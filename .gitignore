@@ -1,0 +1,12 @@
+# API keys & secrets
+.env
+.claude/settings.local.json
+
+# Data (images, memories, DB)
+/data
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+__pycache__/**
