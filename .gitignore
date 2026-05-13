@@ -1,6 +1,6 @@
 # API keys & secrets
 .env
-.claude/settings.local.json
+.claude/
 
 # Data (images, memories, DB)
 /data

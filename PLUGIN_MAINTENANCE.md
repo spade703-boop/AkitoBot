@@ -33,6 +33,7 @@ nonebot_plugin_gemini/
     ├── director.py           # Galgame 级导演骰子（可安全删除）
     ├── snowy.py              # PJSK 榜线预测（sn预测/cn预测）
     ├── verify.py             # 新人审核名单管理
+    ├── random_paro.py        # 派生抽取器（CP 同人灵感配对）
     ├── scheduled.py          # 定时任务（早晚安 / 过期记忆清理）
     └── event_mode.py         # WL2 世界线剧情模式开关
 ```
@@ -383,6 +384,16 @@ Galgame 级导演骰子，由 `chat.py` 调用 `build_director_note()`。
 
 群组配置：`data/verify_config.json` → `{"TARGET_GROUP_ID": "...", "ADMIN_GROUP_ID": "..."}`
 
+### random_paro.py
+
+服务于固定 CP 的派生抽取器。从两个独立身份池随机抽取配对。
+
+- `抽派生` — 受 `ALLOWED_CHAT_GROUPS` 白名单控制
+- 添加/删除指令 — 受 `SUPERUSER_QQ` 权限控制
+- 头像拼合：从 `data/images/paro_avatars/彰人/` 和 `data/images/paro_avatars/冬弥/` 按派生名匹配
+- 限频：30 分钟内 3 次，`asyncio.Lock` 防并发穿透
+- 数据文件：`data/paro_pools.json`，已接入 `reload_assets()` 热重载
+
 ### scheduled.py
 
 | 任务 | 触发时间 | 说明 |
@@ -427,6 +438,8 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（冬弥雷
 | `data/bond_verify.json` | 读写 | 待刷羁绊名单 |
 | `data/hold_verify.json` | 读写 | 特殊挂起名单 |
 | `data/verify_config.json` | 只读 | 审核系统群号配置 |
+| `data/paro_pools.json` | 读写 | 派生抽取器池子数据（彰人池 / 冬弥池） |
+| `data/images/paro_avatars/彰人/` `data/images/paro_avatars/冬弥/` | 只读 | 派生头像素材 |
 | `data/images/<category>/` | 读写 | 本地图库 |
 | `features/font.ttf` | 只读 | snowy.py 渲染字体 |
 | `features/msyhbd.ttc` | 只读 | snowy.py 渲染加粗字体 |
