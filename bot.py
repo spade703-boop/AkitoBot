@@ -8,7 +8,7 @@ driver = nonebot.get_driver()
 driver.register_adapter(Adapter)
 
 # 加载插件
-nonebot.load_plugin("nonebot_plugin_gemini")
+nonebot.load_plugin("nonebot_plugin_akito")
 
 if __name__ == "__main__":
     nonebot.run()

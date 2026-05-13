@@ -11,7 +11,7 @@ __plugin_meta__ = PluginMetadata(
     description="DeepSeek AI (东云彰人)",
     usage="东云小彰 / 小彰 [文本] - AI 角色扮演对话",
     type="application",
-    homepage="https://github.com/zhaomaoniu/nonebot-plugin-gemini",
+    homepage="https://github.com/spade703-boop/AkitoBot",
     supported_adapters=inherit_supported_adapters("nonebot_plugin_alconna"),
 )
 

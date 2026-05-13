@@ -7,9 +7,9 @@ PJSK_KNOWLEDGE_BASE = ""
 
 
 _DATA_SEARCH_DIRS = [
-    "/app/gemini_bot/data",
+    "/app/akito_bot/data",
     "data",
-    "/gemini_bot/data",
+    "/akito_bot/data",
     ".",
 ]
 

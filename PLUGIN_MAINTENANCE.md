@@ -1,4 +1,4 @@
-# nonebot_plugin_gemini — 维护手册
+# nonebot_plugin_akito — 维护手册
 
 **角色**：东云彰人（Project SEKAI 同人 AI）  
 **框架**：NoneBot2 + OneBot V11  
@@ -10,7 +10,7 @@
 ## 目录结构
 
 ```
-nonebot_plugin_gemini/
+nonebot_plugin_akito/
 ├── __init__.py               # 插件入口：元数据 + require() + 导入三大子包
 ├── core/                     # 共享基础层（无副作用，可被任意模块导入）
 │   ├── __init__.py           # 统一 re-export，外部一律 from ..core import ...

@@ -150,11 +150,11 @@ AI 也会在对话中通过 `[[记下: ...]]` 标记自动提取长期记忆。
 ## 项目结构
 
 ```
-gemini_bot/
+akito_bot/
 ├── bot.py                          # 启动入口
 ├── .env.example                    # 配置模板
 ├── pyproject.toml                  # NoneBot2 项目配置
-├── nonebot_plugin_gemini/
+├── nonebot_plugin_akito/
 │   ├── __init__.py                 # 插件入口
 │   ├── core/                       # 基础层
 │   │   ├── api.py                  # DeepSeek / 智谱 / Tavily API 封装

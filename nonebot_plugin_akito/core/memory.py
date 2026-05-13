@@ -39,7 +39,7 @@ init_db()
 def load_memory():
     global MEMORY_DB
     possible_paths = [
-        Path("/app/gemini_bot/data/akito_memories.json"),
+        Path("/app/akito_bot/data/akito_memories.json"),
         Path("data/akito_memories.json"),
         Path("./akito_memories.json"),
     ]
@@ -58,8 +58,8 @@ def load_memory():
 
 def save_memory():
     try:
-        if Path("/app/gemini_bot/data").exists():
-            target_path = Path("/app/gemini_bot/data/akito_memories.json")
+        if Path("/app/akito_bot/data").exists():
+            target_path = Path("/app/akito_bot/data/akito_memories.json")
         else:
             target_path = Path("data/akito_memories.json")
             target_path.parent.mkdir(parents=True, exist_ok=True)
