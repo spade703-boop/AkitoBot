@@ -3,7 +3,7 @@ import random
 import re
 import time
 
-from .constants import TZ_CN, TZ_JST, GROUP_IMAGE_PERMISSIONS
+from . import TZ_CN, TZ_JST, GROUP_IMAGE_PERMISSIONS
 from .data import DAILY_ROUTINE, REACTIONS_DB
 
 AKITO_STATUS: dict = {

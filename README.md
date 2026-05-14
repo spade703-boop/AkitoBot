@@ -1,8 +1,10 @@
 # AkitoBot — 东云彰人 AI Roleplay Bot
 
-基于 [NoneBot2](https://nonebot.dev) + OneBot V11 的 Project SEKAI 同人角色扮演 QQ 机器人，以「东云彰人」身份在群内进行 AI 驱动的沉浸式互动。
+基于 [NoneBot2](https://nonebot.dev) + OneBot V11 的「初音未来：缤纷舞台」同人角色扮演 QQ 机器人，以「东云彰人」身份在群内进行 AI 驱动的沉浸式互动。
 
-**AI 后端**：DeepSeek API（文本对话）/ 智谱 GLM-4V（图片识别）/ Tavily（联网搜索）
+**CP 立场**：彰冬（不拆不逆）。
+
+**AI 后端**：DeepSeek API / 智谱 GLM-4V（图片识别）/ Tavily（联网搜索）
 
 ---
 

@@ -17,7 +17,7 @@ from pathlib import Path
 
 from nonebot.log import logger
 
-from .constants import TZ_CN
+from . import TZ_CN
 from .data import DAILY_ROUTINE, _DATA_SEARCH_DIRS
 from .life_state import AKITO_STATUS
 

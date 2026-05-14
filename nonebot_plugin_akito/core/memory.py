@@ -6,7 +6,7 @@ from pathlib import Path
 from nonebot.log import logger
 from nonebot.adapters import Event
 
-from .constants import DB_PATH
+from . import DB_PATH
 
 MEMORY_DB: dict = {}
 

@@ -7,7 +7,7 @@ from pathlib import Path
 from PIL import Image as PILImage
 from nonebot.log import logger
 
-from .constants import client, vision_client, ZHIPU_API_KEY, TAVILY_API_KEY
+from . import client, vision_client, ZHIPU_API_KEY, TAVILY_API_KEY
 
 
 async def call_deepseek_api(messages, model_name="deepseek-v4-flash", force_json=False):
