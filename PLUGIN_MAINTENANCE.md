@@ -391,6 +391,7 @@ Galgame 级导演骰子，由 `chat.py` 调用 `build_director_note()`。
 - 添加/删除指令 — 受 `SUPERUSER_QQ` 权限控制
 - 头像拼合：从 `data/images/paro_avatars/彰人/` 和 `data/images/paro_avatars/冬弥/` 按派生名匹配
 - 限频：30 分钟内 3 次，`asyncio.Lock` 防并发穿透
+- 模糊匹配：`_fuzzy_match()` 三级匹配（精确 → 前缀 → 包含），大小写不敏感；歧义时列出候选
 - 数据文件：`data/paro_pools.json`，已接入 `reload_assets()` 热重载
 
 ### scheduled.py
