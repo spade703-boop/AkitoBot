@@ -138,6 +138,33 @@ def _render_composite(akito_name: str, toya_name: str, line1: str, line2: str) -
     return buf.getvalue()
 
 
+# ==================== 模糊匹配 ====================
+
+def _fuzzy_match(name: str, pool: list) -> str | list | None:
+    """在池子中模糊匹配，返回匹配到的原始条目名。
+    - str:  唯一匹配
+    - list: 多个匹配（歧义），返回候选列表供调用方提示
+    - None: 无匹配
+    """
+    name_lower = name.lower()
+
+    exact = [e for e in pool if e.lower() == name_lower]
+    if exact:
+        return exact[0]
+
+    prefix = [e for e in pool if e.lower().startswith(name_lower)]
+    if prefix:
+        return prefix[0] if len(prefix) == 1 else prefix
+
+    contains = [e for e in pool if name_lower in e.lower()]
+    if len(contains) == 1:
+        return contains[0]
+    if len(contains) > 1:
+        return contains
+
+    return None
+
+
 # ==================== 抽派生 ====================
 _DRAW_COOLDOWNS: dict[str, list[float]] = {}
 _DRAW_LOCKS: dict[str, asyncio.Lock] = {}
@@ -176,22 +203,29 @@ async def _(event: Event, args: Message = CommandArg()):
         fixed_b = None
 
         if raw:
-            if raw.startswith("彰人"):
+            raw_lower = raw.lower()
+            if raw_lower.startswith("彰人"):
                 name = raw[2:].strip()
                 if not name:
                     await draw_cmd.finish("请指定彰人的派生名称，例如：抽派生 彰人 黑百合")
-                if name not in akito_pool:
-                    await draw_cmd.finish(f"彰人的派生池里没有「{name}」。")
-                fixed_a = name
-            elif raw.startswith("冬弥"):
+                match = _fuzzy_match(name, akito_pool)
+                if not match:
+                    await draw_cmd.finish(f"彰人的派生池里没有与「{name}」匹配的条目。")
+                if isinstance(match, list):
+                    await draw_cmd.finish(f"「{name}」匹配到多个条目：{' / '.join(match)}，请补充完整。")
+                fixed_a = match
+            elif raw_lower.startswith("冬弥"):
                 name = raw[2:].strip()
                 if not name:
                     await draw_cmd.finish("请指定冬弥的派生名称，例如：抽派生 冬弥 王子冬")
-                if name not in toya_pool:
-                    await draw_cmd.finish(f"冬弥的派生池里没有「{name}」。")
-                fixed_b = name
+                match = _fuzzy_match(name, toya_pool)
+                if not match:
+                    await draw_cmd.finish(f"冬弥的派生池里没有与「{name}」匹配的条目。")
+                if isinstance(match, list):
+                    await draw_cmd.finish(f"「{name}」匹配到多个条目：{' / '.join(match)}，请补充完整。")
+                fixed_b = match
             else:
-                await draw_cmd.finish("格式：抽派生 / 抽派生 彰人 XX / 抽派生 冬弥 XX")
+                await draw_cmd.finish("请指定要固定哪一方的派生，例如：抽派生 彰人 黑百合。\n彰冬不拆不逆，一方派生固定则另一方派生随机。")
 
         # 限频检查
         now = time.time()
