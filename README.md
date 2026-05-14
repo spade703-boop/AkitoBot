@@ -159,8 +159,8 @@ akito_bot/
 ├── nonebot_plugin_akito/
 │   ├── __init__.py                 # 插件入口
 │   ├── core/                       # 基础层
+│   │   ├── __init__.py             # 常量定义 & 统一导出
 │   │   ├── api.py                  # DeepSeek / 智谱 / Tavily API 封装
-│   │   ├── constants.py            # 常量 & 群组白名单
 │   │   ├── context.py              # Prompt 组装（人设/剧本/歌曲/关系）
 │   │   ├── data.py                 # JSON 数据文件加载 & 热更新
 │   │   ├── life_state.py           # 状态机（routine/睡眠/节日）

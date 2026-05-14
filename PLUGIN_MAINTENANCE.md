@@ -1,9 +1,9 @@
 # nonebot_plugin_akito — 维护手册
 
-**角色**：东云彰人（Project SEKAI 同人 AI）  
+**角色**：东云彰人（初音未来：缤纷舞台 同人 AI，CP 立场：彰冬不拆不逆）  
 **框架**：NoneBot2 + OneBot V11  
 **AI 后端**：DeepSeek API / 智谱 GLM-4V（视觉）/ Tavily（搜索）  
-**文档更新**：2026-04-30
+**文档更新**：2026-05-14
 
 ---
 
@@ -13,8 +13,7 @@
 nonebot_plugin_akito/
 ├── __init__.py               # 插件入口：元数据 + require() + 导入三大子包
 ├── core/                     # 共享基础层（无副作用，可被任意模块导入）
-│   ├── __init__.py           # 统一 re-export，外部一律 from ..core import ...
-│   ├── constants.py          # 常量 / API 客户端 / 群组白名单（从 .env 读取密钥）
+│   ├── __init__.py           # 常量定义（时区/密钥/客户端/群白名单）+ 统一导出入口
 │   ├── memory.py             # 长期记忆 JSON 读写 + SQLite 群聊上下文
 │   ├── data.py               # JSON 数据文件加载（reactions/prompts/routine 等）
 │   ├── life_state.py         # 彰人状态机（routine 缓存 / 节日 buff / 安全期管理）
@@ -43,15 +42,15 @@ nonebot_plugin_akito/
 ## 依赖关系图
 
 ```
-constants.py ←────────────────────────────────────────────┐
-     ↓                                                     │
-memory.py      (← constants)                              │
-data.py        (无内部依赖)                               │ core/__init__.py
-life_state.py  (← constants, data)                        │ 统一对外暴露所有符号
-api.py         (← constants)                              │
-context.py     (← data, api)                              │
-time_awareness.py (← constants, data, life_state)         │
-     └──────────────────────────────────────────────────── ┘
+core/__init__.py ←───────────────────────────────────────┐
+     ↓  (常量定义 + 统一导出)                             │
+memory.py      (← __init__)                              │
+data.py        (无内部依赖)                               │
+life_state.py  (← __init__, data)                        │ core/__init__.py
+api.py         (← __init__)                              │ 统一对外暴露所有符号
+context.py     (← data, api)                             │
+time_awareness.py (← __init__, data, life_state)         │
+     └────────────────────────────────────────────────── ┘
                            ↓
              handlers/ 和 features/ 均通过
              `from ..core import ...` 访问
@@ -69,7 +68,7 @@ time_awareness.py (← constants, data, life_state)         │
 
 ## 配置与密钥管理
 
-**所有密钥和敏感 ID 统一在 `.env` 中管理**，`core/constants.py` 通过 `os.environ.get()` 读取：
+**所有密钥和敏感 ID 统一在 `.env` 中管理**，`core/__init__.py` 通过 `os.environ.get()` 读取：
 
 ```ini
 # .env
@@ -87,9 +86,9 @@ TOYA_QQ_ID=987654321      # 冬弥本人的 QQ，影响 CP 模式触发
 
 ## core/ — 基础层
 
-### constants.py
+### `__init__.py`（含原 constants.py）
 
-无内部依赖。从 `.env` 读取密钥，定义全局常量。
+无内部依赖。从 `.env` 读取密钥，定义全局常量。子模块通过 `from . import ...` 获取，外部通过 `from ..core import ...` 获取。
 
 | 变量 | 来源 | 说明 |
 |------|------|------|
@@ -452,7 +451,7 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（冬弥雷
 编辑 `.env` → 重启生效。无需改代码。
 
 ### 修改允许的群号
-编辑 `core/constants.py` 中对应的群号列表 → 重启生效。
+编辑 `core/__init__.py` 中对应的群号列表 → 重启生效。
 
 ### 热更新 Prompt 和数据文件
 修改 `data/` 下的 JSON 文件后，在群内发送 `重载配置 assets`（更新 JSON 数据）或 `重载配置 persona`（更新人设文本），无需重启。
