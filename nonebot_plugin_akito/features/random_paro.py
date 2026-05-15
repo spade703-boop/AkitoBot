@@ -109,16 +109,15 @@ def _draw_segmented_line(draw, y: int, segments: list, canvas_width: int):
     每段为 (text, color, bold) 元组。"""
     font_normal = _load_font(20)
     font_bold = _load_font(20, bold=True)
-    # 计算总宽度
     total_w = 0
     for txt, _, bold in segments:
         f = font_bold if bold else font_normal
-        total_w += int(f.getbbox(txt)[2])
+        total_w += draw.textlength(txt, font=f)
     x = (canvas_width - total_w) // 2
     for txt, color, bold in segments:
         f = font_bold if bold else font_normal
         draw.text((x, y), txt, font=f, fill=color, anchor="la")
-        x += int(f.getbbox(txt)[2])
+        x += draw.textlength(txt, font=f)
 
 
 def _render_text_only(text_lines: list) -> bytes:
