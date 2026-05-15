@@ -104,33 +104,52 @@ def _find_avatar(character: str, name: str) -> Path | None:
     return None
 
 
-def _render_text_only(text_lines: list[str]) -> bytes:
+def _draw_segmented_line(draw, y: int, segments: list, canvas_width: int):
+    """在 canvas 上绘制一行分段文字，所有段居中拼合。
+    每段为 (text, color, bold) 元组。"""
+    font_normal = _load_font(20)
+    font_bold = _load_font(20, bold=True)
+    # 计算总宽度
+    total_w = 0
+    for txt, _, bold in segments:
+        f = font_bold if bold else font_normal
+        total_w += int(f.getbbox(txt)[2])
+    x = (canvas_width - total_w) // 2
+    for txt, color, bold in segments:
+        f = font_bold if bold else font_normal
+        draw.text((x, y), txt, font=f, fill=color, anchor="la")
+        x += int(f.getbbox(txt)[2])
+
+
+def _render_text_only(text_lines: list) -> bytes:
     line_count = len(text_lines)
-    font = _load_font(20)
-    row_h = 26
+    row_h = 28
+    width = 380
     height = 30 + line_count * row_h
-    width = 350
     canvas = Image.new("RGB", (width, height), color="#ffffff")
     draw = ImageDraw.Draw(canvas)
-    for i, txt in enumerate(text_lines):
-        draw.text((width // 2, 24 + i * row_h), txt, font=font, fill="#000000", anchor="ma")
+    for i, line in enumerate(text_lines):
+        if isinstance(line, list):
+            _draw_segmented_line(draw, 24 + i * row_h, line, width)
+        else:
+            font = _load_font(20)
+            draw.text((width // 2, 24 + i * row_h), line, font=font, fill="#000000", anchor="ma")
     buf = io.BytesIO()
     canvas.save(buf, format="PNG")
     return buf.getvalue()
 
 
-def _render_composite(akito_name: str, toya_name: str, text_lines: list[str]) -> bytes:
+def _render_composite(akito_name: str, toya_name: str, text_lines: list) -> bytes:
     avatar_size = 150
     gap = 4
     top_pad = 10
     line_count = len(text_lines)
-    row_h = 26
+    row_h = 28
     text_area = 16 + line_count * row_h
-    width = 350
+    width = 380
     height = top_pad + avatar_size + text_area
 
     canvas = Image.new("RGB", (width, height), color="#ffffff")
-    font = _load_font(20)
 
     def _paste_avatar(character: str, name: str, x_offset: int):
         path = _find_avatar(character, name)
@@ -145,8 +164,13 @@ def _render_composite(akito_name: str, toya_name: str, text_lines: list[str]) ->
     _paste_avatar("冬弥", toya_name, avatars_x + avatar_size + gap)
 
     draw = ImageDraw.Draw(canvas)
-    for i, txt in enumerate(text_lines):
-        draw.text((width // 2, top_pad + avatar_size + 16 + i * row_h), txt, font=font, fill="#000000", anchor="ma")
+    for i, line in enumerate(text_lines):
+        y = top_pad + avatar_size + 16 + i * row_h
+        if isinstance(line, list):
+            _draw_segmented_line(draw, y, line, width)
+        else:
+            font = _load_font(20)
+            draw.text((width // 2, y), line, font=font, fill="#000000", anchor="ma")
 
     buf = io.BytesIO()
     canvas.save(buf, format="PNG")
@@ -274,11 +298,23 @@ async def _(event: Event, args: Message = CommandArg()):
             text_lines = [
                 f"@{nickname}：",
                 "对，就是你，你是被选中的彰冬姐，",
-                f"奖励你现在来做{a}×{b}的饭！",
+                [
+                    ("奖励你现在来做", "#000000", True),
+                    (a, "#FF7722", True),
+                    ("×", "#000000", True),
+                    (b, "#0077DD", True),
+                    ("的饭！", "#000000", True),
+                ],
             ]
         else:
             text_lines = [
-                f"你抽到的派生是：{a}×{b}。",
+                [
+                    ("你抽到的派生是：", "#000000", False),
+                    (a, "#FF7722", True),
+                    ("×", "#000000", True),
+                    (b, "#0077DD", True),
+                    ("。", "#000000", False),
+                ],
                 f"（30分钟内剩余 {remaining} 次）",
             ]
 
@@ -292,7 +328,8 @@ async def _(event: Event, args: Message = CommandArg()):
             img_bytes = _render_text_only(text_lines)
             await draw_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes))
         else:
-            await draw_cmd.finish(MessageSegment.reply(event.message_id) + text_lines[0] + text_lines[1])
+            plain = f"你抽到的派生是：{a}×{b}。（30分钟内剩余 {remaining} 次）"
+            await draw_cmd.finish(MessageSegment.reply(event.message_id) + plain)
 
 
 # ==================== 测试做饭 ====================
@@ -305,12 +342,18 @@ async def _(event: Event):
     if str(event.get_user_id()) != SUPERUSER_QQ:
         return
     nickname = event.sender.card or event.sender.nickname or "测试者"
+    a, b = "黑百合", "王子冬"
     text_lines = [
         f"@{nickname}：",
         "对，就是你，你是被选中的彰冬姐，",
-        "奖励你现在来做黑百合×王子冬的饭！",
+        [
+            ("奖励你现在来做", "#000000", True),
+            (a, "#FF7722", True),
+            ("×", "#000000", True),
+            (b, "#0077DD", True),
+            ("的饭！", "#000000", True),
+        ],
     ]
-    a, b = "黑百合", "王子冬"
     if _find_avatar("彰人", a) and _find_avatar("冬弥", b):
         img = _render_composite(a, b, text_lines)
     else:
