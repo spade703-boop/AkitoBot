@@ -109,7 +109,7 @@ FONT_BOLD_SIZE = 24
 ROW_H = 32
 TEXT_TOP_GAP = 22
 TEXT_BOTTOM_PAD = 10
-CANVAS_WIDTH = 380
+CANVAS_WIDTH = 440
 
 
 def _draw_segmented_line(draw, y: int, segments: list):
