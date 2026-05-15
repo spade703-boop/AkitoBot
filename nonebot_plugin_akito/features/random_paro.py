@@ -173,7 +173,6 @@ def _render_composite(akito_name: str, toya_name: str, text_lines: list) -> byte
             _draw_segmented_line(draw, y, line)
         else:
             draw.text((CANVAS_WIDTH // 2, y), line, font=font, fill="#000000", anchor="ma")
-            draw.text((width // 2, y), line, font=font, fill="#000000", anchor="ma")
 
     buf = io.BytesIO()
     canvas.save(buf, format="PNG")
