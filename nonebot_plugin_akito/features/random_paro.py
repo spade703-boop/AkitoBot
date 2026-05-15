@@ -122,7 +122,8 @@ def _draw_segmented_line(draw, y: int, segments: list):
     x = (CANVAS_WIDTH - total_w) // 2
     for txt, color, bold in segments:
         f = font_bold if bold else font_normal
-        draw.text((x, y), txt, font=f, fill=color, anchor="la")
+        y_off = (FONT_SIZE - (FONT_BOLD_SIZE if bold else FONT_SIZE)) // 2
+        draw.text((x, y + y_off), txt, font=f, fill=color, anchor="la")
         x += draw.textlength(txt, font=f)
 
 
