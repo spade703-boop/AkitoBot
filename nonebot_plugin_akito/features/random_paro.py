@@ -104,35 +104,33 @@ def _find_avatar(character: str, name: str) -> Path | None:
     return None
 
 
-def _render_text_only(line1: str, line2: str, egg_line: str = "") -> bytes:
-    height = 120 if egg_line else 80
+def _render_text_only(text_lines: list[str]) -> bytes:
+    line_count = len(text_lines)
+    font = _load_font(20)
+    row_h = 26
+    height = 30 + line_count * row_h
     width = 350
     canvas = Image.new("RGB", (width, height), color="#ffffff")
-    font_line = _load_font(20)
-    font_hint = _load_font(18)
-    font_egg = _load_font(20)
     draw = ImageDraw.Draw(canvas)
-    draw.text((width // 2, 26), line1, font=font_line, fill="#000000", anchor="ma")
-    draw.text((width // 2, 52), line2, font=font_hint, fill="#999999", anchor="ma")
-    if egg_line:
-        draw.text((width // 2, 86), egg_line, font=font_egg, fill="#d35400", anchor="ma")
+    for i, txt in enumerate(text_lines):
+        draw.text((width // 2, 24 + i * row_h), txt, font=font, fill="#000000", anchor="ma")
     buf = io.BytesIO()
     canvas.save(buf, format="PNG")
     return buf.getvalue()
 
 
-def _render_composite(akito_name: str, toya_name: str, line1: str, line2: str, egg_line: str = "") -> bytes:
+def _render_composite(akito_name: str, toya_name: str, text_lines: list[str]) -> bytes:
     avatar_size = 150
     gap = 4
     top_pad = 10
+    line_count = len(text_lines)
+    row_h = 26
+    text_area = 16 + line_count * row_h
     width = 350
-    has_egg = bool(egg_line)
-    height = 282 if has_egg else 230
+    height = top_pad + avatar_size + text_area
 
     canvas = Image.new("RGB", (width, height), color="#ffffff")
-    font_line = _load_font(20)
-    font_hint = _load_font(18)
-    font_egg = _load_font(20)
+    font = _load_font(20)
 
     def _paste_avatar(character: str, name: str, x_offset: int):
         path = _find_avatar(character, name)
@@ -147,13 +145,8 @@ def _render_composite(akito_name: str, toya_name: str, line1: str, line2: str, e
     _paste_avatar("冬弥", toya_name, avatars_x + avatar_size + gap)
 
     draw = ImageDraw.Draw(canvas)
-    text_y1 = top_pad + avatar_size + 16
-    text_y2 = top_pad + avatar_size + 42
-    draw.text((width // 2, text_y1), line1, font=font_line, fill="#000000", anchor="ma")
-    draw.text((width // 2, text_y2), line2, font=font_hint, fill="#999999", anchor="ma")
-
-    if has_egg:
-        draw.text((width // 2, top_pad + avatar_size + 70), egg_line, font=font_egg, fill="#d35400", anchor="ma")
+    for i, txt in enumerate(text_lines):
+        draw.text((width // 2, top_pad + avatar_size + 16 + i * row_h), txt, font=font, fill="#000000", anchor="ma")
 
     buf = io.BytesIO()
     canvas.save(buf, format="PNG")
@@ -274,21 +267,32 @@ async def _(event: Event, args: Message = CommandArg()):
         history.append(now)
         _DRAW_COOLDOWNS[user_id] = history
         remaining = _DRAW_LIMIT - len(history)
-        line1 = f"你抽到的派生是：{a}×{b}。"
-        line2 = f"（30分钟内剩余 {remaining} 次）"
-        egg_line = "笔已经塞到你手里了，快去做饭吧！" if random.random() < _EASTER_EGG_RATE else ""
+        nickname = event.sender.card or event.sender.nickname or f"用户{user_id}"
+        is_egg = random.random() < _EASTER_EGG_RATE
+
+        if is_egg:
+            text_lines = [
+                f"@{nickname}：",
+                "对，就是你，你是被选中的彰冬姐，",
+                f"奖励你现在来做{a}×{b}的饭！",
+            ]
+        else:
+            text_lines = [
+                f"你抽到的派生是：{a}×{b}。",
+                f"（30分钟内剩余 {remaining} 次）",
+            ]
 
         await asyncio.sleep(random.uniform(0.4, 0.8))
 
         has_avatars = _find_avatar("彰人", a) and _find_avatar("冬弥", b)
-        if has_avatars or egg_line:
-            if has_avatars:
-                img_bytes = _render_composite(a, b, line1, line2, egg_line)
-            else:
-                img_bytes = _render_text_only(line1, line2, egg_line)
+        if has_avatars:
+            img_bytes = _render_composite(a, b, text_lines)
+            await draw_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes))
+        elif is_egg:
+            img_bytes = _render_text_only(text_lines)
             await draw_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes))
         else:
-            await draw_cmd.finish(MessageSegment.reply(event.message_id) + line1 + line2)
+            await draw_cmd.finish(MessageSegment.reply(event.message_id) + text_lines[0] + text_lines[1])
 
 
 # ==================== 测试做饭 ====================
@@ -300,12 +304,17 @@ test_egg_cmd = on_command("test做饭", priority=5, block=True)
 async def _(event: Event):
     if str(event.get_user_id()) != SUPERUSER_QQ:
         return
-    egg_line = "笔已经塞到你手里了，快去做饭吧！"
+    nickname = event.sender.card or event.sender.nickname or "测试者"
+    text_lines = [
+        f"@{nickname}：",
+        "对，就是你，你是被选中的彰冬姐，",
+        "奖励你现在来做黑百合×王子冬的饭！",
+    ]
     a, b = "黑百合", "王子冬"
     if _find_avatar("彰人", a) and _find_avatar("冬弥", b):
-        img = _render_composite(a, b, "你抽到的派生是：黑百合×王子冬。", "（30分钟内剩余 3 次）", egg_line)
+        img = _render_composite(a, b, text_lines)
     else:
-        img = _render_text_only("你抽到的派生是：黑百合×王子冬。", "（30分钟内剩余 3 次）", egg_line)
+        img = _render_text_only(text_lines)
     await test_egg_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img))
 
 
