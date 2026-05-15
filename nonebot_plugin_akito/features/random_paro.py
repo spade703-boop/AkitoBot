@@ -41,17 +41,17 @@ def reload_paro_data():
 
 # ==================== 图片渲染 ====================
 
-def _load_font(size: int, bold: bool = False):
+def _load_font(size: int):
     try:
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        font_path = os.path.join(current_dir, "msyhbd.ttc" if bold else "font.ttf")
+        font_path = os.path.join(current_dir, "msyhbd.ttc")
         return ImageFont.truetype(font_path, size)
     except Exception:
         return ImageFont.load_default()
 
 
 def _render_pool_image(title: str, pool: list) -> bytes:
-    font_title = _load_font(28, bold=True)
+    font_title = _load_font(28)
     font_item = _load_font(24)
     font_footer = _load_font(18)
 
@@ -104,16 +104,22 @@ def _find_avatar(character: str, name: str) -> Path | None:
     return None
 
 
-def _draw_segmented_line(draw, y: int, segments: list, canvas_width: int):
-    """在 canvas 上绘制一行分段文字，所有段居中拼合。
-    每段为 (text, color, bold) 元组。"""
-    font_normal = _load_font(20)
-    font_bold = _load_font(20, bold=True)
-    total_w = 0
+FONT_SIZE = 20
+FONT_BOLD_SIZE = 24
+ROW_H = 32
+TEXT_TOP_GAP = 22
+TEXT_BOTTOM_PAD = 10
+CANVAS_WIDTH = 380
+
+
+def _draw_segmented_line(draw, y: int, segments: list):
+    font_normal = _load_font(FONT_SIZE)
+    font_bold = _load_font(FONT_BOLD_SIZE)
+    total_w = 0.0
     for txt, _, bold in segments:
         f = font_bold if bold else font_normal
         total_w += draw.textlength(txt, font=f)
-    x = (canvas_width - total_w) // 2
+    x = (CANVAS_WIDTH - total_w) // 2
     for txt, color, bold in segments:
         f = font_bold if bold else font_normal
         draw.text((x, y), txt, font=f, fill=color, anchor="la")
@@ -122,17 +128,16 @@ def _draw_segmented_line(draw, y: int, segments: list, canvas_width: int):
 
 def _render_text_only(text_lines: list) -> bytes:
     line_count = len(text_lines)
-    row_h = 28
-    width = 380
-    height = 30 + line_count * row_h
-    canvas = Image.new("RGB", (width, height), color="#ffffff")
+    height = TEXT_TOP_GAP + line_count * ROW_H + TEXT_BOTTOM_PAD
+    canvas = Image.new("RGB", (CANVAS_WIDTH, height), color="#ffffff")
+    font = _load_font(FONT_SIZE)
     draw = ImageDraw.Draw(canvas)
     for i, line in enumerate(text_lines):
+        y = TEXT_TOP_GAP + i * ROW_H
         if isinstance(line, list):
-            _draw_segmented_line(draw, 24 + i * row_h, line, width)
+            _draw_segmented_line(draw, y, line)
         else:
-            font = _load_font(20)
-            draw.text((width // 2, 24 + i * row_h), line, font=font, fill="#000000", anchor="ma")
+            draw.text((CANVAS_WIDTH // 2, y), line, font=font, fill="#000000", anchor="ma")
     buf = io.BytesIO()
     canvas.save(buf, format="PNG")
     return buf.getvalue()
@@ -143,12 +148,10 @@ def _render_composite(akito_name: str, toya_name: str, text_lines: list) -> byte
     gap = 4
     top_pad = 10
     line_count = len(text_lines)
-    row_h = 28
-    text_area = 16 + line_count * row_h
-    width = 380
+    text_area = TEXT_TOP_GAP + line_count * ROW_H + TEXT_BOTTOM_PAD
     height = top_pad + avatar_size + text_area
 
-    canvas = Image.new("RGB", (width, height), color="#ffffff")
+    canvas = Image.new("RGB", (CANVAS_WIDTH, height), color="#ffffff")
 
     def _paste_avatar(character: str, name: str, x_offset: int):
         path = _find_avatar(character, name)
@@ -158,17 +161,18 @@ def _render_composite(akito_name: str, toya_name: str, text_lines: list) -> byte
             canvas.paste(img, (x_offset, top_pad))
 
     avatars_width = avatar_size * 2 + gap
-    avatars_x = (width - avatars_width) // 2
+    avatars_x = (CANVAS_WIDTH - avatars_width) // 2
     _paste_avatar("彰人", akito_name, avatars_x)
     _paste_avatar("冬弥", toya_name, avatars_x + avatar_size + gap)
 
     draw = ImageDraw.Draw(canvas)
+    font = _load_font(FONT_SIZE)
     for i, line in enumerate(text_lines):
-        y = top_pad + avatar_size + 16 + i * row_h
+        y = top_pad + avatar_size + TEXT_TOP_GAP + i * ROW_H
         if isinstance(line, list):
-            _draw_segmented_line(draw, y, line, width)
+            _draw_segmented_line(draw, y, line)
         else:
-            font = _load_font(20)
+            draw.text((CANVAS_WIDTH // 2, y), line, font=font, fill="#000000", anchor="ma")
             draw.text((width // 2, y), line, font=font, fill="#000000", anchor="ma")
 
     buf = io.BytesIO()
