@@ -102,11 +102,11 @@ TOYA_QQ_ID=987654321      # 冬弥本人的 QQ，影响 CP 模式触发
 | `TZ_CN` | — | UTC+8（北京时间，用于 routine/睡眠判定） |
 | `TZ_JST` | — | UTC+9（东京时间，用于彰人对话报时） |
 | `MAX_HISTORY_LEN` | — | 对话历史最大条数（当前 40） |
-| `ALLOWED_CHAT_GROUPS` | 代码 | 允许主对话的群列表 |
-| `ALLOWED_CP_GROUPS` | 代码 | 允许 CP 相关功能的群列表 |
-| `ALLOWED_MEMORY_GROUPS` | 代码 | 允许使用记忆指令的群列表 |
-| `TARGET_GROUPS` | 代码 | 定时推送目标群列表 |
-| `GROUP_IMAGE_PERMISSIONS` | 代码 | 各群的图库分类权限 `{group_id: ["all"]}` |
+| `ALLOWED_CHAT_GROUPS` | `.env` | 允许主对话的群列表（逗号分隔） |
+| `ALLOWED_CP_GROUPS` | `.env` | 允许 CP 相关功能的群列表（逗号分隔） |
+| `ALLOWED_MEMORY_GROUPS` | `.env` | 允许使用记忆指令的群列表（逗号分隔） |
+| `TARGET_GROUPS` | `.env` | 定时推送目标群列表（逗号分隔） |
+| `GROUP_IMAGE_PERMISSIONS` | `.env` | 各群的图库分类权限（JSON 格式） |
 
 ### memory.py
 
@@ -452,7 +452,7 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（冬弥雷
 编辑 `.env` → 重启生效。无需改代码。
 
 ### 修改允许的群号
-编辑 `core/__init__.py` 中对应的群号列表 → 重启生效。
+编辑 `.env` 中对应的群号列表（逗号分隔，`GROUP_IMAGE_PERMISSIONS` 为 JSON）→ 重启生效。
 
 ### 热更新 Prompt 和数据文件
 修改 `data/` 下的 JSON 文件后，在群内发送 `重载配置 assets`（更新 JSON 数据）或 `重载配置 persona`（更新人设文本），无需重启。

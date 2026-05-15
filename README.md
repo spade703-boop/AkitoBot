@@ -206,17 +206,16 @@ akito_bot/
 
 ## 群组白名单配置
 
-编辑 `core/constants.py`：
+编辑 `.env`（逗号分隔，`GROUP_IMAGE_PERMISSIONS` 为 JSON）：
 
-```python
-ALLOWED_CHAT_GROUPS   = [群号, ...]   # 主对话
-ALLOWED_CP_GROUPS     = [群号, ...]   # CP 功能（冬弥雷达等）
-ALLOWED_MEMORY_GROUPS = [群号, ...]   # 记忆指令
-TARGET_GROUPS         = [群号, ...]   # 定时推送
-GROUP_IMAGE_PERMISSIONS = {           # 图库权限
-    群号: ["all"],
-    # 或: 群号: ["toya", "self", "food"]
-}
+```ini
+ALLOWED_CHAT_GROUPS=群号1,群号2
+ALLOWED_CP_GROUPS=群号1,群号2
+ALLOWED_MEMORY_GROUPS=群号1
+TARGET_GROUPS=群号1,群号2
+GROUP_IMAGE_PERMISSIONS={"群号1":["all"],"群号2":["toya","self"]}
+```
+重启生效。
 ```
 
 ---

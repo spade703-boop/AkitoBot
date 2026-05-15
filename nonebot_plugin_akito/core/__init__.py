@@ -7,6 +7,7 @@
 # Python 的部分模块初始化保证此顺序安全。
 # ============================================================================
 
+import json
 import os
 import datetime
 from pathlib import Path
@@ -32,16 +33,24 @@ TOYA_QQ_ID   = os.environ.get("TOYA_QQ_ID", "3958033212")
 SUPERUSER_QQ = os.environ.get("SUPERUSER_QQ", "2403925946")
 TRIGGER_NAMES = {"东云小彰", "小彰"}
 
-ALLOWED_CHAT_GROUPS   = [1041487251, 691188576, 761599729, 740468887]
-ALLOWED_CP_GROUPS     = [1041487251, 691188576, 761599729]
-ALLOWED_MEMORY_GROUPS = [1041487251]
-TARGET_GROUPS         = [740468887, 761599729, 691188576]
+def _parse_group_list(key: str) -> list[int]:
+    raw = os.environ.get(key, "")
+    if not raw.strip():
+        return []
+    return [int(s.strip()) for s in raw.split(",") if s.strip().isdigit()]
 
-GROUP_IMAGE_PERMISSIONS = {
-    1041487251: ["all"],
-    691188576:  ["all"],
-    761599729:  ["all"],
-}
+ALLOWED_CHAT_GROUPS   = _parse_group_list("ALLOWED_CHAT_GROUPS")
+ALLOWED_CP_GROUPS     = _parse_group_list("ALLOWED_CP_GROUPS")
+ALLOWED_MEMORY_GROUPS = _parse_group_list("ALLOWED_MEMORY_GROUPS")
+TARGET_GROUPS         = _parse_group_list("TARGET_GROUPS")
+
+GROUP_IMAGE_PERMISSIONS = {}
+_raw_img = os.environ.get("GROUP_IMAGE_PERMISSIONS", "")
+if _raw_img.strip():
+    try:
+        GROUP_IMAGE_PERMISSIONS = {int(k): v for k, v in json.loads(_raw_img).items()}
+    except Exception:
+        pass
 
 
 # ── 子模块导入（必须放在常量定义之后） ────────────────────────────────
