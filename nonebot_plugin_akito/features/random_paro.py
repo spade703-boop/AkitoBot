@@ -275,6 +275,8 @@ def _render_multi(results: list, remaining: int, nickname: str) -> bytes:
     # --- 逐行计算宽度 ---
     emoji_w = fn.getbbox(" ★")[2]
 
+    PREFIX = "你抽到了："
+
     def _row_width(idx):
         _, _, is_egg, fox_type = results[idx]
         if fox_type:
@@ -283,7 +285,7 @@ def _render_multi(results: list, remaining: int, nickname: str) -> bytes:
         a_w = int(fn.getbbox(a)[2])
         b_w = int(fn.getbbox(b)[2])
         x_w = int(fn.getbbox("×")[2])
-        return a_w + x_w + b_w + (emoji_w if is_egg else 0)
+        return int(fn.getbbox(PREFIX)[2]) + a_w + x_w + b_w + (emoji_w if is_egg else 0)
 
     max_line_w = max(_row_width(i) for i in range(count))
 
@@ -366,9 +368,11 @@ def _render_multi(results: list, remaining: int, nickname: str) -> bytes:
             a_w = int(fn.getbbox(a)[2])
             x_w_val = int(fn.getbbox("×")[2])
             b_w = int(fn.getbbox(b)[2])
-            total_w = seq_w + a_w + x_w_val + b_w + (emoji_w if is_egg else 0)
+            pre_w = int(fn.getbbox(PREFIX)[2])
+            total_w = seq_w + pre_w + a_w + x_w_val + b_w + (emoji_w if is_egg else 0)
             x = (w - total_w) // 2
             draw.text((x, y), seq + " ", font=fn, fill="#000000", anchor="la"); x += seq_w
+            draw.text((x, y), PREFIX, font=fn, fill="#000000", anchor="la"); x += pre_w
             draw.text((x, y), a, font=fn, fill="#FF7722", anchor="la"); x += a_w
             draw.text((x, y), "×", font=fn, fill="#000000", anchor="la"); x += x_w_val
             draw.text((x, y), b, font=fn, fill="#0077DD", anchor="la")
