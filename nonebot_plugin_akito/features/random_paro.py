@@ -233,6 +233,134 @@ def _fuzzy_match(name: str, pool: list) -> str | list | None:
     return None
 
 
+# ==================== 多抽渲染 ====================
+
+SEQS = ["①", "②", "③"]
+
+
+def _render_multi(results: list, has_avatars: bool, remaining: int, nickname: str) -> bytes:
+    """results: [(a, b, is_egg), ...]"""
+    count = len(results)
+    egg_indices = [i for i, (_, _, egg) in enumerate(results) if egg]
+
+    avatar_size = 150
+    gap = 4
+    avatars_width = avatar_size * 2 + gap
+    row_text_gap = 8
+    result_gap = 10
+
+    # --- 逐行计算宽度，取最大值 ---
+    fn = _load_font(FONT_SIZE)
+    fb = _load_font(FONT_BOLD_SIZE)
+
+    def _result_line_width(aa, bb):
+        # 序号 "① " + 彰人·AA × 冬弥·BB
+        prefix = fn.getbbox("① ")[2]
+        a_w = fb.getbbox(aa)[2]
+        b_w = fb.getbbox(bb)[2]
+        x_w = fb.getbbox("×")[2]
+        dot_w = fb.getbbox("·")[2]
+        zhangren_w = fn.getbbox("彰人")[2]
+        dongmi_w = fn.getbbox("冬弥")[2]
+        return prefix + zhangren_w + dot_w + a_w + x_w + dongmi_w + dot_w + b_w
+
+    max_line_w = max(_result_line_width(a, b) for a, b, _ in results)
+    egg_summary_w = 0.0
+    if egg_indices:
+        nick_w = fn.getbbox(f"@{nickname}：")[2]
+        egg_parts = []
+        for idx in egg_indices:
+            ea, eb, _ = results[idx]
+            egg_parts.append(fb.getbbox(f"{ea}×{eb}")[2])
+        egg_line_w = fn.getbbox("快来做")[2] + sum(egg_parts) + fn.getbbox("、")[2] * (len(egg_parts) - 1) + fn.getbbox("的饭吧！")[2]
+        egg_summary_w = max(nick_w, egg_line_w)
+    rem_w = fn.getbbox(f"（30分钟内剩余 {remaining} 次）")[2]
+
+    w = max(MIN_CANVAS_W, int(max_line_w) + 40,
+            AVATAR_WIDTH if has_avatars else 0,
+            int(egg_summary_w) + 40 if egg_summary_w else 0,
+            int(rem_w) + 40)
+
+    # --- 拼装文字行（用于计算高度）---
+    title_h = ROW_H + 8
+    result_h_per = (avatar_size + row_text_gap + ROW_H) if has_avatars else ROW_H
+    egg_area_h = 0
+    if egg_indices:
+        egg_area_h = 12 + 2 * ROW_H
+    rem_h = 8 + ROW_H
+    height = TEXT_TOP_GAP + title_h + count * (result_h_per + result_gap) + egg_area_h + rem_h + TEXT_BOTTOM_PAD
+
+    canvas = Image.new("RGB", (w, height), color="#ffffff")
+    draw = ImageDraw.Draw(canvas)
+
+    # --- 标题 ---
+    y = TEXT_TOP_GAP
+    draw.text((w // 2, y), "你抽取到的派生是：", font=_load_font(FONT_SIZE), fill="#000000", anchor="ma")
+    y += title_h
+
+    # --- 每行结果 ---
+    for i, (a, b, is_egg) in enumerate(results):
+        if has_avatars:
+            avatars_x = (w - avatars_width) // 2
+            # paste avatars
+            for ch, name, x_off in [("彰人", a, avatars_x), ("冬弥", b, avatars_x + avatar_size + gap)]:
+                path = _find_avatar(ch, name)
+                if path:
+                    im = Image.open(path).convert("RGB").resize((avatar_size, avatar_size), Image.LANCZOS)
+                    canvas.paste(im, (x_off, y))
+            y += avatar_size + row_text_gap
+
+        # 序号 + 着色文字
+        seq = SEQS[i]
+        seq_w = int(fn.getbbox(seq + " ")[2])
+        zr_w = int(fn.getbbox("彰人")[2])
+        dm_w = int(fn.getbbox("冬弥")[2])
+        dot_w = int(fb.getbbox("·")[2])
+        x_w = int(fb.getbbox("×")[2])
+        a_w = int(fb.getbbox(a)[2])
+        b_w = int(fb.getbbox(b)[2])
+        total_w = seq_w + zr_w + dot_w + a_w + x_w + dm_w + dot_w + b_w
+        x = (w - total_w) // 2
+
+        a_color = "#FF7722" if is_egg else "#000000"
+        b_color = "#0077DD" if is_egg else "#000000"
+
+        draw.text((x, y), seq + " ", font=fn, fill="#000000", anchor="la")
+        x += seq_w
+        draw.text((x, y), "彰人", font=fn, fill="#000000", anchor="la")
+        x += zr_w
+        draw.text((x, y), "·", font=fb, fill="#000000", anchor="la")
+        x += dot_w
+        draw.text((x, y), a, font=fb, fill=a_color, anchor="la")
+        x += a_w
+        draw.text((x, y), "×", font=fb, fill="#000000", anchor="la")
+        x += x_w
+        draw.text((x, y), "冬弥", font=fn, fill="#000000", anchor="la")
+        x += dm_w
+        draw.text((x, y), "·", font=fb, fill="#000000", anchor="la")
+        x += dot_w
+        draw.text((x, y), b, font=fb, fill=b_color, anchor="la")
+
+        y += ROW_H + result_gap
+
+    # --- 彩蛋汇总 ---
+    if egg_indices:
+        y += 12
+        draw.text((w // 2, y), f"恭喜你是被选中的彰冬姐！", font=fn, fill="#000000", anchor="ma")
+        y += ROW_H
+        egg_pairs = "、".join(f"{results[idx][0]}×{results[idx][1]}" for idx in egg_indices)
+        draw.text((w // 2, y), f"快来做{egg_pairs}的饭吧！", font=fn, fill="#d35400", anchor="ma")
+        y += ROW_H
+
+    # --- 剩余次数 ---
+    y += 8
+    draw.text((w // 2, y), f"（30分钟内剩余 {remaining} 次）", font=fn, fill="#999999", anchor="ma")
+
+    buf = io.BytesIO()
+    canvas.save(buf, format="PNG")
+    return buf.getvalue()
+
+
 # ==================== 抽派生 ====================
 _DRAW_COOLDOWNS: dict[str, list[float]] = {}
 _DRAW_LOCKS: dict[str, asyncio.Lock] = {}
@@ -265,15 +393,26 @@ async def _(event: Event, args: Message = CommandArg()):
                 MessageSegment.reply(event.message_id) + "冬弥的派生池还是空的，先用 /添加冬弥派生 添加一些吧。"
             )
 
-        # 解析参数：是否指定一方固定
+        # 解析参数：提取数字 token（1-3）+ 方向/名称
         raw = args.extract_plain_text().strip()
+        count = 1
+        directional = ""  # 剩余的方向+名称字符串
+        if raw:
+            tokens = raw.split()
+            for i, t in enumerate(tokens):
+                if t.isdigit() and 1 <= int(t) <= 3:
+                    count = int(t)
+                    directional = " ".join(tokens[:i] + tokens[i+1:])
+                    break
+            else:
+                directional = raw
+
         fixed_a = None
         fixed_b = None
-
-        if raw:
-            raw_lower = raw.lower()
-            if raw_lower.startswith("彰人"):
-                name = raw[2:].strip()
+        if directional:
+            dl = directional.lower()
+            if dl.startswith("彰人"):
+                name = directional[2:].strip()
                 if not name:
                     await draw_cmd.finish("请指定彰人的派生名称，例如：抽派生 彰人 黑百合")
                 match = _fuzzy_match(name, akito_pool)
@@ -282,8 +421,8 @@ async def _(event: Event, args: Message = CommandArg()):
                 if isinstance(match, list):
                     await draw_cmd.finish(f"「{name}」匹配到多个条目：{' / '.join(match)}，请补充完整。")
                 fixed_a = match
-            elif raw_lower.startswith("冬弥"):
-                name = raw[2:].strip()
+            elif dl.startswith("冬弥"):
+                name = directional[2:].strip()
                 if not name:
                     await draw_cmd.finish("请指定冬弥的派生名称，例如：抽派生 冬弥 王子冬")
                 match = _fuzzy_match(name, toya_pool)
@@ -300,60 +439,81 @@ async def _(event: Event, args: Message = CommandArg()):
         history = _DRAW_COOLDOWNS.get(user_id, [])
         history = [t for t in history if now - t < _DRAW_WINDOW]
         _DRAW_COOLDOWNS[user_id] = history
+        remaining_before = _DRAW_LIMIT - len(history)
 
-        if len(history) >= _DRAW_LIMIT:
-            oldest = min(history)
-            wait = int(_DRAW_WINDOW - (now - oldest))
-            mins, secs = wait // 60, wait % 60
-            await draw_cmd.finish(
-                MessageSegment.reply(event.message_id)
-                + f"30分钟内最多抽{_DRAW_LIMIT}次，你已用完次数，请在 {mins} 分 {secs} 秒后再试。"
-            )
+        if remaining_before < count:
+            if remaining_before <= 0:
+                oldest = min(history)
+                wait = int(_DRAW_WINDOW - (now - oldest))
+                mins, secs = wait // 60, wait % 60
+                await draw_cmd.finish(
+                    MessageSegment.reply(event.message_id)
+                    + f"30分钟内最多抽{_DRAW_LIMIT}次，你已用完次数，请在 {mins} 分 {secs} 秒后再试。"
+                )
+            else:
+                await draw_cmd.finish(
+                    MessageSegment.reply(event.message_id)
+                    + f"30分钟内仅剩 {remaining_before} 次，无法抽 {count} 次。"
+                )
 
-        a = fixed_a or random.choice(akito_pool)
-        b = fixed_b or random.choice(toya_pool)
-        history.append(now)
+        nickname = event.sender.card or event.sender.nickname or f"用户{user_id}"
+
+        # N 次独立抽取
+        results = []
+        for _ in range(count):
+            a = fixed_a or random.choice(akito_pool)
+            b = fixed_b or random.choice(toya_pool)
+            is_egg = random.random() < _EASTER_EGG_RATE
+            results.append((a, b, is_egg))
+
+        for _ in range(count):
+            history.append(now)
         _DRAW_COOLDOWNS[user_id] = history
         remaining = _DRAW_LIMIT - len(history)
-        nickname = event.sender.card or event.sender.nickname or f"用户{user_id}"
-        is_egg = random.random() < _EASTER_EGG_RATE
-
-        if is_egg:
-            text_lines = [
-                f"@{nickname}：",
-                "对，就是你，你是被选中的彰冬姐，",
-                [
-                    ("奖励你现在来做", "#000000", True),
-                    (a, "#FF7722", True),
-                    ("×", "#000000", True),
-                    (b, "#0077DD", True),
-                    ("的饭！", "#000000", True),
-                ],
-            ]
-        else:
-            text_lines = [
-                [
-                    ("你抽到的派生是：", "#000000", False),
-                    (a, "#FF7722", True),
-                    ("×", "#000000", True),
-                    (b, "#0077DD", True),
-                    ("。", "#000000", False),
-                ],
-                f"（30分钟内剩余 {remaining} 次）",
-            ]
 
         await asyncio.sleep(random.uniform(0.4, 0.8))
 
-        has_avatars = _find_avatar("彰人", a) and _find_avatar("冬弥", b)
-        if has_avatars:
-            img_bytes = _render_composite(a, b, text_lines)
-            await draw_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes))
-        elif is_egg:
-            img_bytes = _render_text_only(text_lines)
-            await draw_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes))
+        if count == 1:
+            # 单抽 — 保持原有输出
+            a, b, is_egg = results[0]
+            if is_egg:
+                text_lines = [
+                    f"@{nickname}：",
+                    "对，就是你，你是被选中的彰冬姐，",
+                    [
+                        ("奖励你现在来做", "#000000", True),
+                        (a, "#FF7722", True),
+                        ("×", "#000000", True),
+                        (b, "#0077DD", True),
+                        ("的饭！", "#000000", True),
+                    ],
+                ]
+            else:
+                text_lines = [
+                    [
+                        ("你抽到的派生是：", "#000000", False),
+                        (a, "#FF7722", True),
+                        ("×", "#000000", True),
+                        (b, "#0077DD", True),
+                        ("。", "#000000", False),
+                    ],
+                    f"（30分钟内剩余 {remaining} 次）",
+                ]
+            has_av = _find_avatar("彰人", a) and _find_avatar("冬弥", b)
+            if has_av:
+                img_bytes = _render_composite(a, b, text_lines)
+                await draw_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes))
+            elif is_egg:
+                img_bytes = _render_text_only(text_lines)
+                await draw_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes))
+            else:
+                plain = f"你抽到的派生是：{a}×{b}。（30分钟内剩余 {remaining} 次）"
+                await draw_cmd.finish(MessageSegment.reply(event.message_id) + plain)
         else:
-            plain = f"你抽到的派生是：{a}×{b}。（30分钟内剩余 {remaining} 次）"
-            await draw_cmd.finish(MessageSegment.reply(event.message_id) + plain)
+            # 多抽
+            has_av = all(_find_avatar("彰人", a) and _find_avatar("冬弥", b) for a, b, _ in results)
+            img_bytes = _render_multi(results, has_av, remaining, nickname)
+            await draw_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes))
 
 
 # ==================== 测试做饭 ====================
@@ -383,6 +543,29 @@ async def _(event: Event):
     else:
         img = _render_text_only(text_lines)
     await test_egg_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img))
+
+
+# ==================== 测试多派生 ====================
+
+test_multi_cmd = on_command("test多派生", priority=5, block=True)
+
+
+@test_multi_cmd.handle()
+async def _(event: Event):
+    if str(event.get_user_id()) != SUPERUSER_QQ:
+        return
+    nickname = event.sender.card or event.sender.nickname or "测试者"
+    pool_a = PARO_DATA.get("akito_pool", ["Callboy彰", "黑百合"])
+    pool_b = PARO_DATA.get("toya_pool", ["Callboy冬", "王子冬"])
+    # 固定抽取 3 次，其中恰好前 2 个为彩蛋
+    results = [
+        (pool_a[0], pool_b[0], True),
+        (pool_a[1], pool_b[1], True),
+        (pool_a[0], pool_b[1], False),
+    ]
+    has_av = all(_find_avatar("彰人", a) and _find_avatar("冬弥", b) for a, b, _ in results)
+    img = _render_multi(results, has_av, remaining=1, nickname=nickname)
+    await test_multi_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img))
 
 
 # ==================== 添加派生 ====================
