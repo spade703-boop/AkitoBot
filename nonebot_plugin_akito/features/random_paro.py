@@ -328,7 +328,7 @@ def _render_multi(results: list, remaining: int, nickname: str) -> bytes:
 
     # --- 标题 ---
     y = TEXT_TOP_GAP
-    draw.text((w // 2, y), "你抽取到的派生是：", font=fn, fill="#000000", anchor="ma")
+    draw.text((w // 2, y), f"本次共计抽取了{count}个派生", font=fn, fill="#000000", anchor="ma")
     y += title_h
 
     # --- 每行结果 ---
