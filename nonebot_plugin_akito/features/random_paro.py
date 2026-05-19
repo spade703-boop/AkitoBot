@@ -269,7 +269,7 @@ def _render_multi(results: list, remaining: int, nickname: str) -> bytes:
     FR_TEXTS = {
         "fox": "一只得意的狐狸赶走了这里的派生。",
         "rabbit": "一只圆圆的兔子挡住了这里的派生。",
-        "foxrabbit": "一对眼熟的狐兔不知道什么时候出现在了这里……",
+        "foxrabbit": "一对眼熟的狐兔出现在了这里……",
     }
 
     # --- 逐行计算宽度 ---
@@ -278,7 +278,7 @@ def _render_multi(results: list, remaining: int, nickname: str) -> bytes:
     def _row_width(idx):
         _, _, is_egg, fox_type = results[idx]
         if fox_type:
-            return int(fn.getbbox(FR_TEXTS[fox_type])[2])
+            return int(fn.getbbox(SEQS[idx] + FR_TEXTS[fox_type])[2])
         a, b = results[idx][0], results[idx][1]
         a_w = int(fn.getbbox(a)[2])
         b_w = int(fn.getbbox(b)[2])
@@ -350,7 +350,7 @@ def _render_multi(results: list, remaining: int, nickname: str) -> bytes:
                 if single_im:
                     canvas.paste(single_im, ((w - IMG_SZ) // 2, y))
             y += IMG_SZ + 8
-            draw.text((w // 2, y), FR_TEXTS[fox_type], font=fn, fill="#000000", anchor="ma")
+            draw.text((w // 2, y), seq + FR_TEXTS[fox_type], font=fn, fill="#000000", anchor="ma")
             y += ROW_H + result_gap
         else:
             has_av = _find_avatar("彰人", a) and _find_avatar("冬弥", b)
