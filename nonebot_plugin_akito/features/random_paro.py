@@ -252,15 +252,18 @@ def _render_multi(results: list, has_avatars: bool, remaining: int, nickname: st
     fn = _load_font(FONT_SIZE)       # 20px — 派生名称 / 普通文字
     fb = _load_font(FONT_BOLD_SIZE)  # 24px — 彩蛋汇总
 
-    # --- 行宽：序号 + A × B ---
-    def _result_line_width(aa, bb):
+    # --- 行宽：序号 + A × B（彩蛋行加 🍳）---
+    emoji_w = fn.getbbox(" 🍳")[2]
+
+    def _result_line_width(aa, bb, egg):
         prefix = fn.getbbox("① ")[2]
         a_w = fn.getbbox(aa)[2]
         b_w = fn.getbbox(bb)[2]
         x_w = fn.getbbox("×")[2]
-        return prefix + a_w + x_w + b_w
+        ww = prefix + a_w + x_w + b_w
+        return ww + emoji_w if egg else ww
 
-    max_line_w = max(_result_line_width(a, b) for a, b, _ in results)
+    max_line_w = max(_result_line_width(a, b, egg) for a, b, egg in results)
 
     # 彩蛋汇总行宽
     egg_summary_w = 0.0
@@ -321,6 +324,9 @@ def _render_multi(results: list, has_avatars: bool, remaining: int, nickname: st
         draw.text((x, y), a, font=fn, fill="#FF7722", anchor="la"); x += a_w
         draw.text((x, y), "×", font=fn, fill="#000000", anchor="la"); x += x_w_val
         draw.text((x, y), b, font=fn, fill="#0077DD", anchor="la")
+        if is_egg:
+            x += b_w
+            draw.text((x, y), " 🍳", font=fn, fill="#000000", anchor="la")
 
         y += ROW_H + result_gap
 
