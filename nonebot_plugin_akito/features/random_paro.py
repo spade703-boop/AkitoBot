@@ -249,39 +249,39 @@ def _render_multi(results: list, has_avatars: bool, remaining: int, nickname: st
     row_text_gap = 8
     result_gap = 10
 
-    # --- 逐行计算宽度，取最大值 ---
-    fn = _load_font(FONT_SIZE)
-    fb = _load_font(FONT_BOLD_SIZE)
+    fn = _load_font(FONT_SIZE)       # 20px — 派生名称 / 普通文字
+    fb = _load_font(FONT_BOLD_SIZE)  # 24px — 彩蛋汇总
 
+    # --- 行宽：序号 + A × B ---
     def _result_line_width(aa, bb):
-        # 序号 "① " + 彰人·AA × 冬弥·BB
         prefix = fn.getbbox("① ")[2]
-        a_w = fb.getbbox(aa)[2]
-        b_w = fb.getbbox(bb)[2]
-        x_w = fb.getbbox("×")[2]
-        dot_w = fb.getbbox("·")[2]
-        zhangren_w = fn.getbbox("彰人")[2]
-        dongmi_w = fn.getbbox("冬弥")[2]
-        return prefix + zhangren_w + dot_w + a_w + x_w + dongmi_w + dot_w + b_w
+        a_w = fn.getbbox(aa)[2]
+        b_w = fn.getbbox(bb)[2]
+        x_w = fn.getbbox("×")[2]
+        return prefix + a_w + x_w + b_w
 
     max_line_w = max(_result_line_width(a, b) for a, b, _ in results)
+
+    # 彩蛋汇总行宽
     egg_summary_w = 0.0
     if egg_indices:
-        nick_w = fn.getbbox(f"@{nickname}：")[2]
-        egg_parts = []
+        parts_w = 0.0
         for idx in egg_indices:
             ea, eb, _ = results[idx]
-            egg_parts.append(fb.getbbox(f"{ea}×{eb}")[2])
-        egg_line_w = fn.getbbox("快来做")[2] + sum(egg_parts) + fn.getbbox("、")[2] * (len(egg_parts) - 1) + fn.getbbox("的饭吧！")[2]
-        egg_summary_w = max(nick_w, egg_line_w)
+            parts_w += fb.getbbox(ea)[2] + fb.getbbox("×")[2] + fb.getbbox(eb)[2]
+        egg_line_w = (fb.getbbox("快来做")[2] + parts_w
+                      + fb.getbbox("、")[2] * (len(egg_indices) - 1)
+                      + fb.getbbox("的饭吧！")[2])
+        egg_summary_w = max(fb.getbbox("恭喜你是被选中的彰冬姐！")[2], egg_line_w)
+
     rem_w = fn.getbbox(f"（30分钟内剩余 {remaining} 次）")[2]
 
-    w = max(MIN_CANVAS_W, int(max_line_w) + 40,
+    w = max(MIN_CANVAS_W, int(max_line_w) + 48,
             AVATAR_WIDTH if has_avatars else 0,
-            int(egg_summary_w) + 40 if egg_summary_w else 0,
-            int(rem_w) + 40)
+            int(egg_summary_w) + 48 if egg_summary_w else 0,
+            int(rem_w) + 48)
 
-    # --- 拼装文字行（用于计算高度）---
+    # --- 高度 ---
     title_h = ROW_H + 8
     result_h_per = (avatar_size + row_text_gap + ROW_H) if has_avatars else ROW_H
     egg_area_h = 0
@@ -295,14 +295,13 @@ def _render_multi(results: list, has_avatars: bool, remaining: int, nickname: st
 
     # --- 标题 ---
     y = TEXT_TOP_GAP
-    draw.text((w // 2, y), "你抽取到的派生是：", font=_load_font(FONT_SIZE), fill="#000000", anchor="ma")
+    draw.text((w // 2, y), "你抽取到的派生是：", font=fn, fill="#000000", anchor="ma")
     y += title_h
 
-    # --- 每行结果 ---
+    # --- 每行结果：序号 + A × B（彰人橙 冬弥蓝）---
     for i, (a, b, is_egg) in enumerate(results):
         if has_avatars:
             avatars_x = (w - avatars_width) // 2
-            # paste avatars
             for ch, name, x_off in [("彰人", a, avatars_x), ("冬弥", b, avatars_x + avatar_size + gap)]:
                 path = _find_avatar(ch, name)
                 if path:
@@ -310,46 +309,44 @@ def _render_multi(results: list, has_avatars: bool, remaining: int, nickname: st
                     canvas.paste(im, (x_off, y))
             y += avatar_size + row_text_gap
 
-        # 序号 + 着色文字
         seq = SEQS[i]
         seq_w = int(fn.getbbox(seq + " ")[2])
-        zr_w = int(fn.getbbox("彰人")[2])
-        dm_w = int(fn.getbbox("冬弥")[2])
-        dot_w = int(fb.getbbox("·")[2])
-        x_w = int(fb.getbbox("×")[2])
-        a_w = int(fb.getbbox(a)[2])
-        b_w = int(fb.getbbox(b)[2])
-        total_w = seq_w + zr_w + dot_w + a_w + x_w + dm_w + dot_w + b_w
+        a_w = int(fn.getbbox(a)[2])
+        x_w_val = int(fn.getbbox("×")[2])
+        b_w = int(fn.getbbox(b)[2])
+        total_w = seq_w + a_w + x_w_val + b_w
         x = (w - total_w) // 2
 
-        a_color = "#FF7722" if is_egg else "#000000"
-        b_color = "#0077DD" if is_egg else "#000000"
-
-        draw.text((x, y), seq + " ", font=fn, fill="#000000", anchor="la")
-        x += seq_w
-        draw.text((x, y), "彰人", font=fn, fill="#000000", anchor="la")
-        x += zr_w
-        draw.text((x, y), "·", font=fb, fill="#000000", anchor="la")
-        x += dot_w
-        draw.text((x, y), a, font=fb, fill=a_color, anchor="la")
-        x += a_w
-        draw.text((x, y), "×", font=fb, fill="#000000", anchor="la")
-        x += x_w
-        draw.text((x, y), "冬弥", font=fn, fill="#000000", anchor="la")
-        x += dm_w
-        draw.text((x, y), "·", font=fb, fill="#000000", anchor="la")
-        x += dot_w
-        draw.text((x, y), b, font=fb, fill=b_color, anchor="la")
+        draw.text((x, y), seq + " ", font=fn, fill="#000000", anchor="la"); x += seq_w
+        draw.text((x, y), a, font=fn, fill="#FF7722", anchor="la"); x += a_w
+        draw.text((x, y), "×", font=fn, fill="#000000", anchor="la"); x += x_w_val
+        draw.text((x, y), b, font=fn, fill="#0077DD", anchor="la")
 
         y += ROW_H + result_gap
 
-    # --- 彩蛋汇总 ---
+    # --- 彩蛋汇总（24px，派生名着色）---
     if egg_indices:
         y += 12
-        draw.text((w // 2, y), f"恭喜你是被选中的彰冬姐！", font=fn, fill="#000000", anchor="ma")
+        draw.text((w // 2, y), "恭喜你是被选中的彰冬姐！", font=fb, fill="#000000", anchor="ma")
         y += ROW_H
-        egg_pairs = "、".join(f"{results[idx][0]}×{results[idx][1]}" for idx in egg_indices)
-        draw.text((w // 2, y), f"快来做{egg_pairs}的饭吧！", font=fn, fill="#d35400", anchor="ma")
+
+        # "快来做" + 着色派生对 + "的饭吧！"
+        parts = [("快来做", "#000000")]
+        for j, idx in enumerate(egg_indices):
+            if j > 0:
+                parts.append(("、", "#000000"))
+            ea, eb, _ = results[idx]
+            parts.append((ea, "#FF7722"))
+            parts.append(("×", "#000000"))
+            parts.append((eb, "#0077DD"))
+        parts.append(("的饭吧！", "#000000"))
+
+        total_w2 = sum(fb.getbbox(t)[2] for t, _ in parts)
+        x2 = (w - total_w2) // 2
+        for txt, clr in parts:
+            w_t = int(fb.getbbox(txt)[2])
+            draw.text((x2, y), txt, font=fb, fill=clr, anchor="la")
+            x2 += w_t
         y += ROW_H
 
     # --- 剩余次数 ---
