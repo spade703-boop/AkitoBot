@@ -252,8 +252,8 @@ def _render_multi(results: list, has_avatars: bool, remaining: int, nickname: st
     fn = _load_font(FONT_SIZE)       # 20px — 派生名称 / 普通文字
     fb = _load_font(FONT_BOLD_SIZE)  # 24px — 彩蛋汇总
 
-    # --- 行宽：序号 + A × B（彩蛋行加 🍳）---
-    emoji_w = fn.getbbox(" 🍳")[2]
+    # --- 行宽：序号 + A × B（彩蛋行加 ★）---
+    emoji_w = fn.getbbox(" ★")[2]
 
     def _result_line_width(aa, bb, egg):
         prefix = fn.getbbox("① ")[2]
@@ -326,7 +326,7 @@ def _render_multi(results: list, has_avatars: bool, remaining: int, nickname: st
         draw.text((x, y), b, font=fn, fill="#0077DD", anchor="la")
         if is_egg:
             x += b_w
-            draw.text((x, y), " 🍳", font=fn, fill="#000000", anchor="la")
+            draw.text((x, y), " ★", font=fn, fill="#000000", anchor="la")
 
         y += ROW_H + result_gap
 
