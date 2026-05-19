@@ -108,16 +108,12 @@ FOXRABBIT_DIR = AVATAR_BASE / "fox&rabbit"
 
 
 def _load_foxrabbit_image(kind: str) -> Image.Image | None:
-    """加载狐/兔图片，宽等比缩到 150，从顶端裁 150 高。"""
+    """加载狐/兔图片，缩放到 150×150。"""
     for ext in (".png", ".jpg", ".jpeg"):
         p = FOXRABBIT_DIR / f"{kind}{ext}"
         if p.exists():
             im = Image.open(p).convert("RGB")
-            w, h = im.size
-            new_w = 150
-            new_h = int(h * 150 / w)
-            im = im.resize((new_w, new_h), Image.LANCZOS)
-            return im.crop((0, 0, 150, 150))
+            return im.resize((150, 150), Image.LANCZOS)
     return None
 
 
@@ -281,16 +277,13 @@ def _render_multi(results: list, remaining: int, nickname: str) -> bytes:
 
     def _row_width(idx):
         _, _, is_egg, fox_type = results[idx]
-        seq_w = int(fn.getbbox(SEQS[idx] + " ")[2])
         if fox_type:
-            img_w = IMG_SZ if fox_type == "rabbit" else (IMG_SZ * 2 + gap if fox_type == "foxrabbit" else IMG_SZ)
-            txt_w = int(fn.getbbox(FR_TEXTS[fox_type])[2])
-            return seq_w + img_w + 14 + txt_w
+            return int(fn.getbbox(FR_TEXTS[fox_type])[2])
         a, b = results[idx][0], results[idx][1]
         a_w = int(fn.getbbox(a)[2])
         b_w = int(fn.getbbox(b)[2])
         x_w = int(fn.getbbox("×")[2])
-        return seq_w + a_w + x_w + b_w + (emoji_w if is_egg else 0)
+        return a_w + x_w + b_w + (emoji_w if is_egg else 0)
 
     max_line_w = max(_row_width(i) for i in range(count))
 
@@ -318,7 +311,7 @@ def _render_multi(results: list, remaining: int, nickname: str) -> bytes:
     for i in range(count):
         _, _, _, fox_type = results[i]
         if fox_type:
-            height += IMG_SZ + result_gap  # 狐兔行：图片高 + 间距
+            height += IMG_SZ + 8 + ROW_H + result_gap  # 狐兔行：图片 + 文字
         else:
             has_av = _find_avatar("彰人", results[i][0]) and _find_avatar("冬弥", results[i][1])
             if has_av:
@@ -343,30 +336,22 @@ def _render_multi(results: list, remaining: int, nickname: str) -> bytes:
         seq_w = int(fn.getbbox(seq + " ")[2])
 
         if fox_type:
-            # 狐兔行：序号 + 图片 + 文字，水平排列
-            txt = FR_TEXTS[fox_type]
+            # 狐兔行：图片居中 + 文字在下，跟普通行同布局
             if fox_type == "foxrabbit":
                 fox_im = _load_foxrabbit_image("狐")
                 rab_im = _load_foxrabbit_image("兔")
-                imgs_w = IMG_SZ * 2 + gap
-            else:
-                fox_im = _load_foxrabbit_image("狐" if fox_type == "fox" else "兔")
-                imgs_w = IMG_SZ
-            txt_w = int(fn.getbbox(txt)[2])
-            total_w = seq_w + 14 + imgs_w + txt_w
-            x = (w - total_w) // 2
-            ox = x
-            draw.text((ox, y + (IMG_SZ - FONT_SIZE) // 2), seq + " ", font=fn, fill="#000000", anchor="la")
-            ox += seq_w + 14
-            if fox_type == "foxrabbit":
                 if fox_im and rab_im:
-                    canvas.paste(fox_im, (ox, y)); ox += IMG_SZ + gap
-                    canvas.paste(rab_im, (ox, y)); ox += IMG_SZ
-            elif fox_im:
-                canvas.paste(fox_im, (ox, y)); ox += IMG_SZ
-            ox += 14
-            draw.text((ox, y + (IMG_SZ - FONT_SIZE) // 2), txt, font=fn, fill="#000000", anchor="la")
-            y += IMG_SZ + result_gap
+                    imgs_w = IMG_SZ * 2 + gap
+                    fx = (w - imgs_w) // 2
+                    canvas.paste(fox_im, (fx, y))
+                    canvas.paste(rab_im, (fx + IMG_SZ + gap, y))
+            else:
+                single_im = _load_foxrabbit_image("狐" if fox_type == "fox" else "兔")
+                if single_im:
+                    canvas.paste(single_im, ((w - IMG_SZ) // 2, y))
+            y += IMG_SZ + 8
+            draw.text((w // 2, y), FR_TEXTS[fox_type], font=fn, fill="#000000", anchor="ma")
+            y += ROW_H + result_gap
         else:
             has_av = _find_avatar("彰人", a) and _find_avatar("冬弥", b)
             if has_av:
