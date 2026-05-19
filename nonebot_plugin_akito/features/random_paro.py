@@ -104,6 +104,23 @@ def _find_avatar(character: str, name: str) -> Path | None:
     return None
 
 
+FOXRABBIT_DIR = AVATAR_BASE / "fox&rabbit"
+
+
+def _load_foxrabbit_image(kind: str) -> Image.Image | None:
+    """加载狐/兔图片，宽等比缩到 150，从顶端裁 150 高。"""
+    for ext in (".png", ".jpg", ".jpeg"):
+        p = FOXRABBIT_DIR / f"{kind}{ext}"
+        if p.exists():
+            im = Image.open(p).convert("RGB")
+            w, h = im.size
+            new_w = 150
+            new_h = int(h * 150 / w)
+            im = im.resize((new_w, new_h), Image.LANCZOS)
+            return im.crop((0, 0, 150, 150))
+    return None
+
+
 FONT_SIZE = 20
 FONT_BOLD_SIZE = 24
 ROW_H = 32
@@ -204,6 +221,7 @@ def _render_composite(akito_name: str, toya_name: str, text_lines: list) -> byte
 # ==================== 做饭彩蛋 ====================
 
 _EASTER_EGG_RATE = 0.03
+_FOXRABBIT_RATE = 0.03  # 每种 3%
 
 
 # ==================== 模糊匹配 ====================
@@ -238,60 +256,77 @@ def _fuzzy_match(name: str, pool: list) -> str | list | None:
 SEQS = ["①", "②", "③"]
 
 
-def _render_multi(results: list, has_avatars: bool, remaining: int, nickname: str) -> bytes:
-    """results: [(a, b, is_egg), ...]"""
+def _render_multi(results: list, remaining: int, nickname: str) -> bytes:
+    """results: [(a, b, is_cooking, fox_type), ...]"""
     count = len(results)
-    egg_indices = [i for i, (_, _, egg) in enumerate(results) if egg]
+    cooking_indices = [i for i, (_, _, egg, _) in enumerate(results) if egg]
 
+    IMG_SZ = 150  # 狐兔图片尺寸
     avatar_size = 150
     gap = 4
     avatars_width = avatar_size * 2 + gap
-    row_text_gap = 8
     result_gap = 10
 
-    fn = _load_font(FONT_SIZE)       # 20px — 派生名称 / 普通文字
+    fn = _load_font(FONT_SIZE)       # 20px
     fb = _load_font(FONT_BOLD_SIZE)  # 24px — 彩蛋汇总
 
-    # --- 行宽：序号 + A × B（彩蛋行加 ★）---
+    FR_TEXTS = {
+        "fox": "一只得意的狐狸赶走了这里的派生。",
+        "rabbit": "一只圆圆的兔子挡住了这里的派生。",
+        "foxrabbit": "一对眼熟的狐兔不知道什么时候出现在了这里……",
+    }
+
+    # --- 逐行计算宽度 ---
     emoji_w = fn.getbbox(" ★")[2]
 
-    def _result_line_width(aa, bb, egg):
-        prefix = fn.getbbox("① ")[2]
-        a_w = fn.getbbox(aa)[2]
-        b_w = fn.getbbox(bb)[2]
-        x_w = fn.getbbox("×")[2]
-        ww = prefix + a_w + x_w + b_w
-        return ww + emoji_w if egg else ww
+    def _row_width(idx):
+        _, _, is_egg, fox_type = results[idx]
+        seq_w = int(fn.getbbox(SEQS[idx] + " ")[2])
+        if fox_type:
+            img_w = IMG_SZ if fox_type == "rabbit" else (IMG_SZ * 2 + gap if fox_type == "foxrabbit" else IMG_SZ)
+            txt_w = int(fn.getbbox(FR_TEXTS[fox_type])[2])
+            return seq_w + img_w + 14 + txt_w
+        a, b = results[idx][0], results[idx][1]
+        a_w = int(fn.getbbox(a)[2])
+        b_w = int(fn.getbbox(b)[2])
+        x_w = int(fn.getbbox("×")[2])
+        return seq_w + a_w + x_w + b_w + (emoji_w if is_egg else 0)
 
-    max_line_w = max(_result_line_width(a, b, egg) for a, b, egg in results)
+    max_line_w = max(_row_width(i) for i in range(count))
 
-    # 彩蛋汇总行宽
+    # 做饭彩蛋汇总行宽
     egg_summary_w = 0.0
-    if egg_indices:
+    if cooking_indices:
         parts_w = 0.0
-        for idx in egg_indices:
-            ea, eb, _ = results[idx]
+        for idx in cooking_indices:
+            ea, eb = results[idx][0], results[idx][1]
             parts_w += fb.getbbox(ea)[2] + fb.getbbox("×")[2] + fb.getbbox(eb)[2]
         egg_line_w = (fb.getbbox("快来做")[2] + parts_w
-                      + fb.getbbox("、")[2] * (len(egg_indices) - 1)
+                      + fb.getbbox("、")[2] * (len(cooking_indices) - 1)
                       + fb.getbbox("的饭吧！")[2])
         egg_summary_w = max(fb.getbbox("恭喜你是被选中的彰冬姐！")[2], egg_line_w)
 
     rem_w = fn.getbbox(f"（30分钟内剩余 {remaining} 次）")[2]
 
     w = max(MIN_CANVAS_W, int(max_line_w) + 48,
-            AVATAR_WIDTH if has_avatars else 0,
             int(egg_summary_w) + 48 if egg_summary_w else 0,
             int(rem_w) + 48)
 
-    # --- 高度 ---
+    # --- 高度：逐行累加 ---
     title_h = ROW_H + 8
-    result_h_per = (avatar_size + row_text_gap + ROW_H) if has_avatars else ROW_H
-    egg_area_h = 0
-    if egg_indices:
-        egg_area_h = 12 + 2 * ROW_H
-    rem_h = 8 + ROW_H
-    height = TEXT_TOP_GAP + title_h + count * (result_h_per + result_gap) + egg_area_h + rem_h + TEXT_BOTTOM_PAD
+    height = TEXT_TOP_GAP + title_h
+    for i in range(count):
+        _, _, _, fox_type = results[i]
+        if fox_type:
+            height += IMG_SZ + result_gap  # 狐兔行：图片高 + 间距
+        else:
+            has_av = _find_avatar("彰人", results[i][0]) and _find_avatar("冬弥", results[i][1])
+            if has_av:
+                height += avatar_size + 8 + ROW_H + result_gap  # 头像 + 文字
+            else:
+                height += ROW_H + result_gap  # 纯文字
+    egg_area_h = 12 + 2 * ROW_H if cooking_indices else 0
+    height += egg_area_h + 8 + ROW_H + TEXT_BOTTOM_PAD
 
     canvas = Image.new("RGB", (w, height), color="#ffffff")
     draw = ImageDraw.Draw(canvas)
@@ -301,52 +336,76 @@ def _render_multi(results: list, has_avatars: bool, remaining: int, nickname: st
     draw.text((w // 2, y), "你抽取到的派生是：", font=fn, fill="#000000", anchor="ma")
     y += title_h
 
-    # --- 每行结果：序号 + A × B（彰人橙 冬弥蓝）---
-    for i, (a, b, is_egg) in enumerate(results):
-        if has_avatars:
-            avatars_x = (w - avatars_width) // 2
-            for ch, name, x_off in [("彰人", a, avatars_x), ("冬弥", b, avatars_x + avatar_size + gap)]:
-                path = _find_avatar(ch, name)
-                if path:
-                    im = Image.open(path).convert("RGB").resize((avatar_size, avatar_size), Image.LANCZOS)
-                    canvas.paste(im, (x_off, y))
-            y += avatar_size + row_text_gap
-
+    # --- 每行结果 ---
+    for i in range(count):
+        a, b, is_egg, fox_type = results[i]
         seq = SEQS[i]
         seq_w = int(fn.getbbox(seq + " ")[2])
-        a_w = int(fn.getbbox(a)[2])
-        x_w_val = int(fn.getbbox("×")[2])
-        b_w = int(fn.getbbox(b)[2])
-        total_w = seq_w + a_w + x_w_val + b_w
-        x = (w - total_w) // 2
 
-        draw.text((x, y), seq + " ", font=fn, fill="#000000", anchor="la"); x += seq_w
-        draw.text((x, y), a, font=fn, fill="#FF7722", anchor="la"); x += a_w
-        draw.text((x, y), "×", font=fn, fill="#000000", anchor="la"); x += x_w_val
-        draw.text((x, y), b, font=fn, fill="#0077DD", anchor="la")
-        if is_egg:
-            x += b_w
-            draw.text((x, y), " ★", font=fn, fill="#000000", anchor="la")
+        if fox_type:
+            # 狐兔行：序号 + 图片 + 文字，水平排列
+            txt = FR_TEXTS[fox_type]
+            if fox_type == "foxrabbit":
+                fox_im = _load_foxrabbit_image("狐")
+                rab_im = _load_foxrabbit_image("兔")
+                imgs_w = IMG_SZ * 2 + gap
+            else:
+                fox_im = _load_foxrabbit_image("狐" if fox_type == "fox" else "兔")
+                imgs_w = IMG_SZ
+            txt_w = int(fn.getbbox(txt)[2])
+            total_w = seq_w + 14 + imgs_w + txt_w
+            x = (w - total_w) // 2
+            ox = x
+            draw.text((ox, y + (IMG_SZ - FONT_SIZE) // 2), seq + " ", font=fn, fill="#000000", anchor="la")
+            ox += seq_w + 14
+            if fox_type == "foxrabbit":
+                if fox_im and rab_im:
+                    canvas.paste(fox_im, (ox, y)); ox += IMG_SZ + gap
+                    canvas.paste(rab_im, (ox, y)); ox += IMG_SZ
+            elif fox_im:
+                canvas.paste(fox_im, (ox, y)); ox += IMG_SZ
+            ox += 14
+            draw.text((ox, y + (IMG_SZ - FONT_SIZE) // 2), txt, font=fn, fill="#000000", anchor="la")
+            y += IMG_SZ + result_gap
+        else:
+            has_av = _find_avatar("彰人", a) and _find_avatar("冬弥", b)
+            if has_av:
+                avatars_x = (w - avatars_width) // 2
+                for ch, name, x_off in [("彰人", a, avatars_x), ("冬弥", b, avatars_x + avatar_size + gap)]:
+                    path = _find_avatar(ch, name)
+                    if path:
+                        im = Image.open(path).convert("RGB").resize((avatar_size, avatar_size), Image.LANCZOS)
+                        canvas.paste(im, (x_off, y))
+                y += avatar_size + 8
 
-        y += ROW_H + result_gap
+            a_w = int(fn.getbbox(a)[2])
+            x_w_val = int(fn.getbbox("×")[2])
+            b_w = int(fn.getbbox(b)[2])
+            total_w = seq_w + a_w + x_w_val + b_w + (emoji_w if is_egg else 0)
+            x = (w - total_w) // 2
+            draw.text((x, y), seq + " ", font=fn, fill="#000000", anchor="la"); x += seq_w
+            draw.text((x, y), a, font=fn, fill="#FF7722", anchor="la"); x += a_w
+            draw.text((x, y), "×", font=fn, fill="#000000", anchor="la"); x += x_w_val
+            draw.text((x, y), b, font=fn, fill="#0077DD", anchor="la")
+            if is_egg:
+                x += b_w
+                draw.text((x, y), " ★", font=fn, fill="#000000", anchor="la")
+            y += ROW_H + result_gap
 
-    # --- 彩蛋汇总（24px，派生名着色）---
-    if egg_indices:
+    # --- 做饭彩蛋汇总（24px，派生名着色）---
+    if cooking_indices:
         y += 12
         draw.text((w // 2, y), "恭喜你是被选中的彰冬姐！", font=fb, fill="#000000", anchor="ma")
         y += ROW_H
-
-        # "快来做" + 着色派生对 + "的饭吧！"
         parts = [("快来做", "#000000")]
-        for j, idx in enumerate(egg_indices):
+        for j, idx in enumerate(cooking_indices):
             if j > 0:
                 parts.append(("、", "#000000"))
-            ea, eb, _ = results[idx]
+            ea, eb = results[idx][0], results[idx][1]
             parts.append((ea, "#FF7722"))
             parts.append(("×", "#000000"))
             parts.append((eb, "#0077DD"))
         parts.append(("的饭吧！", "#000000"))
-
         total_w2 = sum(fb.getbbox(t)[2] for t, _ in parts)
         x2 = (w - total_w2) // 2
         for txt, clr in parts:
@@ -461,13 +520,26 @@ async def _(event: Event, args: Message = CommandArg()):
 
         nickname = event.sender.card or event.sender.nickname or f"用户{user_id}"
 
-        # N 次独立抽取
+        # N 次独立抽取（做饭 > 狐兔，多抽时狐兔最多一次）
         results = []
+        foxrabbit_used = False
         for _ in range(count):
             a = fixed_a or random.choice(akito_pool)
             b = fixed_b or random.choice(toya_pool)
             is_egg = random.random() < _EASTER_EGG_RATE
-            results.append((a, b, is_egg))
+            fox_type = None
+            if not is_egg and not foxrabbit_used:
+                rr = random.random()
+                if rr < _FOXRABBIT_RATE:
+                    fox_type = "fox"
+                    foxrabbit_used = True
+                elif rr < _FOXRABBIT_RATE * 2:
+                    fox_type = "rabbit"
+                    foxrabbit_used = True
+                elif rr < _FOXRABBIT_RATE * 3:
+                    fox_type = "foxrabbit"
+                    foxrabbit_used = True
+            results.append((a, b, is_egg, fox_type))
 
         for _ in range(count):
             history.append(now)
@@ -476,9 +548,10 @@ async def _(event: Event, args: Message = CommandArg()):
 
         await asyncio.sleep(random.uniform(0.4, 0.8))
 
-        if count == 1:
-            # 单抽 — 保持原有输出
-            a, b, is_egg = results[0]
+        has_any_fr = any(ft for _, _, _, ft in results)
+        if count == 1 and not has_any_fr:
+            # 单抽无狐兔 — 保持原有输出
+            a, b, is_egg, _ = results[0]
             if is_egg:
                 text_lines = [
                     f"@{nickname}：",
@@ -513,9 +586,8 @@ async def _(event: Event, args: Message = CommandArg()):
                 plain = f"你抽到的派生是：{a}×{b}。（30分钟内剩余 {remaining} 次）"
                 await draw_cmd.finish(MessageSegment.reply(event.message_id) + plain)
         else:
-            # 多抽
-            has_av = all(_find_avatar("彰人", a) and _find_avatar("冬弥", b) for a, b, _ in results)
-            img_bytes = _render_multi(results, has_av, remaining, nickname)
+            # 多抽 或 单抽含狐兔 → 走 _render_multi
+            img_bytes = _render_multi(results, remaining, nickname)
             await draw_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes))
 
 
@@ -560,15 +632,35 @@ async def _(event: Event):
     nickname = event.sender.card or event.sender.nickname or "测试者"
     pool_a = PARO_DATA.get("akito_pool", ["Callboy彰", "黑百合"])
     pool_b = PARO_DATA.get("toya_pool", ["Callboy冬", "王子冬"])
-    # 固定抽取 3 次，其中恰好前 2 个为彩蛋
+    # 固定抽取 3 次，其中恰好前 2 个为做饭彩蛋
     results = [
-        (pool_a[0], pool_b[0], True),
-        (pool_a[1], pool_b[1], True),
-        (pool_a[0], pool_b[1], False),
+        (pool_a[0], pool_b[0], True, None),
+        (pool_a[1], pool_b[1], True, None),
+        (pool_a[0], pool_b[1], False, None),
     ]
-    has_av = all(_find_avatar("彰人", a) and _find_avatar("冬弥", b) for a, b, _ in results)
-    img = _render_multi(results, has_av, remaining=1, nickname=nickname)
+    img = _render_multi(results, remaining=1, nickname=nickname)
     await test_multi_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img))
+
+
+# ==================== 测试狐兔彩蛋 ====================
+
+test_fr_cmd = on_command("test狐兔彩蛋", priority=5, block=True)
+
+
+@test_fr_cmd.handle()
+async def _(event: Event):
+    if str(event.get_user_id()) != SUPERUSER_QQ:
+        return
+    nickname = event.sender.card or event.sender.nickname or "测试者"
+    pool_a = PARO_DATA.get("akito_pool", ["黑百合", "白骑"])
+    pool_b = PARO_DATA.get("toya_pool", ["王子冬", "黑骑"])
+    results = [
+        (pool_a[0], pool_b[0], False, "fox"),
+        (pool_a[1], pool_b[1], False, None),
+        (pool_a[0], pool_b[1], False, "foxrabbit"),
+    ]
+    img = _render_multi(results, remaining=2, nickname=nickname)
+    await test_fr_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img))
 
 
 # ==================== 添加派生 ====================
