@@ -117,6 +117,15 @@ def _load_foxrabbit_image(kind: str) -> Image.Image | None:
     return None
 
 
+def _load_foxbun_image() -> Image.Image | None:
+    """加载狐&兔.png，保持原尺寸不缩放。"""
+    for ext in (".png", ".jpg", ".jpeg"):
+        p = FOXRABBIT_DIR / f"狐&兔{ext}"
+        if p.exists():
+            return Image.open(p).convert("RGB")
+    return None
+
+
 FONT_SIZE = 20
 FONT_BOLD_SIZE = 24
 ROW_H = 32
@@ -266,15 +275,6 @@ def _render_multi(results: list, remaining: int, nickname: str) -> bytes:
 
     fn = _load_font(FONT_SIZE)       # 20px
     fb = _load_font(FONT_BOLD_SIZE)  # 24px — 彩蛋汇总
-
-    def _load_foxbun_image() -> Image.Image | None:
-    """加载狐&兔.png，保持原尺寸不缩放。"""
-    for ext in (".png", ".jpg", ".jpeg"):
-        p = FOXRABBIT_DIR / f"狐&兔{ext}"
-        if p.exists():
-            return Image.open(p).convert("RGB")
-    return None
-
 
 FR_TEXTS = {
         "fox": "一只得意的狐狸赶走了这里的派生。",
