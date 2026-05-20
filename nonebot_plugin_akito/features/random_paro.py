@@ -314,7 +314,7 @@ def _render_multi(results: list, remaining: int, nickname: str) -> bytes:
                 parts_w += fb.getbbox(ea)[2] + fb.getbbox("×")[2] + fb.getbbox(eb)[2]
             sep_count = len(cooking_indices) - 1 + (1 if foxbun_idx is not None else 0)
             if foxbun_idx is not None:
-                parts_w += fb.getbbox("狐")[2] + fb.getbbox("×")[2] + fb.getbbox("兔")[2]
+                parts_w += fb.getbbox("狐")[2] + fb.getbbox("兔")[2]
             egg_line_w = (fb.getbbox("快来做")[2] + parts_w
                           + fb.getbbox("、")[2] * sep_count
                           + fb.getbbox("的饭吧！")[2])
@@ -346,7 +346,10 @@ def _render_multi(results: list, remaining: int, nickname: str) -> bytes:
                 height += avatar_size + 8 + ROW_H + result_gap  # 头像 + 文字
             else:
                 height += ROW_H + result_gap  # 纯文字
-    egg_area_h = 12 + 2 * ROW_H if (cooking_indices or foxbun_idx is not None) else 0
+    has_cook = bool(cooking_indices)
+    has_foxbun = foxbun_idx is not None
+    egg_area_h = 12 + (2 if has_cook else 1) * ROW_H if (has_cook or has_foxbun) else 0
+    # 有做饭时 2 行（恭喜+快来做），仅狐×兔时 1 行
     height += egg_area_h + 8 + ROW_H + TEXT_BOTTOM_PAD
 
     canvas = Image.new("RGB", (w, height), color="#ffffff")
@@ -385,7 +388,16 @@ def _render_multi(results: list, remaining: int, nickname: str) -> bytes:
                 if single_im:
                     canvas.paste(single_im, ((w - IMG_SZ) // 2, y))
                 y += IMG_SZ + 8
-            draw.text((w // 2, y), seq + FR_TEXTS[fox_type], font=fn, fill="#000000", anchor="ma")
+            # 狐兔文字：狐橙兔蓝
+            if fox_type == "foxrabbit":
+                segs = [(seq + " ", "#000000"), ("一对眼熟的", "#000000"), ("狐", "#FF7722"), ("兔", "#0077DD"), ("出现在了这里……", "#000000")]
+            elif fox_type == "foxbun":
+                segs = [(seq + " ", "#000000"), ("发现了一对正在贴贴的", "#000000"), ("狐", "#FF7722"), ("兔", "#0077DD"), ("！", "#000000")]
+            elif fox_type == "fox":
+                segs = [(seq + " ", "#000000"), ("一只得意的", "#000000"), ("狐", "#FF7722"), ("狸赶走了这里的派生。", "#000000")]
+            else:
+                segs = [(seq + " ", "#000000"), ("一只圆圆的", "#000000"), ("兔", "#0077DD"), ("子挡住了这里的派生。", "#000000")]
+            _draw_segmented_line(draw, y, segs, w)
             y += ROW_H + result_gap
         else:
             has_av = _find_avatar("彰人", a) and _find_avatar("冬弥", b)
@@ -431,7 +443,6 @@ def _render_multi(results: list, remaining: int, nickname: str) -> bytes:
             if foxbun_idx is not None:
                 parts.append(("、", "#000000"))
                 parts.append(("狐", "#FF7722"))
-                parts.append(("×", "#000000"))
                 parts.append(("兔", "#0077DD"))
             parts.append(("的饭吧！", "#000000"))
             total_w2 = sum(fb.getbbox(t)[2] for t, _ in parts)
@@ -442,11 +453,8 @@ def _render_multi(results: list, remaining: int, nickname: str) -> bytes:
                 x2 += w_t
             y += ROW_H
         else:
-            # 狐×兔单独触发（无做饭）
-            draw.text((w // 2, y), "快来做", font=fb, fill="#000000", anchor="ma")
-            y += ROW_H
-            # "狐兔饭吧！" 狐橙兔蓝
-            parts = [("狐", "#FF7722"), ("兔", "#0077DD"), ("饭吧！", "#000000")]
+            # 狐×兔单独触发（无做饭）单行：快来做狐兔饭吧！
+            parts = [("快来做", "#000000"), ("狐", "#FF7722"), ("兔", "#0077DD"), ("饭吧！", "#000000")]
             total_w2 = sum(fb.getbbox(t)[2] for t, _ in parts)
             x2 = (w - total_w2) // 2
             for txt, clr in parts:
