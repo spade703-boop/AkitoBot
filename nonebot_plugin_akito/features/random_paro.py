@@ -388,15 +388,16 @@ def _render_multi(results: list, remaining: int, nickname: str) -> bytes:
                 if single_im:
                     canvas.paste(single_im, ((w - IMG_SZ) // 2, y))
                 y += IMG_SZ + 8
-            # 狐兔文字：狐橙兔蓝
+            # 狐兔文字：狐橙兔蓝（单抽不带序号）
+            pre = seq + " " if count > 1 else ""
             if fox_type == "foxrabbit":
-                segs = [(seq + " ", "#000000", False), ("一对眼熟的", "#000000", False), ("狐", "#FF7722", False), ("兔", "#0077DD", False), ("出现在了这里……", "#000000", False)]
+                segs = [(pre, "#000000", False), ("一对眼熟的", "#000000", False), ("狐", "#FF7722", False), ("兔", "#0077DD", False), ("出现在了这里……", "#000000", False)]
             elif fox_type == "foxbun":
-                segs = [(seq + " ", "#000000", False), ("发现了一对正在贴贴的", "#000000", False), ("狐", "#FF7722", False), ("兔", "#0077DD", False), ("！", "#000000", False)]
+                segs = [(pre, "#000000", False), ("发现了一对正在贴贴的", "#000000", False), ("狐", "#FF7722", False), ("兔", "#0077DD", False), ("！", "#000000", False)]
             elif fox_type == "fox":
-                segs = [(seq + " ", "#000000", False), ("一只得意的", "#000000", False), ("狐狸", "#FF7722", False), ("赶走了这里的派生。", "#000000", False)]
+                segs = [(pre, "#000000", False), ("一只得意的", "#000000", False), ("狐狸", "#FF7722", False), ("赶走了这里的派生。", "#000000", False)]
             else:
-                segs = [(seq + " ", "#000000", False), ("一只圆圆的", "#000000", False), ("兔子", "#0077DD", False), ("挡住了这里的派生。", "#000000", False)]
+                segs = [(pre, "#000000", False), ("一只圆圆的", "#000000", False), ("兔子", "#0077DD", False), ("挡住了这里的派生。", "#000000", False)]
             _draw_segmented_line(draw, y, segs, w)
             y += ROW_H + result_gap
         else:
