@@ -217,7 +217,7 @@ def _render_composite(akito_name: str, toya_name: str, text_lines: list) -> byte
 # ==================== 做饭彩蛋 ====================
 
 _EASTER_EGG_RATE = 0.03
-_FOXRABBIT_RATE = 0.03  # 每种 3%
+_FOXRABBIT_RATE = 0.02  # 每种 2%
 
 
 # ==================== 模糊匹配 ====================
@@ -256,6 +256,7 @@ def _render_multi(results: list, remaining: int, nickname: str) -> bytes:
     """results: [(a, b, is_cooking, fox_type), ...]"""
     count = len(results)
     cooking_indices = [i for i, (_, _, egg, _) in enumerate(results) if egg]
+    foxbun_idx = next((i for i, (_, _, _, ft) in enumerate(results) if ft == "foxbun"), None)
 
     IMG_SZ = 150  # 狐兔图片尺寸
     avatar_size = 150
@@ -266,10 +267,20 @@ def _render_multi(results: list, remaining: int, nickname: str) -> bytes:
     fn = _load_font(FONT_SIZE)       # 20px
     fb = _load_font(FONT_BOLD_SIZE)  # 24px — 彩蛋汇总
 
-    FR_TEXTS = {
+    def _load_foxbun_image() -> Image.Image | None:
+    """加载狐&兔.png，保持原尺寸不缩放。"""
+    for ext in (".png", ".jpg", ".jpeg"):
+        p = FOXRABBIT_DIR / f"狐&兔{ext}"
+        if p.exists():
+            return Image.open(p).convert("RGB")
+    return None
+
+
+FR_TEXTS = {
         "fox": "一只得意的狐狸赶走了这里的派生。",
         "rabbit": "一只圆圆的兔子挡住了这里的派生。",
         "foxrabbit": "一对眼熟的狐兔出现在了这里……",
+        "foxbun": "发现了一对正在贴贴的狐兔！",
     }
 
     # --- 逐行计算宽度 ---
@@ -280,7 +291,11 @@ def _render_multi(results: list, remaining: int, nickname: str) -> bytes:
     def _row_width(idx):
         _, _, is_egg, fox_type = results[idx]
         if fox_type:
-            return int(fn.getbbox(SEQS[idx] + FR_TEXTS[fox_type])[2])
+            txt_w = int(fn.getbbox(SEQS[idx] + FR_TEXTS[fox_type])[2])
+            if fox_type == "foxbun":
+                bun = _load_foxbun_image()
+                return max(txt_w, bun.size[0]) if bun else txt_w
+            return txt_w
         a, b = results[idx][0], results[idx][1]
         a_w = int(fn.getbbox(a)[2])
         b_w = int(fn.getbbox(b)[2])
@@ -291,15 +306,21 @@ def _render_multi(results: list, remaining: int, nickname: str) -> bytes:
 
     # 做饭彩蛋汇总行宽
     egg_summary_w = 0.0
-    if cooking_indices:
-        parts_w = 0.0
-        for idx in cooking_indices:
-            ea, eb = results[idx][0], results[idx][1]
-            parts_w += fb.getbbox(ea)[2] + fb.getbbox("×")[2] + fb.getbbox(eb)[2]
-        egg_line_w = (fb.getbbox("快来做")[2] + parts_w
-                      + fb.getbbox("、")[2] * (len(cooking_indices) - 1)
-                      + fb.getbbox("的饭吧！")[2])
-        egg_summary_w = max(fb.getbbox("恭喜你是被选中的彰冬姐！")[2], egg_line_w)
+    if cooking_indices or foxbun_idx is not None:
+        if cooking_indices:
+            parts_w = 0.0
+            for idx in cooking_indices:
+                ea, eb = results[idx][0], results[idx][1]
+                parts_w += fb.getbbox(ea)[2] + fb.getbbox("×")[2] + fb.getbbox(eb)[2]
+            sep_count = len(cooking_indices) - 1 + (1 if foxbun_idx is not None else 0)
+            if foxbun_idx is not None:
+                parts_w += fb.getbbox("狐")[2] + fb.getbbox("×")[2] + fb.getbbox("兔")[2]
+            egg_line_w = (fb.getbbox("快来做")[2] + parts_w
+                          + fb.getbbox("、")[2] * sep_count
+                          + fb.getbbox("的饭吧！")[2])
+            egg_summary_w = max(fb.getbbox("恭喜你是被选中的彰冬姐！")[2], egg_line_w)
+        else:
+            egg_summary_w = fb.getbbox("快来做狐兔饭吧！")[2]
 
     rem_w = fn.getbbox(f"（30分钟内剩余 {remaining} 次）")[2]
 
@@ -313,14 +334,19 @@ def _render_multi(results: list, remaining: int, nickname: str) -> bytes:
     for i in range(count):
         _, _, _, fox_type = results[i]
         if fox_type:
-            height += IMG_SZ + 8 + ROW_H + result_gap  # 狐兔行：图片 + 文字
+            if fox_type == "foxbun":
+                bun = _load_foxbun_image()
+                h = bun.size[1] + 8 if bun else IMG_SZ + 8
+            else:
+                h = IMG_SZ + 8
+            height += h + ROW_H + result_gap  # 狐兔行：图片 + 文字
         else:
             has_av = _find_avatar("彰人", results[i][0]) and _find_avatar("冬弥", results[i][1])
             if has_av:
                 height += avatar_size + 8 + ROW_H + result_gap  # 头像 + 文字
             else:
                 height += ROW_H + result_gap  # 纯文字
-    egg_area_h = 12 + 2 * ROW_H if cooking_indices else 0
+    egg_area_h = 12 + 2 * ROW_H if (cooking_indices or foxbun_idx is not None) else 0
     height += egg_area_h + 8 + ROW_H + TEXT_BOTTOM_PAD
 
     canvas = Image.new("RGB", (w, height), color="#ffffff")
@@ -338,8 +364,14 @@ def _render_multi(results: list, remaining: int, nickname: str) -> bytes:
         seq_w = int(fn.getbbox(seq + " ")[2])
 
         if fox_type:
-            # 狐兔行：图片居中 + 文字在下，跟普通行同布局
-            if fox_type == "foxrabbit":
+            # 狐兔行：图片居中 + 文字在下
+            if fox_type == "foxbun":
+                bun_im = _load_foxbun_image()
+                if bun_im:
+                    bw, bh = bun_im.size
+                    canvas.paste(bun_im, ((w - bw) // 2, y))
+                    y += bh + 8
+            elif fox_type == "foxrabbit":
                 fox_im = _load_foxrabbit_image("狐")
                 rab_im = _load_foxrabbit_image("兔")
                 if fox_im and rab_im:
@@ -347,11 +379,12 @@ def _render_multi(results: list, remaining: int, nickname: str) -> bytes:
                     fx = (w - imgs_w) // 2
                     canvas.paste(fox_im, (fx, y))
                     canvas.paste(rab_im, (fx + IMG_SZ + gap, y))
+                y += IMG_SZ + 8
             else:
                 single_im = _load_foxrabbit_image("狐" if fox_type == "fox" else "兔")
                 if single_im:
                     canvas.paste(single_im, ((w - IMG_SZ) // 2, y))
-            y += IMG_SZ + 8
+                y += IMG_SZ + 8
             draw.text((w // 2, y), seq + FR_TEXTS[fox_type], font=fn, fill="#000000", anchor="ma")
             y += ROW_H + result_gap
         else:
@@ -381,27 +414,46 @@ def _render_multi(results: list, remaining: int, nickname: str) -> bytes:
                 draw.text((x, y), " ★", font=fn, fill="#000000", anchor="la")
             y += ROW_H + result_gap
 
-    # --- 做饭彩蛋汇总（24px，派生名着色）---
-    if cooking_indices:
+    # --- 做饭彩蛋汇总 & 狐×兔联动（24px）---
+    if cooking_indices or foxbun_idx is not None:
         y += 12
-        draw.text((w // 2, y), "恭喜你是被选中的彰冬姐！", font=fb, fill="#000000", anchor="ma")
-        y += ROW_H
-        parts = [("快来做", "#000000")]
-        for j, idx in enumerate(cooking_indices):
-            if j > 0:
+        if cooking_indices:
+            draw.text((w // 2, y), "恭喜你是被选中的彰冬姐！", font=fb, fill="#000000", anchor="ma")
+            y += ROW_H
+            parts = [("快来做", "#000000")]
+            for j, idx in enumerate(cooking_indices):
+                if j > 0:
+                    parts.append(("、", "#000000"))
+                ea, eb = results[idx][0], results[idx][1]
+                parts.append((ea, "#FF7722"))
+                parts.append(("×", "#000000"))
+                parts.append((eb, "#0077DD"))
+            if foxbun_idx is not None:
                 parts.append(("、", "#000000"))
-            ea, eb = results[idx][0], results[idx][1]
-            parts.append((ea, "#FF7722"))
-            parts.append(("×", "#000000"))
-            parts.append((eb, "#0077DD"))
-        parts.append(("的饭吧！", "#000000"))
-        total_w2 = sum(fb.getbbox(t)[2] for t, _ in parts)
-        x2 = (w - total_w2) // 2
-        for txt, clr in parts:
-            w_t = int(fb.getbbox(txt)[2])
-            draw.text((x2, y), txt, font=fb, fill=clr, anchor="la")
-            x2 += w_t
-        y += ROW_H
+                parts.append(("狐", "#FF7722"))
+                parts.append(("×", "#000000"))
+                parts.append(("兔", "#0077DD"))
+            parts.append(("的饭吧！", "#000000"))
+            total_w2 = sum(fb.getbbox(t)[2] for t, _ in parts)
+            x2 = (w - total_w2) // 2
+            for txt, clr in parts:
+                w_t = int(fb.getbbox(txt)[2])
+                draw.text((x2, y), txt, font=fb, fill=clr, anchor="la")
+                x2 += w_t
+            y += ROW_H
+        else:
+            # 狐×兔单独触发（无做饭）
+            draw.text((w // 2, y), "快来做", font=fb, fill="#000000", anchor="ma")
+            y += ROW_H
+            # "狐兔饭吧！" 狐橙兔蓝
+            parts = [("狐", "#FF7722"), ("兔", "#0077DD"), ("饭吧！", "#000000")]
+            total_w2 = sum(fb.getbbox(t)[2] for t, _ in parts)
+            x2 = (w - total_w2) // 2
+            for txt, clr in parts:
+                w_t = int(fb.getbbox(txt)[2])
+                draw.text((x2, y), txt, font=fb, fill=clr, anchor="la")
+                x2 += w_t
+            y += ROW_H
 
     # --- 剩余次数 ---
     y += 8
@@ -528,6 +580,9 @@ async def _(event: Event, args: Message = CommandArg()):
                 elif rr < _FOXRABBIT_RATE * 3:
                     fox_type = "foxrabbit"
                     foxrabbit_used = True
+                elif rr < _FOXRABBIT_RATE * 4:
+                    fox_type = "foxbun"
+                    foxrabbit_used = True
             results.append((a, b, is_egg, fox_type))
 
         for _ in range(count):
@@ -650,6 +705,27 @@ async def _(event: Event):
     ]
     img = _render_multi(results, remaining=2, nickname=nickname)
     await test_fr_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img))
+
+
+# ==================== 测试狐兔饭 ====================
+
+test_foxbun_cmd = on_command("test狐兔饭", priority=5, block=True)
+
+
+@test_foxbun_cmd.handle()
+async def _(event: Event):
+    if str(event.get_user_id()) != SUPERUSER_QQ:
+        return
+    nickname = event.sender.card or event.sender.nickname or "测试者"
+    pool_a = PARO_DATA.get("akito_pool", ["黑百合", "白骑"])
+    pool_b = PARO_DATA.get("toya_pool", ["王子冬", "黑骑"])
+    results = [
+        (pool_a[0], pool_b[0], True, None),
+        (pool_a[1], pool_b[1], False, "foxbun"),
+        (pool_a[0], pool_b[1], False, None),
+    ]
+    img = _render_multi(results, remaining=2, nickname=nickname)
+    await test_foxbun_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img))
 
 
 # ==================== 添加派生 ====================
