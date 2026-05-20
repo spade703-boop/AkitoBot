@@ -394,9 +394,9 @@ def _render_multi(results: list, remaining: int, nickname: str) -> bytes:
             elif fox_type == "foxbun":
                 segs = [(seq + " ", "#000000", False), ("发现了一对正在贴贴的", "#000000", False), ("狐", "#FF7722", False), ("兔", "#0077DD", False), ("！", "#000000", False)]
             elif fox_type == "fox":
-                segs = [(seq + " ", "#000000", False), ("一只得意的", "#000000", False), ("狐", "#FF7722", False), ("狸赶走了这里的派生。", "#000000", False)]
+                segs = [(seq + " ", "#000000", False), ("一只得意的", "#000000", False), ("狐狸", "#FF7722", False), ("赶走了这里的派生。", "#000000", False)]
             else:
-                segs = [(seq + " ", "#000000", False), ("一只圆圆的", "#000000", False), ("兔", "#0077DD", False), ("子挡住了这里的派生。", "#000000", False)]
+                segs = [(seq + " ", "#000000", False), ("一只圆圆的", "#000000", False), ("兔子", "#0077DD", False), ("挡住了这里的派生。", "#000000", False)]
             _draw_segmented_line(draw, y, segs, w)
             y += ROW_H + result_gap
         else:
