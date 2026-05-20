@@ -276,7 +276,7 @@ def _render_multi(results: list, remaining: int, nickname: str) -> bytes:
     fn = _load_font(FONT_SIZE)       # 20px
     fb = _load_font(FONT_BOLD_SIZE)  # 24px — 彩蛋汇总
 
-FR_TEXTS = {
+    FR_TEXTS = {
         "fox": "一只得意的狐狸赶走了这里的派生。",
         "rabbit": "一只圆圆的兔子挡住了这里的派生。",
         "foxrabbit": "一对眼熟的狐兔出现在了这里……",
