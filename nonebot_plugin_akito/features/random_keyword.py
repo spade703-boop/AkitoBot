@@ -3,7 +3,6 @@ import io
 import json
 import os
 import random
-from datetime import date as date_type
 from datetime import datetime
 from pathlib import Path
 
@@ -18,13 +17,15 @@ from ..core import ALLOWED_CHAT_GROUPS, SUPERUSER_QQ, TZ_CN
 from ..core.data import _find_data_path, load_json_file
 
 DATA_FILE = "fanfic_keywords.json"
-DRAWS_FILE = "keyword_draws.json"
 DEFAULT_DATA: dict = {"categories": {}}
 
 KEYWORD_DATA: dict = load_json_file(DATA_FILE, DEFAULT_DATA)
 
-# 分类显示顺序
-CATEGORY_ORDER = ["科学隐喻", "病症设定", "自然意象", "场景画面", "文学化用", "关系张力"]
+CATEGORY_ORDER = [
+    "科学隐喻", "病症设定", "自然意象", "场景画面",
+    "文学化用", "关系张力", "宗教仪式", "电影摄影",
+    "同人结构", "圈内暗号",
+]
 
 
 # ==================== 数据持久化 ====================
@@ -40,31 +41,6 @@ def _save_pool():
     os.replace(tmp, path)
 
 
-def _load_draws() -> dict:
-    path = _find_data_path(DRAWS_FILE)
-    if not path:
-        path = Path("data") / DRAWS_FILE
-    if not path.exists():
-        return {}
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        logger.warning(f"读取 {DRAWS_FILE} 失败，已重置抽取记录")
-        return {}
-
-
-def _save_draws(data: dict):
-    path = _find_data_path(DRAWS_FILE)
-    if not path:
-        path = Path("data") / DRAWS_FILE
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    os.replace(tmp, path)
-
-
 def reload_keyword_data():
     global KEYWORD_DATA
     KEYWORD_DATA = load_json_file(DATA_FILE, DEFAULT_DATA)
@@ -72,14 +48,12 @@ def reload_keyword_data():
 
 
 def _get_non_empty_categories() -> list[tuple[str, list]]:
-    """返回所有非空分类的 [(cat_name, items), ...]，按 CATEGORY_ORDER 排序。"""
     categories = KEYWORD_DATA.get("categories", {})
     result = []
     for cat in CATEGORY_ORDER:
         items = categories.get(cat, [])
         if items:
             result.append((cat, items))
-    # 也包含不在预设顺序中的分类
     for cat, items in categories.items():
         if cat not in CATEGORY_ORDER and items:
             result.append((cat, items))
@@ -119,21 +93,16 @@ def _render_keyword_result(keywords: list[str]) -> bytes:
     img = Image.new("RGB", (width, height), color="#ffffff")
     draw = ImageDraw.Draw(img)
 
-    # 标题
     draw.text((width // 2, top_pad), "今日关键词", font=font_title, fill="#000000", anchor="ma")
 
-    # 分隔线
     y = top_pad + 30 + title_gap
     draw.line([(60, y), (width - 60, y)], fill="#cccccc", width=1)
 
-    # 关键词条目
     for i, kw in enumerate(keywords):
         item_y = y + sep_gap + i * row_height
-        seq = SEQS[i]
-        draw.text((80, item_y), seq, font=font_item, fill="#555555")
+        draw.text((80, item_y), SEQS[i], font=font_item, fill="#555555")
         draw.text((130, item_y), kw, font=font_item, fill="#000000")
 
-    # 底部提示
     footer_y = y + sep_gap + n * row_height + footer_gap
     draw.text((width // 2, footer_y), "已领取今日份关键词，明天再来吧！",
               font=font_footer, fill="#999999", anchor="ma")
@@ -144,7 +113,6 @@ def _render_keyword_result(keywords: list[str]) -> bytes:
 
 
 def _render_categories_image() -> bytes:
-    """按分类分组渲染全池。"""
     font_title = _load_font(28)
     font_cat_header = _load_font(22)
     font_item = _load_font(20)
@@ -154,7 +122,6 @@ def _render_categories_image() -> bytes:
     if not cats:
         return _render_empty_pool()
 
-    # 计算总高度
     top_pad = 30
     title_h = 36
     title_gap = 20
@@ -217,13 +184,11 @@ def _render_empty_pool() -> bytes:
 # ==================== 模糊匹配 ====================
 
 def _fuzzy_match_in_categories(name: str) -> tuple[str | list | None, str | None]:
-    """在所有分类中模糊匹配。返回 (match_result, category_name)。"""
     name_lower = name.lower()
     categories = KEYWORD_DATA.get("categories", {})
 
-    # 三级匹配：exact → prefix → contains，返回第一个唯一匹配
     for match_type in ("exact", "prefix", "contains"):
-        candidates: list[tuple[str, str]] = []  # [(keyword, category), ...]
+        candidates: list[tuple[str, str]] = []
         for cat, items in categories.items():
             for item in items:
                 if match_type == "exact" and item.lower() == name_lower:
@@ -242,7 +207,8 @@ def _fuzzy_match_in_categories(name: str) -> tuple[str | list | None, str | None
 
 # ==================== 今日关键词 ====================
 
-_DRAW_LOCKS: dict[str, asyncio.Lock] = {}
+_DRAW_LOCK = asyncio.Lock()
+_DRAW_RECORDS: dict[str, str] = {}  # user_id -> date_string (in-memory, clears on restart)
 
 draw_cmd = on_command("今日关键词", priority=5, block=True)
 
@@ -253,10 +219,8 @@ async def _(event: Event):
         return
 
     user_id = event.get_user_id()
-    if user_id not in _DRAW_LOCKS:
-        _DRAW_LOCKS[user_id] = asyncio.Lock()
 
-    async with _DRAW_LOCKS[user_id]:
+    async with _DRAW_LOCK:
         cats = _get_non_empty_categories()
         if not cats:
             await draw_cmd.finish(
@@ -264,44 +228,29 @@ async def _(event: Event):
                 + "关键词池还是空的，先用 /添加关键词 添加一些吧。"
             )
 
-        # 每日重置检查
-        draws = _load_draws()
         today_str = datetime.now(TZ_CN).date().isoformat()
-        user_record = draws.get(user_id)
 
-        if user_record:
-            stored_date_str = user_record.get("date", "")
-            try:
-                stored_date = date_type.fromisoformat(stored_date_str)
-                today = date_type.fromisoformat(today_str)
-                if stored_date >= today:
-                    prev_items = user_record.get("items", [])
-                    prev = "、".join(prev_items) if prev_items else "（无记录）"
-                    await draw_cmd.finish(
-                        MessageSegment.reply(event.message_id)
-                        + f"你今天已经领取过关键词了：{prev}，明天 0:00 刷新哦。"
-                    )
-            except (ValueError, TypeError):
-                logger.warning(f"用户 {user_id} 的抽取日期记录异常，已重置")
+        # 每日重置（内存记录，重启自动清零）
+        if _DRAW_RECORDS.get(user_id) == today_str:
+            await draw_cmd.finish(
+                MessageSegment.reply(event.message_id)
+                + "你今天已经领取过关键词了，明天 0:00 刷新哦。"
+            )
 
-        # 随机选 N 个不同分类，每个分类随机抽 1 个关键词
+        # 随机选 N 个不同分类，每个分类随机抽 1 个
         count = random.randint(1, 3)
         count = min(count, len(cats))
         chosen_cats = random.sample(cats, k=count)
-        selected: list[tuple[str, str]] = []
+        selected: list[str] = []
         for cat_name, items in chosen_cats:
             kw = random.choice(items)
-            selected.append((kw, cat_name))
+            selected.append(kw)
 
-        # 保存记录（只存关键词名）
-        draw_items = [kw for kw, _ in selected]
-        draws[user_id] = {"date": today_str, "count": len(selected), "items": draw_items}
-        _save_draws(draws)
+        _DRAW_RECORDS[user_id] = today_str
 
-        # 模拟人类回复延迟
         await asyncio.sleep(random.uniform(1.0, 2.5))
 
-        img_bytes = _render_keyword_result(draw_items)
+        img_bytes = _render_keyword_result(selected)
         await draw_cmd.finish(
             MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes)
         )
@@ -349,7 +298,6 @@ async def _(event: Event, args: Message = CommandArg()):
     cat_name, kw_name = parts[0], parts[1]
     categories = KEYWORD_DATA.setdefault("categories", {})
 
-    # 分类可模糊匹配
     cat_match = None
     for c in categories:
         if c.lower() == cat_name.lower():
@@ -396,7 +344,6 @@ async def _(event: Event, args: Message = CommandArg()):
         await del_cmd.finish(f"「{name}」匹配到多个条目：{' / '.join(match)}，请补充完整。")
 
     categories[cat_name].remove(match)
-    # 清理空分类
     if not categories[cat_name]:
         del categories[cat_name]
     _save_pool()
