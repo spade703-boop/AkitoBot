@@ -3,6 +3,7 @@ import io
 import json
 import os
 import random
+from datetime import date as date_type
 from datetime import datetime
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from ..core import ALLOWED_CHAT_GROUPS, SUPERUSER_QQ, TZ_CN
 from ..core.data import _find_data_path, load_json_file
 
 DATA_FILE = "fanfic_keywords.json"
+DRAWS_FILE = "keyword_draws.json"
 DEFAULT_DATA: dict = {"categories": {}}
 
 KEYWORD_DATA: dict = load_json_file(DATA_FILE, DEFAULT_DATA)
@@ -38,6 +40,31 @@ def _save_pool():
     tmp = path.with_suffix(".tmp")
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(KEYWORD_DATA, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, path)
+
+
+def _load_draws() -> dict:
+    path = _find_data_path(DRAWS_FILE)
+    if not path:
+        path = Path("data") / DRAWS_FILE
+    if not path.exists():
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        logger.warning(f"读取 {DRAWS_FILE} 失败，已重置抽取记录")
+        return {}
+
+
+def _save_draws(data: dict):
+    path = _find_data_path(DRAWS_FILE)
+    if not path:
+        path = Path("data") / DRAWS_FILE
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
     os.replace(tmp, path)
 
 
@@ -207,8 +234,7 @@ def _fuzzy_match_in_categories(name: str) -> tuple[str | list | None, str | None
 
 # ==================== 今日关键词 ====================
 
-_DRAW_LOCK = asyncio.Lock()
-_DRAW_RECORDS: dict[str, str] = {}  # user_id -> date_string (in-memory, clears on restart)
+_DRAW_LOCKS: dict[str, asyncio.Lock] = {}
 
 draw_cmd = on_command("今日关键词", priority=5, block=True)
 
@@ -219,8 +245,12 @@ async def _(event: Event):
         return
 
     user_id = event.get_user_id()
+    is_superuser = str(event.get_user_id()) == SUPERUSER_QQ
 
-    async with _DRAW_LOCK:
+    if user_id not in _DRAW_LOCKS:
+        _DRAW_LOCKS[user_id] = asyncio.Lock()
+
+    async with _DRAW_LOCKS[user_id]:
         cats = _get_non_empty_categories()
         if not cats:
             await draw_cmd.finish(
@@ -230,12 +260,25 @@ async def _(event: Event):
 
         today_str = datetime.now(TZ_CN).date().isoformat()
 
-        # 每日重置（内存记录，重启自动清零）
-        if _DRAW_RECORDS.get(user_id) == today_str:
-            await draw_cmd.finish(
-                MessageSegment.reply(event.message_id)
-                + "你今天已经领取过关键词了，明天 0:00 刷新哦。"
-            )
+        # 普通用户每日限 1 次；超管不限制
+        if not is_superuser:
+            draws = _load_draws()
+            user_record = draws.get(user_id)
+
+            if user_record:
+                stored_date_str = user_record.get("date", "")
+                try:
+                    stored_date = date_type.fromisoformat(stored_date_str)
+                    today = date_type.fromisoformat(today_str)
+                    if stored_date >= today:
+                        prev_items = user_record.get("items", [])
+                        prev = "、".join(prev_items) if prev_items else "（无记录）"
+                        await draw_cmd.finish(
+                            MessageSegment.reply(event.message_id)
+                            + f"你今天已经领取过关键词了：{prev}，明天 0:00 刷新哦。"
+                        )
+                except (ValueError, TypeError):
+                    logger.warning(f"用户 {user_id} 的抽取日期记录异常，已重置")
 
         # 随机选 N 个不同分类，每个分类随机抽 1 个
         count = random.randint(1, 3)
@@ -246,13 +289,20 @@ async def _(event: Event):
             kw = random.choice(items)
             selected.append(kw)
 
-        _DRAW_RECORDS[user_id] = today_str
+        # 保存普通用户记录；超管不保存
+        if not is_superuser:
+            draws = _load_draws()
+            draws[user_id] = {"date": today_str, "count": len(selected), "items": selected}
+            _save_draws(draws)
 
         await asyncio.sleep(random.uniform(1.0, 2.5))
 
-        img_bytes = _render_keyword_result(selected)
+        nickname = event.sender.card or event.sender.nickname or f"用户{user_id}"
+        lines = [f"@{nickname} 抽到的今日关键词是："]
+        for kw in selected:
+            lines.append(f"- {kw}")
         await draw_cmd.finish(
-            MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes)
+            MessageSegment.reply(event.message_id) + "\n".join(lines)
         )
 
 
