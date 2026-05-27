@@ -23,17 +23,10 @@ DEFAULT_DATA: dict = {"categories": {}}
 
 KEYWORD_DATA: dict = load_json_file(DATA_FILE, DEFAULT_DATA)
 
-CATEGORY_ORDER = [
-    "科学隐喻", "病症设定", "自然意象", "场景画面",
-    "文学化用", "关系张力",
-    "物理 / 天文 / 数学", "植物学 / 园艺", "气象 / 地理",
-    "宗教 / 仪式", "古典 / 词章", "电影 / 摄影术语",
-    "心理学 / 精神分析", "日常物 / 器物", "时间 / 节令",
-    "状态 / 关系学", "同人圈通用结构梗", "关系角色定位梗",
-    "设定类", "病症 / 奇幻症", "场景 / 桥段梗",
-    "情绪 / 状态梗", "圈内暗号", "原作衍生类型梗",
-    "动作 / 身体细节梗",
-]
+
+def _get_category_names() -> list[str]:
+    """返回当前数据文件中所有分类名（按 JSON key 顺序）。"""
+    return list(KEYWORD_DATA.get("categories", {}).keys())
 
 
 # ==================== 数据持久化 ====================
@@ -81,14 +74,11 @@ def reload_keyword_data():
 
 
 def _get_non_empty_categories() -> list[tuple[str, list]]:
+    """返回所有非空分类的 [(cat_name, items), ...]，直接从数据读取。"""
     categories = KEYWORD_DATA.get("categories", {})
     result = []
-    for cat in CATEGORY_ORDER:
-        items = categories.get(cat, [])
-        if items:
-            result.append((cat, items))
     for cat, items in categories.items():
-        if cat not in CATEGORY_ORDER and items:
+        if items:
             result.append((cat, items))
     return result
 
@@ -341,14 +331,14 @@ async def _(event: Event, args: Message = CommandArg()):
     if not raw:
         await add_cmd.finish(
             "请指定分类和关键词名称，例如：/添加关键词 科学隐喻 洛希极限\n"
-            f"可用分类：{' / '.join(CATEGORY_ORDER)}"
+            f"可用分类：{' / '.join(_get_category_names())}"
         )
 
     parts = raw.split(None, 1)
     if len(parts) < 2:
         await add_cmd.finish(
             "请同时指定分类和关键词名称，例如：/添加关键词 科学隐喻 洛希极限\n"
-            f"可用分类：{' / '.join(CATEGORY_ORDER)}"
+            f"可用分类：{' / '.join(_get_category_names())}"
         )
 
     cat_name, kw_name = parts[0], parts[1]
@@ -360,13 +350,13 @@ async def _(event: Event, args: Message = CommandArg()):
             cat_match = c
             break
     if not cat_match:
-        for c in CATEGORY_ORDER:
+        for c in _get_category_names():
             if c.lower().startswith(cat_name.lower()):
                 cat_match = c
                 break
     if not cat_match:
         await add_cmd.finish(
-            f"未找到分类「{cat_name}」。可用分类：{' / '.join(CATEGORY_ORDER)}"
+            f"未找到分类「{cat_name}」。可用分类：{' / '.join(_get_category_names())}"
         )
 
     categories.setdefault(cat_match, []).append(kw_name)
