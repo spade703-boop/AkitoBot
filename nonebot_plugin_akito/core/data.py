@@ -131,5 +131,11 @@ def reload_assets():
     except Exception:
         pass
 
+    try:
+        from ..features.random_keyword import reload_keyword_data
+        reload_keyword_data()
+    except Exception:
+        pass
+
     init_pjsk_knowledge()
     logger.info("🔄 所有 JSON 数据文件已热重载完成")

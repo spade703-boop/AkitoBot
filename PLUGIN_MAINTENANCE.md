@@ -3,7 +3,7 @@
 **角色**：东云彰人（初音未来：缤纷舞台 同人 AI，CP 立场：彰冬不拆不逆）  
 **框架**：NoneBot2 + OneBot V11  
 **AI 后端**：DeepSeek API / 智谱 GLM-4V（视觉）/ Tavily（搜索）  
-**文档更新**：2026-05-14
+**文档更新**：2026-05-28
 
 ---
 
@@ -33,6 +33,7 @@ nonebot_plugin_akito/
     ├── snowy.py              # PJSK 榜线预测（sn预测/cn预测）
     ├── verify.py             # 新人审核名单管理
     ├── random_paro.py        # 派生抽取器（CP 同人灵感配对）
+    ├── random_keyword.py     # 今日关键词（同人写作灵感关键词）
     ├── scheduled.py          # 定时任务（早晚安 / 过期记忆清理）
     └── event_mode.py         # WL2 世界线剧情模式开关
 ```
@@ -396,6 +397,19 @@ Galgame 级导演骰子，由 `chat.py` 调用 `build_director_note()`。
 - 模糊匹配：`_fuzzy_match()` 三级匹配（精确 → 前缀 → 包含），大小写不敏感；歧义时列出候选
 - 数据文件：`data/paro_pools.json`，已接入 `reload_assets()` 热重载
 
+### random_keyword.py
+
+同人写作灵感关键词抽取器。从单一关键词池随机抽取 1-3 个意象/情境/关系张力短语。
+
+- `今日关键词` — 受 `ALLOWED_CHAT_GROUPS` 白名单控制，每日限 1 次，0 点自动刷新
+- 添加/删除指令 — 受 `SUPERUSER_QQ` 权限控制
+- 限频：每日 1 次，基于 `keyword_draws.json` 持久化记录，比较 `datetime.now(TZ_CN).date()` 自动跨天重置
+- 并发保护：`asyncio.Lock` 按 user_id 加锁
+- 模糊匹配：`_fuzzy_match()` 三级匹配（精确 → 前缀 → 包含），大小写不敏感；歧义时列出候选
+- PIL 渲染：`_render_keyword_result()` 卡片式输出（序号 + 关键词），`_render_pool_image()` 三列网格展示全池
+- 数据文件：`data/fanfic_keywords.json`（关键词池）、`data/keyword_draws.json`（每日抽取记录），已接入 `reload_assets()` 热重载
+- 字体：复用 `features/msyhbd.ttc`
+
 ### scheduled.py
 
 | 任务 | 触发时间 | 说明 |
@@ -443,6 +457,8 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（冬弥雷
 | `data/hold_verify.json` | 读写 | 特殊挂起名单 |
 | `data/verify_config.json` | 只读 | 审核系统群号配置 |
 | `data/paro_pools.json` | 读写 | 派生抽取器池子数据（彰人池 / 冬弥池） |
+| `data/fanfic_keywords.json` | 读写 | 今日关键词池子数据 |
+| `data/keyword_draws.json` | 读写 | 今日关键词每日抽取记录 |
 | `data/images/paro_avatars/彰人/` `data/images/paro_avatars/冬弥/` | 只读 | 派生头像素材 |
 | `data/images/<category>/` | 读写 | 本地图库 |
 | `features/font.ttf` | 只读 | snowy.py 渲染字体 |
