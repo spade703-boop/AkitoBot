@@ -166,6 +166,7 @@ AKITO_STATUS = {
     "cached_content": "",        # 当前 routine 条目（dict，含 status/poke 字段）
     "expire_time": 0.0,          # 缓存过期时间戳（30 分钟有效期）
     "event_history": [],         # 本时段已出现过的 routine 条目（防重复）
+    "previous_context": "",      # 上一时段的状态描述文本（时段切换时自动保存，供 sleep_buffer 等过渡期引用）
     "last_trigger_user": "",     # 上一条 chat 回复由谁触发
     "last_superuser_trigger_time": {}  # 超管在各群的最后触发时间 {group_id: timestamp}
 }
@@ -187,10 +188,11 @@ AKITO_SAFE_UNTIL = time.time() + 10   # 无效！
 
 | 函数 | 说明 |
 |------|------|
-| `get_daily_activity(hour, weekday)` | 返回当前时段状态字符串，内置 30 分钟缓存 + **时段变更自动清缓存**。**任何需要 routine 的地方都应无条件调用此函数**，不要在外部判断 cached_content 是否存在后跳过调用 |
+| `get_daily_activity(hour, weekday, minute=0)` | 返回当前时段状态字符串，内置 30 分钟缓存 + **时段变更自动清缓存**。时段划分：`late_night`(0-6)、`morning_*`(6-8)、`noon_*`(8-12)、`lunch_*`(12-13)、`afternoon_*`(13-15)、`evening`(15-18)、`night_training`(18-21)、`night_home`(21-23:29)、`sleep_buffer`(23:45-23:59)。**任何需要 routine 的地方都应无条件调用此函数**，不要在外部判断 cached_content 是否存在后跳过调用 |
 | `check_sleep_status(msg)` | 判断是否深夜并返回 `(should_ignore, instruction)` |
 | `get_festival_buff(date_obj)` | 返回今日节日 Prompt 片段 |
 | `get_morning_run_buff(hour)` | 返回晨跑状态 Prompt（6 点整段生效） |
+| `get_sleep_buffer_buff(hour, minute)` | 返回睡前准备状态 Prompt（23:45-23:59 生效），若存在 `previous_context` 则自动注入前一时段的活动记忆 |
 | `parse_duration_and_content(text)` | 解析 `"10m 下雨了"` → `(600, "下雨了")` |
 | `check_img_permission(group_id, category)` | 判断该群是否有某分类图库权限 |
 
@@ -334,7 +336,7 @@ LLM 输出三字段，Python 端决定最终格式：
 | `poke` | 戳一戳通知（PokeNotifyEvent） | 按时段返回反应；深夜 0-6 点返回睡觉提示；每次**无条件调用 `get_daily_activity()`** |
 | `self_monitor` | bot 自身发送消息事件（`message_sent`） | 深夜 0-6 点若未在安全期内，延迟 2-4s 发送自言自语（10s 冷却，超管**per-group** 30s 窗口抑制） |
 
-> ⚠️ **`poke` 和 `toya_status_cmd` 的 routine 获取**：必须无条件调用 `get_daily_activity(hour, weekday)`，
+> ⚠️ **`poke` 和 `toya_status_cmd` 的 routine 获取**：必须无条件调用 `get_daily_activity(hour, weekday, minute)`，
 > 让其内部做时段校验和缓存更新。不能用 `if not cached_content` 跳过调用，
 > 否则上一时段的脏缓存会一直被复用（例如凌晨状态在白天继续出现）。
 
@@ -399,10 +401,12 @@ Galgame 级导演骰子，由 `chat.py` 调用 `build_director_note()`。
 | 任务 | 触发时间 | 说明 |
 |------|----------|------|
 | `akito_morning` | 06:00 (UTC+8) | 从 `REACTIONS_DB.greetings.morning` 推送到 `TARGET_GROUPS` |
-| `akito_night` | 23:50 (UTC+8) | 从 `REACTIONS_DB.greetings.night` 推送 |
+| `akito_night` | 23:50 (UTC+8) | 从 `REACTIONS_DB.greetings.night` 推送（此时处于 `sleep_buffer` 睡前缓冲区） |
 | `clean_expired_memory` | 每小时 | 扫描所有会话，清理过期的 temp_implants |
 
 所有定时推送前调用 `grant_safety_pass(10)`。
+
+> **睡眠缓冲区（sleep_buffer）**：23:45-23:59 为睡前过渡时段。`get_daily_activity()` 在时段切换时自动保存 `previous_context`，`get_sleep_buffer_buff()` 将其注入 prompt，确保角色在睡前准备中仍能回应前一时段的遗留话题。0:00 后 `check_sleep_status()` 照常接管睡眠拦截。
 
 ### event_mode.py
 

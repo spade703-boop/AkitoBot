@@ -63,7 +63,8 @@ _PERIOD_ORDER = [
     "afternoon",        # 13–15
     "evening",          # 15–18
     "night_training",   # 18–21
-    "night_home",       # 21–24
+    "night_home",       # 21–23:29
+    "sleep_buffer",     # 23:45–23:59
 ]
 
 
@@ -90,7 +91,7 @@ def _period_distance(past: str, current: str) -> int:
 def _current_period_key() -> str:
     """根据当前时间返回 routine key（与 get_daily_activity 逻辑完全一致）。"""
     now = datetime.datetime.now(TZ_CN)
-    hour, is_weekend = now.hour, now.weekday() >= 5
+    hour, minute, is_weekend = now.hour, now.minute, now.weekday() >= 5
     if 0 <= hour < 6:     return "late_night"
     elif 6 <= hour < 8:   return "morning_weekend" if is_weekend else "morning_weekday"
     elif 8 <= hour < 12:  return "noon_weekend" if is_weekend else "noon_weekday"
@@ -98,7 +99,11 @@ def _current_period_key() -> str:
     elif 13 <= hour < 15: return "afternoon_weekend" if is_weekend else "afternoon_weekday"
     elif 15 <= hour < 18: return "evening"
     elif 18 <= hour < 21: return "night_training"
-    else:                 return "night_home"
+    elif 21 <= hour < 24:
+        if hour == 23 and minute >= 45:
+            return "sleep_buffer"
+        return "night_home"
+    else:                 return "late_night"
 
 
 # ── 公共接口 ─────────────────────────────────────────────────────────────

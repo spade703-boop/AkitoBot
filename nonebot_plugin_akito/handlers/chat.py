@@ -22,6 +22,7 @@ from ..core import (
     save_memory, get_memory_key, get_user_memory, get_group_context,
     PROMPTS_DB, DIRECTOR_DB, WL2_ROUTINE, PJSK_KNOWLEDGE_BASE,
     grant_safety_pass, get_daily_activity, check_sleep_status, get_festival_buff, get_morning_run_buff,
+    get_sleep_buffer_buff,
     call_deepseek_api, call_deepseek_api_agent, smart_search, describe_image, to_image_data,
     get_random_examples, get_base_persona, get_song_memories, get_hybrid_relationship,
     record_bot_response, build_time_gap_prompt,
@@ -218,9 +219,10 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage(), raw_messa
         hour_12 = jst_h % 12 or 12
         current_time = f"{now_jst.year}年{now_jst.month}月{now_jst.day}日 {period}{hour_12}点{now_jst.minute:02d}分 (24小时制: {now_jst.strftime('%H:%M')} JST)"
 
-        daily_status = get_daily_activity(now_time.hour, now_time.weekday())
+        daily_status = get_daily_activity(now_time.hour, now_time.weekday(), now_time.minute)
         festival_buff = get_festival_buff(now_jst)
         morning_run_buff = get_morning_run_buff(hour_24)
+        sleep_buffer_buff = get_sleep_buffer_buff(hour_24, now_time.minute)
         unique_key = get_memory_key(event)
         user_mem = get_user_memory(unique_key)
 
@@ -386,6 +388,7 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage(), raw_messa
         {time_gap_awareness}
         - 今日特殊日历：{festival_buff}
         {morning_run_buff}
+        {sleep_buffer_buff}
 
         # 2. 动态情报栈
         {relationship_context}

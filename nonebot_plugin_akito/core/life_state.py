@@ -37,7 +37,7 @@ def set_last_complaint(value: float):
     AKITO_LAST_COMPLAINT = value
 
 
-def get_daily_activity(hour: int, weekday: int) -> str:
+def get_daily_activity(hour: int, weekday: int, minute: int = 0) -> str:
     global AKITO_STATUS
     is_weekend = weekday >= 5
     key = ""
@@ -48,11 +48,20 @@ def get_daily_activity(hour: int, weekday: int) -> str:
     elif 13 <= hour < 15: key = "afternoon_weekend" if is_weekend else "afternoon_weekday"
     elif 15 <= hour < 18: key = "evening"
     elif 18 <= hour < 21: key = "night_training"
-    elif 21 <= hour < 24: key = "night_home"
+    elif 21 <= hour < 24:
+        if hour == 23 and minute >= 45:
+            key = "sleep_buffer"
+        else:
+            key = "night_home"
     else:                 key = "late_night"
 
     now_ts = time.time()
     if AKITO_STATUS["current_key"] != key:
+        old_cached = AKITO_STATUS.get("cached_content")
+        if old_cached:
+            old_status = old_cached.get("status", old_cached) if isinstance(old_cached, dict) else old_cached
+            AKITO_STATUS["previous_context"] = old_status
+
         AKITO_STATUS["current_key"] = key
         AKITO_STATUS["event_history"] = []
         AKITO_STATUS["cached_content"] = ""
@@ -153,6 +162,33 @@ def get_morning_run_buff(hour: int) -> str:
         "· 跑步场景中可以出现：早晨空气、跑道/公园环境、脚步声、音乐。\n"
         "· **禁止**描写他停下来或坐着回复，除非对话内容非常紧急。"
     )
+
+
+def get_sleep_buffer_buff(hour: int, minute: int) -> str:
+    """北京时间 23:45–23:59 返回睡前准备状态注入，其余时间返回空字符串。"""
+    if not (hour == 23 and minute >= 45):
+        return ""
+
+    prev = AKITO_STATUS.get("previous_context", "")
+    base = (
+        "😴【当前强制物理状态：睡前准备中】\n"
+        "现在是深夜，彰人正在做睡前准备，马上就要睡觉了。\n"
+        "· 他正在洗漱、换睡衣、设闹钟、关灯、躺下——总之在收尾这一天。\n"
+        "· 说话语调比平时更低更缓，偶尔打哈欠，回复偏短。\n"
+        "· 如果有人发消息会看一眼，但回复意愿极低——他马上要睡了。\n"
+        "· 场景中可能出现：浴室水声、关灯声、被子翻动、手机屏幕暗光。\n"
+        "· **绝对禁止**：主动开启新话题、答应去做需要离开床的事情、长篇大论。\n"
+        "· **允许**：含糊应付两句然后表示要睡了，或直接说「明天再说」。"
+    )
+    if prev:
+        base += (
+            f"\n🧩【睡前准备前在做的事】：在开始准备睡觉之前，你正在「{prev}」。\n"
+            "虽然你现在已经在做睡前准备了，但如果群友问起那件事的后续，"
+            "你记得自己当时在做那件事——那个状态是紧接着现在发生的，"
+            "不要表现得像没发生过一样。只是你现在太困了，可以用「已经弄好了」「明天再说吧」"
+            "之类的简短方式带过。"
+        )
+    return base
 
 
 def parse_duration_and_content(raw_text: str) -> tuple:
