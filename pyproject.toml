@@ -29,3 +29,83 @@ nonebot-adapter-onebot = [
 
 [tool.nonebot.plugins]
 "@local" = []
+
+# ── Dev Dependencies ──────────────────────────────────────────────────────
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.5.0",
+    "mypy>=1.10.0",
+]
+
+# ── Ruff Linter ───────────────────────────────────────────────────────────
+
+[tool.ruff]
+target-version = "py39"
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "E",     # pycodestyle errors
+    "W",     # pycodestyle warnings
+    "F",     # Pyflakes (unused imports, undefined names)
+    "I",     # isort (import ordering)
+    "N",     # pep8-naming conventions
+    "UP",    # pyupgrade (modern Python syntax)
+    "B",     # flake8-bugbear (common bugs)
+    "SIM",   # flake8-simplify (code simplification)
+    "T20",   # flake8-print (no print statements)
+]
+
+ignore = [
+    "E501",  # line too long (handled by formatter)
+    "UP007", # Use X | Y for type annotations (keep Optional for py39 compat)
+    "N812",  # lowercase imported as non-lowercase (NoneBot2 convention)
+    "B008",  # do not perform function calls in argument defaults (false positives with nonebot)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["nonebot_plugin_akito"]
+force-sort-within-sections = true
+
+[tool.ruff.lint.per-file-ignores]
+"tests/test_time_awareness.py" = ["E402"]  # 导入依赖 conftest.py 的 mock 初始化
+"tests/*.py" = ["SIM117"]                   # 嵌套 with mock.patch 是可接受的测试写法
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "lf"
+
+# ── Mypy Type Checker ─────────────────────────────────────────────────────
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = false
+warn_unused_configs = true
+ignore_missing_imports = true
+strict = false
+check_untyped_defs = false
+disallow_untyped_defs = false
+
+[[tool.mypy.overrides]]
+module = [
+    "nonebot.*",
+    "nonebot_plugin_*",
+    "openai.*",
+    "PIL.*",
+    "aiohttp.*",
+    "httpx.*",
+]
+ignore_missing_imports = true
+
+# ── Pytest ────────────────────────────────────────────────────────────────
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+pythonpath = ["."]
+norecursedirs = ["nonebot_plugin_akito", "data", ".claude"]

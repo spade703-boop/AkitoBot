@@ -10,3 +10,15 @@ __pycache__/
 *.pyc
 *.pyo
 __pycache__/**
+
+# Linter & type checker cache
+.mypy_cache/
+.ruff_cache/
+
+# Coverage
+htmlcov/
+.coverage
+coverage.xml
+
+# Test artifacts
+.pytest_cache/

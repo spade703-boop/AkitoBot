@@ -627,3 +627,39 @@ impression.py（群印象 + AutoChat）使用的 schema 是两字段：`{"inner_
 ### 风险十：routin 数据文件的字段结构
 
 `akito_routine.json` 中每个时段的条目必须包含 `status`（文本描述）和 `poke`（list，戳一戳反应词列表）两个字段。若新增条目时遗漏 `poke` 字段，`reactions.py` 的 poke handler 会回落到 `fallback_poke` 而不报错，但戳一戳的个性化反应会失效。
+
+---
+
+## 项目规范
+
+本项目有完整的编码规范文档，位于 `docs/PROJECT_SPEC.md`。所有维护者在修改代码时需遵守其中的约定。
+
+### 速查
+
+| 规则 | 要求 |
+|------|------|
+| 导入顺序 | 标准库 → 第三方 → 本地，组间空行 |
+| 类型注解 | 公共函数必须标注参数和返回值 |
+| 文档字符串 | Google 风格，模块级和公共函数必须 |
+| 文件写入 | 原子写入（`.tmp` + `os.replace`） |
+| 全局状态 | dict/list → `.clear()` + `.update()`；不可变 → `global` + 赋值 |
+| 日志前缀 | 保持现有 emoji 风格 |
+| 行宽 | 120 字符 |
+| 引号 | 双引号 |
+| Commit | `type: 中文描述` |
+
+### 质量检查
+
+```bash
+# Lint（warnings only，非阻塞）
+ruff check nonebot_plugin_akito/
+
+# 类型检查
+mypy nonebot_plugin_akito/
+
+# 格式化检查
+ruff format --check nonebot_plugin_akito/
+
+# 测试
+pytest tests/ -v
+```
