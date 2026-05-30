@@ -16,8 +16,7 @@ from nonebot.log import logger
 from nonebot.params import CommandArg
 from PIL import Image, ImageDraw, ImageFont
 
-from ..core import ALLOWED_CHAT_GROUPS, SUPERUSER_QQ, TZ_CN
-from ..core.data import _find_data_path, load_json_file
+from ..core import ALLOWED_CHAT_GROUPS, SUPERUSER_QQ, TZ_CN, find_data_path, load_json_file
 
 DATA_FILE = "fanfic_keywords.json"
 DRAWS_FILE = "keyword_draws.json"
@@ -34,7 +33,7 @@ def _get_category_names() -> list[str]:
 # ==================== 数据持久化 ====================
 
 def _save_pool():
-    path = _find_data_path(DATA_FILE)
+    path = find_data_path(DATA_FILE)
     if not path:
         path = Path("data") / DATA_FILE
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -45,7 +44,7 @@ def _save_pool():
 
 
 def _load_draws() -> dict:
-    path = _find_data_path(DRAWS_FILE)
+    path = find_data_path(DRAWS_FILE)
     if not path:
         path = Path("data") / DRAWS_FILE
     if not path.exists():
@@ -59,7 +58,7 @@ def _load_draws() -> dict:
 
 
 def _save_draws(data: dict):
-    path = _find_data_path(DRAWS_FILE)
+    path = find_data_path(DRAWS_FILE)
     if not path:
         path = Path("data") / DRAWS_FILE
     path.parent.mkdir(parents=True, exist_ok=True)

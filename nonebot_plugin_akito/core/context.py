@@ -9,6 +9,7 @@ from .data import RELATIONSHIP_DATA, SCRIPT_DB, SONG_DATA, load_prompt_template
 
 
 def get_random_examples(num: int = 5) -> str:
+    """随机抽取 num 条参考剧本台词，拼成用于模仿语气的提示文本；无数据返回空串。"""
     if not SCRIPT_DB:
         return ""
     samples = random.sample(SCRIPT_DB, min(len(SCRIPT_DB), num))
@@ -22,6 +23,7 @@ _PERSONA_CACHE: str = ""
 
 
 def get_base_persona() -> str:
+    """返回人设文本（带进程内缓存）；缺人设文件时返回兜底文本。"""
     global _PERSONA_CACHE
     if _PERSONA_CACHE:
         return _PERSONA_CACHE
@@ -67,6 +69,7 @@ def get_song_memories() -> str:
 
 
 async def get_hybrid_relationship(text: str) -> str:
+    """命中关系档案关键词时，拼装「本地认知 +（提问时）网络搜索」的关系提示；未命中返回空串。"""
     text_lower = text.lower()
 
     # --- Step 1: 本地关键词白名单扫描 ---

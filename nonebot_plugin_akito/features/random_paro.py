@@ -15,8 +15,7 @@ from nonebot.log import logger
 from nonebot.params import CommandArg
 from PIL import Image, ImageDraw, ImageFont
 
-from ..core import ALLOWED_CHAT_GROUPS, SUPERUSER_QQ
-from ..core.data import _find_data_path, load_json_file
+from ..core import ALLOWED_CHAT_GROUPS, SUPERUSER_QQ, find_data_path, load_json_file
 
 DATA_FILE = "paro_pools.json"
 DEFAULT_DATA = {"akito_pool": [], "toya_pool": []}
@@ -25,7 +24,7 @@ PARO_DATA: dict = load_json_file(DATA_FILE, DEFAULT_DATA)
 
 
 def _save():
-    path = _find_data_path(DATA_FILE)
+    path = find_data_path(DATA_FILE)
     if not path:
         path = Path("data") / DATA_FILE
     path.parent.mkdir(parents=True, exist_ok=True)

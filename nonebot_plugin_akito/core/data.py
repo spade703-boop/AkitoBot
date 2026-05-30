@@ -20,11 +20,16 @@ _DATA_SEARCH_DIRS = [
 
 
 def _find_data_path(filename: str) -> Path | None:
+    """在多个候选数据目录中定位文件，返回第一个存在的路径；都不存在返回 None。"""
     for base in _DATA_SEARCH_DIRS:
         p = Path(base) / filename
         if p.exists():
             return p
     return None
+
+
+# 公共别名：features/handlers 统一通过 from ..core import find_data_path 调用，避免直引 core 子模块
+find_data_path = _find_data_path
 
 
 def load_json_file(filename: str, default_data: Any = None) -> Any:
@@ -43,6 +48,7 @@ def load_json_file(filename: str, default_data: Any = None) -> Any:
 
 
 def load_prompt_template(filename: str) -> str:
+    """读取文本模板文件内容；未找到或读取失败返回空串。"""
     path = _find_data_path(filename)
     if path:
         try:
@@ -89,7 +95,8 @@ SONG_DATA         = load_json_file("akito_songs.json", {})
 RELATIONSHIP_DATA = load_json_file("akito_relationships.json", [])
 
 
-def init_pjsk_knowledge():
+def init_pjsk_knowledge() -> None:
+    """加载并拼装 PJSK 黑话知识库到 PJSK_KNOWLEDGE_BASE（缺文件则保持空串）。"""
     global PJSK_KNOWLEDGE_BASE
     data = load_json_file("pjsk_knowledge.json", {})
     if not data:
@@ -109,7 +116,7 @@ def init_pjsk_knowledge():
 init_pjsk_knowledge()
 
 
-def reload_assets():
+def reload_assets() -> None:
     """原地热更新所有 JSON 数据文件，对已导入该模块变量的引用立即生效（无需重启）。"""
     for target, filename, default in [
         (REACTIONS_DB,    "akito_reactions.json", {}),
@@ -134,14 +141,14 @@ def reload_assets():
     try:
         from ..features.random_paro import reload_paro_data
         reload_paro_data()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"🔄 random_paro 热重载跳过: {e}")
 
     try:
         from ..features.random_keyword import reload_keyword_data
         reload_keyword_data()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"🔄 random_keyword 热重载跳过: {e}")
 
     init_pjsk_knowledge()
     logger.info("🔄 所有 JSON 数据文件已热重载完成")

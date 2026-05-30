@@ -1,3 +1,5 @@
+"""core 包入口：定义全局常量与 API 客户端，并统一导出 memory/data/life_state/api/context/time_awareness 六个子模块的公共接口。"""
+
 # ============================================================================
 # core/__init__.py — 包入口
 #
@@ -60,7 +62,7 @@ from .memory import (
     get_group_context,
 )
 from .data import (
-    load_json_file, load_prompt_template, reload_assets,
+    load_json_file, load_prompt_template, reload_assets, find_data_path,
     SCRIPT_DB, REACTIONS_DB, PROMPTS_DB, DIRECTOR_DB,
     DAILY_ROUTINE, WL2_ROUTINE,
     SONG_DATA, RELATIONSHIP_DATA, PJSK_KNOWLEDGE_BASE,
@@ -94,7 +96,7 @@ __all__ = [
     "MEMORY_DB", "load_memory", "save_memory", "get_memory_key", "get_user_memory",
     "get_group_context",
     # data
-    "load_json_file", "load_prompt_template", "reload_assets",
+    "load_json_file", "load_prompt_template", "reload_assets", "find_data_path",
     "SCRIPT_DB", "REACTIONS_DB", "PROMPTS_DB", "DIRECTOR_DB",
     "DAILY_ROUTINE", "WL2_ROUTINE", "SONG_DATA", "RELATIONSHIP_DATA", "PJSK_KNOWLEDGE_BASE",
     # life_state
