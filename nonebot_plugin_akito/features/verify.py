@@ -1,10 +1,11 @@
 import json
-import time
 from pathlib import Path
-from nonebot import on_notice, on_command
-from nonebot.log import logger
-from nonebot.adapters.onebot.v11 import GroupIncreaseNoticeEvent, GroupDecreaseNoticeEvent, Bot
+import time
+
+from nonebot import on_command, on_notice
 from nonebot.adapters import Event, Message
+from nonebot.adapters.onebot.v11 import Bot, GroupDecreaseNoticeEvent, GroupIncreaseNoticeEvent
+from nonebot.log import logger
 from nonebot.params import CommandArg
 
 # ==============================================================================
@@ -15,7 +16,7 @@ VERIFY_FILE = Path("data/pending_verify.json")
 
 def load_config():
     try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f: return json.load(f)
+        with open(CONFIG_FILE, encoding="utf-8") as f: return json.load(f)
     except Exception as e:
         logger.warning(f"⚠️ 读取 verify_config.json 失败，使用默认配置: {e}")
         return {"TARGET_GROUP_ID": "1058884117", "ADMIN_GROUP_ID": "1078300612"}
@@ -27,8 +28,8 @@ ADMIN_GROUP_ID = config.get("ADMIN_GROUP_ID")
 def load_verify_queue():
     if not VERIFY_FILE.exists(): return {}
     try:
-        with open(VERIFY_FILE, "r", encoding="utf-8") as f: return json.load(f)
-    except: return {}
+        with open(VERIFY_FILE, encoding="utf-8") as f: return json.load(f)
+    except Exception: return {}
 
 def save_verify_queue(data):
     VERIFY_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -85,7 +86,7 @@ async def _(event: Event):
         await check_verify_cmd.finish("（翻了翻名单）……目前没有需要核对自证的新人。")
 
     now_ts = time.time()
-    msg = f"📋 【停车场待核对名单】\n"
+    msg = "📋 【停车场待核对名单】\n"
     for item in pending_list:
         uid = item['uid']
         diff = now_ts - item['join_time']
@@ -115,7 +116,7 @@ async def _(event: Event, args: Message = CommandArg()):
             save_verify_queue(data)
             await pass_verify_cmd.finish(f"✅ OK，已将 {target_qq} 从名单中划掉。")
         else:
-            await pass_verify_cmd.finish(f"（查了查）名单里没这个号，是不是填错了？")
+            await pass_verify_cmd.finish("（查了查）名单里没这个号，是不是填错了？")
 
 add_verify_cmd = on_command("手动添加", aliases={"添加待审核", "加入名单"}, priority=5, block=True)
 @add_verify_cmd.handle()
@@ -179,8 +180,8 @@ BOND_FILE = Path("data/bond_verify.json")
 def load_bond_queue():
     if not BOND_FILE.exists(): return {}
     try:
-        with open(BOND_FILE, "r", encoding="utf-8") as f: return json.load(f)
-    except: return {}
+        with open(BOND_FILE, encoding="utf-8") as f: return json.load(f)
+    except Exception: return {}
 
 def save_bond_queue(data):
     BOND_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -231,7 +232,7 @@ async def _(event: Event, args: Message = CommandArg()):
         if success_list: save_bond_queue(bond_data)
         if transferred_count > 0: save_verify_queue(verify_data)
 
-        msg = f"✅ 名单转移更新完毕：\n"
+        msg = "✅ 名单转移更新完毕：\n"
         if success_list:
             msg += f"🎸 已将 {len(success_list)} 人挂入待刷羁绊列表：\n{', '.join(success_list)}\n"
         if transferred_count > 0:
@@ -284,7 +285,7 @@ async def _(event: Event, args: Message = CommandArg()):
             save_bond_queue(data)
             await pass_bond_cmd.finish(f"✅ 知道了，{target_qq} 已从羁绊名单划掉。")
         else:
-            await pass_bond_cmd.finish(f"（翻了翻）羁绊名单里没这个号啊？")
+            await pass_bond_cmd.finish("（翻了翻）羁绊名单里没这个号啊？")
 
 # ==============================================================================
 # 5. 自定义理由延期/挂起区
@@ -294,8 +295,8 @@ HOLD_FILE = Path("data/hold_verify.json")
 def load_hold_queue():
     if not HOLD_FILE.exists(): return {}
     try:
-        with open(HOLD_FILE, "r", encoding="utf-8") as f: return json.load(f)
-    except: return {}
+        with open(HOLD_FILE, encoding="utf-8") as f: return json.load(f)
+    except Exception: return {}
 
 def save_hold_queue(data):
     HOLD_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -405,4 +406,4 @@ async def _(event: Event, args: Message = CommandArg()):
             save_hold_queue(data)
             await pass_hold_cmd.finish(f"✅ OK，{target_qq} 已从特殊延期名单中划掉。")
         else:
-            await pass_hold_cmd.finish(f"（翻了翻）特殊名单里没这个号啊？")
+            await pass_hold_cmd.finish("（翻了翻）特殊名单里没这个号啊？")

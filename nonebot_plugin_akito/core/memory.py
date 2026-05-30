@@ -1,10 +1,12 @@
+"""记忆系统：长期记忆 JSON 的原子读写，以及基于 SQLite 的群聊上下文存取。"""
+
 import json
 import os
-import sqlite3
 from pathlib import Path
+import sqlite3
 
-from nonebot.log import logger
 from nonebot.adapters import Event
+from nonebot.log import logger
 
 from . import DB_PATH
 
@@ -46,7 +48,7 @@ def load_memory():
     for path in possible_paths:
         if path.exists():
             try:
-                with open(path, "r", encoding="utf-8") as f:
+                with open(path, encoding="utf-8") as f:
                     MEMORY_DB = json.load(f)
                 logger.info(f"💾 长期记忆已加载！包含 {len(MEMORY_DB)} 个会话数据")
                 return

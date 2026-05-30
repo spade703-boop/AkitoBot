@@ -1,19 +1,20 @@
+import asyncio
+from datetime import datetime, timedelta, timezone
+import io
 import json
 import os
-import ssl
 from pathlib import Path
-import httpx
-import io
-import asyncio
+import ssl
 import time
-from datetime import datetime, timezone, timedelta
 
-_TZ_CN = timezone(timedelta(hours=8))  # 北京时间，独立定义避免循环导入
+import httpx
 from nonebot import on_command
 from nonebot.adapters.onebot.v11 import MessageEvent, MessageSegment
 from nonebot.exception import FinishedException
 from nonebot.log import logger
 from PIL import Image, ImageDraw, ImageFont
+
+_TZ_CN = timezone(timedelta(hours=8))  # 北京时间，独立定义避免循环导入
 
 # ================= 配置 =================
 CACHE_FILE = Path("data/pjsk_event_cache.json")
@@ -36,7 +37,7 @@ def load_event_cache():
     if not CACHE_FILE.exists():
         return {"event_id": None, "event_name": "", "updated_at": 0}
     try:
-        with open(CACHE_FILE, "r", encoding="utf-8") as f:
+        with open(CACHE_FILE, encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
         logger.warning(f"⚠️ [Snowy] 读取活动缓存失败: {e}")
@@ -92,7 +93,7 @@ async def safe_request(client, url, max_retries=3, retry_delay=3):
                 try:
                     data = resp.json()
                     return True, data, ""
-                except:
+                except Exception:
                     return False, None, f"非JSON响应: {content_type}"
 
             try:

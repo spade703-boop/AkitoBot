@@ -1,13 +1,15 @@
+"""外部 API 封装：DeepSeek 对话 / Agent、Tavily 搜索、智谱 GLM-4V 图像识别，均带超时与降级处理。"""
+
 import asyncio
-import aiohttp
 import base64
 from io import BytesIO
 from pathlib import Path
 
-from PIL import Image as PILImage
+import aiohttp
 from nonebot.log import logger
+from PIL import Image as PILImage
 
-from . import client, vision_client, ZHIPU_API_KEY, TAVILY_API_KEY
+from . import TAVILY_API_KEY, ZHIPU_API_KEY, client, vision_client
 
 
 async def call_deepseek_api(messages, model_name="deepseek-v4-flash", force_json=False):
@@ -75,26 +77,25 @@ async def smart_search(query: str) -> str:
             "include_images": False,
         }
         timeout = aiohttp.ClientTimeout(total=8)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.post(url, json=payload) as resp:
-                if resp.status != 200:
-                    error_text = await resp.text()
-                    logger.error(f"❌ Tavily 搜索API报错: HTTP {resp.status} - {error_text}")
-                    return ""
-                data = await resp.json()
-                results = data.get("results", [])
-                if not results:
-                    logger.warning("⚠️ 搜索API未返回任何有效结果")
-                    return ""
-                summary = ""
-                for item in results[:2]:
-                    title   = item.get("title", "无标题")
-                    content = item.get("content", "无内容")
-                    if len(content) > 150:
-                        content = content[:150] + "..."
-                    summary += f"- {title}: {content}\n"
-                logger.info(f"🔍 网络搜索成功！提取了 {len(results[:2])} 条摘要。")
-                return summary
+        async with aiohttp.ClientSession(timeout=timeout) as session, session.post(url, json=payload) as resp:
+            if resp.status != 200:
+                error_text = await resp.text()
+                logger.error(f"❌ Tavily 搜索API报错: HTTP {resp.status} - {error_text}")
+                return ""
+            data = await resp.json()
+            results = data.get("results", [])
+            if not results:
+                logger.warning("⚠️ 搜索API未返回任何有效结果")
+                return ""
+            summary = ""
+            for item in results[:2]:
+                title   = item.get("title", "无标题")
+                content = item.get("content", "无内容")
+                if len(content) > 150:
+                    content = content[:150] + "..."
+                summary += f"- {title}: {content}\n"
+            logger.info(f"🔍 网络搜索成功！提取了 {len(results[:2])} 条摘要。")
+            return summary
     except Exception as e:
         logger.error(f"❌ 搜索过程中发生严重错误: {e}")
         return ""
@@ -176,16 +177,15 @@ async def to_image_data(image) -> bytes:
         async with aiohttp.ClientSession(
             headers={"User-Agent": "Mozilla/5.0"},
             timeout=timeout,
-        ) as session:
-            async with session.get(image.url) as resp:
-                if resp.status != 200:
-                    logger.error(f"❌ 图片下载失败，HTTP 状态码: {resp.status}")
-                    raise ValueError(f"下载失败: {resp.status}")
-                content_type = resp.headers.get("Content-Type", "")
-                if not any(t in content_type for t in ("image/", "application/octet-stream")):
-                    logger.error(f"❌ 非图片类型，Content-Type: {content_type}")
-                    raise ValueError(f"非图片内容: {content_type}")
-                data = await resp.read()
-                logger.info(f"✅ 图片下载成功，文件大小: {len(data)} 字节")
-                return data
+        ) as session, session.get(image.url) as resp:
+            if resp.status != 200:
+                logger.error(f"❌ 图片下载失败，HTTP 状态码: {resp.status}")
+                raise ValueError(f"下载失败: {resp.status}")
+            content_type = resp.headers.get("Content-Type", "")
+            if not any(t in content_type for t in ("image/", "application/octet-stream")):
+                logger.error(f"❌ 非图片类型，Content-Type: {content_type}")
+                raise ValueError(f"非图片内容: {content_type}")
+            data = await resp.read()
+            logger.info(f"✅ 图片下载成功，文件大小: {len(data)} 字节")
+            return data
     raise ValueError("无法获取图片数据")

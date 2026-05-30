@@ -1,22 +1,28 @@
 import datetime
-import time
 import random
 import sqlite3
+import time
 
 from nonebot import on_command
+from nonebot.adapters import Event, Message
+from nonebot.adapters.onebot.v11 import GroupMessageEvent
 from nonebot.log import logger
-from nonebot.adapters import Message, Event
 from nonebot.params import CommandArg
 
-from nonebot.adapters.onebot.v11 import GroupMessageEvent
-
 from ..core import (
-    TZ_CN, DB_PATH,
-    SUPERUSER_QQ, ALLOWED_MEMORY_GROUPS, ALLOWED_CHAT_GROUPS,
     AKITO_STATUS,
-    save_memory, get_memory_key, get_user_memory,
-    parse_duration_and_content, grant_safety_pass,
-    reload_assets, reload_persona,
+    ALLOWED_CHAT_GROUPS,
+    ALLOWED_MEMORY_GROUPS,
+    DB_PATH,
+    SUPERUSER_QQ,
+    TZ_CN,
+    get_memory_key,
+    get_user_memory,
+    grant_safety_pass,
+    parse_duration_and_content,
+    reload_assets,
+    reload_persona,
+    save_memory,
 )
 
 
@@ -137,7 +143,7 @@ async def _(event: Event, args: Message = CommandArg()):
         if 0 <= index < len(facts):
             facts.pop(index)
             save_memory()
-            await forget_cmd.finish(f"OK，已经忘了这件事。")
+            await forget_cmd.finish("OK，已经忘了这件事。")
     except Exception: await forget_cmd.finish("请输入正确的数字序号。")
 
 

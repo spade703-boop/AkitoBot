@@ -1,9 +1,11 @@
+"""生活状态机：作息 / 睡眠 / 节日 / 晨跑等状态推断，以及安全期、吐槽冷却、图片权限等运行时开关。"""
+
 import datetime
 import random
 import re
 import time
 
-from . import TZ_CN, TZ_JST, GROUP_IMAGE_PERMISSIONS
+from . import GROUP_IMAGE_PERMISSIONS, TZ_CN, TZ_JST
 from .data import DAILY_ROUTINE, REACTIONS_DB
 
 AKITO_STATUS: dict = {
@@ -48,11 +50,7 @@ def get_daily_activity(hour: int, weekday: int, minute: int = 0) -> str:
     elif 13 <= hour < 15: key = "afternoon_weekend" if is_weekend else "afternoon_weekday"
     elif 15 <= hour < 18: key = "evening"
     elif 18 <= hour < 21: key = "night_training"
-    elif 21 <= hour < 24:
-        if hour == 23 and minute >= 45:
-            key = "sleep_buffer"
-        else:
-            key = "night_home"
+    elif 21 <= hour < 24: key = "sleep_buffer" if hour == 23 and minute >= 45 else "night_home"
     else:                 key = "late_night"
 
     now_ts = time.time()

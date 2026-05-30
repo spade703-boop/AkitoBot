@@ -1,5 +1,10 @@
+"""数据加载与热重载：统一从 data/ 定位并读取 JSON / 文本资源，并提供 reload_assets() 原地热更新。"""
+
+from __future__ import annotations
+
 import json
 from pathlib import Path
+from typing import Any
 
 from nonebot.log import logger
 
@@ -22,11 +27,12 @@ def _find_data_path(filename: str) -> Path | None:
     return None
 
 
-def load_json_file(filename: str, default_data):
+def load_json_file(filename: str, default_data: Any = None) -> Any:
+    """加载 JSON 数据文件；未找到或解析失败时回落到 default_data。"""
     path = _find_data_path(filename)
     if path:
         try:
-            with open(path, "r", encoding="utf-8-sig") as f:
+            with open(path, encoding="utf-8-sig") as f:
                 data = json.load(f)
             logger.info(f"✅ 成功加载 {filename}")
             return data

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # ============================================================================
 # core/__init__.py — 包入口
 #
@@ -82,3 +81,32 @@ from .context import (
 from .time_awareness import (
     record_bot_response, build_time_gap_prompt,
 )
+
+# ── 统一公共导出面（显式声明，避免 import * 时泄漏内部名） ────────────────
+__all__ = [
+    # 常量 / 客户端
+    "TZ_CN", "TZ_JST", "DB_PATH", "IMAGE_BASE_PATH", "MAX_HISTORY_LEN",
+    "DEEPSEEK_API_KEY", "TAVILY_API_KEY", "ZHIPU_API_KEY", "client", "vision_client",
+    "TOYA_QQ_ID", "SUPERUSER_QQ", "TRIGGER_NAMES",
+    "ALLOWED_CHAT_GROUPS", "ALLOWED_CP_GROUPS", "ALLOWED_MEMORY_GROUPS", "TARGET_GROUPS",
+    "GROUP_IMAGE_PERMISSIONS",
+    # memory
+    "MEMORY_DB", "load_memory", "save_memory", "get_memory_key", "get_user_memory",
+    "get_group_context",
+    # data
+    "load_json_file", "load_prompt_template", "reload_assets",
+    "SCRIPT_DB", "REACTIONS_DB", "PROMPTS_DB", "DIRECTOR_DB",
+    "DAILY_ROUTINE", "WL2_ROUTINE", "SONG_DATA", "RELATIONSHIP_DATA", "PJSK_KNOWLEDGE_BASE",
+    # life_state
+    "AKITO_STATUS", "STATE_DURATION",
+    "grant_safety_pass", "get_safe_until", "get_last_complaint", "set_last_complaint",
+    "get_daily_activity", "check_sleep_status", "get_festival_buff", "get_morning_run_buff",
+    "get_sleep_buffer_buff", "parse_duration_and_content", "check_img_permission",
+    # api
+    "call_deepseek_api", "call_deepseek_api_agent", "smart_search", "describe_image", "to_image_data",
+    # context
+    "get_random_examples", "get_base_persona", "reload_persona", "get_song_memories",
+    "get_hybrid_relationship",
+    # time_awareness
+    "record_bot_response", "build_time_gap_prompt",
+]

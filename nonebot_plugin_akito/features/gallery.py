@@ -1,13 +1,13 @@
+from __future__ import annotations
+
 import base64
 import datetime
-import json
-import random
-import time
 from io import BytesIO
 from pathlib import Path
+import random
+import time
 
 import aiohttp
-from PIL import Image as PILImage
 from nonebot import on_command, on_message
 from nonebot.adapters import Event, Message
 from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, MessageSegment
@@ -15,18 +15,19 @@ from nonebot.adapters.onebot.v11 import Message as OB11Message
 from nonebot.log import logger
 from nonebot.params import CommandArg
 from nonebot_plugin_htmlrender import html_to_pic
+from PIL import Image as PILImage
 
 from ..core import (
-    REACTIONS_DB,
     GROUP_IMAGE_PERMISSIONS,
     IMAGE_BASE_PATH,
+    REACTIONS_DB,
     TZ_CN,
     call_deepseek_api,
-    get_base_persona,
-    grant_safety_pass,
-    get_user_memory,
-    get_memory_key,
     check_img_permission,
+    get_base_persona,
+    get_memory_key,
+    get_user_memory,
+    grant_safety_pass,
 )
 
 # ==============================================================================
@@ -81,12 +82,11 @@ async def _(bot: Bot, event: GroupMessageEvent):
         save_dir = IMAGE_BASE_PATH / category
         save_dir.mkdir(parents=True, exist_ok=True)
         file_name = f"{int(time.time())}_{random.randint(100, 999)}.jpg"
-        async with aiohttp.ClientSession() as session:
-            async with session.get(img_url) as resp:
-                if resp.status == 200:
-                    with open(save_dir / file_name, "wb") as f: f.write(await resp.read())
-                    grant_safety_pass(5)
-                    await bot.send(event=event, message=save_msg)
+        async with aiohttp.ClientSession() as session, session.get(img_url) as resp:
+            if resp.status == 200:
+                with open(save_dir / file_name, "wb") as f: f.write(await resp.read())
+                grant_safety_pass(5)
+                await bot.send(event=event, message=save_msg)
     except Exception: pass
 
 # --- 2. 自动进货模式 ---
@@ -116,7 +116,7 @@ async def _(event: Event, args: Message = CommandArg()):
     elif any(k in target for k in ["表情", "meme", "梗图"]): category = "meme"
 
     if group_id and not check_img_permission(group_id, category):
-        await collect_cmd.finish(f"（皱眉）……这是什么图。")
+        await collect_cmd.finish("（皱眉）……这是什么图。")
         return
 
     COLLECTING_MODE[session_key] = category

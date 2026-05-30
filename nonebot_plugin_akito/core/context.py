@@ -1,9 +1,11 @@
+"""Prompt 组装：人设、示例台词、歌曲记忆、关系文本等上下文片段的拼装与缓存。"""
+
 import random
 
 from nonebot.log import logger
 
-from .data import SCRIPT_DB, SONG_DATA, RELATIONSHIP_DATA, load_prompt_template
 from .api import smart_search
+from .data import RELATIONSHIP_DATA, SCRIPT_DB, SONG_DATA, load_prompt_template
 
 
 def get_random_examples(num: int = 5) -> str:

@@ -1,32 +1,55 @@
-import re
-import datetime
-import time
 import asyncio
+import datetime
 import json
 import random
+import re
+import time
 
 from nonebot import on_message
-from nonebot.log import logger
+from nonebot.adapters import Bot, Event, Message
 from nonebot.exception import FinishedException
-from nonebot.adapters import Message, Event, Bot
-from nonebot.params import EventMessage
+from nonebot.log import logger
 from nonebot.matcher import Matcher
-
-from nonebot.adapters.onebot.v11 import GroupMessageEvent
-from nonebot_plugin_alconna import UniMessage, Text, Image, Reply
+from nonebot.params import EventMessage
+from nonebot_plugin_alconna import Image, Reply, Text, UniMessage
 from nonebot_plugin_htmlrender import md_to_pic
 
 from ..core import (
-    TZ_CN, TZ_JST, MAX_HISTORY_LEN, TOYA_QQ_ID, TRIGGER_NAMES,
-    SUPERUSER_QQ, ALLOWED_CHAT_GROUPS, AKITO_STATUS,
-    save_memory, get_memory_key, get_user_memory, get_group_context,
-    PROMPTS_DB, DIRECTOR_DB, WL2_ROUTINE, PJSK_KNOWLEDGE_BASE,
-    grant_safety_pass, get_daily_activity, check_sleep_status, get_festival_buff, get_morning_run_buff,
+    AKITO_STATUS,
+    ALLOWED_CHAT_GROUPS,
+    DIRECTOR_DB,
+    MAX_HISTORY_LEN,
+    PJSK_KNOWLEDGE_BASE,
+    PROMPTS_DB,
+    SUPERUSER_QQ,
+    TOYA_QQ_ID,
+    TRIGGER_NAMES,
+    TZ_CN,
+    TZ_JST,
+    WL2_ROUTINE,
+    build_time_gap_prompt,
+    call_deepseek_api,
+    call_deepseek_api_agent,
+    check_sleep_status,
+    describe_image,
+    get_base_persona,
+    get_daily_activity,
+    get_festival_buff,
+    get_group_context,
+    get_hybrid_relationship,
+    get_memory_key,
+    get_morning_run_buff,
+    get_random_examples,
     get_sleep_buffer_buff,
-    call_deepseek_api, call_deepseek_api_agent, smart_search, describe_image, to_image_data,
-    get_random_examples, get_base_persona, get_song_memories, get_hybrid_relationship,
-    record_bot_response, build_time_gap_prompt,
+    get_song_memories,
+    get_user_memory,
+    grant_safety_pass,
+    record_bot_response,
+    save_memory,
+    smart_search,
+    to_image_data,
 )
+
 try:
     from ..features.director import build_director_note
 except ImportError:
@@ -70,9 +93,7 @@ async def starts_with_trigger(event: Event) -> bool:
     try: text = event.get_plaintext().strip()
     except AttributeError: text = event.get_message().extract_plain_text().strip()
 
-    for name in TRIGGER_NAMES:
-        if text.lower().startswith(name.lower()): return True
-    return False
+    return any(text.lower().startswith(name.lower()) for name in TRIGGER_NAMES)
 
 
 async def smart_finish(matcher: Matcher, result: str):
@@ -338,7 +359,6 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage(), raw_messa
         # build_director_note 来自 features/director.py（可一键删除该模块）
         _d = build_director_note(plain_text_content, is_toya_context, long_term_memory_text, PROMPTS_DB, DIRECTOR_DB) if build_director_note else {}
         is_physical_or_drama = _d.get("is_physical_or_drama", False)
-        is_really_spicy      = _d.get("is_really_spicy", False)
 
         acting_guide = ""
         if is_info_request:
@@ -512,7 +532,7 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage(), raw_messa
             inner_os = response_data.get("inner_os", "") or response_data.get("Inner_os", "") or response_data.get("内心OS", "")
             if inner_os:
                 logger.info(f"🎭【小彰内心OS】: {inner_os}")
-            
+
             # 分别提取动作和台词
             dialogue = response_data.get("dialogue", "") or response_data.get("reply", "") or response_data.get("Reply", "") or response_data.get("回复", "")
             action = response_data.get("action", "")
@@ -549,14 +569,14 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage(), raw_messa
                         f"……{dialogue}",
                         f"{dialogue}"
                     ]
-                
+
                 # 日常状态下大幅提高纯文本概率
                 if not is_toya_context and len(layout_choices) > 2:
                     weights = [0.15, 0.15, 0.2, 0.5]
                     result = random.choices(layout_choices, weights=weights)[0]
                 else:
                     result = random.choice(layout_choices)
-                    
+
             if not result:
                 result = "……"
         except Exception as e:

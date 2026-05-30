@@ -1,17 +1,19 @@
+from __future__ import annotations
+
 import asyncio
 import io
 import json
 import os
+from pathlib import Path
 import random
 import time
-from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
 from nonebot import on_command
-from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageSegment
 from nonebot.adapters import Event, Message
-from nonebot.params import CommandArg
+from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageSegment
 from nonebot.log import logger
+from nonebot.params import CommandArg
+from PIL import Image, ImageDraw, ImageFont
 
 from ..core import ALLOWED_CHAT_GROUPS, SUPERUSER_QQ
 from ..core.data import _find_data_path, load_json_file

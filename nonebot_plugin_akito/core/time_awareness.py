@@ -10,15 +10,15 @@
   build_time_gap_prompt(group_id)    — 构建 system prompt 注入文本（gap < 30min 返回空字符串）
 """
 
-import json
-import time
 import datetime
+import json
 from pathlib import Path
+import time
 
 from nonebot.log import logger
 
 from . import TZ_CN
-from .data import DAILY_ROUTINE, _DATA_SEARCH_DIRS
+from .data import _DATA_SEARCH_DIRS, DAILY_ROUTINE
 from .life_state import AKITO_STATUS
 
 # ── 持久化 ──────────────────────────────────────────────────────────────

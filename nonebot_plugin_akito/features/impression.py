@@ -1,22 +1,29 @@
-import sqlite3
-import re
+import asyncio
+import datetime
 import json
 import random
-import datetime
+import re
+import sqlite3
 import time
-import asyncio
-from nonebot.exception import FinishedException, ActionFailed
+
 from nonebot import on_command, on_message
-from nonebot.adapters.onebot.v11 import GroupMessageEvent, Bot, MessageSegment
-from nonebot.rule import Rule
+from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, MessageSegment
+from nonebot.exception import FinishedException
 from nonebot.log import logger
+
 from ..core import (
     ALLOWED_CP_GROUPS,
-    DB_PATH, TZ_CN,
-    PROMPTS_DB, PJSK_KNOWLEDGE_BASE, RELATIONSHIP_DATA,
+    DB_PATH,
+    PJSK_KNOWLEDGE_BASE,
+    PROMPTS_DB,
+    RELATIONSHIP_DATA,
+    TZ_CN,
     client,
-    get_base_persona, load_prompt_template,
-    get_group_context, get_user_memory, get_safe_until,
+    get_base_persona,
+    get_group_context,
+    get_safe_until,
+    get_user_memory,
+    load_prompt_template,
 )
 
 # ================= 配置区域 =================
@@ -109,7 +116,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
             target_name = member_info.get("card") or member_info.get("nickname") or f"用户{target_id}"
         except Exception as e:
             logger.error(f"获取被艾特成员信息失败: {e}")
-            target_name = f"那家伙"
+            target_name = "那家伙"
 
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -221,8 +228,8 @@ async def _(bot: Bot, event: GroupMessageEvent):
         await um_cmd.finish(reply_segment + final_reply)
     except FinishedException:
         raise
-    except Exception as e:
-        await um_cmd.finish(reply_segment + f"脑子短路了...")
+    except Exception:
+        await um_cmd.finish(reply_segment + "脑子短路了...")
 
 # ================= 功能 3：随机插嘴 (AutoChat) =================
 AUTO_CHAT_COOLDOWN = {}

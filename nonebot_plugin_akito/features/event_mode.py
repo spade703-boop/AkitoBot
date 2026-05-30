@@ -1,9 +1,8 @@
-import time
 from nonebot import on_command
 from nonebot.adapters import Event
 from nonebot.adapters.onebot.v11 import GroupMessageEvent
 
-from ..core import SUPERUSER_QQ, ALLOWED_CHAT_GROUPS, get_memory_key, get_user_memory, save_memory, load_prompt_template
+from ..core import ALLOWED_CHAT_GROUPS, SUPERUSER_QQ, get_memory_key, get_user_memory, load_prompt_template, save_memory
 
 # --- 1. 开启 WL2 剧情线 ---
 enable_wl2_cmd = on_command("开启WL2模式", priority=5, block=True)

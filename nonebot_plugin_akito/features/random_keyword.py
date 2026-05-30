@@ -1,18 +1,20 @@
+from __future__ import annotations
+
 import asyncio
+from datetime import date as date_type
+from datetime import datetime
 import io
 import json
 import os
-import random
-from datetime import date as date_type
-from datetime import datetime
 from pathlib import Path
+import random
 
-from PIL import Image, ImageDraw, ImageFont
 from nonebot import on_command
-from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageSegment
 from nonebot.adapters import Event, Message
-from nonebot.params import CommandArg
+from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageSegment
 from nonebot.log import logger
+from nonebot.params import CommandArg
+from PIL import Image, ImageDraw, ImageFont
 
 from ..core import ALLOWED_CHAT_GROUPS, SUPERUSER_QQ, TZ_CN
 from ..core.data import _find_data_path, load_json_file
@@ -49,7 +51,7 @@ def _load_draws() -> dict:
     if not path.exists():
         return {}
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             return json.load(f)
     except Exception:
         logger.warning(f"读取 {DRAWS_FILE} 失败，已重置抽取记录")
@@ -156,7 +158,7 @@ def _render_categories_image() -> bytes:
     bottom_pad = 24
 
     height = top_pad + title_h + title_gap
-    for cat_name, items in cats:
+    for _cat_name, items in cats:
         height += cat_header_h + cat_gap
         height += len(items) * item_row_h
         height += between_cat_gap
@@ -214,11 +216,7 @@ def _fuzzy_match_in_categories(name: str) -> tuple[str | list | None, str | None
         candidates: list[tuple[str, str]] = []
         for cat, items in categories.items():
             for item in items:
-                if match_type == "exact" and item.lower() == name_lower:
-                    candidates.append((item, cat))
-                elif match_type == "prefix" and item.lower().startswith(name_lower):
-                    candidates.append((item, cat))
-                elif match_type == "contains" and name_lower in item.lower():
+                if match_type == "exact" and item.lower() == name_lower or match_type == "prefix" and item.lower().startswith(name_lower) or match_type == "contains" and name_lower in item.lower():
                     candidates.append((item, cat))
         if len(candidates) == 1:
             return candidates[0][0], candidates[0][1]
@@ -281,7 +279,7 @@ async def _(event: Event):
         count = min(count, len(cats))
         chosen_cats = random.sample(cats, k=count)
         selected: list[str] = []
-        for cat_name, items in chosen_cats:
+        for _cat_name, items in chosen_cats:
             kw = random.choice(items)
             selected.append(kw)
 
