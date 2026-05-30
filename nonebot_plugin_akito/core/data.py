@@ -60,15 +60,23 @@ def load_prompt_template(filename: str) -> str:
 
 SCRIPT_DB       = load_json_file("akito_scripts.json", [])
 REACTIONS_DB    = load_json_file("akito_reactions.json", {
-    "complaints": ["……吵死了……"],
-    "sleep_replies_img": ["……困……"],
     "behavior_seeds": ["冬弥在发呆"],
     "save_img_replies": {},
     "send_img_angles": ["语气切入点：随意的发言，像是随手丢过去的。"],
     "greetings": {"morning": ["早。"], "night": ["晚安。"]},
     "fallback_poke": ["喂，别乱戳啊。"],
+})
+SLEEP_DB        = load_json_file("akito_sleep.json", {
+    "complaints": ["……吵死了……"],
+    "sleep_replies_img": ["……困……"],
     "sleep_relation": ["【状态：困】\n动作：闭着眼。\n台词参考：……不知道……困……"],
     "sleep_search":   ["【状态：困】\n动作：闭着眼查手机。\n台词参考：……给你……呼……"],
+    "sleep_mumbles":  ["……zzZ……"],
+    "sleep_toya_radar": ["（正在熟睡中……）zzZ"],
+    "sleep_save_img": ["……明天再存……zzZ"],
+    "sleep_poke": ["（正在睡觉，完全没有反应）"],
+    "sleep_inject_memory": ["（呼……呼……完全没听见……）zzZ"],
+    "sleep_gallery_list": ["💤 正在睡觉，早上再来……"],
 })
 PROMPTS_DB      = load_json_file("akito_prompts.json", {
     "system_header": "【系统级绝对指令】你是东云彰人，只输出合法JSON。",
@@ -137,6 +145,10 @@ def reload_assets() -> None:
     new_rels = load_json_file("akito_relationships.json", [])
     RELATIONSHIP_DATA.clear()
     RELATIONSHIP_DATA.extend(new_rels)
+
+    new_sleep = load_json_file("akito_sleep.json", {})
+    SLEEP_DB.clear()
+    SLEEP_DB.update(new_sleep)
 
     try:
         from ..features.random_paro import reload_paro_data

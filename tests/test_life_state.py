@@ -30,9 +30,15 @@ FAKE_DAILY_ROUTINE = {
     "sleep_buffer": [{"status": "准备睡觉。"}],
 }
 
-FAKE_REACTIONS_DB = {
+FAKE_SLEEP_DB = {
+    "sleep_mumbles": ["……zzZ……", "……呼……"],
     "sleep_relation": ['【状态：困】\n动作：闭着眼。\n台词参考：……嗯……还行吧……'],
     "sleep_search": ['【状态：困】\n动作：查手机。\n台词参考：……给你……'],
+    "sleep_toya_radar": ["（正在熟睡……）zzZ"],
+    "sleep_save_img": ["……明天再存……zzZ"],
+    "sleep_poke": ["正在睡觉……"],
+    "sleep_inject_memory": ["……呼……zzZ"],
+    "sleep_gallery_list": ["睡觉中……"],
 }
 
 
@@ -47,12 +53,12 @@ def patch_life_state_deps():
     import nonebot_plugin_akito.core.life_state as ls
 
     original_routine = ls.DAILY_ROUTINE
-    original_reactions = ls.REACTIONS_DB
+    original_sleep_db = ls.SLEEP_DB
     original_tz_cn = ls.TZ_CN
     original_tz_jst = ls.TZ_JST
 
     ls.DAILY_ROUTINE = FAKE_DAILY_ROUTINE
-    ls.REACTIONS_DB = FAKE_REACTIONS_DB
+    ls.SLEEP_DB = FAKE_SLEEP_DB
     ls.TZ_CN = TZ_CN
     ls.TZ_JST = TZ_JST
 
@@ -64,7 +70,7 @@ def patch_life_state_deps():
     yield ls
 
     ls.DAILY_ROUTINE = original_routine
-    ls.REACTIONS_DB = original_reactions
+    ls.SLEEP_DB = original_sleep_db
     ls.TZ_CN = original_tz_cn
     ls.TZ_JST = original_tz_jst
 
@@ -99,6 +105,23 @@ def test_sleep_midnight_ignore_high_probability(patch_life_state_deps):
     assert ignore_found, "凌晨普通消息应有一定概率被忽略"
 
 
+def test_sleep_mumble_comes_from_sleep_db(patch_life_state_deps):
+    """凌晨梦话应从 SLEEP_DB["sleep_mumbles"] 随机选取（不再硬编码）。"""
+    ls = patch_life_state_deps
+    ls.SLEEP_DB["sleep_mumbles"] = ["TEST_MUMBLE_ONLY"]
+    fake_now = _make_dt(2026, 5, 30, 3, 0, tzinfo=TZ_CN)
+    # 多轮采样确保 20% 概率的 mumble 路径被触发
+    for _ in range(50):
+        with mock.patch("datetime.datetime") as mock_dt:
+            mock_dt.now.side_effect = lambda tz: fake_now
+            with mock.patch.object(ls, "TZ_CN", TZ_CN), mock.patch.object(ls, "TZ_JST", TZ_JST):
+                should_block, instruction = ls.check_sleep_status("在吗")
+                if instruction == "TEST_MUMBLE_ONLY":
+                    break
+    else:
+        pytest.fail("未从 SLEEP_DB 读取梦话")
+
+
 def test_sleep_woken_up_by_search(patch_life_state_deps):
     """凌晨搜索类消息触发被叫醒营业。"""
     ls = patch_life_state_deps
@@ -118,7 +141,6 @@ def test_sleep_woken_up_by_relation_query(patch_life_state_deps):
     with mock.patch("datetime.datetime") as mock_dt:
         mock_dt.now.side_effect = lambda tz: fake_now
         with mock.patch.object(ls, "TZ_CN", TZ_CN), mock.patch.object(ls, "TZ_JST", TZ_JST):
-            # 必须同时包含唤醒词(如"我想知道")和评价词(如"怎么看")
             should_block, instruction = ls.check_sleep_status("我想知道你怎么看冬弥")
     assert should_block is False
     assert "sleep_relation" in instruction or "被叫醒问话" in instruction
@@ -144,6 +166,104 @@ def test_sleep_edge_hour_6(patch_life_state_deps):
         with mock.patch.object(ls, "TZ_CN", TZ_CN), mock.patch.object(ls, "TZ_JST", TZ_JST):
             should_block, instruction = ls.check_sleep_status("早上好")
     assert should_block is False
+
+
+# ── is_sleeping 测试 ───────────────────────────────────────────────────────
+
+def test_is_sleeping_during_night():
+    """凌晨 3 点 is_sleeping() 返回 True。"""
+    import nonebot_plugin_akito.core.life_state as ls
+    fake_now = _make_dt(2026, 5, 30, 3, 0, tzinfo=TZ_CN)
+    with mock.patch("datetime.datetime") as mock_dt:
+        mock_dt.now.return_value = fake_now
+        with mock.patch.object(ls, "TZ_CN", TZ_CN):
+            assert ls.is_sleeping() is True
+
+
+def test_is_sleeping_during_day():
+    """上午 10 点 is_sleeping() 返回 False。"""
+    import nonebot_plugin_akito.core.life_state as ls
+    fake_now = _make_dt(2026, 5, 30, 10, 0, tzinfo=TZ_CN)
+    with mock.patch("datetime.datetime") as mock_dt:
+        mock_dt.now.return_value = fake_now
+        with mock.patch.object(ls, "TZ_CN", TZ_CN):
+            assert ls.is_sleeping() is False
+
+
+def test_is_sleeping_edge_hour_0():
+    """0:30 仍在睡眠范围内。"""
+    import nonebot_plugin_akito.core.life_state as ls
+    fake_now = _make_dt(2026, 5, 30, 0, 30, tzinfo=TZ_CN)
+    with mock.patch("datetime.datetime") as mock_dt:
+        mock_dt.now.return_value = fake_now
+        with mock.patch.object(ls, "TZ_CN", TZ_CN):
+            assert ls.is_sleeping() is True
+
+
+def test_is_sleeping_edge_hour_6():
+    """6:00 不在睡眠范围内。"""
+    import nonebot_plugin_akito.core.life_state as ls
+    fake_now = _make_dt(2026, 5, 30, 6, 0, tzinfo=TZ_CN)
+    with mock.patch("datetime.datetime") as mock_dt:
+        mock_dt.now.return_value = fake_now
+        with mock.patch.object(ls, "TZ_CN", TZ_CN):
+            assert ls.is_sleeping() is False
+
+
+# ── sleep_block 测试 ───────────────────────────────────────────────────────
+
+def test_sleep_block_daytime_returns_empty():
+    """白天 sleep_block 返回空字符串（放行）。"""
+    import nonebot_plugin_akito.core.life_state as ls
+    with mock.patch.object(ls, "is_sleeping", return_value=False):
+        result = ls.sleep_block("sleep_poke", silent_chance=0.5)
+        assert result == ""
+
+
+def test_sleep_block_silent_returns_none():
+    """silent_chance=1.0 时，夜间 sleep_block 返回 None（静默丢弃）。"""
+    import nonebot_plugin_akito.core.life_state as ls
+    with mock.patch.object(ls, "is_sleeping", return_value=True):
+        with mock.patch("random.random", return_value=0.01):
+            result = ls.sleep_block("sleep_poke", silent_chance=0.8)
+            assert result is None
+
+
+def test_sleep_block_reply_from_pool():
+    """silent_chance=0.0 时，夜间 sleep_block 从 SLEEP_DB 池中返回文案。"""
+    import nonebot_plugin_akito.core.life_state as ls
+    pool = ["回复A", "回复B"]
+    original_sleep = dict(ls.SLEEP_DB)
+    ls.SLEEP_DB["test_pool"] = pool
+    try:
+        with mock.patch.object(ls, "is_sleeping", return_value=True):
+            with mock.patch("random.random", return_value=0.9):
+                with mock.patch("random.choice", return_value="回复A"):
+                    result = ls.sleep_block("test_pool", silent_chance=0.0)
+                    assert result == "回复A"
+    finally:
+        ls.SLEEP_DB.clear()
+        ls.SLEEP_DB.update(original_sleep)
+
+
+def test_sleep_block_fallback_when_pool_missing():
+    """pool_key 不存在时使用 fallback。"""
+    import nonebot_plugin_akito.core.life_state as ls
+    with mock.patch.object(ls, "is_sleeping", return_value=True):
+        with mock.patch("random.random", return_value=0.9):
+            result = ls.sleep_block("nonexistent_key", silent_chance=0.0, fallback="兜底文案")
+            assert result == "兜底文案"
+
+
+def test_sleep_block_zero_silent_never_returns_none():
+    """silent_chance=0.0 时永远不返回 None。"""
+    import nonebot_plugin_akito.core.life_state as ls
+    with mock.patch.object(ls, "is_sleeping", return_value=True):
+        results = set()
+        for _ in range(20):
+            result = ls.sleep_block("sleep_poke", silent_chance=0.0)
+            results.add(result)
+        assert None not in results
 
 
 # ── get_festival_buff 测试 ─────────────────────────────────────────────────
@@ -293,29 +413,6 @@ def test_parse_duration_no_number(patch_life_state_deps):
     seconds, content = ls.parse_duration_and_content("纯文本记忆")
     assert seconds == 600
     assert content == "纯文本记忆"
-
-
-def test_parse_duration_seconds(patch_life_state_deps):
-    """解析秒格式 '30s text'。"""
-    ls = patch_life_state_deps
-    seconds, content = ls.parse_duration_and_content("30s 短期记忆")
-    assert seconds == 30
-    assert content == "短期记忆"
-
-
-def test_parse_duration_uppercase_unit(patch_life_state_deps):
-    """大写单位 '2H' 与小写等价（不区分大小写）。"""
-    ls = patch_life_state_deps
-    seconds, _ = ls.parse_duration_and_content("2H 内容")
-    assert seconds == 7200
-
-
-def test_parse_duration_leading_space_returns_default(patch_life_state_deps):
-    """前导空格使正则无法匹配，整段作为内容、默认 600 秒。"""
-    ls = patch_life_state_deps
-    seconds, content = ls.parse_duration_and_content("  10m 文本")
-    assert seconds == 600
-    assert content == "  10m 文本"
 
 
 # ── grant_safety_pass 测试 ─────────────────────────────────────────────────

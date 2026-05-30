@@ -25,6 +25,7 @@ from ..core import (
     get_group_context,
     get_safe_until,
     get_user_memory,
+    is_sleeping,
     load_prompt_template,
 )
 
@@ -243,8 +244,9 @@ random_chat = on_message(rule=is_in_auto_group, priority=99, block=False)
 @random_chat.handle()
 async def _(bot: Bot, event: GroupMessageEvent):
     now_ts = time.time()
+    if is_sleeping():
+        return
     now = datetime.datetime.now(TZ_CN)
-    if 0 <= now.hour < 6: return
 
     msg = event.get_plaintext().strip()
     if len(msg) < 2: return

@@ -1,7 +1,6 @@
 """管理指令：查看记忆、清空记忆、人设 / 数据热重载、临时设定植入等。"""
 
 import datetime
-import random
 import sqlite3
 import time
 
@@ -25,6 +24,7 @@ from ..core import (
     reload_assets,
     reload_persona,
     save_memory,
+    sleep_block,
 )
 
 
@@ -80,11 +80,12 @@ inject_cmd = on_command("植入记忆", aliases={"接下来的事是", "记住",
 @inject_cmd.handle()
 async def _(event: Event, args: Message = CommandArg()):
     if isinstance(event, GroupMessageEvent) and event.group_id not in ALLOWED_MEMORY_GROUPS: return
-    now = datetime.datetime.now(TZ_CN)
     _stamp_trigger(event)
-    if 0 <= now.hour < 6:
+    result = sleep_block("sleep_inject_memory", silent_chance=0.0,
+                         fallback="……呼……zzZ")
+    if result:
         grant_safety_pass(5)
-        await inject_cmd.finish(random.choice(["（呼……呼……完全没听见你在说什么……）zzZ", "……吵死了……明天再说……"]))
+        await inject_cmd.finish(result)
     raw_text = args.extract_plain_text().strip()
     if not raw_text: await inject_cmd.finish("请告诉我时间和内容，例如：接下来的事是 10m 外面下大雨了")
     duration, content = parse_duration_and_content(raw_text)

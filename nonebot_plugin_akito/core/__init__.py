@@ -65,7 +65,7 @@ from .data import (
     load_json_file, load_prompt_template, reload_assets, find_data_path,
     SCRIPT_DB, REACTIONS_DB, PROMPTS_DB, DIRECTOR_DB,
     DAILY_ROUTINE, WL2_ROUTINE,
-    SONG_DATA, RELATIONSHIP_DATA, PJSK_KNOWLEDGE_BASE,
+    SONG_DATA, RELATIONSHIP_DATA, PJSK_KNOWLEDGE_BASE, SLEEP_DB,
 )
 from .life_state import (
     AKITO_STATUS, STATE_DURATION,
@@ -73,6 +73,7 @@ from .life_state import (
     get_daily_activity, check_sleep_status, get_festival_buff, get_morning_run_buff,
     get_sleep_buffer_buff,
     parse_duration_and_content, check_img_permission,
+    is_sleeping, sleep_block,
 )
 from .api import (
     call_deepseek_api, call_deepseek_api_agent, smart_search, describe_image, to_image_data,
@@ -99,11 +100,13 @@ __all__ = [
     "load_json_file", "load_prompt_template", "reload_assets", "find_data_path",
     "SCRIPT_DB", "REACTIONS_DB", "PROMPTS_DB", "DIRECTOR_DB",
     "DAILY_ROUTINE", "WL2_ROUTINE", "SONG_DATA", "RELATIONSHIP_DATA", "PJSK_KNOWLEDGE_BASE",
+    "SLEEP_DB",
     # life_state
     "AKITO_STATUS", "STATE_DURATION",
     "grant_safety_pass", "get_safe_until", "get_last_complaint", "set_last_complaint",
     "get_daily_activity", "check_sleep_status", "get_festival_buff", "get_morning_run_buff",
     "get_sleep_buffer_buff", "parse_duration_and_content", "check_img_permission",
+    "is_sleeping", "sleep_block",
     # api
     "call_deepseek_api", "call_deepseek_api_agent", "smart_search", "describe_image", "to_image_data",
     # context

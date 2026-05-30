@@ -5,8 +5,10 @@ import random
 import re
 import time
 
+from nonebot.log import logger
+
 from . import GROUP_IMAGE_PERMISSIONS, TZ_CN, TZ_JST
-from .data import DAILY_ROUTINE, REACTIONS_DB
+from .data import DAILY_ROUTINE, SLEEP_DB
 
 AKITO_STATUS: dict = {
     "current_key": "",
@@ -41,6 +43,36 @@ def set_last_complaint(value: float) -> None:
     """记录本次深夜抱怨时间戳（用于冷却控制）。"""
     global AKITO_LAST_COMPLAINT
     AKITO_LAST_COMPLAINT = value
+
+
+def is_sleeping() -> bool:
+    """返回当前是否处于睡眠时段（北京时间 0:00–5:59）。"""
+    now = datetime.datetime.now(TZ_CN)
+    return 0 <= now.hour < 6
+
+
+def sleep_block(pool_key: str, silent_chance: float = 0.0, fallback: str = "……zzZ") -> str | None:
+    """统一的睡眠拦截决策——取代散落在各模块的手写夜间判断。
+
+    Args:
+        pool_key: SLEEP_DB 中的 key，用于选取回复文案。
+        silent_chance: 静默拦截的概率（0.0 = 总回复，1.0 = 总静默）。
+        fallback: SLEEP_DB 缺 key 或为空时的兜底文案。
+
+    Returns:
+        ``""``      — 非睡眠时段，正常放行。
+        ``None``    — 睡眠时段 + 静默拦截，调用方应丢弃消息。
+        ``"文案"``  — 睡眠时段 + 回复拦截，调用方应发送此文本。
+    """
+    if not is_sleeping():
+        return ""
+    if random.random() < silent_chance:
+        logger.debug(f"😴 [SleepBlock] {pool_key}: silent")
+        return None
+    pool = SLEEP_DB.get(pool_key) or [fallback]
+    chosen = random.choice(pool)
+    logger.info(f"😴 [SleepBlock] {pool_key}: reply")
+    return chosen
 
 
 def get_daily_activity(hour: int, weekday: int, minute: int = 0) -> str:
@@ -97,12 +129,10 @@ def check_sleep_status(msg: str) -> tuple[bool, str]:
         (是否照常处理, 指令/标记文本)。如 (True, "ignore") 表示装睡忽略，
         (False, instruction) 表示被唤醒并注入对应扮演指令。
     """
-    now = datetime.datetime.now(TZ_CN)
-    now_jst = datetime.datetime.now(TZ_JST)
-    hour = now.hour
-
-    if not (0 <= hour < 6):
+    if not is_sleeping():
         return False, ""
+
+    now_jst = datetime.datetime.now(TZ_JST)
 
     msg_lower = msg.strip().lower()
     clean_msg = msg_lower
@@ -117,14 +147,14 @@ def check_sleep_status(msg: str) -> tuple[bool, str]:
         if random.random() < 0.8:
             return True, "ignore"
         else:
-            mumbles = ["……呼……吵死了……闭嘴……", "（翻身背对着你）……呼……", "……嗯……别吵……明天再说……", "（将被子蒙过头）……zzZ……"]
-            return True, random.choice(mumbles)
+            mumble_pool = SLEEP_DB.get("sleep_mumbles") or ["……zzZ……"]
+            return True, random.choice(mumble_pool)
 
     relation_features = ["评价", "看法", "印象", "怎么看", "认识"]
     is_evaluation = any(k in clean_msg for k in relation_features)
 
     if is_evaluation:
-        selected = random.choice(REACTIONS_DB.get("sleep_relation") or ["【状态：困】\n动作：闭着眼。\n台词参考：……不知道……困……"])
+        selected = random.choice(SLEEP_DB.get("sleep_relation") or ["【状态：困】\n动作：闭着眼。\n台词参考：……不知道……困……"])
         instruction = (
             f"\n⚠️⚠️【特殊事件：深夜被叫醒问话】⚠️⚠️\n"
             f"当前时间：凌晨 {now_jst.strftime('%H:%M')}（JST）。用户把你吵醒了，问你对某人的看法：'{msg}'。\n"
@@ -132,7 +162,7 @@ def check_sleep_status(msg: str) -> tuple[bool, str]:
         )
         return False, instruction
     else:
-        selected = random.choice(REACTIONS_DB.get("sleep_search") or ["【状态：困】\n动作：闭着眼查手机。\n台词参考：……给你……呼……"])
+        selected = random.choice(SLEEP_DB.get("sleep_search") or ["【状态：困】\n动作：闭着眼查手机。\n台词参考：……给你……呼……"])
         instruction = (
             f"\n⚠️⚠️【特殊事件：深夜被迫营业】⚠️⚠️\n"
             f"当前时间：凌晨 {now_jst.strftime('%H:%M')}（JST）。用户让你查数据/资讯：'{msg}'。\n"

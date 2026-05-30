@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import base64
-import datetime
 from io import BytesIO
 from pathlib import Path
 import random
@@ -23,13 +22,13 @@ from ..core import (
     GROUP_IMAGE_PERMISSIONS,
     IMAGE_BASE_PATH,
     REACTIONS_DB,
-    TZ_CN,
     call_deepseek_api,
     check_img_permission,
     get_base_persona,
     get_memory_key,
     get_user_memory,
     grant_safety_pass,
+    sleep_block,
 )
 
 # ==============================================================================
@@ -58,11 +57,13 @@ async def _(bot: Bot, event: GroupMessageEvent):
     text = event.get_plaintext().strip()
     if not any(k in text for k in ["存", "收下", "投喂", "增加"]): return
 
-    now = datetime.datetime.now(TZ_CN)
-    if 0 <= now.hour < 6:
-        if random.random() < 0.8: return
+    result = sleep_block("sleep_save_img", silent_chance=0.8,
+                         fallback="……明天再存……zzZ")
+    if result is None:
+        return
+    if result:
         grant_safety_pass(5)
-        await bot.send(event=event, message="（迷迷糊糊地看了一眼屏幕）……嗯……明天再存……zzZ")
+        await bot.send(event=event, message=result)
         return
 
     img_url = ""
@@ -170,10 +171,10 @@ async def _(bot: Bot, event: Event):
 send_img_cmd = on_command("看你的", aliases={"发张", "来张"}, priority=5, block=True)
 @send_img_cmd.handle()
 async def _(event: Event, args: Message = CommandArg()):
-    now = datetime.datetime.now(TZ_CN)
-    if 0 <= now.hour < 6:
+    result = sleep_block("sleep_replies_img", silent_chance=0.0, fallback="……zzZ")
+    if result:
         grant_safety_pass(5)
-        await send_img_cmd.finish(random.choice(REACTIONS_DB.get("sleep_replies_img", ["……zzZ"])))
+        await send_img_cmd.finish(result)
 
     group_id = getattr(event, 'group_id', None)
     if group_id and group_id not in GROUP_IMAGE_PERMISSIONS: return
@@ -291,9 +292,10 @@ def get_thumbnail_safe(file_path: Path) -> str:
 gallery_cmd = on_command("图库清单", aliases={"查看图库", "库存", "相册"}, priority=5, block=True)
 @gallery_cmd.handle()
 async def _(event: Event, args: Message = CommandArg()):
-    now = datetime.datetime.now(TZ_CN)
-    if 0 <= now.hour < 6:
-        await gallery_cmd.finish("💤 (小彰正在睡觉，请早上6点后再来...)")
+    result = sleep_block("sleep_gallery_list", silent_chance=0.0,
+                         fallback="💤 (小彰正在睡觉，请早上6点后再来...)")
+    if result:
+        await gallery_cmd.finish(result)
         return
 
     if isinstance(event, GroupMessageEvent):
