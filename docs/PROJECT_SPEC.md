@@ -216,22 +216,27 @@ def _find_data_path(filename: str) -> Optional[Path]:
 
 ### 7.2 公共函数
 
-新增 / 重构的公共函数**必须包含**，存量逐步补齐。格式为：简短描述 + Parameters + Returns：
+新增 / 重构的公共函数**必须**有简短描述（一行即可），存量逐步补齐。
+参数或返回值不直观时，用 Google 风格的 `Args:` / `Returns:` 块补充说明：
 
 ```python
-def build_time_gap_prompt(group_id: str) -> str:
+def build_time_gap_prompt(group_id: int | str) -> str:
     """构建时间流逝感知注入文本。
 
-    Parameters
-    ----------
-    group_id : str
-        群 ID，用于查找该群的上次交互记录。
+    Args:
+        group_id: 群 ID，用于查找该群的上次交互记录。
 
-    Returns
-    -------
-    str
+    Returns:
         注入到 system prompt 的时间感知文本。gap < 30 分钟时返回空字符串。
     """
+```
+
+简单的取值 / 设值函数只需一行摘要，无需强制 `Args:` / `Returns:`：
+
+```python
+def get_safe_until() -> float:
+    """返回安全期截止时间戳。"""
+    ...
 ```
 
 ### 7.3 内部辅助函数

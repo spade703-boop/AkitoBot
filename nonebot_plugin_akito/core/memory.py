@@ -13,7 +13,7 @@ from . import DB_PATH
 MEMORY_DB: dict = {}
 
 
-def init_db():
+def init_db() -> None:
     """创建 impression 历史记录表（由 core 统一初始化，供 impression.py 和 get_group_context 使用）。"""
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
@@ -38,8 +38,8 @@ def init_db():
 init_db()
 
 
-def load_memory():
-    global MEMORY_DB
+def load_memory() -> None:
+    """从磁盘加载长期记忆到 MEMORY_DB（原地 clear+update，保持其他模块持有的引用不失效）。"""
     possible_paths = [
         Path("/app/akito_bot/data/akito_memories.json"),
         Path("data/akito_memories.json"),
@@ -49,16 +49,19 @@ def load_memory():
         if path.exists():
             try:
                 with open(path, encoding="utf-8") as f:
-                    MEMORY_DB = json.load(f)
+                    loaded = json.load(f)
+                MEMORY_DB.clear()
+                MEMORY_DB.update(loaded)
                 logger.info(f"💾 长期记忆已加载！包含 {len(MEMORY_DB)} 个会话数据")
                 return
             except Exception as e:
                 logger.error(f"⚠️ 记忆文件损坏: {e}")
     logger.info("🆕 未找到记忆文件，初始化空记忆库。")
-    MEMORY_DB = {}
+    MEMORY_DB.clear()
 
 
-def save_memory():
+def save_memory() -> None:
+    """将 MEMORY_DB 原子写入磁盘（.tmp + os.replace），失败仅记日志不抛出。"""
     try:
         if Path("/app/akito_bot/data").exists():
             target_path = Path("/app/akito_bot/data/akito_memories.json")
@@ -77,18 +80,21 @@ load_memory()
 
 
 def get_memory_key(event: Event) -> str:
+    """根据事件生成会话记忆键：群聊为 group_{id}，私聊为 private_{id}。"""
     group_id = getattr(event, "group_id", None)
     user_id = event.get_user_id()
     return f"group_{group_id}" if group_id else f"private_{user_id}"
 
 
 def get_user_memory(unique_key: str) -> dict:
+    """取某会话的记忆字典，不存在时初始化 {"history": [], "temp_implants": []} 并返回。"""
     if unique_key not in MEMORY_DB:
         MEMORY_DB[unique_key] = {"history": [], "temp_implants": []}
     return MEMORY_DB[unique_key]
 
 
 def get_group_context(group_id: str, limit: int = 20) -> str:
+    """从 SQLite 读取某群最近 limit 条消息，拼成上下文文本（含 bot 复读去重）；失败返回空串。"""
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()

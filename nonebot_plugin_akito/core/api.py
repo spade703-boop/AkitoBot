@@ -4,6 +4,7 @@ import asyncio
 import base64
 from io import BytesIO
 from pathlib import Path
+from typing import Any
 
 import aiohttp
 from nonebot.log import logger
@@ -12,7 +13,8 @@ from PIL import Image as PILImage
 from . import TAVILY_API_KEY, ZHIPU_API_KEY, client, vision_client
 
 
-async def call_deepseek_api(messages, model_name="deepseek-v4-flash", force_json=False):
+async def call_deepseek_api(messages: list, model_name: str = "deepseek-v4-flash", force_json: bool = False) -> str:
+    """调用 DeepSeek 对话补全，带 15s 超时与降级文案；force_json=True 时强制 JSON 输出。"""
     try:
         kwargs = {
             "model": model_name,
@@ -68,6 +70,7 @@ async def call_deepseek_api_agent(messages, tools: list, model_name="deepseek-v4
 
 
 async def smart_search(query: str) -> str:
+    """用 Tavily 搜索 query，返回前 2 条结果摘要拼成的文本；失败或无结果返回空串。"""
     try:
         url = "https://api.tavily.com/search"
         payload = {
@@ -102,6 +105,7 @@ async def smart_search(query: str) -> str:
 
 
 async def describe_image(image_data: bytes) -> str:
+    """用智谱 GLM-4V 识别图片，返回结构化情报文本；未配置 key 或失败返回空串。"""
     try:
         if "请在这里" in ZHIPU_API_KEY:
             return ""
@@ -166,7 +170,8 @@ async def describe_image(image_data: bytes) -> str:
         return ""
 
 
-async def to_image_data(image) -> bytes:
+async def to_image_data(image: Any) -> bytes:
+    """从消息图片段取原始字节：优先 raw，其次本地 path，最后下载 url。"""
     if image.raw is not None:
         return image.raw
     if image.path is not None:

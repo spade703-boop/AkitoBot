@@ -10,8 +10,11 @@
   build_time_gap_prompt(group_id)    — 构建 system prompt 注入文本（gap < 30min 返回空字符串）
 """
 
+from __future__ import annotations
+
 import datetime
 import json
+import os
 from pathlib import Path
 import time
 
@@ -44,11 +47,13 @@ def _load() -> dict:
     return {}
 
 
-def _save(data: dict):
+def _save(data: dict) -> None:
     path = _get_write_path()
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(tmp, path)
     except Exception as e:
         logger.warning(f"⚠️ [TimeAwareness] 写入 {_FILENAME} 失败: {e}")
 
@@ -124,7 +129,7 @@ def get_current_routine_snapshot() -> dict:
     return {"period": key, "status": status}
 
 
-def record_bot_response(group_id) -> None:
+def record_bot_response(group_id: int | str) -> None:
     """
     bot 在某个群发完回复后调用。
     将当前时间戳和 routine 快照写入持久化文件，供下次对话计算 gap。
@@ -140,7 +145,7 @@ def record_bot_response(group_id) -> None:
     logger.debug(f"⏱️ [TimeAwareness] 群 {group_id} 时间戳已记录 (period={snap['period']})")
 
 
-def build_time_gap_prompt(group_id) -> str:
+def build_time_gap_prompt(group_id: int | str) -> str:
     """
     构建时间流逝感知注入文本。
 

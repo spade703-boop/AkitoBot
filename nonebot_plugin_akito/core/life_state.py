@@ -21,25 +21,30 @@ AKITO_SAFE_UNTIL = 0.0
 AKITO_LAST_COMPLAINT = 0.0
 
 
-def grant_safety_pass(seconds: int = 5):
+def grant_safety_pass(seconds: int = 5) -> None:
+    """开启一段安全期（默认 5 秒），期间抑制深夜抱怨等被动反应。"""
     global AKITO_SAFE_UNTIL
     AKITO_SAFE_UNTIL = time.time() + seconds
 
 
 def get_safe_until() -> float:
+    """返回安全期截止时间戳。"""
     return AKITO_SAFE_UNTIL
 
 
 def get_last_complaint() -> float:
+    """返回上次深夜抱怨的时间戳。"""
     return AKITO_LAST_COMPLAINT
 
 
-def set_last_complaint(value: float):
+def set_last_complaint(value: float) -> None:
+    """记录本次深夜抱怨时间戳（用于冷却控制）。"""
     global AKITO_LAST_COMPLAINT
     AKITO_LAST_COMPLAINT = value
 
 
 def get_daily_activity(hour: int, weekday: int, minute: int = 0) -> str:
+    """按时段返回彰人当前状态文本，带 30 分钟缓存与同段去重抽取。"""
     global AKITO_STATUS
     is_weekend = weekday >= 5
     key = ""
@@ -85,7 +90,13 @@ def get_daily_activity(hour: int, weekday: int, minute: int = 0) -> str:
     return f"【当前状态】{status_text}"
 
 
-def check_sleep_status(msg: str) -> tuple:
+def check_sleep_status(msg: str) -> tuple[bool, str]:
+    """深夜(0–6 点)睡眠状态判定。
+
+    Returns:
+        (是否照常处理, 指令/标记文本)。如 (True, "ignore") 表示装睡忽略，
+        (False, instruction) 表示被唤醒并注入对应扮演指令。
+    """
     now = datetime.datetime.now(TZ_CN)
     now_jst = datetime.datetime.now(TZ_JST)
     hour = now.hour
@@ -130,7 +141,8 @@ def check_sleep_status(msg: str) -> tuple:
         return False, instruction
 
 
-def get_festival_buff(date_obj) -> str:
+def get_festival_buff(date_obj: datetime.datetime) -> str:
+    """根据日期返回节日气氛注入文本；非节日返回空串。"""
     m, d = date_obj.month, date_obj.day
     hour = date_obj.hour
     calendar_map = {
@@ -189,7 +201,8 @@ def get_sleep_buffer_buff(hour: int, minute: int) -> str:
     return base
 
 
-def parse_duration_and_content(raw_text: str) -> tuple:
+def parse_duration_and_content(raw_text: str) -> tuple[int, str]:
+    """解析「<数字><单位> <内容>」为 (秒数, 内容)；无匹配返回 (600, 原文)。单位 s/h/d，缺省按分钟。"""
     match = re.match(r"^(\d+)\s*([a-zA-Z]*)\s+(.*)", raw_text, re.DOTALL)
     if not match:
         return 600, raw_text
@@ -204,6 +217,7 @@ def parse_duration_and_content(raw_text: str) -> tuple:
 
 
 def check_img_permission(group_id: int, category: str) -> bool:
+    """判断某群是否有权发送某类图片（"all" 表示全部放行）。"""
     allowed_list = GROUP_IMAGE_PERMISSIONS.get(group_id, [])
     if not allowed_list:
         return False
