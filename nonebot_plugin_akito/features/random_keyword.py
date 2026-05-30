@@ -1,3 +1,5 @@
+"""今日关键词：六分类去重抽取每日关键词，渲染成图片，每日限 1 次。"""
+
 from __future__ import annotations
 
 import asyncio
@@ -68,9 +70,10 @@ def _save_draws(data: dict):
     os.replace(tmp, path)
 
 
-def reload_keyword_data():
-    global KEYWORD_DATA
-    KEYWORD_DATA = load_json_file(DATA_FILE, DEFAULT_DATA)
+def reload_keyword_data() -> None:
+    """热重载关键词池数据（原地 clear+update，保持其他模块持有的引用不失效）。"""
+    KEYWORD_DATA.clear()
+    KEYWORD_DATA.update(load_json_file(DATA_FILE, DEFAULT_DATA))
     logger.info("🔄 关键词池数据已热重载")
 
 

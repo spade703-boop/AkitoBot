@@ -1,3 +1,7 @@
+"""寒星活动榜线预测：抓取 PJSK 活动 / 预测 / 实况数据，合并后渲染成榜线预测图。"""
+
+from __future__ import annotations
+
 import asyncio
 from datetime import datetime, timedelta, timezone
 import io
@@ -32,8 +36,8 @@ USER_AGENTS = [
 # =======================================
 
 # ================= 活动缓存管理 =================
-def load_event_cache():
-    """加载缓存的活动信息"""
+def load_event_cache() -> dict:
+    """加载缓存的活动信息（文件缺失或损坏时返回默认空缓存结构）。"""
     if not CACHE_FILE.exists():
         return {"event_id": None, "event_name": "", "updated_at": 0}
     try:
@@ -43,20 +47,22 @@ def load_event_cache():
         logger.warning(f"⚠️ [Snowy] 读取活动缓存失败: {e}")
         return {"event_id": None, "event_name": "", "updated_at": 0}
 
-def save_event_cache(event_id, event_name):
-    """保存活动信息到本地"""
+def save_event_cache(event_id: int | str | None, event_name: str) -> None:
+    """原子写入（.tmp + os.replace）活动信息到本地缓存。"""
     CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
     cache = {
         "event_id": event_id,
         "event_name": event_name,
         "updated_at": time.time()
     }
-    with open(CACHE_FILE, "w", encoding="utf-8") as f:
+    tmp = CACHE_FILE.with_suffix(".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
         json.dump(cache, f, indent=4, ensure_ascii=False)
+    os.replace(tmp, CACHE_FILE)
     logger.info(f"[Snowy] 已更新活动缓存: {event_id} - {event_name}")
 
 # ================= 健壮请求工具 =================
-async def safe_request(client, url, max_retries=3, retry_delay=3):
+async def safe_request(client: httpx.AsyncClient, url: str, max_retries: int = 3, retry_delay: int = 3) -> tuple:
     """
     健壮请求：支持 522/525 重试，自动轮换 UA
     """
@@ -122,7 +128,7 @@ async def safe_request(client, url, max_retries=3, retry_delay=3):
     return False, None, "达到最大重试次数"
 
 # ================= 智能活动ID获取 =================
-async def get_current_event_id(client):
+async def get_current_event_id(client: httpx.AsyncClient) -> tuple:
     """
     获取当前活动ID，带缓存容错
     返回: (event_id, event_name, is_from_cache)
@@ -159,7 +165,7 @@ async def get_current_event_id(client):
     return None, None, False
 
 # ================= 数据获取 =================
-async def fetch_predict_data(client, event_id):
+async def fetch_predict_data(client: httpx.AsyncClient, event_id: int | str) -> tuple:
     """获取预测数据，失败返回空列表"""
     url = f"https://rk.exmeaning.com/public/event/{event_id}/latest?region=cn"
     success, data, error = await safe_request(client, url, max_retries=2)
@@ -177,7 +183,7 @@ async def fetch_predict_data(client, event_id):
 
     return items, data.get("updated_at")
 
-async def fetch_live_data(client):
+async def fetch_live_data(client: httpx.AsyncClient) -> tuple:
     """获取实况数据（容错）"""
     url = "https://rks.exmeaning.com/api/public/cn/latest"
     success, data, error = await safe_request(client, url, max_retries=2)
@@ -203,7 +209,7 @@ async def fetch_live_data(client):
 
     return rank_map, latest_ts, True
 
-def merge_data(predict_items, live_map):
+def merge_data(predict_items: list, live_map: dict) -> list:
     """合并数据"""
     merged = []
     for p_item in predict_items:
@@ -308,12 +314,14 @@ async def _(event: MessageEvent):
         await predict_cmd.finish(f"系统错误：[{type(e).__name__}] {str(e)}")
 
 # ================= 工具函数 =================
-def format_w(value, placeholder="-"):
+def format_w(value: float | None, placeholder: str = "-") -> str:
+    """把数值格式化成「x.xxxxw」（万）；空值或 0 返回占位符。"""
     if not value or value == 0:
         return placeholder
     return f"{value / 10000:.4f}w"
 
-def get_relative_time(past_timestamp):
+def get_relative_time(past_timestamp: float | None) -> str:
+    """把过去的时间戳转成「x 分钟前 / x 小时前」描述；空值返回「-」。"""
     if not past_timestamp:
         return "-"
     now = time.time()
@@ -331,7 +339,8 @@ def get_relative_time(past_timestamp):
     return f"{hours//24}天前"
 
 # ================= 渲染引擎（带缓存提示） =================
-def render_predict_image(event_info, merged_items, times, live_data_available, warning_text=""):
+def render_predict_image(event_info: dict, merged_items: list, times: dict, live_data_available: bool, warning_text: str = "") -> bytes:
+    """把活动信息与榜线数据渲染成一张 JPEG 预测图，返回图片字节。"""
     width = 750
     row_height = 46
     height = 140 + 50 + len(merged_items) * row_height + 100 + 60

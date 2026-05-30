@@ -1,3 +1,5 @@
+"""抽派生：从派生池随机 / 模糊匹配抽取，渲染成图片（含狐兔 / 狐包等合成图）。"""
+
 from __future__ import annotations
 
 import asyncio
@@ -34,9 +36,10 @@ def _save():
     os.replace(tmp, path)
 
 
-def reload_paro_data():
-    global PARO_DATA
-    PARO_DATA = load_json_file(DATA_FILE, DEFAULT_DATA)
+def reload_paro_data() -> None:
+    """热重载派生池数据（原地 clear+update，保持其他模块持有的引用不失效）。"""
+    PARO_DATA.clear()
+    PARO_DATA.update(load_json_file(DATA_FILE, DEFAULT_DATA))
     logger.info("🔄 派生池数据已热重载")
 
 
