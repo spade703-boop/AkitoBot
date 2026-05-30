@@ -634,32 +634,6 @@ impression.py（群印象 + AutoChat）使用的 schema 是两字段：`{"inner_
 
 本项目有完整的编码规范文档，位于 `docs/PROJECT_SPEC.md`。所有维护者在修改代码时需遵守其中的约定。
 
-### 速查
-
-| 规则 | 要求 |
-|------|------|
-| 导入顺序 | 标准库 → 第三方 → 本地，组间空行 |
-| 类型注解 | 新增/重构的公共函数必须标注；存量逐步补齐 |
-| 文档字符串 | Google 风格；新增/重构必须，存量逐步补齐 |
-| 文件写入 | 原子写入（`.tmp` + `os.replace`） |
-| 全局状态 | dict/list → `.clear()` + `.update()`；不可变 → `global` + 赋值 |
-| 日志前缀 | 保持现有 emoji 风格 |
-| 行宽 | 120 字符 |
-| 引号 | 双引号 |
-| Commit | `type: 中文描述` |
-
-### 质量检查
-
-```bash
-# Lint（必需，应为 0 错误）
-ruff check nonebot_plugin_akito/
-
-# 类型检查（可选，未纳入日常流程）
-mypy nonebot_plugin_akito/
-
-# 格式化检查（可选；既有紧凑单行风格与 ruff format 不完全一致，非阻塞）
-ruff format --check nonebot_plugin_akito/
-
-# 测试
-pytest tests/ -v
-```
+具体内容（命名、导入顺序、类型注解 / docstring、错误处理、全局状态、文件 I/O、版本号与 Commit、
+安全规则），以及推送前的质量检查命令（`ruff check nonebot_plugin_akito/`、`pytest tests/ -v`），
+**均以 `docs/PROJECT_SPEC.md` 为准**，此处不再重复，避免与规范正文产生分歧。
