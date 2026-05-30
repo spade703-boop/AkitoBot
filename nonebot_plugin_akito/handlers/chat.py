@@ -1,3 +1,5 @@
+"""主对话引擎：触发判定、消息组装与发送、会话锁、图片识别与搜索 Agent 调度。"""
+
 import asyncio
 import datetime
 import json
@@ -87,6 +89,7 @@ AGENT_TOOLS = [
 
 
 async def starts_with_trigger(event: Event) -> bool:
+    """消息匹配规则：是否以触发名（东云小彰 / 小彰）开头，且群在白名单内。"""
     group_id = getattr(event, 'group_id', None)
     if group_id and group_id not in ALLOWED_CHAT_GROUPS:
         return False
@@ -96,7 +99,8 @@ async def starts_with_trigger(event: Event) -> bool:
     return any(text.lower().startswith(name.lower()) for name in TRIGGER_NAMES)
 
 
-async def smart_finish(matcher: Matcher, result: str):
+async def smart_finish(matcher: Matcher, result: str) -> None:
+    """统一发送回复：含图则转 UniMessage，超长(>800)转图片，否则纯文本。"""
     if not result: return
     grant_safety_pass(8)
     result = result.strip()
@@ -122,6 +126,7 @@ async def smart_finish(matcher: Matcher, result: str):
 
 
 async def get_uni_reply(reply: Reply, event: Event, bot: Bot) -> UniMessage:
+    """将被回复消息(Reply)转成 UniMessage，供后续解析引用内容。"""
     if reply.msg is None: raise ValueError("回复为空")
     if isinstance(reply.msg, str): return UniMessage([Text(reply.msg)])
     elif isinstance(reply.msg, Message): return await UniMessage.generate(message=reply.msg, event=event, bot=bot)
@@ -132,7 +137,8 @@ chat = on_message(rule=starts_with_trigger, priority=10, block=True)
 SESSION_LOCKS = {}
 
 
-def get_session_lock(session_key: str):
+def get_session_lock(session_key: str) -> asyncio.Lock:
+    """取 / 建某会话的 asyncio 锁，保证同一会话的消息串行处理。"""
     if session_key not in SESSION_LOCKS:
         SESSION_LOCKS[session_key] = asyncio.Lock()
     return SESSION_LOCKS[session_key]

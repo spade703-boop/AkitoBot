@@ -1,3 +1,5 @@
+"""管理指令：查看记忆、清空记忆、人设 / 数据热重载、临时设定植入等。"""
+
 import datetime
 import random
 import sqlite3
@@ -26,7 +28,7 @@ from ..core import (
 )
 
 
-def _stamp_trigger(event) -> None:
+def _stamp_trigger(event: Event) -> None:
     """在任何指令回复前调用：
     1. 记录触发者身份（供 self_monitor 使用）
     2. 设置安全通行证，防止指令回复本身触发深夜抱怨
