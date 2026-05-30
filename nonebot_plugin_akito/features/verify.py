@@ -1,3 +1,5 @@
+"""加群审核：入群 / 退群探头，待审核 / 羁绊 / 特殊挂起三类名单的增删查指令。"""
+
 import json
 from pathlib import Path
 import time
@@ -14,7 +16,8 @@ from nonebot.params import CommandArg
 CONFIG_FILE = Path("data/verify_config.json")
 VERIFY_FILE = Path("data/pending_verify.json")
 
-def load_config():
+def load_config() -> dict:
+    """读取 verify_config.json（群号配置）；失败返回内置默认配置。"""
     try:
         with open(CONFIG_FILE, encoding="utf-8") as f: return json.load(f)
     except Exception as e:
@@ -25,13 +28,15 @@ config = load_config()
 TARGET_GROUP_ID = config.get("TARGET_GROUP_ID")
 ADMIN_GROUP_ID = config.get("ADMIN_GROUP_ID")
 
-def load_verify_queue():
+def load_verify_queue() -> dict:
+    """读取待审核名单；文件不存在或损坏返回空 dict。"""
     if not VERIFY_FILE.exists(): return {}
     try:
         with open(VERIFY_FILE, encoding="utf-8") as f: return json.load(f)
     except Exception: return {}
 
-def save_verify_queue(data):
+def save_verify_queue(data: dict) -> None:
+    """将待审核名单写入磁盘。"""
     VERIFY_FILE.parent.mkdir(parents=True, exist_ok=True)
     with open(VERIFY_FILE, "w", encoding="utf-8") as f: json.dump(data, f, ensure_ascii=False, indent=2)
 
@@ -177,13 +182,15 @@ async def _(event: Event, args: Message = CommandArg()):
 # ==============================================================================
 BOND_FILE = Path("data/bond_verify.json")
 
-def load_bond_queue():
+def load_bond_queue() -> dict:
+    """读取羁绊待刷名单；文件不存在或损坏返回空 dict。"""
     if not BOND_FILE.exists(): return {}
     try:
         with open(BOND_FILE, encoding="utf-8") as f: return json.load(f)
     except Exception: return {}
 
-def save_bond_queue(data):
+def save_bond_queue(data: dict) -> None:
+    """将羁绊待刷名单写入磁盘。"""
     BOND_FILE.parent.mkdir(parents=True, exist_ok=True)
     with open(BOND_FILE, "w", encoding="utf-8") as f: json.dump(data, f, ensure_ascii=False, indent=2)
 
@@ -292,13 +299,15 @@ async def _(event: Event, args: Message = CommandArg()):
 # ==============================================================================
 HOLD_FILE = Path("data/hold_verify.json")
 
-def load_hold_queue():
+def load_hold_queue() -> dict:
+    """读取特殊挂起名单；文件不存在或损坏返回空 dict。"""
     if not HOLD_FILE.exists(): return {}
     try:
         with open(HOLD_FILE, encoding="utf-8") as f: return json.load(f)
     except Exception: return {}
 
-def save_hold_queue(data):
+def save_hold_queue(data: dict) -> None:
+    """将特殊挂起名单写入磁盘。"""
     HOLD_FILE.parent.mkdir(parents=True, exist_ok=True)
     with open(HOLD_FILE, "w", encoding="utf-8") as f: json.dump(data, f, ensure_ascii=False, indent=2)
 

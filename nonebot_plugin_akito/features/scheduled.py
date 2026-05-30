@@ -1,3 +1,5 @@
+"""定时任务：每小时清理过期临时记忆、每日早安 / 晚安群发问候。"""
+
 import asyncio
 import random
 import time
@@ -15,7 +17,7 @@ from ..core import MEMORY_DB, REACTIONS_DB, TARGET_GROUPS, TZ_CN, grant_safety_p
 # ==============================================================================
 
 @scheduler.scheduled_job("interval", hours=1, id="clean_expired_memory")
-async def clean_expired_memory():
+async def clean_expired_memory() -> None:
     """每小时清理一次过期的临时记忆"""
     now = time.time()
     cleaned_count = 0
@@ -35,7 +37,7 @@ async def clean_expired_memory():
 
 
 @scheduler.scheduled_job("cron", hour=6, minute=0, id="akito_morning", timezone=TZ_CN)
-async def akito_morning():
+async def akito_morning() -> None:
     """早安问候"""
     try:
         bot = get_bot()
@@ -54,7 +56,7 @@ async def akito_morning():
 
 
 @scheduler.scheduled_job("cron", hour=23, minute=50, id="akito_night", timezone=TZ_CN)
-async def akito_night():
+async def akito_night() -> None:
     """晚安问候"""
     try:
         bot = get_bot()

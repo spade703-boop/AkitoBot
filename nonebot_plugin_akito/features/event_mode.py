@@ -1,3 +1,5 @@
+"""WL2 世界线：超管开启 / 关闭 WL2 剧情线（临时设定植入到会话记忆）。"""
+
 from nonebot import on_command
 from nonebot.adapters import Event
 from nonebot.adapters.onebot.v11 import GroupMessageEvent
