@@ -19,7 +19,7 @@
 | 图像渲染 | Pillow + nonebot-plugin-htmlrender |
 | 持久化 | JSON 文件 + SQLite |
 | 定时任务 | APScheduler |
-| 运行环境 | Python 3.10+ |
+| 运行环境 | Python 3.9+（生产 Docker 容器实际为 3.10+） |
 
 ### 1.3 架构
 
@@ -27,12 +27,18 @@
 nonebot_plugin_akito/
 ├── core/         基础层：API 封装、数据加载、状态机、记忆、时间感知
 ├── handlers/     消息处理层：主对话引擎、管理指令、被动反应
-└── features/     独立功能模块：8 个可独立增删的功能
+└── features/     独立功能模块：9 个（director 可安全删除，scheduled 为定时基础设施）
 ```
 
-依赖方向：`features/` → `core/` ← `handlers/`，features 与 handlers 互不引用。
+依赖方向：`features/` → `core/` ← `handlers/`，三层默认单向依赖。
 
-`core/__init__.py` 是统一导出入口，所有模块通过 `from ..core import ...` 获取核心能力，**不直接引用 core 的子文件**。
+`core/__init__.py` 是统一导出入口，模块应**优先**通过 `from ..core import ...` 获取核心能力。
+
+**已知的合理例外**（不视为违规，刻意保留）：
+
+- `handlers/chat.py` 通过 `try/except` **惰性导入**可选功能 `features/director.py`，以保证该模块可被一键删除；
+- `core/data.py` 的 `reload_assets()` 惰性导入各 feature 的热重载钩子（注册式刷新，非启动期依赖）；
+- `features/random_paro.py`、`features/random_keyword.py`、`core/time_awareness.py` 直接引用 `core.data` 的共享内部工具 `_find_data_path` / `_DATA_SEARCH_DIRS`（后续可提升为公共 API 后再收敛）。
 
 ---
 
@@ -103,6 +109,8 @@ gemini_bot/
 | 模块级变量 | `UPPER_SNAKE_CASE` | `MEMORY_DB`, `AKITO_STATUS` |
 | 类 | `PascalCase` | 当前项目无类定义，预留规范 |
 
+> 例外：函数内部「常量性」局部变量（仅在该函数内使用、值固定）允许用 `UPPER_SNAKE_CASE`，如 `ITEMS_PER_PAGE`、`FR_TEXTS`；ruff 已忽略 `N806`。
+
 ---
 
 ## 4. 导入顺序规范
@@ -128,7 +136,7 @@ from ..core import (
 )
 ```
 
-- 始终使用 `from ..core import` 导入核心能力，**不直接引用 core 的子模块**
+- **优先**使用 `from ..core import` 导入核心能力，不直接引用 core 的子模块（少数共享内部工具的例外见 §1.3）
 - 如需 `from __future__ import annotations`，放在文件最顶部（docstring 之后）
 
 ---
@@ -146,24 +154,26 @@ from ..core import (
 | 运算符两侧 | 保留空格 |
 | 逗号后 | 保留空格 |
 
+> 既有代码大量使用「一行写完简单 `if` / 赋值」的紧凑风格（如 `if not x: return`），予以保留；ruff 已忽略 `E701` / `E702`。
+
 ---
 
 ## 6. 类型注解
 
 ### 6.1 要求
 
-- **公共函数**：必须标注参数类型和返回值类型
+- **新增 / 重构的公共函数**：必须标注参数类型和返回值类型
+- **存量公共函数**：逐步补齐，不作为阻塞项；`core/` 层作为参考实现已基本完成
 - **内部辅助函数**：类型注解可选，但推荐在逻辑复杂的函数上使用
-- 使用 `from __future__ import annotations` 以支持前向引用
+- 使用 `from __future__ import annotations` 以支持前向引用与新式联合类型
 
 ### 6.2 Python 版本兼容
 
-项目 `pyproject.toml` 声明 `requires-python = ">=3.9"`。`Path | None` 是 Python 3.10+ 语法，在 3.9 中不可用。有两种方案：
+项目 `pyproject.toml` 声明 `requires-python = ">=3.9"`。`Path | None` 等新式联合类型是 Python 3.10+ 语法，在 3.9 中运行时不可用。
 
-- **方案 A（推荐）**：使用 `from __future__ import annotations` + `Optional[Path]`
-- **方案 B**：将 `requires-python` 提升至 `>=3.10`
+**本项目采用方案 A**：所有用到新式联合类型注解的模块（`core/data.py`、`features/gallery.py`、`features/random_paro.py`、`features/random_keyword.py`）均已在文件顶部添加 `from __future__ import annotations`，使注解延迟求值，因此 **3.9+ 均可正常运行**；生产 Docker 容器实际为 3.10+。
 
-当前实际运行环境为 3.10+，建议采用方案 B 以简化代码。如需保持 3.9 兼容，必须使用方案 A。
+新增模块若使用 `X | None` 等写法，同样需在文件顶部添加 `from __future__ import annotations`。
 
 ### 6.3 示例
 
@@ -189,7 +199,7 @@ def _find_data_path(filename: str) -> Optional[Path]:
 
 ### 7.1 模块级
 
-必须包含，描述模块职责和对外接口：
+**应包含**，描述模块职责和对外接口（`core/` 层已完成，features/handlers 存量逐步补齐）：
 
 ```python
 """
@@ -206,7 +216,7 @@ def _find_data_path(filename: str) -> Optional[Path]:
 
 ### 7.2 公共函数
 
-必须包含，格式为：简短描述 + Parameters + Returns：
+新增 / 重构的公共函数**必须包含**，存量逐步补齐。格式为：简短描述 + Parameters + Returns：
 
 ```python
 def build_time_gap_prompt(group_id: str) -> str:
@@ -239,9 +249,10 @@ def _normalize_period(key: str) -> str:
 
 ### 8.1 基本原则
 
-- 始终使用 `try/except` 捕获**具体**异常类型，**严禁**裸 `except`
+- 始终使用 `try/except` 捕获异常，**严禁**裸 `except`（至少写 `except Exception`）
 - 采用 graceful degradation 模式：失败时回落到安全的默认值
-- 不要在 except 块中静默吞掉异常（至少记录 warning 级别日志）
+- **关键错误**不得静默吞掉，至少记录 warning/error 级别日志
+- **尽力而为的可选操作**（如可选数据解析、热重载钩子、可选模块导入）允许静默抑制（`try/except: pass`），建议补一行 `logger.debug`；ruff 已忽略 `SIM105`
 - 每个 API 调用必须包裹 try/except + 超时处理
 
 ### 8.2 标准模式
@@ -462,5 +473,5 @@ def reload_assets():
 1. 确认 `.env` 未被追踪（`git status` 中不出现）
 2. 确认 `/data` 下无新增被追踪文件
 3. 确认 `.env.example` 已同步最新的可配置项
-4. 代码可通过 `ruff check` 和 `mypy`（warnings 可接受）
+4. `ruff check nonebot_plugin_akito/` 通过（必需，应为 0 错误）；`mypy` 可选，未纳入日常推送流程
 5. 关键路径测试通过：`pytest tests/ -v`

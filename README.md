@@ -243,6 +243,7 @@ GROUP_IMAGE_PERMISSIONS={"群号1":["all"],"群号2":["toya","self"]}
 nonebot2[fastapi] >= 2.4.4
 nonebot-adapter-onebot >= 2.4.6
 openai >= 1.0.0
+python-dotenv >= 1.0.0
 Pillow >= 10.0.0
 aiohttp >= 3.9.0
 httpx >= 0.27.0

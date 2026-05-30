@@ -639,8 +639,8 @@ impression.py（群印象 + AutoChat）使用的 schema 是两字段：`{"inner_
 | 规则 | 要求 |
 |------|------|
 | 导入顺序 | 标准库 → 第三方 → 本地，组间空行 |
-| 类型注解 | 公共函数必须标注参数和返回值 |
-| 文档字符串 | Google 风格，模块级和公共函数必须 |
+| 类型注解 | 新增/重构的公共函数必须标注；存量逐步补齐 |
+| 文档字符串 | Google 风格；新增/重构必须，存量逐步补齐 |
 | 文件写入 | 原子写入（`.tmp` + `os.replace`） |
 | 全局状态 | dict/list → `.clear()` + `.update()`；不可变 → `global` + 赋值 |
 | 日志前缀 | 保持现有 emoji 风格 |
@@ -651,13 +651,13 @@ impression.py（群印象 + AutoChat）使用的 schema 是两字段：`{"inner_
 ### 质量检查
 
 ```bash
-# Lint（warnings only，非阻塞）
+# Lint（必需，应为 0 错误）
 ruff check nonebot_plugin_akito/
 
-# 类型检查
+# 类型检查（可选，未纳入日常流程）
 mypy nonebot_plugin_akito/
 
-# 格式化检查
+# 格式化检查（可选；既有紧凑单行风格与 ruff format 不完全一致，非阻塞）
 ruff format --check nonebot_plugin_akito/
 
 # 测试
