@@ -1,3 +1,5 @@
+"""图库引擎：本地图片随机抽取、手动 / 自动存图、主动发图、图库清单渲染。"""
+
 from __future__ import annotations
 
 import base64
@@ -35,10 +37,13 @@ from ..core import (
 # ==============================================================================
 
 def get_random_local_image(category: str) -> Path | None:
+    """从某分类图库随机返回一张有效图片路径；目录不存在则创建后返回 None。"""
     folder = IMAGE_BASE_PATH / category
     if not folder.exists():
-        try: folder.mkdir(parents=True, exist_ok=True)
-        except Exception: pass
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            logger.debug(f"📁 创建图库目录 {category} 失败: {e}")
         return None
     images = list(folder.glob("*.jpg")) + list(folder.glob("*.png")) + list(folder.glob("*.gif")) + list(folder.glob("*.jpeg"))
     valid_images = [img for img in images if img.stat().st_size > 0]
@@ -87,7 +92,8 @@ async def _(bot: Bot, event: GroupMessageEvent):
                 with open(save_dir / file_name, "wb") as f: f.write(await resp.read())
                 grant_safety_pass(5)
                 await bot.send(event=event, message=save_msg)
-    except Exception: pass
+    except Exception as e:
+        logger.debug(f"💾 手动存图失败: {e}")
 
 # --- 2. 自动进货模式 ---
 COLLECTING_MODE = {}
@@ -134,7 +140,8 @@ async def _(bot: Bot, event: Event):
     try:
         for seg in event.get_message():
             if seg.type == "image": img_urls.append(seg.data.get("url"))
-    except Exception: pass
+    except Exception as e:
+        logger.debug(f"📥 提取图片 URL 失败: {e}")
     if not img_urls: return
 
     category = COLLECTING_MODE[session_key]
@@ -150,8 +157,10 @@ async def _(bot: Bot, event: Event):
                             with open(save_dir / f"{int(time.time())}_{random.randint(1000, 9999)}.jpg", "wb") as f:
                                 f.write(await resp.read())
                             count += 1
-                except Exception: pass
-    except Exception: pass
+                except Exception as e:
+                    logger.debug(f"📥 自动存图下载失败: {e}")
+    except Exception as e:
+        logger.debug(f"📥 自动进货批次失败: {e}")
 
     if count > 0 and random.random() < 0.3:
         grant_safety_pass(5)
@@ -260,14 +269,16 @@ async def _(event: Event, args: Message = CommandArg()):
         await send_img_cmd.finish(final_msg)
 
 # --- 4. 相册清单 ---
-def get_file_list_safe(category: str):
+def get_file_list_safe(category: str) -> list[Path] | None:
+    """返回某分类图库的全部图片路径（按修改时间倒序）；目录不存在返回 None。"""
     folder = IMAGE_BASE_PATH / category
     if not folder.exists(): return None
     files = list(folder.glob("*.jpg")) + list(folder.glob("*.png")) + list(folder.glob("*.gif")) + list(folder.glob("*.jpeg"))
     files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
     return files
 
-def get_thumbnail_safe(file_path):
+def get_thumbnail_safe(file_path: Path) -> str:
+    """将图片压成 140px 缩略图并返回 base64 字符串；失败返回空串。"""
     try:
         with PILImage.open(file_path) as img:
             if img.mode in ("RGBA", "P"): img = img.convert("RGB")

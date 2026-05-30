@@ -1,3 +1,5 @@
+"""群印象：默默记录群聊到 SQLite、生成「群印象」评价、低概率随机插嘴。"""
+
 import asyncio
 import datetime
 import json
@@ -51,9 +53,11 @@ BLOCK_KEYWORDS = [
 
 
 async def is_in_auto_group(event: GroupMessageEvent) -> bool:
+    """规则：判断该群是否在自动互动（印象 / 插嘴）白名单内。"""
     return event.group_id in AUTO_CHAT_GROUPS
 
-def save_my_response(group_id: str, bot_qq: str, content: str):
+def save_my_response(group_id: str, bot_qq: str, content: str) -> None:
+    """将 bot 自己的回复写入 SQLite 消息表，供后续群上下文与印象生成。"""
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
