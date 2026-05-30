@@ -295,6 +295,29 @@ def test_parse_duration_no_number(patch_life_state_deps):
     assert content == "纯文本记忆"
 
 
+def test_parse_duration_seconds(patch_life_state_deps):
+    """解析秒格式 '30s text'。"""
+    ls = patch_life_state_deps
+    seconds, content = ls.parse_duration_and_content("30s 短期记忆")
+    assert seconds == 30
+    assert content == "短期记忆"
+
+
+def test_parse_duration_uppercase_unit(patch_life_state_deps):
+    """大写单位 '2H' 与小写等价（不区分大小写）。"""
+    ls = patch_life_state_deps
+    seconds, _ = ls.parse_duration_and_content("2H 内容")
+    assert seconds == 7200
+
+
+def test_parse_duration_leading_space_returns_default(patch_life_state_deps):
+    """前导空格使正则无法匹配，整段作为内容、默认 600 秒。"""
+    ls = patch_life_state_deps
+    seconds, content = ls.parse_duration_and_content("  10m 文本")
+    assert seconds == 600
+    assert content == "  10m 文本"
+
+
 # ── grant_safety_pass 测试 ─────────────────────────────────────────────────
 
 def test_safety_pass_sets_future_timestamp(patch_life_state_deps):

@@ -31,6 +31,10 @@ sys.modules["nonebot.plugin.load"] = mock.MagicMock()
 sys.modules["nonebot.plugin.load"].require = mock.MagicMock()
 sys.modules["nonebot.exception"] = _mock_nonebot.exception
 
+# feature / handler 模块导入时还会用到这些子模块
+for _nb_sub in ["nonebot.params", "nonebot.rule", "nonebot.matcher", "nonebot.permission", "nonebot.typing"]:
+    sys.modules[_nb_sub] = mock.MagicMock()
+
 # 初始化假适配器
 sys.modules["nonebot.adapters"] = mock.MagicMock()
 sys.modules["nonebot.adapters.onebot"] = mock.MagicMock()
