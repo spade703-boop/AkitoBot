@@ -18,13 +18,17 @@ _DATA_SEARCH_DIRS = [
     ".",
 ]
 
+# 只读内容按用途归入子目录；"" = 根目录兜底，旧 flat 布局仍能命中（向后兼容）
+_DATA_SUBDIRS = ["persona", "content", ""]
+
 
 def _find_data_path(filename: str) -> Path | None:
-    """在多个候选数据目录中定位文件，返回第一个存在的路径；都不存在返回 None。"""
+    """在候选数据目录（含 persona/ content/ 子目录）中定位文件，返回第一个存在的路径；都不存在返回 None。"""
     for base in _DATA_SEARCH_DIRS:
-        p = Path(base) / filename
-        if p.exists():
-            return p
+        for sub in _DATA_SUBDIRS:
+            p = Path(base) / sub / filename if sub else Path(base) / filename
+            if p.exists():
+                return p
     return None
 
 
