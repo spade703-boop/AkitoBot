@@ -142,8 +142,8 @@ TOYA_QQ_ID=987654321      # 冬弥本人的 QQ，影响 CP 模式触发
 | 变量 | 对应文件 | 说明 |
 |------|----------|------|
 | `SCRIPT_DB` | `akito_scripts.json` | 台词剧本库（list），每条含 `context`/`dialogue` |
-| `REACTIONS_DB` | `akito_reactions.json` | 反应资源包：complaints / behavior_seeds / greetings / fallback_poke / sleep_relation / sleep_search 等 |
-| `PROMPTS_DB` | `akito_prompts.json` | Prompt 模板库（dict）：system_header / schema 字段 / 各类 acting_guide 等 |
+| `REACTIONS_DB` | `content/akito_reactions.json` + `content/gallery_text.json` + `content/greetings.json` | 被动反应 / 图库文案 / 问候，合并加载回单一 dict |
+| `PROMPTS_DB` | `persona/prompts_system.json` + `persona/prompts_character.json` | Prompt 模板：系统机制 + 角色演绎，合并加载回单一 dict |
 | `DIRECTOR_DB` | `akito_director.json` | 导演骰子资产：toya_directions / dynamic_lexicon |
 | `DAILY_ROUTINE` | `akito_routine.json` | 每日状态日程，键为时间段（每条含 `status` 和 `poke` 字段） |
 | `WL2_ROUTINE` | `wl2_routine.json` | WL2 世界线状态 |
@@ -435,34 +435,48 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（冬弥雷
 
 ## 数据文件清单
 
+> 只读内容文件归入 `data/persona/` 与 `data/content/` 子目录；`_find_data_path` 自动搜子目录与根目录（兼容旧 flat 布局）。`PROMPTS_DB` / `REACTIONS_DB` 由各自拆分文件合并加载，consumer 不感知。
+
+### 只读内容 — `data/persona/`（人设 + Prompt，热重载）
+
+| 路径 | 说明 |
+|------|------|
+| `persona/akito_persona.txt` | 主人设 Prompt |
+| `persona/wl2_persona.txt` | WL2 世界线人设 Prompt |
+| `persona/prompts_system.json` | Prompt 模板·系统机制（system_header / schema_* / memory_capture_rule / memory_*_template） |
+| `persona/prompts_character.json` | Prompt 模板·角色演绎（vitality / tone_limiter / reliable_mode / cool_guy_filter / toya_*） |
+
+### 只读内容 — `data/content/`（语料 / 行为 / 世界观，热重载）
+
+| 路径 | 说明 |
+|------|------|
+| `content/akito_routine.json` | 每日状态日程（各时段 status + poke 字段） |
+| `content/wl2_routine.json` | WL2 世界线状态 |
+| `content/akito_sleep.json` | 睡眠场景文案（complaints / sleep_* 各场景） |
+| `content/akito_reactions.json` | 被动反应（behavior_seeds / fallback_poke） |
+| `content/gallery_text.json` | 图库文案（save_img_replies / send_img_angles） |
+| `content/greetings.json` | 早晚安问候（morning / night） |
+| `content/akito_relationships.json` | 人物关系档案（keywords 白名单 + content） |
+| `content/akito_songs.json` | 歌曲背景知识（song_name / description / keywords） |
+| `content/akito_scripts.json` | 台词剧本库 |
+| `content/pjsk_knowledge.json` | PJSK 黑话知识库 |
+| `content/akito_director.json` | 导演骰子资产（toya_directions / dynamic_lexicon） |
+
+### 功能 / 运行时 — `data/` 根目录（多为写回）
+
 | 路径 | 读写 | 说明 |
 |------|------|------|
 | `data/akito_memories.json` | 读写 | 核心记忆库（启动时加载，记忆变更时写入） |
 | `data/last_interactions.json` | 读写 | 各群最后互动时间戳和 routine 快照（time_awareness.py） |
-| `data/akito_persona.txt` | 只读 | 主人设 Prompt |
-| `data/wl2_persona.txt` | 只读 | WL2 世界线人设 Prompt |
-| `data/akito_scripts.json` | 只读 | 台词剧本库 |
-| `data/akito_reactions.json` | 只读 | 反应资源包（complaints / greetings / poke / sleep 等） |
-| `data/akito_prompts.json` | 只读 | Prompt 模板库（schema 定义 / acting_guide / system_header 等） |
-| `data/akito_director.json` | 只读 | 导演骰子资产（toya_directions / dynamic_lexicon） |
-| `data/akito_routine.json` | 只读 | 每日状态日程（各时段 status + poke 字段） |
-| `data/wl2_routine.json` | 只读 | WL2 世界线状态 |
-| `data/akito_songs.json` | 只读 | 歌曲背景知识（song_name / description / keywords） |
-| `data/akito_relationships.json` | 只读 | 人物关系档案（keywords 白名单 + content） |
-| `data/pjsk_knowledge.json` | 只读 | PJSK 黑话知识库 |
 | `data/impression_history.db` | 读写 | 群消息 SQLite（impression.py 独占） |
 | `data/pjsk_event_cache.json` | 读写 | PJSK 活动 ID 缓存（snowy.py 独占） |
-| `data/pending_verify.json` | 读写 | 待审核名单 |
-| `data/bond_verify.json` | 读写 | 待刷羁绊名单 |
-| `data/hold_verify.json` | 读写 | 特殊挂起名单 |
-| `data/verify_config.json` | 只读 | 审核系统群号配置 |
 | `data/paro_pools.json` | 读写 | 派生抽取器池子数据（彰人池 / 冬弥池） |
 | `data/fanfic_keywords.json` | 读写 | 今日关键词池子数据 |
 | `data/keyword_draws.json` | 读写 | 今日关键词每日抽取记录 |
-| `data/images/paro_avatars/彰人/` `data/images/paro_avatars/冬弥/` | 只读 | 派生头像素材 |
-| `data/images/<category>/` | 读写 | 本地图库 |
-| `features/font.ttf` | 只读 | snowy.py 渲染字体 |
-| `features/msyhbd.ttc` | 只读 | snowy.py 渲染加粗字体 |
+| `data/pending_verify.json` / `bond_verify.json` / `hold_verify.json` | 读写 | 待审核 / 待刷羁绊 / 特殊挂起名单 |
+| `data/verify_config.json` | 只读 | 审核系统群号配置 |
+| `data/images/<category>/`、`paro_avatars/彰人\|冬弥/` | 读写 / 只读 | 本地图库 / 派生头像素材 |
+| `features/font.ttf`、`features/msyhbd.ttc` | 只读 | snowy.py 渲染字体 |
 
 ---
 

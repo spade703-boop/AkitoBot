@@ -439,9 +439,10 @@ def grant_safety_pass(seconds: int = 5):
 ### 14.1 格式要求
 
 - 格式：JSON（UTF-8 编码）
-- 位置：`data/` 目录下
-- 加载：通过 `core/data.py` 的 `load_json_file()` 统一加载
-- 热重载：通过 `reload_assets()` 实现
+- 位置：只读内容文件归入 `data/persona/`（人设 / prompt）与 `data/content/`（语料 / 行为 / 世界观）子目录；功能 / 运行时（写回）文件留在 `data/` 根目录。
+- 加载：通过 `core/data.py` 的 `load_json_file()` 统一加载；`_find_data_path()` 自动搜索 `persona/`、`content/` 子目录与根目录（向后兼容旧 flat 布局）。
+- 热重载：通过 `reload_assets()` 实现。
+- 拆分文件合并加载：`PROMPTS_DB`（= `prompts_system.json` + `prompts_character.json`）、`REACTIONS_DB`（= `akito_reactions.json` + `gallery_text.json` + `greetings.json`）在加载时合并回单一 DB，consumer 不感知拆分。
 
 ### 14.2 新增数据文件
 

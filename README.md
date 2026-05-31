@@ -221,25 +221,34 @@ akito_bot/
 
 ## 数据文件
 
-可编辑的配置文件位于 `data/` 目录，绝大多数支持热重载（群内发送 `重载配置` 即可生效，无需重启）：
+可编辑的内容文件按用途归入子目录，绝大多数支持热重载（群内发送 `重载配置` 即可生效，无需重启）：
+
+**`data/persona/`（人设与 Prompt）**
 
 | 文件 | 说明 |
 |------|------|
-| `akito_persona.txt` | 主人设 Prompt |
-| `wl2_persona.txt` | WL2 世界线人设 Prompt |
-| `akito_routine.json` | 各时段日常状态（`status` + `poke`） |
-| `akito_reactions.json` | 反应词库（问候 / 戳一戳兜底 / 行为种子 / 存图回复 等） |
-| `akito_sleep.json` | 睡眠文案库（梦话 / 深夜抱怨 / 各场景睡眠反应） |
-| `akito_prompts.json` | Prompt 模板库（schema / acting_guide 等） |
+| `akito_persona.txt` / `wl2_persona.txt` | 主人设 / WL2 世界线人设 |
+| `prompts_system.json` | Prompt 模板·系统机制（输出格式 / 记忆机制） |
+| `prompts_character.json` | Prompt 模板·角色演绎（语气 / 模式 / 冬弥相关） |
+
+**`data/content/`（语料 / 行为 / 世界观）**
+
+| 文件 | 说明 |
+|------|------|
+| `akito_routine.json` / `wl2_routine.json` | 各时段日常状态（`status` + `poke`） |
+| `akito_sleep.json` | 睡眠文案（梦话 / 抱怨 / 各场景睡眠反应） |
+| `akito_reactions.json` | 被动反应（行为种子 / 戳一戳兜底） |
+| `gallery_text.json` | 图库文案（存图回复 / 发图语气） |
+| `greetings.json` | 早晚安问候 |
 | `akito_scripts.json` | 台词剧本示例 |
 | `akito_songs.json` | 歌曲知识库 |
 | `akito_relationships.json` | 人物关系档案（含 `keywords` 白名单） |
 | `akito_director.json` | 导演骰子资产 |
 | `pjsk_knowledge.json` | PJSK 世界观 / 黑话库 |
-| `wl2_routine.json` | WL2 世界线状态 |
-| `paro_pools.json` | 派生抽取池（彰人 / 冬弥） |
-| `fanfic_keywords.json` | 今日关键词池 |
-| `akito_memories.json` | 运行时记忆库（自动读写） |
+
+**`data/` 根目录（功能 / 运行时，多为自动读写）**：`paro_pools.json`、`fanfic_keywords.json`、`keyword_draws.json`、`akito_memories.json`、`verify_*.json`、`pjsk_event_cache.json`、`last_interactions.json`、`impression_history.db`
+
+> `core/data.py` 自动搜索 `persona/`、`content/` 子目录（兼容旧扁平布局）；`PROMPTS_DB` / `REACTIONS_DB` 由各自的拆分文件合并加载。
 
 > ⚠️ 编辑 JSON 时字符串值里的双引号需转义为 `\"`，或改用中文书名号 `「」`，否则加载失败会静默回落到内置默认值。
 

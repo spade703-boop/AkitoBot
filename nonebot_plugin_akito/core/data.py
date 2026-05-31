@@ -62,14 +62,36 @@ def load_prompt_template(filename: str) -> str:
     return ""
 
 
+def _load_optional_json(filename: str) -> Any:
+    """加载可选的拆分数据文件；不存在时静默返回 None（不打"未找到"警告）。"""
+    if _find_data_path(filename) is None:
+        return None
+    return load_json_file(filename, None)
+
+
 SCRIPT_DB       = load_json_file("akito_scripts.json", [])
-REACTIONS_DB    = load_json_file("akito_reactions.json", {
+
+# reactions 已按归属拆分为 本体(behavior_seeds/fallback_poke) + gallery_text + greetings，合并加载回单一 REACTIONS_DB
+REACTIONS_DEFAULTS = {
     "behavior_seeds": ["冬弥在发呆"],
     "save_img_replies": {},
     "send_img_angles": ["语气切入点：随意的发言，像是随手丢过去的。"],
     "greetings": {"morning": ["早。"], "night": ["晚安。"]},
     "fallback_poke": ["喂，别乱戳啊。"],
-})
+}
+
+
+def _load_reactions() -> dict:
+    """合并加载：reactions 本体 + gallery_text + greetings → 单一 REACTIONS_DB（缺任一文件由默认值兜底）。"""
+    return {
+        **REACTIONS_DEFAULTS,
+        **load_json_file("akito_reactions.json", {}),
+        **(_load_optional_json("gallery_text.json") or {}),
+        **(_load_optional_json("greetings.json") or {}),
+    }
+
+
+REACTIONS_DB    = _load_reactions()
 SLEEP_DB        = load_json_file("akito_sleep.json", {
     "complaints": ["……吵死了……"],
     "sleep_replies_img": ["……困……"],
@@ -82,7 +104,8 @@ SLEEP_DB        = load_json_file("akito_sleep.json", {
     "sleep_inject_memory": ["（呼……呼……完全没听见……）zzZ"],
     "sleep_gallery_list": ["💤 正在睡觉，早上再来……"],
 })
-PROMPTS_DB      = load_json_file("akito_prompts.json", {
+# prompts 已按用途拆分为 prompts_system + prompts_character，合并加载回单一 PROMPTS_DB（兼容未拆的旧单文件）
+PROMPTS_DEFAULTS = {
     "system_header": "【系统级绝对指令】你是东云彰人，只输出合法JSON。",
     "reliable_mode": "", "cool_guy_filter": "",
     "toya_acting_guide": "风格：{selected}。",
@@ -94,7 +117,19 @@ PROMPTS_DB      = load_json_file("akito_prompts.json", {
     "schema_dialogue": "角色实际说出的话，纯对话文本。",
     "memory_fusion_template": "【警告】特殊状态：{implant}。关系：{relationship}。",
     "memory_force_template":  "【警告】唯一真理：{implant}。",
-})
+}
+
+
+def _load_prompts() -> dict:
+    """合并加载：prompts_system + prompts_character → 单一 PROMPTS_DB；两者都缺时回落到旧单文件 akito_prompts.json。"""
+    _sys = _load_optional_json("prompts_system.json")
+    _char = _load_optional_json("prompts_character.json")
+    if _sys is None and _char is None:
+        return load_json_file("akito_prompts.json", PROMPTS_DEFAULTS)
+    return {**PROMPTS_DEFAULTS, **(_sys or {}), **(_char or {})}
+
+
+PROMPTS_DB      = _load_prompts()
 DIRECTOR_DB     = load_json_file("akito_director.json", {
     "toya_directions": ["【侧重沉默】"],
     "dynamic_lexicon": {},
@@ -131,8 +166,6 @@ init_pjsk_knowledge()
 def reload_assets() -> None:
     """原地热更新所有 JSON 数据文件，对已导入该模块变量的引用立即生效（无需重启）。"""
     for target, filename, default in [
-        (REACTIONS_DB,    "akito_reactions.json", {}),
-        (PROMPTS_DB,      "akito_prompts.json",   {}),
         (DIRECTOR_DB,     "akito_director.json",  {}),
         (DAILY_ROUTINE,   "akito_routine.json",   {}),
         (WL2_ROUTINE,     "wl2_routine.json",     {}),
@@ -141,6 +174,12 @@ def reload_assets() -> None:
         new = load_json_file(filename, default)
         target.clear()
         target.update(new)
+
+    # reactions / prompts 走合并加载（拆分文件 → 合回单一 DB），保持 §11 模式 A
+    REACTIONS_DB.clear()
+    REACTIONS_DB.update(_load_reactions())
+    PROMPTS_DB.clear()
+    PROMPTS_DB.update(_load_prompts())
 
     new_scripts = load_json_file("akito_scripts.json", [])
     SCRIPT_DB.clear()
