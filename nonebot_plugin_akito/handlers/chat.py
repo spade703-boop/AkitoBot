@@ -215,9 +215,6 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage(), raw_messa
                 except Exception as e:
                     logger.error(f"视觉解析后赋值失败: {e}")
 
-        if not plain_text_content and not current_image_identity:
-            await chat.finish("干嘛……")
-
         # --- 2. 睡眠拦截 ---
         _is_superuser = str(event.get_user_id()) == SUPERUSER_QQ
         if _is_superuser:
@@ -230,6 +227,9 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage(), raw_messa
                     await asyncio.sleep(2)
                     grant_safety_pass(5)
                     await chat.finish(sleep_instruction)
+
+        if not plain_text_content and not current_image_identity:
+            await chat.finish("干嘛……")
 
         # --- 3. 时间 ---（搜索意图由 LLM 通过 Function Calling 自主决定，见第 9 步）
         search_result = ""
