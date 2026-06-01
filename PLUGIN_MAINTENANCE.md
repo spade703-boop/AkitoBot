@@ -30,7 +30,6 @@ nonebot_plugin_akito/
     ├── impression.py         # 群印象 + 随机插嘴（AutoChat）
     ├── gallery.py            # 相册图库指令
     ├── director.py           # Galgame 级导演骰子（可安全删除）
-    ├── snowy.py              # PJSK 榜线预测（sn预测/cn预测）
     ├── verify.py             # 新人审核名单管理
     ├── random_paro.py        # 派生抽取器（CP 同人灵感配对）
     ├── random_keyword.py     # 今日关键词（同人写作灵感关键词）
@@ -62,7 +61,7 @@ time_awareness.py (← __init__, data, life_state)         │
 - `core/` 子模块只能用相对导入 `.` 访问同层文件，**严禁**向上引用 `handlers/` 或 `features/`
 - `handlers/` 和 `features/` 均使用 `from ..core import ...`（两个点 = 上一级包）
 - `handlers/` 和 `features/` 之间**无互相引用**
-- `features/snowy.py` 和 `features/verify.py` 无任何内部依赖，完全独立
+- `features/verify.py` 无任何内部依赖，完全独立
 - `features/director.py` 仅被 `handlers/chat.py` 调用，可整体删除（chat.py 有安全降级）
 
 ---
@@ -372,14 +371,6 @@ Galgame 级导演骰子，由 `chat.py` 调用 `build_director_note()`。
 - `acting_guide = ""`（cool_guy_filter 不生效）
 - `format_breaker = ""`（不附加导演指令）
 
-### snowy.py
-
-完全独立。PJSK 榜线预测，从 Moesekai API 拉取数据，PIL 渲染为 JPEG 图片。
-
-字体文件（渲染依赖）：`font.ttf`（正文）和 `msyhbd.ttc`（加粗）必须与 `snowy.py` 同目录（`features/`）。
-
-活动 ID 缓存：`data/pjsk_event_cache.json`
-
 ### verify.py
 
 完全独立。管理三套新人审核名单，所有指令限 `ADMIN_GROUP_ID` 群使用。
@@ -469,14 +460,13 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（冬弥雷
 | `data/akito_memories.json` | 读写 | 核心记忆库（启动时加载，记忆变更时写入） |
 | `data/last_interactions.json` | 读写 | 各群最后互动时间戳和 routine 快照（time_awareness.py） |
 | `data/impression_history.db` | 读写 | 群消息 SQLite（impression.py 独占） |
-| `data/pjsk_event_cache.json` | 读写 | PJSK 活动 ID 缓存（snowy.py 独占） |
 | `data/paro_pools.json` | 读写 | 派生抽取器池子数据（彰人池 / 冬弥池） |
 | `data/fanfic_keywords.json` | 读写 | 今日关键词池子数据 |
 | `data/keyword_draws.json` | 读写 | 今日关键词每日抽取记录 |
 | `data/pending_verify.json` / `bond_verify.json` / `hold_verify.json` | 读写 | 待审核 / 待刷羁绊 / 特殊挂起名单 |
 | `data/verify_config.json` | 只读 | 审核系统群号配置 |
 | `data/images/<category>/`、`paro_avatars/彰人\|冬弥/` | 读写 / 只读 | 本地图库 / 派生头像素材 |
-| `features/font.ttf`、`features/msyhbd.ttc` | 只读 | snowy.py 渲染字体 |
+| `features/msyhbd.ttc` | 只读 | random_paro / random_keyword 渲染加粗字体 |
 
 ---
 
@@ -543,7 +533,7 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（冬弥雷
 
 9. **handler 注册时机**：`on_command`/`on_message` 在模块被 import 时立即注册。`features/__init__.py` 中缺少某行 `from . import xxx`，对应功能会完全静默失效，不报任何错误。
 
-10. **`features/snowy.py` 字体路径**：渲染函数用 `os.path.abspath(__file__)` 定位字体，字体必须与 `snowy.py` 同目录。
+10. **渲染字体路径**：`random_paro.py` / `random_keyword.py` 用 `os.path.join(os.path.dirname(__file__), "msyhbd.ttc")` 定位字体，`msyhbd.ttc` 必须与模块同目录（`features/`）。
 
 ---
 

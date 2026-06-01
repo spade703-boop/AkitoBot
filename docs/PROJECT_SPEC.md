@@ -27,7 +27,7 @@
 nonebot_plugin_akito/
 ├── core/         基础层：API 封装、数据加载、状态机、记忆、时间感知
 ├── handlers/     消息处理层：主对话引擎、管理指令、被动反应
-└── features/     独立功能模块：9 个（director 可安全删除，scheduled 为定时基础设施）
+└── features/     独立功能模块：8 个（director 可安全删除，scheduled 为定时基础设施）
 ```
 
 依赖方向：`features/` → `core/` ← `handlers/`，三层默认单向依赖。
@@ -91,7 +91,6 @@ gemini_bot/
         ├── random_keyword.py     # 今日关键词
         ├── random_paro.py        # 抽派生
         ├── scheduled.py          # 定时任务
-        ├── snowy.py              # 活动预测
         └── verify.py             # 加群审核
 ```
 

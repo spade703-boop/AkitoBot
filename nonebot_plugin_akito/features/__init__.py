@@ -1,6 +1,5 @@
 from . import impression
 from . import gallery
-from . import snowy
 from . import verify
 from . import scheduled
 from . import event_mode

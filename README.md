@@ -143,12 +143,6 @@ AI 也会在对话中通过 `[[记下: ...]]` 标记自动提取长期记忆。
 
 分类：冬弥(toya) / 彰人(self) / 美食(food) / 群友(groupmate) / 合照(vbs) / 表情(meme)
 
-### PJSK 榜线预测
-
-| 指令 | 说明 |
-|------|------|
-| `sn预测` / `cn预测` | 查询当前活动榜线 + Moesekai 预测，PIL 渲染图片 |
-
 ### 新人审核系统
 
 三套名单管理（待审核 / 羁绊 / 特殊挂起），支持智能转移和自定义理由，所有指令限管理群使用。
@@ -207,7 +201,6 @@ akito_bot/
 │       ├── gallery.py              # 相册图库
 │       ├── random_paro.py          # 派生抽取器
 │       ├── random_keyword.py       # 今日关键词
-│       ├── snowy.py                # PJSK 榜线预测
 │       ├── verify.py               # 新人审核管理
 │       ├── scheduled.py            # 定时任务
 │       ├── event_mode.py           # WL2 世界线开关
@@ -246,7 +239,7 @@ akito_bot/
 | `akito_director.json` | 导演骰子资产 |
 | `pjsk_knowledge.json` | PJSK 世界观 / 黑话库 |
 
-**`data/` 根目录（功能 / 运行时，多为自动读写）**：`paro_pools.json`、`fanfic_keywords.json`、`keyword_draws.json`、`akito_memories.json`、`verify_*.json`、`pjsk_event_cache.json`、`last_interactions.json`、`impression_history.db`
+**`data/` 根目录（功能 / 运行时，多为自动读写）**：`paro_pools.json`、`fanfic_keywords.json`、`keyword_draws.json`、`akito_memories.json`、`verify_*.json`、`last_interactions.json`、`impression_history.db`
 
 > `core/data.py` 自动搜索 `persona/`、`content/` 子目录（兼容旧扁平布局）；`PROMPTS_DB` / `REACTIONS_DB` 由各自的拆分文件合并加载。
 
