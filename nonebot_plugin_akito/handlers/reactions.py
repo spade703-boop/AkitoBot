@@ -16,6 +16,7 @@ from ..core import (
     AKITO_STATUS,
     ALLOWED_CHAT_GROUPS,
     ALLOWED_CP_GROUPS,
+    DAILY_ROUTINE,
     PROMPTS_DB,
     REACTIONS_DB,
     RELATIONSHIP_DATA,
@@ -197,7 +198,7 @@ async def _(bot: Bot, event: NoticeEvent):
     get_daily_activity(now_full.hour, now_full.weekday(), now_full.minute)
     current_state = AKITO_STATUS.get("cached_content", "")
     reactions = current_state.get("poke", []) if isinstance(current_state, dict) else []
-    if not reactions: reactions = REACTIONS_DB.get("fallback_poke", ["喂，别乱戳啊。"])
+    if not reactions: reactions = DAILY_ROUTINE.get("fallback_poke", ["喂，别乱戳啊。"])
 
     await asyncio.sleep(random.uniform(0.5, 1.5))
     grant_safety_pass(5)
