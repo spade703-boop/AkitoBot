@@ -1,6 +1,7 @@
 """加群审核：入群 / 退群探头，待审核 / 羁绊 / 特殊挂起三类名单的增删查指令。"""
 
 import json
+import os
 from pathlib import Path
 import time
 
@@ -36,9 +37,12 @@ def load_verify_queue() -> dict:
     except Exception: return {}
 
 def save_verify_queue(data: dict) -> None:
-    """将待审核名单写入磁盘。"""
+    """将待审核名单原子写入磁盘（.tmp + os.replace）。"""
     VERIFY_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(VERIFY_FILE, "w", encoding="utf-8") as f: json.dump(data, f, ensure_ascii=False, indent=2)
+    tmp = VERIFY_FILE.with_suffix(".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, VERIFY_FILE)
 
 # ==============================================================================
 # 2. 核心监控逻辑区
@@ -190,9 +194,12 @@ def load_bond_queue() -> dict:
     except Exception: return {}
 
 def save_bond_queue(data: dict) -> None:
-    """将羁绊待刷名单写入磁盘。"""
+    """将羁绊待刷名单原子写入磁盘（.tmp + os.replace）。"""
     BOND_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(BOND_FILE, "w", encoding="utf-8") as f: json.dump(data, f, ensure_ascii=False, indent=2)
+    tmp = BOND_FILE.with_suffix(".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, BOND_FILE)
 
 # [羁绊名单：手动批量添加]
 # [羁绊名单：一键转移/添加]
@@ -307,9 +314,12 @@ def load_hold_queue() -> dict:
     except Exception: return {}
 
 def save_hold_queue(data: dict) -> None:
-    """将特殊挂起名单写入磁盘。"""
+    """将特殊挂起名单原子写入磁盘（.tmp + os.replace）。"""
     HOLD_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(HOLD_FILE, "w", encoding="utf-8") as f: json.dump(data, f, ensure_ascii=False, indent=2)
+    tmp = HOLD_FILE.with_suffix(".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, HOLD_FILE)
 
 # [自定义挂起：智能转移/添加]
 add_hold_cmd = on_command("特殊挂号", aliases={"延期审核", "加备注转出"}, priority=5, block=True)

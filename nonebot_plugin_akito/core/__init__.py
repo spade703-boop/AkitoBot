@@ -13,6 +13,7 @@ import os
 import datetime
 from pathlib import Path
 from dotenv import load_dotenv
+from nonebot.log import logger
 from openai import AsyncOpenAI
 
 load_dotenv()  # 显式将 .env 写入 os.environ（NoneBot2 自身不做这一步）
@@ -50,8 +51,8 @@ _raw_img = os.environ.get("GROUP_IMAGE_PERMISSIONS", "")
 if _raw_img.strip():
     try:
         GROUP_IMAGE_PERMISSIONS = {int(k): v for k, v in json.loads(_raw_img).items()}
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"⚠️ GROUP_IMAGE_PERMISSIONS 解析失败（应为 JSON），已忽略: {e}")
 
 
 # ── 子模块导入（必须放在常量定义之后） ────────────────────────────────
