@@ -190,11 +190,11 @@ async def _(event: Event, args: Message = CommandArg()):
         chars = len(result)
         await reload_cmd.finish(f"✅ 人设文件已重载（{chars} 字）")
     elif arg in ("assets", "数据", "json"):
-        reload_assets()
-        await reload_cmd.finish("✅ 所有 JSON 数据文件已重载（reactions / prompts / director / routine / songs / relationships / scripts）")
+        n = reload_assets()
+        await reload_cmd.finish(f"✅ 数据资源已重载（{n} 组）")
     elif arg in ("", "all", "全部"):
-        reload_assets()
+        n = reload_assets()
         result = reload_persona()
-        await reload_cmd.finish(f"✅ 全部配置已重载\n· JSON 数据文件（8 项）\n· 人设文件（{len(result)} 字）")
+        await reload_cmd.finish(f"✅ 全部配置已重载\n· 数据资源（{n} 组）\n· 人设文件（{len(result)} 字）")
     else:
         await reload_cmd.finish("用法：重载配置 [persona|assets|全部]\n· persona — 重载 akito_persona.txt\n· assets — 重载全部 JSON 数据文件\n· 全部（默认）— 两者都重载")

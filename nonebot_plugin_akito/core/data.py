@@ -163,8 +163,13 @@ def init_pjsk_knowledge() -> None:
 init_pjsk_knowledge()
 
 
-def reload_assets() -> None:
-    """原地热更新所有 JSON 数据文件，对已导入该模块变量的引用立即生效（无需重启）。"""
+def reload_assets() -> int:
+    """原地热更新所有数据资源，对已导入该模块变量的引用立即生效（无需重启）。
+
+    Returns:
+        成功重载的配置组数（供 `重载配置` 指令回执动态显示，避免写死过时数字）。
+    """
+    count = 0
     for target, filename, default in [
         (DIRECTOR_DB,     "akito_director.json",  {}),
         (DAILY_ROUTINE,   "akito_routine.json",   {}),
@@ -174,36 +179,46 @@ def reload_assets() -> None:
         new = load_json_file(filename, default)
         target.clear()
         target.update(new)
+        count += 1
 
     # reactions / prompts 走合并加载（拆分文件 → 合回单一 DB），保持 §11 模式 A
     REACTIONS_DB.clear()
     REACTIONS_DB.update(_load_reactions())
     PROMPTS_DB.clear()
     PROMPTS_DB.update(_load_prompts())
+    count += 2
 
     new_scripts = load_json_file("akito_scripts.json", [])
     SCRIPT_DB.clear()
     SCRIPT_DB.extend(new_scripts)
+    count += 1
 
     new_rels = load_json_file("akito_relationships.json", [])
     RELATIONSHIP_DATA.clear()
     RELATIONSHIP_DATA.extend(new_rels)
+    count += 1
 
     new_sleep = load_json_file("akito_sleep.json", {})
     SLEEP_DB.clear()
     SLEEP_DB.update(new_sleep)
+    count += 1
 
     try:
         from ..features.random_paro import reload_paro_data
         reload_paro_data()
+        count += 1
     except Exception as e:
         logger.debug(f"🔄 random_paro 热重载跳过: {e}")
 
     try:
         from ..features.random_keyword import reload_keyword_data
         reload_keyword_data()
+        count += 1
     except Exception as e:
         logger.debug(f"🔄 random_keyword 热重载跳过: {e}")
 
     init_pjsk_knowledge()
-    logger.info("🔄 所有 JSON 数据文件已热重载完成")
+    count += 1
+
+    logger.info(f"🔄 所有数据资源已热重载完成（{count} 组）")
+    return count
