@@ -132,6 +132,7 @@ async def get_relevant_examples(query: str, num: int = 5) -> str:
     """
     ids = await retrieve("scripts", query, num) if query and query.strip() else None
     if ids is None:
+        logger.debug(f"🔍 剧本检索不可用，回退随机抽取 query={query[:40]}")
         return get_random_examples(num)
 
     # 取 top-(num-1) 相关 + 1 随机
@@ -140,6 +141,7 @@ async def get_relevant_examples(query: str, num: int = 5) -> str:
     random_count = min(num - len(relevant_ids), len(SCRIPT_DB))
 
     relevant = [SCRIPT_DB[i] for i in relevant_ids if 0 <= i < len(SCRIPT_DB)]
+    rand_sources: list[int] = []  # 记录哪些是随机来的
     if random_count > 0:
         import random
         remaining = [
@@ -147,8 +149,16 @@ async def get_relevant_examples(query: str, num: int = 5) -> str:
             if i not in relevant_ids and SCRIPT_DB[i].get("type") != "noise"
         ]
         if remaining:
-            random_ids = random.sample(remaining, min(random_count, len(remaining)))
-            relevant += [SCRIPT_DB[i] for i in random_ids]
+            rand_sources = random.sample(remaining, min(random_count, len(remaining)))
+            relevant += [SCRIPT_DB[i] for i in rand_sources]
+
+    # 调试日志：每条来源 + 类型 + 前 30 字
+    logger.debug(
+        f"🔍 剧本命中 [{len(relevant_ids)}检索+{len(rand_sources)}随机] query={query[:40]}"
+    )
+    for i, s in enumerate(relevant):
+        src = "检索" if i < len(relevant_ids) else "随机"
+        logger.debug(f"  [{src}] type={s.get('type','?')} {s.get('context','')[:30]}")
 
     if not relevant:
         return get_random_examples(num)
