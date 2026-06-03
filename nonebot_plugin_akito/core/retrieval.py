@@ -110,7 +110,10 @@ def reload_indices() -> int:
         _INDICES[corpus] = idx
         if idx is not None:
             loaded += 1
-    logger.info(f"🔄 检索引擎重载完成: {loaded}/{len(_registry)} 语料可用")
+    if loaded == len(_registry):
+        logger.info(f"🔄 检索引擎重载完成: {loaded}/{len(_registry)} 语料可用")
+    else:
+        logger.debug(f"🔄 检索引擎重载完成: {loaded}/{len(_registry)} 语料可用（部分/全部降级，正常回退）")
     return loaded
 
 
