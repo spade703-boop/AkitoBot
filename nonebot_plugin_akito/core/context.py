@@ -181,9 +181,13 @@ async def get_relevant_pjsk(query: str, num: int = 6) -> str:
     """语义检索 PJSK 黑话；检索失败回退到全量 base；PJSK_INTRO 永远在前。"""
     ids = await retrieve("pjsk", query, num) if query and query.strip() else None
     if ids is None or not PJSK_ENTRIES:
+        logger.debug(f"🔍 PJSK检索不可用，回退全量 base query={query[:40]}")
         return PJSK_KNOWLEDGE_BASE
 
     relevant = [PJSK_ENTRIES[i] for i in ids if 0 <= i < len(PJSK_ENTRIES)]
+    logger.debug(f"🔍 PJSK命中 [{len(relevant)}条] query={query[:40]}")
+    for item in relevant:
+        logger.debug(f"  [PJSK] {item.get('category','')[:20]} {item.get('text','')[:40]}")
     if not relevant:
         return PJSK_KNOWLEDGE_BASE
 
