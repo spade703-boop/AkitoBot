@@ -378,3 +378,207 @@ async def test_get_relevant_examples_mixed_types():
     assert result.count("【原作·类似情境】") == 2
     # 一个 home
     assert result.count("- 情境：") == 1
+
+
+# ── 查询扩散 ────────────────────────────────────────────────────────────────────
+
+
+def test_expand_query_for_retrieval_success():
+    """正常返回时 strip 后的文本不为空则返回（mock api 模块级 client）。"""
+    import asyncio
+
+    from nonebot_plugin_akito.core import api as api_module
+
+    async def _test():
+        fake_client = mock.MagicMock()
+        fake_client.chat.completions.create = mock.AsyncMock()
+        fake_client.chat.completions.create.return_value.choices = [mock.MagicMock()]
+        fake_client.chat.completions.create.return_value.choices[0].message.content = "  刷高分 肝进度 累  "
+        with mock.patch.dict(api_module.__dict__, {"client": fake_client}):
+            result = await api_module.expand_query_for_retrieval("打虾")
+            assert result == "刷高分 肝进度 累"
+
+    asyncio.run(_test())
+
+
+def test_expand_query_for_retrieval_empty_message():
+    """空消息返回 None。"""
+    import asyncio
+
+    from nonebot_plugin_akito.core.api import expand_query_for_retrieval
+
+    async def _test():
+        assert await expand_query_for_retrieval("") is None
+        assert await expand_query_for_retrieval("   ") is None
+
+    asyncio.run(_test())
+
+
+def _make_fake_client(content=None, side_effect=None):
+    """构造一个 fake AsyncOpenAI client 供 expand 测试用。"""
+    fake = mock.MagicMock()
+    if side_effect:
+        fake.chat.completions.create.side_effect = side_effect
+        return fake
+    fake.chat.completions.create.return_value.choices = [mock.MagicMock()]
+    fake.chat.completions.create.return_value.choices[0].message.content = content
+    return fake
+
+
+def test_expand_query_for_retrieval_timeout_returns_none():
+    """超时 → None，绝不抛异常。"""
+    import asyncio
+
+    from nonebot_plugin_akito.core import api as api_module
+
+    async def _test():
+        fake = _make_fake_client(side_effect=asyncio.TimeoutError)
+        with mock.patch.object(api_module, "client", fake):
+            result = await api_module.expand_query_for_retrieval("测试")
+            assert result is None
+
+    asyncio.run(_test())
+
+
+def test_expand_query_for_retrieval_exception_returns_none():
+    """任意异常 → None，绝不抛到调用方。"""
+    import asyncio
+
+    from nonebot_plugin_akito.core import api as api_module
+
+    async def _test():
+        fake = _make_fake_client(side_effect=RuntimeError("模拟错误"))
+        with mock.patch.object(api_module, "client", fake):
+            result = await api_module.expand_query_for_retrieval("测试")
+            assert result is None
+
+    asyncio.run(_test())
+
+
+def test_expand_never_returns_character_fallback():
+    """验证 expand 函数直调 OpenAI client，绝不走 call_deepseek_api 的角色兜底文案路径。"""
+    import asyncio
+
+    from nonebot_plugin_akito.core import api as api_module
+
+    async def _test():
+        fake = _make_fake_client(side_effect=RuntimeError("失败"))
+        with mock.patch.object(api_module, "client", fake):
+            result = await api_module.expand_query_for_retrieval("测试")
+        assert result is None
+        assert "头好痛" not in str(result or "")
+
+    asyncio.run(_test())
+
+
+def test_expand_empty_api_response_returns_none():
+    """LLM 返回空串或纯空白 → None。"""
+    import asyncio
+
+    from nonebot_plugin_akito.core import api as api_module
+
+    async def _test():
+        fake = _make_fake_client(content="   ")
+        with mock.patch.object(api_module, "client", fake):
+            result = await api_module.expand_query_for_retrieval("测试")
+            assert result is None
+
+    asyncio.run(_test())
+
+
+# ── 扩散接入 get_relevant_examples ────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_get_relevant_examples_uses_expanded_query():
+    """扩散成功 → 用 blend query 调用 retrieve。"""
+    from nonebot_plugin_akito.core.context import get_relevant_examples
+
+    fake_db = [{"type": "home", "context": "ctx", "dialogue": "dl"}]
+    captured_retrieval_query = []
+
+    async def fake_retrieve(corpus, query, num):
+        captured_retrieval_query.append(query)
+        return [0]
+
+    with mock.patch("nonebot_plugin_akito.core.context.retrieve", fake_retrieve):
+        with mock.patch("nonebot_plugin_akito.core.context.SCRIPT_DB", fake_db):
+            with mock.patch("nonebot_plugin_akito.core.context.expand_query_for_retrieval", return_value="刷高分 肝进度"):
+                with mock.patch("nonebot_plugin_akito.core.context._QUERY_EXPANSION_ENABLED", True):
+                    await get_relevant_examples("打虾还是打龙", num=1)
+    assert len(captured_retrieval_query) == 1
+    blended = captured_retrieval_query[0]
+    assert "打虾" in blended
+    assert "刷高分" in blended
+
+
+@pytest.mark.asyncio
+async def test_get_relevant_examples_expansion_none_uses_original():
+    """扩散失败 → 用原 query 检索，不报错。"""
+    from nonebot_plugin_akito.core.context import get_relevant_examples
+
+    fake_db = [{"type": "home", "context": "ctx", "dialogue": "dl"}]
+    captured_query = []
+
+    async def fake_retrieve(corpus, query, num):
+        captured_query.append(query)
+        return [0]
+
+    with mock.patch("nonebot_plugin_akito.core.context.retrieve", fake_retrieve):
+        with mock.patch("nonebot_plugin_akito.core.context.SCRIPT_DB", fake_db):
+            with mock.patch("nonebot_plugin_akito.core.context.expand_query_for_retrieval", return_value=None):
+                with mock.patch("nonebot_plugin_akito.core.context._QUERY_EXPANSION_ENABLED", True):
+                    await get_relevant_examples("测试消息", num=1)
+    assert captured_query[0] == "测试消息"
+
+
+@pytest.mark.asyncio
+async def test_get_relevant_examples_expansion_disabled_skips():
+    """开关关闭 → 不调扩散，直接用原 query。"""
+    from nonebot_plugin_akito.core.context import get_relevant_examples
+
+    fake_db = [{"type": "home", "context": "ctx", "dialogue": "dl"}]
+    captured_query = []
+    expand_called = []
+
+    async def fake_retrieve(corpus, query, num):
+        captured_query.append(query)
+        return [0]
+
+    async def fake_expand(msg):
+        expand_called.append(msg)
+        return "不应被调用"
+
+    with mock.patch("nonebot_plugin_akito.core.context.retrieve", fake_retrieve):
+        with mock.patch("nonebot_plugin_akito.core.context.SCRIPT_DB", fake_db):
+            with mock.patch("nonebot_plugin_akito.core.context.expand_query_for_retrieval", fake_expand):
+                with mock.patch("nonebot_plugin_akito.core.context._QUERY_EXPANSION_ENABLED", False):
+                    await get_relevant_examples("测试消息", num=1)
+    assert len(expand_called) == 0
+    assert captured_query[0] == "测试消息"
+
+
+@pytest.mark.asyncio
+async def test_get_relevant_examples_short_query_skip_expansion():
+    """极短消息（<3 字）跳过扩散，省调用。"""
+    from nonebot_plugin_akito.core.context import get_relevant_examples
+
+    fake_db = [{"type": "home", "context": "ctx", "dialogue": "dl"}]
+    short_called = []
+    captured_query = []
+
+    async def fake_retrieve(corpus, query, num):
+        captured_query.append(query)
+        return [0]
+
+    async def fake_expand(msg):
+        short_called.append(msg)
+        return "不应被调用"
+
+    with mock.patch("nonebot_plugin_akito.core.context.retrieve", fake_retrieve):
+        with mock.patch("nonebot_plugin_akito.core.context.SCRIPT_DB", fake_db):
+            with mock.patch("nonebot_plugin_akito.core.context.expand_query_for_retrieval", fake_expand):
+                with mock.patch("nonebot_plugin_akito.core.context._QUERY_EXPANSION_ENABLED", True):
+                    await get_relevant_examples("早", num=1)
+    assert len(short_called) == 0
+    assert captured_query[0] == "早"

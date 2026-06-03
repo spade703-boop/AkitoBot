@@ -86,6 +86,7 @@ from .life_state import (
 )
 from .api import (
     call_deepseek_api, call_deepseek_api_agent, smart_search, describe_image, to_image_data, embed_text,
+    expand_query_for_retrieval,
 )
 from .context import (
     get_random_examples, get_base_persona, reload_persona, get_song_memories, get_hybrid_relationship,
@@ -123,6 +124,7 @@ __all__ = [
     "is_sleeping", "sleep_block",
     # api
     "call_deepseek_api", "call_deepseek_api_agent", "smart_search", "describe_image", "to_image_data", "embed_text",
+    "expand_query_for_retrieval",
     # context
     "get_random_examples", "get_base_persona", "reload_persona", "get_song_memories",
     "get_hybrid_relationship", "get_relevant_examples", "get_relevant_pjsk",

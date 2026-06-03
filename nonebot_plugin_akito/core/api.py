@@ -12,6 +12,44 @@ from PIL import Image as PILImage
 
 from . import TAVILY_API_KEY, ZHIPU_API_KEY, client, embedding_client, vision_client
 
+# ── 查询扩散 Prompt（检索辅助，非人设，不改彰人语气） ──────────────────────────
+_EXPANSION_PROMPT = """你是检索关键词助手，服务于 Project Sekai 角色【东云彰人】（毒舌、嫌麻烦但讲义气的街头歌手）。
+给定用户对彰人说的一句话，提炼它**真正在聊的情境/情绪/话题**，用于检索彰人在类似情境下的台词。
+规则：
+1. 只输出 4-8 个中文关键词/短词，空格分隔；不要解释、不要标点、不要原样复述。
+2. 游戏黑话翻成真实含义并补足联想：虾/龙/效率曲→刷高分 肝进度 重复打歌 累；沉船/吃井→抽卡没出 破防 想被安慰；车/上车→组队打歌 邀约。
+3. 抓潜台词与情绪："又加班到现在"→疲惫 辛苦 深夜；"考砸了"→失落 沮丧 想安慰；"你唱得真好"→被夸 演出 音乐。
+4. 日常闲聊/打招呼就提取核心词即可，别硬编情绪。"""
+
+
+async def expand_query_for_retrieval(message: str) -> str | None:
+    """把用户消息提炼成检索用的情境/情绪/话题关键词；失败/超时返回 None（调用方回退原文）。
+
+    低温短输出 + 6s 短超时，不影响主链路延迟。
+    """
+    if not message or not message.strip():
+        return None
+    try:
+        resp = await asyncio.wait_for(
+            client.chat.completions.create(
+                model="deepseek-v4-flash",
+                messages=[
+                    {"role": "system", "content": _EXPANSION_PROMPT},
+                    {"role": "user", "content": message[:200]},
+                ],
+                temperature=0.3,
+                max_tokens=64,
+                stream=False,
+                extra_body={"thinking": {"type": "disabled"}},
+            ),
+            timeout=6.0,
+        )
+        text = (resp.choices[0].message.content or "").strip()
+        return text or None
+    except Exception as e:
+        logger.debug(f"query 扩散失败，回退原文: {e}")
+        return None
+
 
 async def call_deepseek_api(messages: list, model_name: str = "deepseek-v4-flash", force_json: bool = False) -> str:
     """调用 DeepSeek 对话补全，带 15s 超时与降级文案；force_json=True 时强制 JSON 输出。"""

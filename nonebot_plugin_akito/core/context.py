@@ -4,7 +4,7 @@ import random
 
 from nonebot.log import logger
 
-from .api import smart_search
+from .api import expand_query_for_retrieval, smart_search
 from .data import (
     PJSK_ENTRIES,
     PJSK_INTRO,
@@ -123,14 +123,26 @@ async def get_hybrid_relationship(text: str) -> str:
 # 语义检索过渡比例：top-(num-1) 相关 + 1 随机（story 纳入后相关池更丰富，降随机比例）
 _RELEVANT_RATIO = 1  # 保留的随机条数（其余来自语义检索）
 
+# 查询扩散增强开关（出问题一键回退原行为）
+_QUERY_EXPANSION_ENABLED = True
+
 
 async def get_relevant_examples(query: str, num: int = 5) -> str:
     """语义检索剧本示例；检索失败 / 不可用时回退到随机抽取（零改动行为）。
 
+    检索前用 LLM 扩散 query（游戏黑话翻含义 + 潜台词/情绪），
+    原文 + 联想词 blend 后 embed，让 BGE-M3 突破字面屏障。
     story 条目（日文原作情境）用「原作·类似情境」格式标注前情与彰人台词，
     表头点明"体会语气/态度，用中文表达"。
     """
-    ids = await retrieve("scripts", query, num) if query and query.strip() else None
+    retrieval_query = query
+    if _QUERY_EXPANSION_ENABLED and query and len(query.strip()) >= 3:
+        expanded = await expand_query_for_retrieval(query)
+        if expanded:
+            retrieval_query = f"{query} {expanded}"
+            logger.debug(f"🔍 查询扩散: {query[:40]} → +{expanded[:60]}")
+
+    ids = await retrieve("scripts", retrieval_query, num) if retrieval_query.strip() else None
     if ids is None:
         logger.debug(f"🔍 剧本检索不可用，回退随机抽取 query={query[:40]}")
         return get_random_examples(num)
