@@ -3,7 +3,7 @@
 **角色**：东云彰人（初音未来：缤纷舞台 同人 AI，CP 立场：彰冬不拆不逆）  
 **框架**：NoneBot2 + OneBot V11  
 **AI 后端**：DeepSeek API / 智谱 GLM-4V（视觉）/ Tavily（搜索）  
-**文档更新**：2026-05-28
+**文档更新**：2026-06-03
 
 ---
 
@@ -19,6 +19,7 @@ nonebot_plugin_akito/
 │   ├── life_state.py         # 彰人状态机（routine 缓存 / 节日 buff / 安全期管理）
 │   ├── api.py                # DeepSeek / 智谱 / Tavily API 封装
 │   ├── context.py            # Prompt 组装（人设 / 剧本示例 / 歌曲记忆 / 关系链）
+│   ├── retrieval.py          # 通用语义检索引擎（BGE-M3 + 均值中心化）
 │   └── time_awareness.py     # 时间流逝感知（追踪群对话 gap，注入时段切换提示）
 ├── handlers/                 # 主聊天处理层（响应群消息）
 │   ├── __init__.py
@@ -95,6 +96,8 @@ TOYA_QQ_ID=987654321      # 冬弥本人的 QQ，影响 CP 模式触发
 | `DEEPSEEK_API_KEY` | `.env` | DeepSeek 密钥 |
 | `TAVILY_API_KEY` | `.env` | Tavily 搜索密钥 |
 | `ZHIPU_API_KEY` | `.env` | 智谱 GLM 密钥 |
+| `SILICONFLOW_API_KEY` | `.env` | SiliconFlow 密钥（BGE-M3 语义检索） |
+| `embedding_client` | — | SiliconFlow AsyncOpenAI 客户端（无 key 时为 None，检索自动降级） |
 | `SUPERUSER_QQ` | `.env` | 超级用户 QQ |
 | `TOYA_QQ_ID` | `.env` | 冬弥 QQ 号（CP 模式判断） |
 | `client` | — | DeepSeek AsyncOpenAI 客户端 |
@@ -148,7 +151,9 @@ TOYA_QQ_ID=987654321      # 冬弥本人的 QQ，影响 CP 模式触发
 | `WL2_ROUTINE` | `wl2_routine.json` | WL2 世界线状态 |
 | `SONG_DATA` | `akito_songs.json` | 歌曲背景知识 |
 | `RELATIONSHIP_DATA` | `akito_relationships.json` | 人物关系档案（含 `keywords` 白名单） |
-| `PJSK_KNOWLEDGE_BASE` | `pjsk_knowledge.json` | PJSK 黑话知识库（拼接为字符串） |
+| `PJSK_KNOWLEDGE_BASE` | `pjsk_knowledge.json` | PJSK 黑话知识库（拼接为字符串，检索不可用时作为兜底全量注入） |
+| `PJSK_INTRO` | `pjsk_knowledge.json` 的 `introduction` | 语境锁前言（永远常驻，检索时始终在前） |
+| `PJSK_ENTRIES` | `pjsk_knowledge.json` 的 `knowledge_list` 拍平 | 结构化条目列表 `list[dict]`，每条 `{"category": str, "text": str}`，供检索引擎使用 |
 
 **热更新**：`reload_assets()` 用 `.clear()` + `.update()` / `.extend()` 原地修改所有全局变量，
 已持有引用的模块无需重新 import，即时生效。通过 `重载配置 assets` 指令触发。
@@ -210,6 +215,7 @@ AKITO_SAFE_UNTIL = time.time() + 10   # 无效！
 | `smart_search(query)` | Tavily 搜索，返回摘要字符串，失败返回空字符串 |
 | `describe_image(bytes)` | 智谱 GLM-4V 图片分析，返回结构化描述文本 |
 | `to_image_data(image)` | 从 AlcImage 获取原始字节（支持 raw/path/url 三种来源） |
+| `embed_text(text)` | BGE-M3 单条 embedding（SiliconFlow），返回 1024 维 float list；未配置 key / 失败返回 None，不抛异常 |
 
 > `call_deepseek_api_agent` 专供 `chat.py` 的 ReAct 循环，其他调用方用 `call_deepseek_api`。
 
@@ -218,10 +224,27 @@ AKITO_SAFE_UNTIL = time.time() + 10   # 无效！
 | 函数 | 说明 |
 |------|------|
 | `get_base_persona()` | 读取 `data/akito_persona.txt` 人设文本 |
-| `get_random_examples(n)` | 从 `SCRIPT_DB` 随机抽取 n 条台词示例注入 Prompt |
+| `get_random_examples(n)` | 从 `SCRIPT_DB` 随机抽取 n 条台词示例注入 Prompt（检索不可用时的兜底） |
+| `get_relevant_examples(query, n)` | 语义检索剧本示例；检索失败回退到 `get_random_examples` |
+| `get_relevant_pjsk(query, n)` | 语义检索 PJSK 黑话；检索失败回退到全量 `PJSK_KNOWLEDGE_BASE`；`PJSK_INTRO` 始终在前 |
 | `get_song_memories()` | 将 `SONG_DATA` 格式化为背景知识条目，每次对话静态注入 |
 | `get_hybrid_relationship(text)` | 本地关键词白名单扫描 + 可选联网补充，返回 Prompt 片段 |
 | `reload_persona()` | 重新读取 `akito_persona.txt`，返回新内容（`重载配置 persona` 触发） |
+
+### retrieval.py
+
+通用语义检索引擎，BGE-M3（1024 维）+ 均值中心化。设计为 registry 驱动，加新语料只需一条配置 + 跑一次 build。
+
+| 函数 | 说明 |
+|------|------|
+| `retrieve(corpus, query, top_k)` | 异步语义检索，返回源 DB 下标列表；任一环节失败返回 None（降级） |
+| `reload_indices()` | 重读所有 `.npz` 并重建缓存，返回成功加载数（`reload_assets()` 联动调用） |
+
+**.npz schema**（每语料一份 `data/content/<name>_embeddings.npz`）：
+`vectors`(N×1024 float32)、`mean`(1024 float32)、`indices`(N int32)、`count`(int)
+
+**降级链路**（5 层）：
+无 numpy → 无 `.npz` 文件 → 无 API key → embed 返回 None → count 不符 → 均回退静态/随机行为，不抛错、不空窗。
 
 ### time_awareness.py
 
@@ -449,8 +472,10 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（冬弥雷
 | `content/greetings.json` | 早晚安问候（morning / night） |
 | `content/akito_relationships.json` | 人物关系档案（keywords 白名单 + content） |
 | `content/akito_songs.json` | 歌曲背景知识（song_name / description / keywords） |
-| `content/akito_scripts.json` | 台词剧本库 |
-| `content/pjsk_knowledge.json` | PJSK 黑话知识库 |
+| `content/akito_scripts.json` | 台词剧本库（每条含 `type` 字段: `home`/`story`/`noise`，检索仅用 `home`） |
+| `content/pjsk_knowledge.json` | PJSK 黑话知识库（`introduction` + `knowledge_list` → `PJSK_INTRO` + `PJSK_ENTRIES`） |
+| `content/scripts_embeddings.npz` | 剧本语义向量库（`tools/build_embeddings.py` 生成，gitignore） |
+| `content/pjsk_embeddings.npz` | PJSK 语义向量库（`tools/build_embeddings.py` 生成，gitignore） |
 | `content/akito_director.json` | 导演骰子资产（toya_directions / dynamic_lexicon） |
 
 ### 功能 / 运行时 — `data/` 根目录（多为写回）
@@ -479,7 +504,24 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（冬弥雷
 编辑 `.env` 中对应的群号列表（逗号分隔，`GROUP_IMAGE_PERMISSIONS` 为 JSON）→ 重启生效。
 
 ### 热更新 Prompt 和数据文件
-修改 `data/` 下的 JSON 文件后，在群内发送 `重载配置 assets`（更新 JSON 数据）或 `重载配置 persona`（更新人设文本），无需重启。
+修改 `data/` 下的 JSON 文件后，在群内发送 `重载配置 assets`（更新 JSON 数据）或 `重载配置 persona`（更新人设文本），无需重启。`重载配置 assets` 会同步重建语义检索索引。
+
+### 构建语义检索向量库
+修改 `akito_scripts.json`（台词剧本）或 `pjsk_knowledge.json`（PJSK 黑话）后，需要重建 `.npz` 向量库：
+
+```bash
+# 先分类剧本（仅首次，或剧本文件重新导入后）
+py tools/classify_scripts.py --write --yes
+
+# 构建向量库（需配置 SILICONFLOW_API_KEY + pip install numpy）
+py tools/build_embeddings.py all     # 全量构建
+py tools/build_embeddings.py scripts # 仅剧本
+py tools/build_embeddings.py pjsk    # 仅 PJSK
+```
+
+生成的 `data/content/*_embeddings.npz` 不纳入 Git（已在 `/data` gitignore）。服务器端部署：本地建好 `.npz` 上传到服务器 `data/content/` 目录，或服务器上直接运行 build 工具。
+
+**向后兼容**：若无 `.npz` 文件或未配置 `SILICONFLOW_API_KEY`，bot 自动降级为原有静态/随机行为，不影响正常对话。
 
 ### 新增歌曲知识
 在 `data/akito_songs.json` 追加一个 key：
@@ -491,6 +533,11 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（冬弥雷
 }
 ```
 热更新后自动注入 Prompt，无需改代码。
+
+### 新增剧本台词 & type 字段
+在 `data/akito_scripts.json` 追加条目，每条需含 `type` 字段（`home`/`story`/`noise`），仅 `home`（中文 context，约 176 条）参与语义检索。
+`type` 字段由 `tools/classify_scripts.py` 自动打标，`SCRIPT_DB` 加载零改动（consumer 用 `.get()` 访问）。
+修改后需运行 `py tools/build_embeddings.py scripts` 重建向量库。
 
 ### 新增人物关系档案
 在 `data/akito_relationships.json` 追加一条 entry：

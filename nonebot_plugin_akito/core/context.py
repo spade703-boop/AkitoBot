@@ -5,14 +5,24 @@ import random
 from nonebot.log import logger
 
 from .api import smart_search
-from .data import RELATIONSHIP_DATA, SCRIPT_DB, SONG_DATA, load_prompt_template
+from .data import (
+    PJSK_ENTRIES,
+    PJSK_INTRO,
+    PJSK_KNOWLEDGE_BASE,
+    RELATIONSHIP_DATA,
+    SCRIPT_DB,
+    SONG_DATA,
+    load_prompt_template,
+)
+from .retrieval import retrieve
 
 
 def get_random_examples(num: int = 5) -> str:
     """随机抽取 num 条参考剧本台词，拼成用于模仿语气的提示文本；无数据返回空串。"""
-    if not SCRIPT_DB:
+    pool = [s for s in SCRIPT_DB if s.get("type") != "noise"]
+    if not pool:
         return ""
-    samples = random.sample(SCRIPT_DB, min(len(SCRIPT_DB), num))
+    samples = random.sample(pool, min(len(pool), num))
     text = "\n\n# 参考剧本 (请严格模仿以下台词的语气、长短和用词)\n"
     for s in samples:
         text += f"- 情境：{s.get('context')}\n  台词：{s.get('dialogue')}\n"
@@ -108,3 +118,67 @@ async def get_hybrid_relationship(text: str) -> str:
     if web_info:
         final_prompt += f"🔍【补充情报 (网络搜索结果)】🔍\n{web_info}\n"
     return final_prompt
+
+
+# 语义检索过渡比例：top-(num-1) 相关 + 1 随机（story 纳入后相关池更丰富，降随机比例）
+_RELEVANT_RATIO = 1  # 保留的随机条数（其余来自语义检索）
+
+
+async def get_relevant_examples(query: str, num: int = 5) -> str:
+    """语义检索剧本示例；检索失败 / 不可用时回退到随机抽取（零改动行为）。
+
+    story 条目（日文原作情境）用「原作·类似情境」格式标注前情与彰人台词，
+    表头点明"体会语气/态度，用中文表达"。
+    """
+    ids = await retrieve("scripts", query, num) if query and query.strip() else None
+    if ids is None:
+        return get_random_examples(num)
+
+    # 取 top-(num-1) 相关 + 1 随机
+    relevant_count = max(0, num - _RELEVANT_RATIO)
+    relevant_ids = ids[:relevant_count]
+    random_count = min(num - len(relevant_ids), len(SCRIPT_DB))
+
+    relevant = [SCRIPT_DB[i] for i in relevant_ids if 0 <= i < len(SCRIPT_DB)]
+    if random_count > 0:
+        import random
+        remaining = [
+            i for i in range(len(SCRIPT_DB))
+            if i not in relevant_ids and SCRIPT_DB[i].get("type") != "noise"
+        ]
+        if remaining:
+            random_ids = random.sample(remaining, min(random_count, len(remaining)))
+            relevant += [SCRIPT_DB[i] for i in random_ids]
+
+    if not relevant:
+        return get_random_examples(num)
+
+    header = (
+        "\n\n# 参考剧本 (语义匹配 + 随机注入)\n"
+        "## 以下为原作中类似情境下彰人的反应（日文原文），请体会其语气/态度，**用中文表达**\n"
+    )
+    lines = [header]
+    for s in relevant:
+        tp = s.get("type", "")
+        if tp == "story":
+            lines.append(f"【原作·类似情境】前情：{s.get('context')}\n  彰人：{s.get('dialogue')}")
+        else:
+            lines.append(f"- 情境：{s.get('context')}\n  台词：{s.get('dialogue')}")
+    return "\n".join(lines)
+
+
+async def get_relevant_pjsk(query: str, num: int = 6) -> str:
+    """语义检索 PJSK 黑话；检索失败回退到全量 base；PJSK_INTRO 永远在前。"""
+    ids = await retrieve("pjsk", query, num) if query and query.strip() else None
+    if ids is None or not PJSK_ENTRIES:
+        return PJSK_KNOWLEDGE_BASE
+
+    relevant = [PJSK_ENTRIES[i] for i in ids if 0 <= i < len(PJSK_ENTRIES)]
+    if not relevant:
+        return PJSK_KNOWLEDGE_BASE
+
+    intro = PJSK_INTRO or ""
+    text = intro + "\n\n"
+    for item in relevant:
+        text += f"{item['category']}：{item['text']}\n"
+    return text.strip()

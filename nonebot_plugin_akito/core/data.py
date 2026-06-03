@@ -9,6 +9,8 @@ from typing import Any
 from nonebot.log import logger
 
 PJSK_KNOWLEDGE_BASE = ""
+PJSK_INTRO = ""
+PJSK_ENTRIES: list[dict] = []
 
 
 _DATA_SEARCH_DIRS = [
@@ -151,8 +153,8 @@ RELATIONSHIP_DATA = load_json_file("akito_relationships.json", [])
 
 
 def init_pjsk_knowledge() -> None:
-    """加载并拼装 PJSK 黑话知识库到 PJSK_KNOWLEDGE_BASE（缺文件则保持空串）。"""
-    global PJSK_KNOWLEDGE_BASE
+    """加载并拼装 PJSK 黑话知识库到 PJSK_KNOWLEDGE_BASE + PJSK_INTRO + PJSK_ENTRIES（缺文件则保持空串/空列表）。"""
+    global PJSK_KNOWLEDGE_BASE, PJSK_INTRO, PJSK_ENTRIES
     data = load_json_file("pjsk_knowledge.json", {})
     if not data:
         return
@@ -164,6 +166,15 @@ def init_pjsk_knowledge() -> None:
                 text += f"   {entry}\n"
             text += "\n"
         PJSK_KNOWLEDGE_BASE = text.strip()
+
+        # 结构化导出供检索引擎使用
+        PJSK_INTRO = data.get("introduction", "")
+        flat: list[dict] = []
+        for item in data.get("knowledge_list", []):
+            category = item.get("category", "")
+            for entry in item.get("entries", []):
+                flat.append({"category": category, "text": entry})
+        PJSK_ENTRIES = flat
     except Exception as e:
         logger.error(f"❌ PJSK黑话库拼装失败: {e}")
 
@@ -227,6 +238,14 @@ def reload_assets() -> int:
 
     init_pjsk_knowledge()
     count += 1
+
+    try:
+        from .retrieval import reload_indices
+        loaded = reload_indices()
+        count += 1
+        logger.debug(f"🔄 检索引擎索引已刷新（{loaded} 语料可用）")
+    except Exception as e:
+        logger.debug(f"🔄 检索索引重载跳过（无 numpy/无配置等，属正常降级）: {e}")
 
     logger.info(f"🔄 所有数据资源已热重载完成（{count} 组）")
     return count

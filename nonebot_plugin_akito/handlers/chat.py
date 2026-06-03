@@ -21,7 +21,6 @@ from ..core import (
     ALLOWED_CHAT_GROUPS,
     DIRECTOR_DB,
     MAX_HISTORY_LEN,
-    PJSK_KNOWLEDGE_BASE,
     PROMPTS_DB,
     SUPERUSER_QQ,
     TOYA_QQ_ID,
@@ -41,7 +40,8 @@ from ..core import (
     get_hybrid_relationship,
     get_memory_key,
     get_morning_run_buff,
-    get_random_examples,
+    get_relevant_examples,
+    get_relevant_pjsk,
     get_sleep_buffer_buff,
     get_song_memories,
     get_user_memory,
@@ -300,8 +300,11 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage(), raw_messa
         else:
             interact_instruction = f"""🛑【交互对象锁定】对话对象是普通群友 **{sender_nickname}**。保持 [独立街头歌手/直率/嫌麻烦但有教养] 的态度。\n💡【你的行为准则（请顺应本能反应）】：\n1. 【应对调侃】：保持情绪稳定。用无语的叹气、平淡的反问（"你很闲吗"）或直球承认来终结话题。\n2. 【应对倒霉/送礼】：遇到群友沉船就顺毛安抚两句；收到礼物就叹着气收下（"给我这个干嘛，谢了"），保持游刃有余。\n3. 【应对使唤】：你是有自己生活重心（练歌/打工）的独立男高。面对群友的跑腿要求，优先顺从你的不耐烦：直接冷漠拒绝（"你自己去。"），或用自己的日程当挡箭牌（"没空，正要去练歌"）。仅在心情极好或顺路时，才会勉强帮个小忙（"啧，放那吧我等下弄"）。\n🎯 核心语感：干脆利落的短句。把注意力放在你自己的事上，而不是被群友牵着鼻子走。"""
 
-        relationship_context = await get_hybrid_relationship(plain_text_content)
-        script_examples = get_random_examples(num=5)
+        relationship_context, script_examples, pjsk_block = await asyncio.gather(
+            get_hybrid_relationship(plain_text_content),
+            get_relevant_examples(plain_text_content, 5),
+            get_relevant_pjsk(plain_text_content, 6),
+        )
         group_id = getattr(event, 'group_id', None)
         group_context = get_group_context(group_id) if group_id else ""
         time_gap_awareness = build_time_gap_prompt(group_id) if group_id else ""
@@ -430,7 +433,7 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage(), raw_messa
         {get_base_persona()}
         {script_examples}
         🎮【PJSK 世界观/黑话库】：
-        {PJSK_KNOWLEDGE_BASE}
+        {pjsk_block}
         {get_song_memories()}
         🧠【你的长期记忆】：
         {long_term_memory_text}

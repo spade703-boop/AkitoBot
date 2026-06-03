@@ -24,12 +24,20 @@ DB_PATH = Path("data/impression_history.db")
 IMAGE_BASE_PATH = Path("data/images")
 MAX_HISTORY_LEN = 40
 
-DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
-TAVILY_API_KEY   = os.environ.get("TAVILY_API_KEY", "")
-ZHIPU_API_KEY    = os.environ.get("ZHIPU_API_KEY", "")
+DEEPSEEK_API_KEY    = os.environ.get("DEEPSEEK_API_KEY", "")
+TAVILY_API_KEY      = os.environ.get("TAVILY_API_KEY", "")
+ZHIPU_API_KEY       = os.environ.get("ZHIPU_API_KEY", "")
+SILICONFLOW_API_KEY = os.environ.get("SILICONFLOW_API_KEY", "")
 
 client = AsyncOpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
 vision_client = AsyncOpenAI(api_key=ZHIPU_API_KEY, base_url="https://open.bigmodel.cn/api/paas/v4/")
+embedding_client = AsyncOpenAI(api_key=SILICONFLOW_API_KEY, base_url="https://api.siliconflow.cn/v1") if SILICONFLOW_API_KEY and "sk-" in SILICONFLOW_API_KEY else None
+
+# numpy 守卫：未安装时置 None，检索引擎整体降级
+try:
+    import numpy as np
+except ImportError:  # pragma: no cover — 生产环境可选依赖
+    np = None
 
 TOYA_QQ_ID   = os.environ.get("TOYA_QQ_ID", "3958033212")
 SUPERUSER_QQ = os.environ.get("SUPERUSER_QQ", "2403925946")
@@ -77,20 +85,25 @@ from .life_state import (
     is_sleeping, sleep_block,
 )
 from .api import (
-    call_deepseek_api, call_deepseek_api_agent, smart_search, describe_image, to_image_data,
+    call_deepseek_api, call_deepseek_api_agent, smart_search, describe_image, to_image_data, embed_text,
 )
 from .context import (
     get_random_examples, get_base_persona, reload_persona, get_song_memories, get_hybrid_relationship,
+    get_relevant_examples, get_relevant_pjsk,
 )
 from .time_awareness import (
     record_bot_response, build_time_gap_prompt,
+)
+from .retrieval import (
+    retrieve, reload_indices,
 )
 
 # ── 统一公共导出面（显式声明，避免 import * 时泄漏内部名） ────────────────
 __all__ = [
     # 常量 / 客户端
     "TZ_CN", "TZ_JST", "DB_PATH", "IMAGE_BASE_PATH", "MAX_HISTORY_LEN",
-    "DEEPSEEK_API_KEY", "TAVILY_API_KEY", "ZHIPU_API_KEY", "client", "vision_client",
+    "DEEPSEEK_API_KEY", "TAVILY_API_KEY", "ZHIPU_API_KEY", "SILICONFLOW_API_KEY",
+    "client", "vision_client", "embedding_client", "np",
     "TOYA_QQ_ID", "SUPERUSER_QQ", "TRIGGER_NAMES",
     "ALLOWED_CHAT_GROUPS", "ALLOWED_CP_GROUPS", "ALLOWED_MEMORY_GROUPS", "TARGET_GROUPS",
     "GROUP_IMAGE_PERMISSIONS",
@@ -109,10 +122,12 @@ __all__ = [
     "get_sleep_buffer_buff", "parse_duration_and_content", "check_img_permission",
     "is_sleeping", "sleep_block",
     # api
-    "call_deepseek_api", "call_deepseek_api_agent", "smart_search", "describe_image", "to_image_data",
+    "call_deepseek_api", "call_deepseek_api_agent", "smart_search", "describe_image", "to_image_data", "embed_text",
     # context
     "get_random_examples", "get_base_persona", "reload_persona", "get_song_memories",
-    "get_hybrid_relationship",
+    "get_hybrid_relationship", "get_relevant_examples", "get_relevant_pjsk",
     # time_awareness
     "record_bot_response", "build_time_gap_prompt",
+    # retrieval
+    "retrieve", "reload_indices",
 ]

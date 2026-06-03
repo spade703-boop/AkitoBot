@@ -10,7 +10,7 @@ import aiohttp
 from nonebot.log import logger
 from PIL import Image as PILImage
 
-from . import TAVILY_API_KEY, ZHIPU_API_KEY, client, vision_client
+from . import TAVILY_API_KEY, ZHIPU_API_KEY, client, embedding_client, vision_client
 
 
 async def call_deepseek_api(messages: list, model_name: str = "deepseek-v4-flash", force_json: bool = False) -> str:
@@ -194,3 +194,17 @@ async def to_image_data(image: Any) -> bytes:
             logger.info(f"✅ 图片下载成功，文件大小: {len(data)} 字节")
             return data
     raise ValueError("无法获取图片数据")
+
+
+async def embed_text(text: str) -> list[float] | None:
+    """BGE-M3 单条 embedding；失败返回 None（绝不抛到调用方）。"""
+    if not embedding_client:
+        return None
+    if not text or not text.strip():
+        return None
+    try:
+        r = await embedding_client.embeddings.create(model="BAAI/bge-m3", input=text)
+        return r.data[0].embedding
+    except Exception as e:
+        logger.warning(f"embed_text 失败，降级: {e}")
+        return None

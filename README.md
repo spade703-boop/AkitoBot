@@ -21,7 +21,7 @@
 
 ```bash
 pip install "nonebot2[fastapi]" nonebot-adapter-onebot openai python-dotenv Pillow aiohttp httpx \
-            nonebot-plugin-htmlrender nonebot-plugin-alconna nonebot-plugin-apscheduler nonebot-plugin-uninfo
+            numpy nonebot-plugin-htmlrender nonebot-plugin-alconna nonebot-plugin-apscheduler nonebot-plugin-uninfo
 ```
 
 > `nonebot-plugin-htmlrender` 首次运行会自动下载 Playwright 浏览器内核（用于图库清单等 HTML 渲染）。
@@ -38,6 +38,7 @@ ONEBOT_WS_URLS=["ws://127.0.0.1:3000"]
 DEEPSEEK_API_KEY=sk-your-deepseek-key    # DeepSeek 对话
 TAVILY_API_KEY=tvly-your-tavily-key      # Tavily 联网搜索
 ZHIPU_API_KEY=your-zhipu-key             # 智谱 GLM-4V 图片识别
+SILICONFLOW_API_KEY=sk-your-siliconflow  # SiliconFlow embedding（语义检索，可选）
 
 # 管理
 SUPERUSER_QQ=你的QQ号                     # 超管：重置 / 热重载 / WL2 等
@@ -64,6 +65,7 @@ python bot.py        # 或：nb run
 
 **对话引擎特性**：
 - ReAct Agent 循环：LLM 自主决定是否发起联网搜索
+- 语义检索（RAG）：BGE-M3 自动匹配相关剧本示例 + PJSK 黑话，替代全量随机注入；未配置则自动降级回静态行为
 - 时间流逝感知：跨时段对话自动切换场景，不会续接久远话题
 - 睡眠系统：凌晨 0–6 点自动进入休眠状态，搜索类请求会「被迫营业」
 - 节假日感知：自动感知日本节日气氛
@@ -181,6 +183,9 @@ akito_bot/
 ├── README.md                       # 本文件（用户向）
 ├── PLUGIN_MAINTENANCE.md           # 维护手册（开发 / 维护向）
 ├── docs/PROJECT_SPEC.md            # 项目规范（编码 / 提交 / 安全）
+├── tools/                          # 维护工具脚本
+│   ├── classify_scripts.py         # 剧本分类打标（home/story/noise）
+│   └── build_embeddings.py         # 语义向量库构建（scripts/pjsk/all）
 ├── tests/                          # 关键路径测试（pytest）
 ├── nonebot_plugin_akito/
 │   ├── __init__.py                 # 插件入口
@@ -233,7 +238,8 @@ akito_bot/
 | `akito_reactions.json` | 被动反应（行为种子 / 戳一戳兜底） |
 | `gallery_text.json` | 图库文案（存图回复 / 发图语气） |
 | `greetings.json` | 早晚安问候 |
-| `akito_scripts.json` | 台词剧本示例 |
+| `akito_scripts.json` | 台词剧本示例（含 `type` 字段，`home` 类参与语义检索） |
+| `scripts_embeddings.npz` | 剧本语义向量库（`tools/build_embeddings.py` 生成） |
 | `akito_songs.json` | 歌曲知识库 |
 | `akito_relationships.json` | 人物关系档案（含 `keywords` 白名单） |
 | `akito_director.json` | 导演骰子资产 |
@@ -283,11 +289,15 @@ python-dotenv             >= 1.0.0
 Pillow                    >= 10.0.0
 aiohttp                   >= 3.9.0
 httpx                     >= 0.27.0
+numpy                     >= 1.21.0
 nonebot-plugin-htmlrender >= 0.3.0
 nonebot-plugin-alconna    >= 0.50.0
 nonebot-plugin-apscheduler>= 0.4.0
 nonebot-plugin-uninfo     >= 0.7.0
 ```
+
+> **语义检索（可选）**：配置 `SILICONFLOW_API_KEY` + `pip install numpy`，然后运行 `py tools/build_embeddings.py all` 生成向量库。
+> 未配置时自动降级为原有随机/全量注入行为，不影响正常对话。
 
 ---
 

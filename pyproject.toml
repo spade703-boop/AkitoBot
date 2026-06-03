@@ -11,6 +11,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "Pillow>=10.0.0",
     "aiohttp>=3.9.0",
+    "numpy>=1.21.0",
     "nonebot-plugin-htmlrender>=0.3.0",
     "nonebot-plugin-alconna>=0.50.0",
     "nonebot-plugin-apscheduler>=0.4.0",
@@ -78,6 +79,7 @@ force-sort-within-sections = true
 "tests/test_time_awareness.py" = ["E402"]  # 导入依赖 conftest.py 的 mock 初始化
 "tests/*.py" = ["SIM117"]                   # 嵌套 with mock.patch 是可接受的测试写法
 "**/__init__.py" = ["E402", "F401", "I001"] # NoneBot 插件需在元数据后做副作用导入、按依赖顺序再导出，不参与自动排序
+"tools/*.py" = ["T201"]                     # CLI 工具允许 print
 
 [tool.ruff.format]
 quote-style = "double"
