@@ -231,6 +231,46 @@ def get_sleep_buffer_buff(hour: int, minute: int) -> str:
     return base
 
 
+# 彰冬同框时段：VBS 团队活动 / 共同行程，冬弥默认在场或近在身边
+_TOYA_COPRESENT_PERIODS = {"lunch_weekday", "evening", "night_training"}
+
+# routine→冬弥 位置推断的 IF-THEN 参考（并入自原 reactions.py 的 toya_radar 模板）
+_TOYA_REASONING = (
+    "推断参考：练习/团队活动→冬弥和你在一起或刚分开/在赶来路上；上课/在校→冬弥在隔壁班(2-B)，"
+    "可能值日、去洗手间或被叫去帮忙；逛街买衣服→冬弥在旁边帮你提袋，或你在帮他挑；吃松饼/在咖啡店"
+    "→冬弥在对面；晨跑→冬弥跟在后面，或你在想他昨晚发的消息；在家/睡前→冬弥刚发完晚安，或你在想他。"
+)
+
+
+def get_toya_anchor() -> str:
+    """据当前缓存的 routine 推断冬弥此刻的合理位置，返回 Prompt 片段；无缓存返回空串。
+
+    并入自原 ``冬弥呢`` 指令（toya_radar 模板）的位置推断逻辑，使主对话引擎也具备
+    routine 锚定的冬弥去向推理 + 跨轮连贯锁。WL2 决裂世界线由调用方门控跳过。
+    依赖调用方已先调用 ``get_daily_activity`` 使 ``AKITO_STATUS`` 缓存为热。
+    """
+    cached = AKITO_STATUS.get("cached_content", "")
+    status = cached.get("status", cached) if isinstance(cached, dict) else cached
+    key = AKITO_STATUS.get("current_key", "")
+    if not status:
+        return ""
+    status = str(status)
+
+    if "冬弥" in status:
+        line = f"此刻冬弥就和你在一起（当前：{status}）。"
+    elif key in _TOYA_COPRESENT_PERIODS:
+        line = f"现在是 VBS 团队活动 / 共同行程时段，冬弥就和你在同一场所或近在身边（当前：{status}）。"
+    else:
+        line = f"当前：{status} 请据此把冬弥放在与当前情境自洽的位置。"
+
+    return (
+        f"\n🧭【冬弥此刻】{line}\n{_TOYA_REASONING}\n"
+        "约束：冬弥必须和你在同一场景或与当前活动直接相关；理由要轻松日常（买水/帮忙/听歌等），"
+        "禁止编造无关支线（如无端跑去喝咖啡，除非你正好在咖啡店），禁止升学/退学/生重病等沉重话题。\n"
+        "（连贯锁）本轮对话里你已说过冬弥在做什么/在哪，就必须前后一致——换措辞可以，事实不能自相矛盾。"
+    )
+
+
 def parse_duration_and_content(raw_text: str) -> tuple[int, str]:
     """解析「<数字><单位> <内容>」为 (秒数, 内容)；无匹配返回 (600, 原文)。单位 s/h/d，缺省按分钟。"""
     match = re.match(r"^(\d+)\s*([a-zA-Z]*)\s+(.*)", raw_text, re.DOTALL)

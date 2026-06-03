@@ -44,6 +44,7 @@ from ..core import (
     get_relevant_pjsk,
     get_sleep_buffer_buff,
     get_song_memories,
+    get_toya_anchor,
     get_user_memory,
     grant_safety_pass,
     record_bot_response,
@@ -253,7 +254,8 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage(), raw_messa
         unique_key = get_memory_key(event)
         user_mem = get_user_memory(unique_key)
 
-        if any(item.get("id") == "WL2" for item in user_mem.get("temp_implants", [])):
+        is_wl2 = any(item.get("id") == "WL2" for item in user_mem.get("temp_implants", []))
+        if is_wl2:
             if 0 <= hour_24 < 6: time_key = "late_night"
             elif 6 <= hour_24 < 12: time_key = "morning"
             elif 12 <= hour_24 < 14: time_key = "noon"
@@ -357,6 +359,8 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage(), raw_messa
         # --- 7. 导演骰子 ---
         toya_keywords = ["冬弥", "toya", "Toya", "搭档", "青柳"]
         is_toya_context = any(k in plain_text_content for k in toya_keywords) or is_talking_to_toya
+        # 涉冬弥话题：注入 routine 锚定的冬弥去向推断 + 连贯锁（WL2 决裂世界线跳过，避免冒同框糖）
+        toya_anchor = get_toya_anchor() if (is_toya_context and not is_wl2) else ""
 
         # 仅用于 acting_guide 语气调节，不触发实际搜索
         info_keywords = ["搜", "查", "是什么", "谁是", "天气", "新闻", "多少钱", "查询", "我想知道"]
@@ -373,29 +377,17 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage(), raw_messa
         if is_info_request:
             acting_guide = PROMPTS_DB.get("reliable_mode", "")
         elif is_toya_context:
-            # 位置推断模式：用 routine 推断冬弥在哪（短语 + 长度限制，避免普通"冬弥"提及误触发）
-            location_keywords = ["冬弥呢", "搭档呢", "冬弥在哪", "冬弥在干嘛", "冬弥去哪了"]
-            is_asking_toya_location = any(k in plain_text_content for k in location_keywords) and len(plain_text_content) < 20
+            # 冬弥去向锚定已由 toya_anchor 统一注入（见上）；此处只决定 CP 演技风格
+            directions = DIRECTOR_DB.get("toya_directions", [])
+            selected = random.choice(directions) if directions else "侧重动作控制"
 
-            if is_asking_toya_location:
-                default_loc_guide = (
-                    "🎯【冬弥位置推断模式】：用户在问冬弥现在在哪里/在干什么。"
-                    "**你必须完全基于你自己当前的【生物钟状态】来推断冬弥最可能的位置和状态。**"
-                    "你的答案必须在逻辑上与你当前正在做的事保持一致，不能自相矛盾。"
-                    "（例如：你刚洗完澡在家，就不能说冬弥在外面走了；你在练歌房，冬弥应该也在附近或者路上。）"
-                )
-                acting_guide = PROMPTS_DB.get("toya_location_guide", default_loc_guide)
+            if is_physical_or_drama:
+                template = PROMPTS_DB.get("toya_high_tension_guide", "风格：{selected}。")
+                acting_guide = template.replace("{selected}", selected)
             else:
-                directions = DIRECTOR_DB.get("toya_directions", [])
-                selected = random.choice(directions) if directions else "侧重动作控制"
-
-                if is_physical_or_drama:
-                    template = PROMPTS_DB.get("toya_high_tension_guide", "风格：{selected}。")
+                if random.random() < 0.85:
+                    template = PROMPTS_DB.get("toya_acting_guide", "风格：{selected}。")
                     acting_guide = template.replace("{selected}", selected)
-                else:
-                    if random.random() < 0.85:
-                        template = PROMPTS_DB.get("toya_acting_guide", "风格：{selected}。")
-                        acting_guide = template.replace("{selected}", selected)
         elif _d.get("acting_guide"):
             acting_guide = _d["acting_guide"]
 
@@ -414,6 +406,7 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage(), raw_messa
         # 1. 物理现实与环境
         - 当前系统时间：{current_time}
         - 你的生物钟状态：{daily_status}
+        {toya_anchor}
         {time_gap_awareness}
         - 今日特殊日历：{festival_buff}
         {morning_run_buff}

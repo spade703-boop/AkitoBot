@@ -25,7 +25,7 @@ nonebot_plugin_akito/
 │   ├── __init__.py
 │   ├── chat.py               # 主对话引擎（ReAct Agent 循环 + Python 端 MVVM 排版）
 │   ├── commands.py           # 记忆管理指令（查看/植入/清除/遗忘/重置/热更新）
-│   └── reactions.py          # 被动反应（冬弥雷达 / 戳一戳 / 深夜自言自语）
+│   └── reactions.py          # 被动反应（戳一戳 / 深夜自言自语）
 └── features/                 # 独立功能模块
     ├── __init__.py
     ├── impression.py         # 群印象 + 随机插嘴（AutoChat）
@@ -198,6 +198,7 @@ AKITO_SAFE_UNTIL = time.time() + 10   # 无效！
 | `get_festival_buff(date_obj)` | 返回今日节日 Prompt 片段 |
 | `get_morning_run_buff(hour)` | 返回晨跑状态 Prompt（6 点整段生效） |
 | `get_sleep_buffer_buff(hour, minute)` | 返回睡前准备状态 Prompt（23:45-23:59 生效），若存在 `previous_context` 则自动注入前一时段的活动记忆 |
+| `get_toya_anchor()` | 据当前缓存 routine 推断冬弥此刻位置，返回 Prompt 片段（routine 文本含「冬弥」或处于同框时段 `night_training`/`evening`/`lunch_weekday` → 声明在场；否则给「与情境自洽 + 禁无关支线 + 禁沉重话题」推断规则）+ 跨轮连贯锁；无缓存返回空串。由 chat.py 在涉冬弥话题且非 WL2 时注入 |
 | `parse_duration_and_content(text)` | 解析 `"10m 下雨了"` → `(600, "下雨了")` |
 | `check_img_permission(group_id, category)` | 判断该群是否有某分类图库权限 |
 
@@ -284,7 +285,7 @@ AKITO_SAFE_UNTIL = time.time() + 10   # 无效！
 3. 并发保护        asyncio.Lock（per 会话键）防止同一会话并发
 4. 睡眠检测        check_sleep_status → 深夜可能忽略或返回睡觉提示
 5. Prompt 组装     人设 + 时间感知 + 临时记忆 + 关系链 + 搜索结果 +
-                   剧本示例 + 歌曲知识 + 导演骰子 + schema 格式指令
+                   剧本示例 + 歌曲知识 + 导演骰子 + 冬弥去向锚定(get_toya_anchor，涉冬弥且非WL2) + schema 格式指令
 6. ReAct Agent     见下方
 7. JSON 解析       提取 inner_os / action / dialogue；两层正则救援兜底
 8. 内联动作回收    action 为空时尝试从 dialogue 开头提取「(动作)」
@@ -355,11 +356,13 @@ LLM 输出三字段，Python 端决定最终格式：
 
 | 处理器 | 触发 | 说明 |
 |--------|------|------|
-| `toya_status_cmd` | "冬弥呢"等 5 个别名 | 结合当前 routine 生成冬弥位置描述；WL2 模式下切换为冷漠台词；每次**无条件调用 `get_daily_activity()`** |
 | `poke` | 戳一戳通知（PokeNotifyEvent） | 按时段返回反应；深夜 0-6 点返回睡觉提示；每次**无条件调用 `get_daily_activity()`** |
 | `self_monitor` | bot 自身发送消息事件（`message_sent`） | 深夜 0-6 点若未在安全期内，延迟 2-4s 发送自言自语（10s 冷却，超管**per-group** 30s 窗口抑制） |
 
-> ⚠️ **`poke` 和 `toya_status_cmd` 的 routine 获取**：必须无条件调用 `get_daily_activity(hour, weekday, minute)`，
+> ℹ️ **冬弥去向已收敛到主对话引擎**：原独立的 `冬弥呢` 指令（`toya_status_cmd` / `get_toya_location_reply` / `toya_radar` 模板）已移除；
+> routine 锚定的冬弥位置推断 + 连贯锁现由 `core.life_state.get_toya_anchor()` 提供、在 chat.py 涉冬弥话题时统一注入（用「小彰冬弥呢」触发）。
+
+> ⚠️ **`poke` 的 routine 获取**：必须无条件调用 `get_daily_activity(hour, weekday, minute)`，
 > 让其内部做时段校验和缓存更新。不能用 `if not cached_content` 跳过调用，
 > 否则上一时段的脏缓存会一直被复用（例如凌晨状态在白天继续出现）。
 
@@ -443,7 +446,7 @@ Galgame 级导演骰子，由 `chat.py` 调用 `build_director_note()`。
 | `开启WL2模式` | SUPERUSER_QQ | 注入 ID 为 `"WL2"` 的永久临时记忆（expire 2099 年） |
 | `关闭WL2模式` | SUPERUSER_QQ | 移除 ID 为 `"WL2"` 的 temp_implant |
 
-WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（冬弥雷达/戳一戳）。
+WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（戳一戳）、chat.py（`get_toya_anchor` 同框锚定门控跳过，避免与决裂世界线冲突）。
 
 ---
 
@@ -467,7 +470,7 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（冬弥雷
 | `content/akito_routine.json` | 每日状态日程（各时段 status + poke 字段） |
 | `content/wl2_routine.json` | WL2 世界线状态 |
 | `content/akito_sleep.json` | 睡眠场景文案（complaints / sleep_* 各场景） |
-| `content/akito_reactions.json` | 被动反应（behavior_seeds / fallback_poke） |
+| `content/akito_reactions.json` | 被动反应（旧 flat 布局兼容读取；`behavior_seeds` 已随冬弥雷达退役、`fallback_poke` 在 routine.json） |
 | `content/gallery_text.json` | 图库文案（save_img_replies / send_img_angles） |
 | `content/greetings.json` | 早晚安问候（morning / night） |
 | `content/akito_relationships.json` | 人物关系档案（keywords 白名单 + content） |
@@ -659,6 +662,8 @@ py tools/build_embeddings.py pjsk    # 仅 PJSK
 9. **handler 注册时机**：`on_command`/`on_message` 在模块被 import 时立即注册。`features/__init__.py` 中缺少某行 `from . import xxx`，对应功能会完全静默失效，不报任何错误。
 
 10. **渲染字体路径**：`random_paro.py` / `random_keyword.py` 用 `os.path.join(os.path.dirname(__file__), "msyhbd.ttc")` 定位字体，`msyhbd.ttc` 必须与模块同目录（`features/`）。
+
+11. **冬弥去向 = 当前 routine 派生 + 连贯锁，单一大脑收敛到 chat.py**：曾有两套「冬弥在哪」逻辑（reactions.py 的 `冬弥呢` 指令 + chat.py 的窄触发片段），推断规则重复且主对话路径无连贯锁，导致队友去向跨轮自相矛盾（如先说去买咖啡、再说请假）。现统一为 `core.life_state.get_toya_anchor()`：读当前缓存 routine（`get_daily_activity` 已置热），同框时段/文本含「冬弥」判定在场，否则给自洽推断规则，并恒附「本轮已述事实不得自相矛盾」连贯锁；chat.py 在涉冬弥话题且非 WL2 时注入到「物理现实」段。独立的 `冬弥呢` 指令与 `toya_radar.json` 已退役。
 
 ---
 

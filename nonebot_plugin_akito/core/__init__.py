@@ -80,7 +80,7 @@ from .life_state import (
     AKITO_STATUS, STATE_DURATION,
     grant_safety_pass, get_safe_until, get_last_complaint, set_last_complaint,
     get_daily_activity, check_sleep_status, get_festival_buff, get_morning_run_buff,
-    get_sleep_buffer_buff,
+    get_sleep_buffer_buff, get_toya_anchor,
     parse_duration_and_content, check_img_permission,
     is_sleeping, sleep_block,
 )
@@ -120,7 +120,7 @@ __all__ = [
     "AKITO_STATUS", "STATE_DURATION",
     "grant_safety_pass", "get_safe_until", "get_last_complaint", "set_last_complaint",
     "get_daily_activity", "check_sleep_status", "get_festival_buff", "get_morning_run_buff",
-    "get_sleep_buffer_buff", "parse_duration_and_content", "check_img_permission",
+    "get_sleep_buffer_buff", "get_toya_anchor", "parse_duration_and_content", "check_img_permission",
     "is_sleeping", "sleep_block",
     # api
     "call_deepseek_api", "call_deepseek_api_agent", "smart_search", "describe_image", "to_image_data", "embed_text",

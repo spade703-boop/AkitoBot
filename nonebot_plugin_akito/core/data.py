@@ -73,30 +73,22 @@ def _load_optional_json(filename: str) -> Any:
 
 SCRIPT_DB       = load_json_file("akito_scripts.json", [])
 
-# reactions 内容已拆分：gallery_text + greetings + 冬弥行为(behavior_seeds，在 toya_radar.json)；
+# reactions 内容已拆分：gallery_text + greetings；
 # fallback_poke 已移入 routine.json。akito_reactions.json 仅作旧 flat 布局兼容读取。
 REACTIONS_DEFAULTS = {
-    "behavior_seeds": ["冬弥在发呆"],
     "save_img_replies": {},
     "send_img_angles": ["语气切入点：随意的发言，像是随手丢过去的。"],
     "greetings": {"morning": ["早。"], "night": ["晚安。"]},
 }
 
 
-def _load_toya_radar() -> dict:
-    """冬弥雷达三件套（跨 DB）：toya_radar.json 含 behavior_seeds(→REACTIONS_DB) + toya_radar/toya_location_guide(→PROMPTS_DB)。"""
-    return _load_optional_json("toya_radar.json") or {}
-
-
 def _load_reactions() -> dict:
-    """合并加载 → 单一 REACTIONS_DB：gallery_text + greetings + toya_radar.behavior_seeds（akito_reactions.json 仅旧布局兼容）。"""
-    _tr = _load_toya_radar()
+    """合并加载 → 单一 REACTIONS_DB：gallery_text + greetings（akito_reactions.json 仅旧布局兼容）。"""
     return {
         **REACTIONS_DEFAULTS,
         **(_load_optional_json("akito_reactions.json") or {}),
         **(_load_optional_json("gallery_text.json") or {}),
         **(_load_optional_json("greetings.json") or {}),
-        **{k: _tr[k] for k in ("behavior_seeds",) if k in _tr},
     }
 
 
@@ -119,7 +111,6 @@ PROMPTS_DEFAULTS = {
     "reliable_mode": "", "cool_guy_filter": "",
     "toya_acting_guide": "风格：{selected}。",
     "toya_high_tension_guide": "风格：{selected}。",
-    "toya_radar": "", "toya_location_guide": "",
     "vitality_guide": "", "memory_capture_rule": "", "tone_limiter": "",
     "schema_inner_os": "你的真实心理活动。",
     "schema_action": "角色的肢体动作或微表情。没有时留空。",
@@ -130,13 +121,12 @@ PROMPTS_DEFAULTS = {
 
 
 def _load_prompts() -> dict:
-    """合并加载 → 单一 PROMPTS_DB：prompts_system + prompts_character + toya_radar 的雷达模板；都缺时回落旧单文件 akito_prompts.json。"""
+    """合并加载 → 单一 PROMPTS_DB：prompts_system + prompts_character；都缺时回落旧单文件 akito_prompts.json。"""
     _sys = _load_optional_json("prompts_system.json")
     _char = _load_optional_json("prompts_character.json")
-    _radar = {k: v for k, v in _load_toya_radar().items() if k in ("toya_radar", "toya_location_guide")}
-    if _sys is None and _char is None and not _radar:
+    if _sys is None and _char is None:
         return load_json_file("akito_prompts.json", PROMPTS_DEFAULTS)
-    return {**PROMPTS_DEFAULTS, **(_sys or {}), **(_char or {}), **_radar}
+    return {**PROMPTS_DEFAULTS, **(_sys or {}), **(_char or {})}
 
 
 PROMPTS_DB      = _load_prompts()

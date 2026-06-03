@@ -424,3 +424,45 @@ def test_safety_pass_sets_future_timestamp(patch_life_state_deps):
     with mock.patch("time.time", return_value=now):
         ls.grant_safety_pass(10)
         assert ls.get_safe_until() == now + 10
+
+
+# ── get_toya_anchor 测试 ───────────────────────────────────────────────────
+
+def test_toya_anchor_copresent_period(patch_life_state_deps):
+    """同框时段（night_training）+ 状态不含「冬弥」→ 声明 VBS 团队活动同框 + 禁咖啡 + 连贯锁。"""
+    ls = patch_life_state_deps
+    ls.AKITO_STATUS["current_key"] = "night_training"
+    ls.AKITO_STATUS["cached_content"] = {"status": "正在做核心力量训练。"}
+    result = ls.get_toya_anchor()
+    assert "VBS 团队活动" in result
+    assert "正在做核心力量训练" in result
+    assert "喝咖啡" in result        # 禁无关支线规则在场
+    assert "连贯锁" in result
+
+
+def test_toya_anchor_status_mentions_toya(patch_life_state_deps):
+    """routine 文本已含「冬弥」→ 明确同框（优先于时段判断）。"""
+    ls = patch_life_state_deps
+    ls.AKITO_STATUS["current_key"] = "noon_weekday"   # 非同框时段，但文本含冬弥应优先
+    ls.AKITO_STATUS["cached_content"] = {"status": "在楼梯口遇到了冬弥。"}
+    result = ls.get_toya_anchor()
+    assert "此刻冬弥就和你在一起" in result
+    assert "连贯锁" in result
+
+
+def test_toya_anchor_generic_period(patch_life_state_deps):
+    """普通时段 + 状态不含「冬弥」→ 走自洽推断规则，不声明同框在场。"""
+    ls = patch_life_state_deps
+    ls.AKITO_STATUS["current_key"] = "noon_weekday"
+    ls.AKITO_STATUS["cached_content"] = {"status": "在课堂上发呆。"}
+    result = ls.get_toya_anchor()
+    assert "与当前情境自洽" in result
+    assert "VBS 团队活动" not in result   # 非同框时段不应声明在场
+    assert "连贯锁" in result
+
+
+def test_toya_anchor_empty_cache_returns_empty(patch_life_state_deps):
+    """无缓存 routine → 返回空串，不污染 prompt。"""
+    ls = patch_life_state_deps
+    ls.AKITO_STATUS["cached_content"] = ""
+    assert ls.get_toya_anchor() == ""
