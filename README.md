@@ -185,6 +185,7 @@ akito_bot/
 ├── docs/PROJECT_SPEC.md            # 项目规范（编码 / 提交 / 安全）
 ├── tools/                          # 维护工具脚本
 │   ├── classify_scripts.py         # 剧本分类打标（home/story/noise）
+│   ├── enrich_scripts.py           # LLM 富集（生成 cn_key + category + topics，断点续跑）
 │   └── build_embeddings.py         # 语义向量库构建（scripts/pjsk/all）
 ├── tests/                          # 关键路径测试（pytest）
 ├── nonebot_plugin_akito/
@@ -238,8 +239,8 @@ akito_bot/
 | `akito_reactions.json` | 被动反应（行为种子 / 戳一戳兜底） |
 | `gallery_text.json` | 图库文案（存图回复 / 发图语气） |
 | `greetings.json` | 早晚安问候 |
-| `akito_scripts.json` | 台词剧本示例（含 `type` 字段，`home` 类参与语义检索） |
-| `scripts_embeddings.npz` | 剧本语义向量库（`tools/build_embeddings.py` 生成） |
+| `akito_scripts.json` | 台词剧本库（含 `type`/`category`/`topics`/`cn_key`/`context`/`dialogue`，检索键为 `cn_key`） |
+| `scripts_embeddings.npz` | 剧本语义向量库（`tools/build_embeddings.py` 生成，embed key=cn_key） |
 | `akito_songs.json` | 歌曲知识库 |
 | `akito_relationships.json` | 人物关系档案（含 `keywords` 白名单） |
 | `akito_director.json` | 导演骰子资产 |
@@ -296,8 +297,13 @@ nonebot-plugin-apscheduler>= 0.4.0
 nonebot-plugin-uninfo     >= 0.7.0
 ```
 
-> **语义检索（可选）**：配置 `SILICONFLOW_API_KEY` + `pip install numpy`，然后运行 `py tools/build_embeddings.py all` 生成向量库。
-> 未配置时自动降级为原有随机/全量注入行为，不影响正常对话。
+> **语义检索（可选）**：配置 `SILICONFLOW_API_KEY` + `pip install numpy`：
+> ```bash
+> py tools/classify_scripts.py --write --yes     # 首次：剧本打 type
+> py tools/enrich_scripts.py --write             # LLM 富集（cn_key + category + topics）
+> py tools/build_embeddings.py all               # 构建 .npz 向量库
+> ```
+> 未配置 key 时自动降级为原有随机/全量注入行为，不影响正常对话。
 
 ---
 

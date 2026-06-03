@@ -17,7 +17,7 @@
   count    (int)             — 源 DB 全量长度（用于加载时校验一致性）
 
 输出：
-  data/content/scripts_embeddings.npz  — 剧本（home + story，~2476 条；indices 为 SCRIPT_DB 原始位置）
+  data/content/scripts_embeddings.npz  — 剧本（home+story，~2476 条；embed key=cn_key，缺失回退 context）
   data/content/pjsk_embeddings.npz     — PJSK 黑话库
 """
 
@@ -82,24 +82,28 @@ def build(
     out_name: str,
     embed_key: str,
     client: OpenAI,
+    fallback_key: str | None = None,
 ) -> Path:
     """逐条 embed → 堆叠 → 存 .npz（indices=原始下标，count=全量长度）。
 
-    embed_key: "context"（剧本）或 "text"（PJSK）。
+    embed_key: "cn_key"（剧本 cn_key→context 兜底）/ "text"（PJSK）。
+    fallback_key: embed_key 取值为空时回退到此字段。
     """
     import numpy as np
 
     total = len(indexed_items)
     vectors = np.empty((total, 1024), dtype=np.float32)
     orig_indices = np.empty(total, dtype=np.int32)
-    print(f"🔨 开始构建 {out_name} ({total} 条)...")
+    print(f"🔨 开始构建 {out_name} ({total} 条, key={embed_key}" + (f" fallback={fallback_key})" if fallback_key else ")"))
 
     for row, (orig_i, entry) in enumerate(indexed_items):
         orig_indices[row] = orig_i
-        if embed_key == "context":
-            text = entry.get("context", "")
-        else:
+        if embed_key == "text":
             text = f"{entry.get('category', '')} {entry.get('text', '')}"
+        else:
+            text = entry.get(embed_key, "") or ""
+            if not text.strip() and fallback_key:
+                text = entry.get(fallback_key, "") or ""
         if not text.strip():
             text = "（空）"
         try:
@@ -141,7 +145,7 @@ def main() -> None:
 
     if target in ("scripts", "all"):
         items, full_len = load_scripts()
-        build(items, full_len, "scripts_embeddings.npz", embed_key="context", client=client)
+        build(items, full_len, "scripts_embeddings.npz", embed_key="cn_key", fallback_key="context", client=client)
 
     if target in ("pjsk", "all"):
         items, full_len = load_pjsk()

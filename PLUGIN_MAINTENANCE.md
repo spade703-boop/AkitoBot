@@ -472,9 +472,10 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（冬弥雷
 | `content/greetings.json` | 早晚安问候（morning / night） |
 | `content/akito_relationships.json` | 人物关系档案（keywords 白名单 + content） |
 | `content/akito_songs.json` | 歌曲背景知识（song_name / description / keywords） |
-| `content/akito_scripts.json` | 台词剧本库（每条含 `type` 字段: `home`/`story`/`noise`，检索仅用 `home`） |
+| `content/akito_scripts.json` | 台词剧本库（每条含 `type`/`category`/`topics`/`cn_key`/`context`/`dialogue`；检索 key 为 `cn_key`，缺失回退 `context`） |
 | `content/pjsk_knowledge.json` | PJSK 黑话知识库（`introduction` + `knowledge_list` → `PJSK_INTRO` + `PJSK_ENTRIES`） |
-| `content/scripts_embeddings.npz` | 剧本语义向量库（`tools/build_embeddings.py` 生成，gitignore） |
+| `content/scripts_embeddings.npz` | 剧本语义向量库（`tools/build_embeddings.py` 生成；embed key=`cn_key`，gitignore） |
+| `content/pjsk_embeddings.npz` | PJSK 语义向量库（`tools/build_embeddings.py` 生成，gitignore） |
 | `content/pjsk_embeddings.npz` | PJSK 语义向量库（`tools/build_embeddings.py` 生成，gitignore） |
 | `content/akito_director.json` | 导演骰子资产（toya_directions / dynamic_lexicon） |
 
@@ -522,6 +523,83 @@ py tools/build_embeddings.py pjsk    # 仅 PJSK
 生成的 `data/content/*_embeddings.npz` 不纳入 Git（已在 `/data` gitignore）。服务器端部署：本地建好 `.npz` 上传到服务器 `data/content/` 目录，或服务器上直接运行 build 工具。
 
 **向后兼容**：若无 `.npz` 文件或未配置 `SILICONFLOW_API_KEY`，bot 自动降级为原有静态/随机行为，不影响正常对话。
+
+### 维护剧本语料（`akito_scripts.json`）
+
+#### Schema（每条一个对象）
+
+```json
+{
+  "type":     "home | story | noise",
+  "category": "冬弥·彰冬 | VBS伙伴 | VBS虚拟歌手 | 跨团客串 | 其他NPC·路人 | 彰人独白 | 家园·对事件 | 家园·对物品 | 家园·对人&共度 | 其它",
+  "topics":   ["音乐·演出", "情绪·内心", ...],
+  "cn_key":   "一句中文情境概括（15–30 字），embed 检索键",
+  "context":  "前文（日文原文不动）",
+  "dialogue": "彰人台词（日文原文不动）"
+}
+```
+
+- **检索只看 `cn_key`**（runtime 注入仍是原文 `context` + `dialogue`）——中文键消除 home↔story 的语言鸿沟。
+- home 的 `cn_key` 自动复用 `context`（本来就是中文概览），无需手动填。
+- `category`/`topics` 仅供人工组织浏览和横切筛选，**不参与运行时检索**。
+
+#### Category 闭集（10 类，按优先级）
+
+| 优先级 | 类别 | 含义 |
+|--------|------|------|
+| 1 | 冬弥·彰冬 | 与青柳冬弥的互动、提及冬弥、或他人对彰冬关系的看法 |
+| 2 | VBS伙伴 | 与小豆沢こはね（心羽）、白石杏（アン）的互动 |
+| 3 | VBS虚拟歌手 | 与初音ミク、镜音リン、镜音レン、巡音ルカ、MEIKO、KAITO 的互动（VBS SEKAI 内常驻） |
+| 4 | 跨团客串 | 与 Leo/need、MMJ、W×S、25時 各团可养成角色的互动（含彰人姐姐东云绘名） |
+| 5 | 其他NPC·路人 | 与白石谦、古柳大河、凪、远野新等传奇/对手，或社长、店员、路人等 |
+| 6 | 彰人独白 | 无特定他人、纯彰人内心独白或旁白 |
+| 7 | 家园·对事件 | 家园系统：对某事件/状况的看法 |
+| 8 | 家园·对物品 | 家园系统：对家具/物品的看法 |
+| 9 | 家园·对人&共度 | 家园系统：对某人的看法 & 与某人共度的经历回忆 |
+| 10 | 其它 | 兜底 |
+
+#### Topics 标签（9 类，多选）
+
+| 标签 | 含义 |
+|------|------|
+| 音乐·演出 | 唱歌、表演、LIVE、舞台 |
+| 街头·比赛 | 街头表演、RAD WEEKEND、竞赛对抗 |
+| 练习·努力·信念 | 练习、排练、坚持、梦想 |
+| 过去·RAD WEEKEND | RAD WEEKEND 历史、谦/大河/凪的过去 |
+| 情绪·内心 | 心境、烦恼、孤独、喜悦、反思 |
+| 怕狗 | 狗/怕狗/犬相关 |
+| 足球·过去 | 足球、棒球等运动或过去经历 |
+| 游戏黑话·抽卡 | PJSK 游戏机制、抽卡、打歌黑话 |
+| 其它话题 | 兜底 |
+
+#### 可养成角色花名册（26 人）
+
+| 归属 | 成员 |
+|------|------|
+| 冬弥·彰冬 | 青柳冬弥（トウヤ） |
+| VBS伙伴 | 小豆沢こはね、白石杏（アン） |
+| VBS虚拟歌手 | 初音ミク、镜音リン、镜音レン、巡音ルカ、MEIKO、KAITO |
+| 跨团客串 | Leo/need：星乃一歌、天马咲希、望月穗波、日野森志步<br>MMJ：花里实乃理、桐谷遥、桃井爱莉、日野森雫<br>W×S：天马司、凤えむ、草薙寧々、神代类<br>25時：宵崎奏、朝比奈まふゆ、东云绘名(=彰人姐姐)、晓山瑞希 |
+| 其他NPC·路人 | 26 人外的任何人物（白石谦、古柳大河、凪、远野新、社长、店员、路人等） |
+
+#### 加新剧本内容的工作流
+
+1. **编辑** `data/content/akito_scripts.json`，在数组中追加条目。必填 `type`（home/story）、`context`（日文前文）、`dialogue`（彰人台词）。`category`/`topics`/`cn_key` 留空。
+2. **分类打标**（仅首次/大量改）：
+   ```bash
+   py tools/classify_scripts.py --write --yes
+   ```
+3. **LLM 富集**（补 category/topics/cn_key，断点续跑）：
+   ```bash
+   py tools/enrich_scripts.py --write
+   ```
+4. **重建向量库**（embed key=cn_key）：
+   ```bash
+   py tools/build_embeddings.py scripts
+   ```
+5. 上传 `.npz` → `重载配置 assets`（或重启）。
+
+> ⚠️ `.env` 需要 `DEEPSEEK_API_KEY`（富集用）和 `SILICONFLOW_API_KEY`（embed 用）。缺少任一 key 则跳过对应步骤，bot 自动降级。
 
 ### 新增歌曲知识
 在 `data/akito_songs.json` 追加一个 key：
