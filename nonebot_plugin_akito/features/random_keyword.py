@@ -394,3 +394,15 @@ async def _(event: Event, args: Message = CommandArg()):
         del categories[cat_name]
     _save_pool()
     await del_cmd.finish(f"已从「{cat_name}」分类中删除「{match}」。")
+
+# ==================== 重置关键词 CD ====================
+
+reset_cmd = on_command("重置关键词", priority=5, block=True)
+
+
+@reset_cmd.handle()
+async def _(event: Event):
+    if str(event.get_user_id()) != SUPERUSER_QQ:
+        return
+    _save_draws({})
+    await reset_cmd.finish("已重置所有人的今日关键词抽取记录。")
