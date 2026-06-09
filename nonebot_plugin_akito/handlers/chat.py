@@ -47,6 +47,7 @@ from ..core import (
     get_toya_anchor,
     get_user_memory,
     grant_safety_pass,
+    record_bot_message,
     record_bot_response,
     save_memory,
     smart_search,
@@ -670,6 +671,7 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage(), raw_messa
             AKITO_STATUS.setdefault("last_superuser_trigger_time", {})[str(group_id)] = time.time()
         if group_id:
             record_bot_response(group_id)
+            record_bot_message(group_id, result, str(bot.self_id))
         base_delay = random.uniform(0.8, 2.5)
         typing_delay = min(len(result) * 0.12, 5.0)
         await asyncio.sleep(base_delay + typing_delay)

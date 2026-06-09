@@ -122,3 +122,23 @@ def get_group_context(group_id: str, limit: int = 20) -> str:
     except Exception as e:
         logger.warning(f"⚠️ 读取群上下文失败: {e}")
         return ""
+
+
+def record_bot_message(group_id: str, content: str, bot_qq: str = "") -> None:
+    """把 bot 自己的回复写入共享 SQLite 群日志（nickname 统一为「东云彰人」）。
+
+    供 get_group_context 跨引擎读取——主动对话与随机插嘴据此互相「看见」对方说过的话。
+    """
+    if not content or not content.strip():
+        return
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO messages (group_id, user_id, nickname, content) VALUES (?, ?, ?, ?)",
+            (str(group_id), str(bot_qq), "东云彰人", content),
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.error(f"❌ 记录 bot 回复到群日志失败: {e}")

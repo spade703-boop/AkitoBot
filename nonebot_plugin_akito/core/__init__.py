@@ -68,7 +68,7 @@ if _raw_img.strip():
 from .memory import (
     MEMORY_DB, load_memory, save_memory,
     get_memory_key, get_user_memory,
-    get_group_context,
+    get_group_context, record_bot_message,
 )
 from .data import (
     load_json_file, load_prompt_template, reload_assets, find_data_path,
@@ -110,7 +110,7 @@ __all__ = [
     "GROUP_IMAGE_PERMISSIONS",
     # memory
     "MEMORY_DB", "load_memory", "save_memory", "get_memory_key", "get_user_memory",
-    "get_group_context",
+    "get_group_context", "record_bot_message",
     # data
     "load_json_file", "load_prompt_template", "reload_assets", "find_data_path",
     "SCRIPT_DB", "REACTIONS_DB", "PROMPTS_DB", "DIRECTOR_DB",
