@@ -16,13 +16,14 @@ from nonebot.log import logger
 from ..core import (
     ALLOWED_CP_GROUPS,
     DB_PATH,
-    PJSK_KNOWLEDGE_BASE,
     PROMPTS_DB,
     RELATIONSHIP_DATA,
     TZ_CN,
     client,
     get_base_persona,
     get_group_context,
+    get_relevant_examples,
+    get_relevant_pjsk,
     get_safe_until,
     get_user_memory,
     is_sleeping,
@@ -268,6 +269,12 @@ async def _(bot: Bot, event: GroupMessageEvent):
     group_context = get_group_context(str(event.group_id), limit=50)
     current_user_name = event.sender.card or event.sender.nickname
 
+    # 语义检索：相关剧本样本 + 相关 PJSK（与主聊天一致；get_relevant_examples 内含 query 扩散）
+    script_examples, pjsk_block = await asyncio.gather(
+        get_relevant_examples(msg, 5),
+        get_relevant_pjsk(msg, 6),
+    )
+
     # 本地关键词白名单扫描
     relation_info = ""
     if RELATIONSHIP_DATA:
@@ -336,8 +343,9 @@ async def _(bot: Bot, event: GroupMessageEvent):
     【场景】{scene_desc}
     【群聊上下文】\n{group_context}
     【人际资料】{relation_info}
-
-    {PJSK_KNOWLEDGE_BASE}
+    {script_examples}
+    🎮【PJSK 世界观/黑话库】：
+    {pjsk_block}
     {cool_guy_filter}
 
     【任务目标与回复逻辑 (极其重要)】
