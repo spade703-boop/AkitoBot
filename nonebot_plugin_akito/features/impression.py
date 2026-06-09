@@ -21,13 +21,16 @@ from ..core import (
     TZ_CN,
     client,
     get_base_persona,
+    get_daily_activity,
     get_group_context,
     get_relevant_examples,
     get_relevant_pjsk,
     get_safe_until,
+    get_toya_anchor,
     get_user_memory,
     is_sleeping,
     load_prompt_template,
+    record_bot_message,
 )
 
 # ================= 配置区域 =================
@@ -59,18 +62,8 @@ async def is_in_auto_group(event: GroupMessageEvent) -> bool:
     return event.group_id in AUTO_CHAT_GROUPS
 
 def save_my_response(group_id: str, bot_qq: str, content: str) -> None:
-    """将 bot 自己的回复写入 SQLite 消息表，供后续群上下文与印象生成。"""
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO messages (group_id, user_id, nickname, content) VALUES (?, ?, ?, ?)",
-            (group_id, bot_qq, "东云彰人", content)
-        )
-        conn.commit()
-        conn.close()
-    except Exception as e:
-        logger.error(f"保存Bot回复失败: {e}")
+    """将 bot 自己的回复写入 SQLite 群日志（转调 core.record_bot_message，单一真相源）。"""
+    record_bot_message(group_id, content, bot_qq)
 
 # ================= 功能 1：默默记录群聊 =================
 recorder = on_message(priority=1, block=False)
@@ -313,6 +306,12 @@ async def _(bot: Bot, event: GroupMessageEvent):
             persona += "\n" + wl2_text
         persona += "\n🎬【导演附加指导】：请基于上述 WL2 设定进行潜水判断。你不关心群友的状态，回复可以体现一些冷漠和距离感。"
 
+    # 涉冬弥话题：注入 routine 锚定的冬弥去向 + 连贯锁（与主对话一致；WL2 决裂线跳过）
+    toya_anchor = ""
+    if any(k in msg for k in ("冬弥", "toya", "Toya", "搭档", "青柳")) and not is_wl2_active:
+        get_daily_activity(now.hour, now.weekday(), now.minute)  # 预热 routine 缓存
+        toya_anchor = get_toya_anchor()
+
     BOT_NAMES = ["小彰", "彰人", "东云彰人"]
     is_directed_at_bot = any(name in msg for name in BOT_NAMES)
 
@@ -339,7 +338,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
     【系统级绝对指令：潜水思维链与格式强制】
     {persona}
     【系统物理时间】当前时间是：{time_str}。绝对不可弄错时间。
-
+    {toya_anchor}
     【场景】{scene_desc}
     【群聊上下文】\n{group_context}
     【人际资料】{relation_info}
