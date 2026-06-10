@@ -1246,8 +1246,9 @@ def _render_personal_paro_card(user_id: str, display_name: str, user_stats: dict
     row_gap = 8
     section_gap = 12
     pair_tile_w = 150
-    pair_tile_h = 112
+    pair_tile_h = 92
     pair_gap = 12
+    fox_section_gap = 28
 
     font_title = _load_font(30)
     font_subtitle = _load_font(18)
@@ -1255,17 +1256,14 @@ def _render_personal_paro_card(user_id: str, display_name: str, user_stats: dict
     font_row = _load_font(20)
     font_value = _load_font(20)
     font_pair = _load_font(18)
+    font_name = _load_font(36)
+    name_text = display_name or f"用户{user_id}"
 
-    info_rows = [
-        {"left": "当前群名片", "right": display_name or f"用户{user_id}"},
-        {"left": "QQ", "right": user_id},
-    ]
     summary_rows = [
-        {"left": "历史抽取派生", "right": f"{user_stats['draw_count']}次"},
-        {"left": "历史做饭 + foxbun", "right": f"{user_stats['egg_count']}次"},
+        {"left": "累计抽取派生次数", "right": f"{user_stats['draw_count']}次"},
+        {"left": "累计抽到做饭的次数", "right": f"{user_stats['egg_count']}次"},
     ]
     prepared_sections = [
-        ("用户信息", _prepare_display_rows(info_rows)),
         ("累计记录", _prepare_display_rows(summary_rows)),
         (
             "抽到最多的彰人派生 TOP 3",
@@ -1296,11 +1294,11 @@ def _render_personal_paro_card(user_id: str, display_name: str, user_stats: dict
     pair_columns = max(1, (content_width + pair_gap) // (pair_tile_w + pair_gap))
     pair_row_count = (len(pair_items) + pair_columns - 1) // pair_columns if pair_items else 0
 
-    foxbun_image = _load_foxbun_image()
-    if foxbun_image:
-        foxbun_image = _resize_to_fit(foxbun_image, max_w=content_width, max_h=140)
+    foxbun_icon = _load_fox_stat_icon("foxbun")
+    foxbun_text = f"狐兔彩蛋：累计触发 {user_stats['foxbun_count']} 次。"
+    fox_line_height = max(56, (foxbun_icon.height if foxbun_icon else 0) + 8)
 
-    height = pad_y + 38 + 28
+    height = pad_y + 38 + 28 + 56
     for _section_title, rows in prepared_sections:
         height += 34
         for _row, _prefix_icon, _suffix_icons, row_height in rows:
@@ -1314,11 +1312,7 @@ def _render_personal_paro_card(user_id: str, display_name: str, user_stats: dict
         height += 44
     height += section_gap
 
-    height += 34 + 32
-    if foxbun_image:
-        height += foxbun_image.height + 12
-    else:
-        height += 24
+    height += fox_section_gap + fox_line_height
     height += pad_y
 
     canvas = Image.new("RGB", (width, height), color="#ffffff")
@@ -1328,7 +1322,9 @@ def _render_personal_paro_card(user_id: str, display_name: str, user_stats: dict
     draw.text((width // 2, y), "我的派生", font=font_title, fill="#000000", anchor="ma")
     y += 38
     draw.text((width // 2, y), "当前群历史累计", font=font_subtitle, fill="#888888", anchor="ma")
-    y += 28
+    y += 34
+    draw.text((width // 2, y), name_text, font=font_name, fill="#111111", anchor="ma")
+    y += 50
 
     for section_title, rows in prepared_sections:
         draw.text((pad_x, y), section_title, font=font_section, fill="#333333", anchor="la")
@@ -1361,7 +1357,7 @@ def _render_personal_paro_card(user_id: str, display_name: str, user_stats: dict
             y += row_height + row_gap
         y += section_gap
 
-    draw.text((pad_x, y), "抽到过的所有派生组合", font=font_section, fill="#333333", anchor="la")
+    draw.text((pad_x, y), "你还没有做的派生饭……", font=font_section, fill="#333333", anchor="la")
     y += 34
     if pair_items:
         for index, item in enumerate(pair_items):
@@ -1375,35 +1371,29 @@ def _render_personal_paro_card(user_id: str, display_name: str, user_stats: dict
                 outline="#dddddd",
                 width=1,
             )
-            thumb = _build_pair_thumb(item["akito_name"], item["toya_name"])
+            thumb = _build_pair_thumb(item["akito_name"], item["toya_name"], size=60)
             thumb_x = tile_x + (pair_tile_w - thumb.width) // 2
             canvas.paste(thumb, (thumb_x, tile_y + 10))
-
-            pair_label = f"{item['akito_name']}×{item['toya_name']}" if item["toya_name"] else item["akito_name"]
-            pair_label = _truncate_text(pair_label, font_pair, pair_tile_w - 16)
-            draw.text((tile_x + pair_tile_w // 2, tile_y + 74), pair_label, font=font_pair, fill="#333333", anchor="ma")
             draw.text(
-                (tile_x + pair_tile_w - 10, tile_y + 96),
+                (tile_x + 10, tile_y + pair_tile_h - 12),
                 f"x{item['count']}",
                 font=font_pair,
                 fill="#666666",
-                anchor="rm",
+                anchor="ld",
             )
         y += pair_row_count * pair_tile_h + max(0, pair_row_count - 1) * pair_gap
     else:
         draw.text((pad_x, y + 20), "暂无可见派生记录", font=font_row, fill="#888888", anchor="la")
         y += 44
-    y += section_gap
+    y += fox_section_gap
 
-    draw.text((pad_x, y), "foxbun 彩蛋", font=font_section, fill="#333333", anchor="la")
-    y += 34
-    draw.text((pad_x, y), f"累计触发 {user_stats['foxbun_count']} 次", font=font_row, fill="#333333", anchor="la")
-    y += 32
-    if foxbun_image:
-        foxbun_x = pad_x + (content_width - foxbun_image.width) // 2
-        canvas.paste(foxbun_image, (foxbun_x, y))
-    else:
-        draw.text((pad_x, y + 12), "暂无 foxbun 图片素材", font=font_subtitle, fill="#888888", anchor="la")
+    line_y = y + fox_line_height // 2
+    text_x = pad_x
+    if foxbun_icon:
+        icon_y = y + (fox_line_height - foxbun_icon.height) // 2
+        canvas.paste(foxbun_icon, (pad_x, icon_y))
+        text_x += foxbun_icon.width + 14
+    draw.text((text_x, line_y), foxbun_text, font=font_row, fill="#333333", anchor="lm")
 
     buf = io.BytesIO()
     canvas.save(buf, format="PNG")
@@ -1623,20 +1613,22 @@ def _build_personal_preview_image() -> bytes:
     _record_user_draw_stats(
         user_stats,
         results=[
-            ("Callboy彰人", "Callboy冬弥", True, None),
-            ("白骑士", "王子冬弥", False, None),
-            ("白骑士", "王子冬弥", False, None),
-            ("王子彰人", "白百合", False, None),
-            ("WL2彰人", "WL2冬弥", False, None),
-            ("Callboy彰人", "Callboy冬弥", False, None),
-            ("法师彰人", "青鸟", False, None),
-            ("白恶魔", "黑骑士", False, None),
-            ("白骑士", "黑骑士", False, None),
-            ("王子彰人", "白百合", False, None),
-            ("Callboy彰人", "Callboy冬弥", False, "foxbun"),
-            ("白骑士", "王子冬弥", False, "foxrabbit"),
-            ("Callboy彰人", "青鸟", False, None),
-            ("白恶魔", "WL2冬弥", False, None),
+            ("Callboy彰", "Callboy冬", True, None),
+            ("白骑", "王子冬", False, None),
+            ("白骑", "王子冬", False, None),
+            ("王子彰", "白百合", False, None),
+            ("WL2彰", "WL2冬", False, None),
+            ("Callboy彰", "Callboy冬", False, None),
+            ("法师彰", "青鸟", False, None),
+            ("白恶魔", "黑骑", False, None),
+            ("白骑", "黑骑", False, None),
+            ("王子彰", "白百合", False, None),
+            ("Callboy彰", "Callboy冬", False, "foxbun"),
+            ("白骑", "王子冬", False, "foxrabbit"),
+            ("向日葵彰", "向日葵冬", False, None),
+            ("野营彰", "野营冬", False, None),
+            ("模特彰", "模特冬", False, None),
+            ("厨子", "2星厨冬", False, None),
         ],
     )
     return _build_personal_paro_image_from_user_stats("10001", "测试群友甲甲甲甲", user_stats)
