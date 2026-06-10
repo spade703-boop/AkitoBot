@@ -3,7 +3,7 @@
 **角色**：东云彰人（初音未来：缤纷舞台 同人 AI，CP 立场：彰冬不拆不逆）  
 **框架**：NoneBot2 + OneBot V11  
 **AI 后端**：DeepSeek API / 智谱 GLM-4V（视觉）/ Tavily（搜索）  
-**文档更新**：2026-06-03
+**文档更新**：2026-06-10
 
 ---
 
@@ -45,11 +45,12 @@ nonebot_plugin_akito/
 ```
 core/__init__.py ←───────────────────────────────────────┐
      ↓  (常量定义 + 统一导出)                             │
-memory.py      (← __init__)                              │
-data.py        (无内部依赖)                               │
+memory.py      (← __init__, data)                        │
+data.py        (惰性 ← retrieval / features 热重载钩子)   │
 life_state.py  (← __init__, data)                        │ core/__init__.py
-api.py         (← __init__)                              │ 统一对外暴露所有符号
-context.py     (← data, api)                             │
+api.py         (← __init__；含 LLM JSON 提取/救援工具)    │ 统一对外暴露所有符号
+context.py     (← data, api, retrieval)                  │
+retrieval.py   (← __init__(np)；惰性 ← data, api)        │
 time_awareness.py (← __init__, data, life_state)         │
      └────────────────────────────────────────────────── ┘
                            ↓
@@ -98,8 +99,8 @@ TOYA_QQ_ID=987654321      # 冬弥本人的 QQ，影响 CP 模式触发
 | `ZHIPU_API_KEY` | `.env` | 智谱 GLM 密钥 |
 | `SILICONFLOW_API_KEY` | `.env` | SiliconFlow 密钥（BGE-M3 语义检索） |
 | `embedding_client` | — | SiliconFlow AsyncOpenAI 客户端（无 key 时为 None，检索自动降级） |
-| `SUPERUSER_QQ` | `.env` | 超级用户 QQ |
-| `TOYA_QQ_ID` | `.env` | 冬弥 QQ 号（CP 模式判断） |
+| `SUPERUSER_QQ` | `.env` | 超级用户 QQ（未配置则超管指令全部停用，启动时告警；代码内无兜底） |
+| `TOYA_QQ_ID` | `.env` | 冬弥 QQ 号（CP 模式判断；未配置则不识别冬弥本人，启动时告警；代码内无兜底） |
 | `client` | — | DeepSeek AsyncOpenAI 客户端 |
 | `vision_client` | — | 智谱 GLM 视觉客户端 |
 | `TZ_CN` | — | UTC+8（北京时间，用于 routine/睡眠判定） |
@@ -120,7 +121,7 @@ TOYA_QQ_ID=987654321      # 冬弥本人的 QQ，影响 CP 模式触发
 | `MEMORY_DB: dict` | 全部会话记忆的内存字典 |
 | `get_memory_key(event)` | 从 Event 生成 `group_xxx` 键（**按群而非按人**，群内所有用户共享记忆） |
 | `get_user_memory(key)` | 获取/初始化某会话的记忆字典 |
-| `save_memory()` | 原子写入（先写 .tmp 再 os.replace） |
+| `save_memory()` | 原子写入（先写 .tmp 再 os.replace；落点目录由 `data.get_data_dir()` 统一解析） |
 | `get_group_context(gid, limit)` | 从 SQLite 读取最近 N 条群聊上下文字符串（bot 消息去重上限 2 条） |
 
 **记忆结构**（每个 `group_xxx` 键下）：
@@ -151,12 +152,15 @@ TOYA_QQ_ID=987654321      # 冬弥本人的 QQ，影响 CP 模式触发
 | `WL2_ROUTINE` | `wl2_routine.json` | WL2 世界线状态 |
 | `SONG_DATA` | `akito_songs.json` | 歌曲背景知识 |
 | `RELATIONSHIP_DATA` | `akito_relationships.json` | 人物关系档案（含 `keywords` 白名单） |
-| `PJSK_KNOWLEDGE_BASE` | `pjsk_knowledge.json` | PJSK 黑话知识库（拼接为字符串，检索不可用时作为兜底全量注入） |
-| `PJSK_INTRO` | `pjsk_knowledge.json` 的 `introduction` | 语境锁前言（永远常驻，检索时始终在前） |
+| `PJSK_KNOWLEDGE_BASE` | `pjsk_knowledge.json` | PJSK 黑话知识库全文（str，热重载会重新赋值——消费方**必须**经 `get_pjsk_knowledge_base()` 在调用时读取，不可模块级导入旧引用） |
+| `PJSK_INTRO` | `pjsk_knowledge.json` 的 `introduction` | 语境锁前言（同上，经 `get_pjsk_intro()` 读取） |
 | `PJSK_ENTRIES` | `pjsk_knowledge.json` 的 `knowledge_list` 拍平 | 结构化条目列表 `list[dict]`，每条 `{"category": str, "text": str}`，供检索引擎使用 |
 
 **热更新**：`reload_assets()` 用 `.clear()` + `.update()` / `.extend()` 原地修改所有全局变量，
 已持有引用的模块无需重新 import，即时生效。通过 `重载配置 assets` 指令触发。
+
+**公共工具**：`find_data_path(filename)` 定位数据文件；`get_data_dir()` 返回写回文件的统一落点目录
+（memory / time_awareness 共用）；`get_pjsk_knowledge_base()` / `get_pjsk_intro()` 实时读取 PJSK 字符串（热重载安全）。
 
 > ⚠️ **`akito_prompts.json` 编辑注意**：文件内容为 JSON 字符串，值中不能出现裸 ASCII 双引号 `"`。
 > 需用 `\"` 转义，或改用中文书名号 `「」` 代替。否则加载失败时会静默回落到代码内默认值。
@@ -193,6 +197,7 @@ AKITO_SAFE_UNTIL = time.time() + 10   # 无效！
 
 | 函数 | 说明 |
 |------|------|
+| `compute_period_key(hour, weekday, minute=0)` | 计算 routine 时段 key 的**单一真相源**——`get_daily_activity` 与 `time_awareness` 均转调此函数，调整作息划分只需改这一处 |
 | `get_daily_activity(hour, weekday, minute=0)` | 返回当前时段状态字符串，内置 30 分钟缓存 + **时段变更自动清缓存**。时段划分：`late_night`(0-6)、`morning_*`(6-8)、`noon_*`(8-12)、`lunch_*`(12-13)、`afternoon_*`(13-15)、`evening`(15-18)、`night_training`(18-21)、`night_home`(21-23:29)、`sleep_buffer`(23:45-23:59)。**任何需要 routine 的地方都应无条件调用此函数**，不要在外部判断 cached_content 是否存在后跳过调用 |
 | `check_sleep_status(msg)` | 判断是否深夜并返回 `(should_ignore, instruction)` |
 | `get_festival_buff(date_obj)` | 返回今日节日 Prompt 片段 |
@@ -217,6 +222,8 @@ AKITO_SAFE_UNTIL = time.time() + 10   # 无效！
 | `describe_image(bytes)` | 智谱 GLM-4V 图片分析，返回结构化描述文本 |
 | `to_image_data(image)` | 从 AlcImage 获取原始字节（支持 raw/path/url 三种来源） |
 | `embed_text(text)` | BGE-M3 单条 embedding（SiliconFlow），返回 1024 维 float list；未配置 key / 失败返回 None，不抛异常 |
+| `extract_json_block(raw)` | 从 LLM 原始返回中提取最外层 `{...}` 片段；无匹配时原样返回（chat / impression 共用） |
+| `rescue_field(raw, *fields)` | 从残缺 JSON 中正则抠出第一个命中的字符串字段值；无匹配返回 None。可能返回空串，调用方需用 `is not None` 判断命中 |
 
 > `call_deepseek_api_agent` 专供 `chat.py` 的 ReAct 循环，其他调用方用 `call_deepseek_api`。
 
@@ -372,8 +379,9 @@ LLM 输出三字段，Python 端决定最终格式：
 
 ### impression.py
 
-> ℹ️ **孤岛现状**：该文件使用 `httpx` 直接调用 DeepSeek API，与 `core/api.py` 并行存在。
-> 行为正确，但日后如需统一，可将其 `httpx` 调用替换为 `call_deepseek_api`。
+> ℹ️ **已并轨**：该文件直接使用 `core` 的共享 `client`（AsyncOpenAI）调用 DeepSeek（带自定义温度/超时参数），
+> JSON 提取与救援也统一走 `core.api.extract_json_block` / `rescue_field`。
+> 仅 JSON schema 仍为两字段（`reply`，无 `action`），与 chat.py 的三字段不同（见风险九）。
 
 | 功能 | 说明 |
 |------|------|
@@ -402,6 +410,7 @@ Galgame 级导演骰子，由 `chat.py` 调用 `build_director_note()`。
 完全独立。管理三套新人审核名单，所有指令限 `ADMIN_GROUP_ID` 群使用。
 
 群组配置：`data/verify_config.json` → `{"TARGET_GROUP_ID": "...", "ADMIN_GROUP_ID": "..."}`
+（该文件必须存在且两个 key 齐全，否则审核系统整体静默停用并在启动日志告警——群号不在代码内兜底。）
 
 ### random_paro.py
 
@@ -478,7 +487,6 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（戳一戳
 | `content/akito_scripts.json` | 台词剧本库（每条含 `type`/`category`/`topics`/`cn_key`/`context`/`dialogue`；检索 key 为 `cn_key`，缺失回退 `context`） |
 | `content/pjsk_knowledge.json` | PJSK 黑话知识库（`introduction` + `knowledge_list` → `PJSK_INTRO` + `PJSK_ENTRIES`） |
 | `content/scripts_embeddings.npz` | 剧本语义向量库（`tools/build_embeddings.py` 生成；embed key=`cn_key`，gitignore） |
-| `content/pjsk_embeddings.npz` | PJSK 语义向量库（`tools/build_embeddings.py` 生成，gitignore） |
 | `content/pjsk_embeddings.npz` | PJSK 语义向量库（`tools/build_embeddings.py` 生成，gitignore） |
 | `content/akito_director.json` | 导演骰子资产（toya_directions / dynamic_lexicon） |
 
@@ -657,7 +665,7 @@ py tools/build_embeddings.py pjsk    # 仅 PJSK
 
 7. **JSON 历史记录格式**：chat.py 将 assistant 回复以 `{"inner_os": ..., "reply": ...}` 存入 history，但 system prompt 要求输出 `{"inner_os": ..., "action": ..., "dialogue": ...}`。读取历史时（time_awareness 压缩、复读检测等）需同时兼容 `reply` 和 `dialogue` 两个字段名。
 
-8. **`impression.py` 孤岛现状**：使用 `httpx` 直接调用 API，而非 `core/api.py` 封装。行为正确，但统一时需注意：impression 的 JSON schema 是两字段（`reply`，无 `action`），与 chat.py 的三字段格式不同，不能直接套用 chat.py 的解析逻辑。
+8. **`impression.py` 与 chat.py 的 schema 差异**：两者已共用 `core` 的 `client` 与 `core.api` 的 JSON 提取/救援工具，但 impression 的 JSON schema 是两字段（`reply`，无 `action`），chat.py 是三字段；救援字段集也不同（impression 只救 `reply`，chat 救 `dialogue`/`reply`），调用形态不能互换。
 
 9. **handler 注册时机**：`on_command`/`on_message` 在模块被 import 时立即注册。`features/__init__.py` 中缺少某行 `from . import xxx`，对应功能会完全静默失效，不报任何错误。
 
@@ -754,11 +762,11 @@ chat.py 存入 history 的 assistant 条目格式：
 
 ### 风险九：impression.py 的 JSON 格式与 chat.py 不同
 
-impression.py（群印象 + AutoChat）使用的 schema 是两字段：`{"inner_os": ..., "reply": ...}`，没有 `action` 字段。chat.py 是三字段。两个文件的 JSON 解析代码不能混用，impression 的救援正则也只认 `reply` 字段。
+impression.py（群印象 + AutoChat）使用的 schema 是两字段：`{"inner_os": ..., "reply": ...}`，没有 `action` 字段。chat.py 是三字段。两者虽共用 `core.api.extract_json_block` / `rescue_field` 工具，但救援字段集不同（chat 救 `dialogue`/`reply`，impression 只救 `reply`），解析后续的排版逻辑也完全不同，不能互相套用。
 
 ---
 
-### 风险十：routin 数据文件的字段结构
+### 风险十：routine 数据文件的字段结构
 
 `akito_routine.json` 中每个时段的条目必须包含 `status`（文本描述）和 `poke`（list，戳一戳反应词列表）两个字段。若新增条目时遗漏 `poke` 字段，`reactions.py` 的 poke handler 会回落到 `fallback_poke` 而不报错，但戳一戳的个性化反应会失效。
 

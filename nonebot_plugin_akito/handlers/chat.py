@@ -13,7 +13,7 @@ from nonebot.exception import FinishedException
 from nonebot.log import logger
 from nonebot.matcher import Matcher
 from nonebot.params import EventMessage
-from nonebot_plugin_alconna import Image, Reply, Text, UniMessage
+from nonebot_plugin_alconna import Image, Text, UniMessage
 from nonebot_plugin_htmlrender import md_to_pic
 
 from ..core import (
@@ -33,6 +33,7 @@ from ..core import (
     call_deepseek_api_agent,
     check_sleep_status,
     describe_image,
+    extract_json_block,
     get_base_persona,
     get_daily_activity,
     get_festival_buff,
@@ -49,6 +50,7 @@ from ..core import (
     grant_safety_pass,
     record_bot_message,
     record_bot_response,
+    rescue_field,
     save_memory,
     smart_search,
     to_image_data,
@@ -127,13 +129,6 @@ async def smart_finish(matcher: Matcher, result: str) -> None:
         await matcher.finish(result)
 
 
-async def get_uni_reply(reply: Reply, event: Event, bot: Bot) -> UniMessage:
-    """将被回复消息(Reply)转成 UniMessage，供后续解析引用内容。"""
-    if reply.msg is None: raise ValueError("回复为空")
-    if isinstance(reply.msg, str): return UniMessage([Text(reply.msg)])
-    elif isinstance(reply.msg, Message): return await UniMessage.generate(message=reply.msg, event=event, bot=bot)
-
-
 chat = on_message(rule=starts_with_trigger, priority=10, block=True)
 
 SESSION_LOCKS = {}
@@ -147,7 +142,7 @@ def get_session_lock(session_key: str) -> asyncio.Lock:
 
 
 @chat.handle()
-async def _(event: Event, bot: Bot, message: Message = EventMessage(), raw_message: Message = EventMessage()):
+async def _(event: Event, bot: Bot, message: Message = EventMessage()):
     session_key = get_memory_key(event)
     session_lock = get_session_lock(session_key)
 
@@ -233,9 +228,7 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage(), raw_messa
         if not plain_text_content and not current_image_identity:
             await chat.finish("干嘛……")
 
-        # --- 3. 时间 ---（搜索意图由 LLM 通过 Function Calling 自主决定，见第 9 步）
-        search_result = ""
-
+        # --- 3. 时间 ---
         now_time = datetime.datetime.now(TZ_CN)
         now_jst  = datetime.datetime.now(TZ_JST)
         hour_24 = now_time.hour
@@ -415,7 +408,6 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage(), raw_messa
 
         # 2. 动态情报栈
         {relationship_context}
-        {search_result}
 
         # 3. 社交上下文
         📜【群聊背景流】
@@ -477,7 +469,8 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage(), raw_messa
 
         messages_list.append({"role": "user", "content": tagged_user_msg_for_llm})
 
-        # --- 9. ReAct 智能体调用循环 ---
+        # --- 9. ReAct 智能体调用循环 ---（是否搜索由 LLM 通过 Function Calling 自主决定）
+        search_result = ""
         raw_result = ""
         if not has_image:
             agent_message = await call_deepseek_api_agent(messages_list, tools=AGENT_TOOLS)
@@ -525,10 +518,7 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage(), raw_messa
             raw_result = await call_deepseek_api(messages_list, force_json=True)
 
         result = ""
-        clean_json_str = raw_result
-        json_match = re.search(r'\{[\s\S]*\}', raw_result)
-        if json_match:
-            clean_json_str = json_match.group(0)
+        clean_json_str = extract_json_block(raw_result)
         inner_os = ""
         try:
             response_data = json.loads(clean_json_str)
@@ -585,9 +575,9 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage(), raw_messa
         except Exception as e:
             logger.warning(f"⚠️ 解析JSON失败 ({e}) | 原始返回: {raw_result}")
             # 正则救援：从截断/残缺 JSON 里直接抠出 dialogue/reply 的值
-            rescue = re.search(r'"(?:dialogue|reply)"\s*:\s*"((?:[^"\\]|\\.)*)"', raw_result)
-            if rescue:
-                result = rescue.group(1)
+            rescued = rescue_field(raw_result, "dialogue", "reply")
+            if rescued is not None:
+                result = rescued
                 logger.info(f"🔧 正则救援成功，提取到回复内容: {result[:60]}")
             else:
                 # 二次救援：key 名幻觉（模型把动作描写写成了 key 名）
@@ -646,10 +636,8 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage(), raw_messa
             )
             raw_result = await call_deepseek_api(messages_list, force_json=True)
             try:
-                json_match = re.search(r'\{[\s\S]*\}', raw_result)
-                if json_match:
-                    response_data = json.loads(json_match.group(0))
-                    result = response_data.get("dialogue", "") or response_data.get("reply", "") or raw_result
+                response_data = json.loads(extract_json_block(raw_result))
+                result = response_data.get("dialogue", "") or response_data.get("reply", "") or raw_result
             except Exception as e:
                 logger.warning(f"⚠️ JSON解析失败，使用原始回复: {e}")
                 result = raw_result

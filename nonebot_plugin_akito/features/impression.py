@@ -20,6 +20,7 @@ from ..core import (
     RELATIONSHIP_DATA,
     TZ_CN,
     client,
+    extract_json_block,
     get_base_persona,
     get_daily_activity,
     get_group_context,
@@ -31,6 +32,7 @@ from ..core import (
     is_sleeping,
     load_prompt_template,
     record_bot_message,
+    rescue_field,
 )
 
 # ================= 配置区域 =================
@@ -193,11 +195,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
         )
         raw_result = response.choices[0].message.content
         final_reply = ""
-
-        clean_json_str = raw_result
-        json_match = re.search(r'\{[\s\S]*\}', raw_result)
-        if json_match:
-            clean_json_str = json_match.group(0)
+        clean_json_str = extract_json_block(raw_result)
 
         try:
             response_data = json.loads(clean_json_str)
@@ -210,12 +208,13 @@ async def _(bot: Bot, event: GroupMessageEvent):
         except json.JSONDecodeError:
             logger.warning(f"⚠️ 评价系统未输出标准JSON: {raw_result[:120]}")
             # 救援①：broken JSON 中提取 reply 字段（内部引号未转义场景）
-            rescue = re.search(r'"reply"\s*:\s*"((?:[^"\\]|\\.)*)"', raw_result)
+            rescued = rescue_field(raw_result, "reply")
             # 救援②：模型输出纯文本 "reply：..." 格式
-            if not rescue:
-                rescue = re.search(r'reply\s*[：:]\s*(.+)', raw_result, re.DOTALL)
-            if rescue:
-                final_reply = rescue.group(1).strip().strip('"')
+            if rescued is None:
+                m = re.search(r'reply\s*[：:]\s*(.+)', raw_result, re.DOTALL)
+                rescued = m.group(1) if m else None
+            if rescued is not None:
+                final_reply = rescued.strip().strip('"')
                 logger.info(f"🔧 评价救援成功: {final_reply[:60]}")
             else:
                 final_reply = "（上下打量了你一下）……啧，没什么特别的印象。"
@@ -378,11 +377,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
 
         raw_result = response.choices[0].message.content
         reply = ""
-
-        clean_json_str = raw_result
-        json_match = re.search(r'\{[\s\S]*\}', raw_result)
-        if json_match:
-            clean_json_str = json_match.group(0)
+        clean_json_str = extract_json_block(raw_result)
 
         try:
             response_data = json.loads(clean_json_str)
@@ -401,12 +396,12 @@ async def _(bot: Bot, event: GroupMessageEvent):
         except json.JSONDecodeError:
             logger.warning(f"⚠️ 插嘴系统未输出标准JSON: {raw_result[:120]}")
             # 救援：提取 reply 字段（最常见原因：inner_os 内部引号未转义）
-            rescue_os = re.search(r'"inner_os"\s*:\s*"((?:[^"\\]|\\.)*)"', raw_result)
-            if rescue_os:
-                logger.info(f"💦【小彰潜水OS（救援）】: {rescue_os.group(1)[:80]}")
-            rescue = re.search(r'"reply"\s*:\s*"((?:[^"\\]|\\.)*)"', raw_result)
-            if rescue:
-                reply = rescue.group(1).strip()
+            rescued_os = rescue_field(raw_result, "inner_os")
+            if rescued_os:
+                logger.info(f"💦【小彰潜水OS（救援）】: {rescued_os[:80]}")
+            rescued = rescue_field(raw_result, "reply")
+            if rescued is not None:
+                reply = rescued.strip()
                 logger.info(f"🔧 插嘴救援成功，reply={repr(reply[:40])}")
                 # reply 为空 = 模型决定静默，走正常静默流程
             else:
@@ -427,5 +422,6 @@ async def _(bot: Bot, event: GroupMessageEvent):
         await random_chat.finish(reply_segment + reply)
     except FinishedException:
         raise
-    except Exception:
-        pass
+    except Exception as e:
+        # 随机插嘴是尽力而为的可选行为：失败只记日志，不打扰群聊
+        logger.debug(f"💦 随机插嘴流程异常，本次静默放弃: {e}")

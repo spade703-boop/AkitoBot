@@ -16,6 +16,7 @@
 | AI 对话 | DeepSeek API (`deepseek-v4-flash`) |
 | 图像识别 | 智谱 GLM-4V |
 | 网络搜索 | Tavily API |
+| 语义检索 | SiliconFlow BGE-M3 embedding + numpy（可选，未配置自动降级） |
 | 图像渲染 | Pillow + nonebot-plugin-htmlrender |
 | 持久化 | JSON 文件 + SQLite |
 | 定时任务 | APScheduler |
@@ -25,7 +26,7 @@
 
 ```
 nonebot_plugin_akito/
-├── core/         基础层：API 封装、数据加载、状态机、记忆、时间感知
+├── core/         基础层：API 封装、数据加载、状态机、记忆、时间感知、语义检索
 ├── handlers/     消息处理层：主对话引擎、管理指令、被动反应
 └── features/     独立功能模块：8 个（director 可安全删除，scheduled 为定时基础设施）
 ```
@@ -38,7 +39,8 @@ nonebot_plugin_akito/
 
 - `handlers/chat.py` 通过 `try/except` **惰性导入**可选功能 `features/director.py`，以保证该模块可被一键删除；
 - `core/data.py` 的 `reload_assets()` 惰性导入各 feature 的热重载钩子（注册式刷新，非启动期依赖）；
-- `features/random_paro.py`、`features/random_keyword.py`、`core/time_awareness.py` 直接引用 `core.data` 的共享内部工具 `_find_data_path` / `_DATA_SEARCH_DIRS`（后续可提升为公共 API 后再收敛）。
+- `core/retrieval.py` 与 `core/data.py` 互为惰性导入（函数内 import，规避循环依赖）；core 子模块之间允许直接引用兄弟模块的内部工具（如 `_DATA_SEARCH_DIRS`），不必经过包入口。
+  （历史例外已收敛：features 层现统一走公共 `find_data_path` / `get_data_dir`，不再直引 core 内部工具。）
 
 ---
 
@@ -58,7 +60,8 @@ gemini_bot/
 │   └── CLAUDE.md
 │
 ├── docs/                         # 项目文档
-│   └── PROJECT_SPEC.md           # 本规范文件
+│   ├── PROJECT_SPEC.md           # 本规范文件
+│   └── FEATURE_LOGIC.md          # 功能逻辑全解（维护者本地参考，已 gitignore 不入库）
 │
 ├── data/                         # 运行时数据（不可提交）
 │   ├── *.json                    # 人设/提示词/记忆/功能数据
@@ -69,6 +72,8 @@ gemini_bot/
 │   ├── conftest.py
 │   └── test_*.py
 │
+├── tools/                        # 维护工具脚本（剧本分类 / LLM 富集 / 向量库构建）
+│
 └── nonebot_plugin_akito/         # 主插件包
     ├── __init__.py               # 插件入口：元数据 + require() + 导入三大子包
     ├── core/                     # 基础层
@@ -78,6 +83,7 @@ gemini_bot/
     │   ├── data.py               # 数据加载 + 热重载
     │   ├── life_state.py         # 状态机
     │   ├── memory.py             # 记忆系统
+    │   ├── retrieval.py          # 语义检索引擎
     │   └── time_awareness.py     # 时间感知
     ├── handlers/                 # 消息处理层
     │   ├── chat.py               # 主对话引擎
@@ -91,7 +97,8 @@ gemini_bot/
         ├── random_keyword.py     # 今日关键词
         ├── random_paro.py        # 抽派生
         ├── scheduled.py          # 定时任务
-        └── verify.py             # 加群审核
+        ├── verify.py             # 加群审核
+        └── msyhbd.ttc            # 渲染字体（random_paro / random_keyword 共用）
 ```
 
 ---
@@ -169,7 +176,7 @@ from ..core import (
 
 项目 `pyproject.toml` 声明 `requires-python = ">=3.9"`。`Path | None` 等新式联合类型是 Python 3.10+ 语法，在 3.9 中运行时不可用。
 
-**本项目采用方案 A**：所有用到新式联合类型注解的模块（`core/data.py`、`features/gallery.py`、`features/random_paro.py`、`features/random_keyword.py`）均已在文件顶部添加 `from __future__ import annotations`，使注解延迟求值，因此 **3.9+ 均可正常运行**；生产 Docker 容器实际为 3.10+。
+**本项目采用方案 A**：所有用到新式联合类型注解的模块均需在文件顶部添加 `from __future__ import annotations`，使注解延迟求值，因此 **3.9+ 均可正常运行**；生产 Docker 容器实际为 3.10+。
 
 新增模块若使用 `X | None` 等写法，同样需在文件顶部添加 `from __future__ import annotations`。
 

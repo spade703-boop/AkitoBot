@@ -1,34 +1,25 @@
 """
-测试 JSON 提取逻辑 —— 验证 LLM 响应中 JSON 的正则提取 + json.loads 解析。
+测试 JSON 提取逻辑 —— 验证 LLM 响应中 JSON 的提取 + json.loads 解析 + 字段救援。
 
-覆盖 chat.py / reactions.py / impression.py 中重复出现的解析模式。
+直接测试 core/api.py 的 extract_json_block / rescue_field 真函数
+（chat.py 与 impression.py 共用的单一真相源），不再维护本地正则副本。
 """
 import json
-import re
 
-# ── 与源码一致的正则模式 ────────────────────────────────────────────────────
-
-JSON_EXTRACT_PATTERN = re.compile(r"\{[\s\S]*\}")
-RESCUE_PATTERN = re.compile(r'"(?:dialogue|reply)"\s*:\s*"((?:[^"\\]|\\.)*)"')
+from nonebot_plugin_akito.core.api import extract_json_block, rescue_field
 
 
 def extract_json(raw: str) -> dict | None:
-    """模拟源码中的 JSON 提取 + 解析逻辑。"""
-    match = JSON_EXTRACT_PATTERN.search(raw)
-    if match:
-        try:
-            return json.loads(match.group(0))
-        except json.JSONDecodeError:
-            pass
-    return None
+    """提取 JSON 块并解析；解析失败返回 None（与调用方的兜底语义一致）。"""
+    try:
+        return json.loads(extract_json_block(raw))
+    except json.JSONDecodeError:
+        return None
 
 
 def rescue_dialogue(raw: str) -> str | None:
-    """模拟源码中的正则救援逻辑。"""
-    rescue = RESCUE_PATTERN.search(raw)
-    if rescue:
-        return rescue.group(1)
-    return None
+    """dialogue / reply 字段救援（chat.py 的调用形态）。"""
+    return rescue_field(raw, "dialogue", "reply")
 
 
 # ── extract_json 测试 ──────────────────────────────────────────────────────

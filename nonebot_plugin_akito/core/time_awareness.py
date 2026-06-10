@@ -21,20 +21,16 @@ import time
 from nonebot.log import logger
 
 from . import TZ_CN
-from .data import _DATA_SEARCH_DIRS, DAILY_ROUTINE
-from .life_state import AKITO_STATUS
+from .data import DAILY_ROUTINE, get_data_dir
+from .life_state import AKITO_STATUS, compute_period_key
 
 # ── 持久化 ──────────────────────────────────────────────────────────────
 _FILENAME = "last_interactions.json"
 
 
 def _get_write_path() -> Path:
-    """找到第一个存在的数据目录，用于读写持久化文件。"""
-    for base in _DATA_SEARCH_DIRS:
-        p = Path(base)
-        if p.exists():
-            return p / _FILENAME
-    return Path("data") / _FILENAME
+    """定位持久化文件的读写路径（数据根目录由 core.data.get_data_dir 统一解析）。"""
+    return get_data_dir() / _FILENAME
 
 
 def _load() -> dict:
@@ -94,21 +90,9 @@ def _period_distance(past: str, current: str) -> int:
 
 
 def _current_period_key() -> str:
-    """根据当前时间返回 routine key（与 get_daily_activity 逻辑完全一致）。"""
+    """根据当前时间返回 routine key（转调 life_state.compute_period_key，时段划分单一真相源）。"""
     now = datetime.datetime.now(TZ_CN)
-    hour, minute, is_weekend = now.hour, now.minute, now.weekday() >= 5
-    if 0 <= hour < 6:     return "late_night"
-    elif 6 <= hour < 8:   return "morning_weekend" if is_weekend else "morning_weekday"
-    elif 8 <= hour < 12:  return "noon_weekend" if is_weekend else "noon_weekday"
-    elif 12 <= hour < 13: return "lunch_weekend" if is_weekend else "lunch_weekday"
-    elif 13 <= hour < 15: return "afternoon_weekend" if is_weekend else "afternoon_weekday"
-    elif 15 <= hour < 18: return "evening"
-    elif 18 <= hour < 21: return "night_training"
-    elif 21 <= hour < 24:
-        if hour == 23 and minute >= 45:
-            return "sleep_buffer"
-        return "night_home"
-    else:                 return "late_night"
+    return compute_period_key(now.hour, now.weekday(), now.minute)
 
 
 # ── 公共接口 ─────────────────────────────────────────────────────────────

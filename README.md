@@ -4,7 +4,7 @@
 
 - **CP 立场**：彰冬（不拆不逆）
 - **AI 后端**：DeepSeek API（对话）/ 智谱 GLM-4V（图片识别）/ Tavily（联网搜索）
-- **当前版本**：0.2.1
+- **当前版本**：0.3.1
 
 ---
 
@@ -20,7 +20,7 @@
 本项目用 `pyproject.toml` 声明依赖（无 `requirements.txt`），直接 pip 安装：
 
 ```bash
-pip install "nonebot2[fastapi]" nonebot-adapter-onebot openai python-dotenv Pillow aiohttp httpx \
+pip install "nonebot2[fastapi]" nonebot-adapter-onebot openai python-dotenv Pillow aiohttp \
             numpy nonebot-plugin-htmlrender nonebot-plugin-alconna nonebot-plugin-apscheduler nonebot-plugin-uninfo
 ```
 
@@ -196,6 +196,7 @@ akito_bot/
 │   │   ├── data.py                 # JSON 数据文件加载 & 热重载
 │   │   ├── life_state.py           # 状态机（routine / 睡眠 / 节日）
 │   │   ├── memory.py               # 长期记忆 & SQLite 群聊上下文
+│   │   ├── retrieval.py            # 语义检索引擎（BGE-M3 + 均值中心化）
 │   │   └── time_awareness.py       # 时间流逝感知
 │   ├── handlers/                   # 主处理层
 │   │   ├── chat.py                 # 主对话引擎（ReAct Agent）
@@ -235,7 +236,7 @@ akito_bot/
 |------|------|
 | `akito_routine.json` / `wl2_routine.json` | 各时段日常状态（`status` + `poke`） |
 | `akito_sleep.json` | 睡眠文案（梦话 / 抱怨 / 各场景睡眠反应） |
-| `akito_reactions.json` | 被动反应（行为种子 / 戳一戳兜底） |
+| `akito_reactions.json` | 被动反应（旧 flat 布局兼容保留；戳一戳兜底已移至 routine.json） |
 | `gallery_text.json` | 图库文案（存图回复 / 发图语气） |
 | `greetings.json` | 早晚安问候 |
 | `akito_scripts.json` | 台词剧本库（含 `type`/`category`/`topics`/`cn_key`/`context`/`dialogue`，检索键为 `cn_key`） |
@@ -288,7 +289,6 @@ openai                    >= 1.0.0
 python-dotenv             >= 1.0.0
 Pillow                    >= 10.0.0
 aiohttp                   >= 3.9.0
-httpx                     >= 0.27.0
 numpy                     >= 1.21.0
 nonebot-plugin-htmlrender >= 0.3.0
 nonebot-plugin-alconna    >= 0.50.0
