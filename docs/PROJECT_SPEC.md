@@ -429,7 +429,7 @@ def grant_safety_pass(seconds: int = 5):
 
 ### 13.2 Commit 格式
 
-- **格式**：`type: 中文描述`（Commit message 一律中文填写）
+- **格式**：`type: 中文描述`（Commit message 一律中文填写，后续维护统一遵守）
 - **类型**：
   - `feat` — 新功能
   - `fix` — Bug 修复

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime
 import io
 import json
 import os
@@ -17,9 +18,11 @@ from nonebot.log import logger
 from nonebot.params import CommandArg
 from PIL import Image, ImageDraw, ImageFont
 
-from ..core import ALLOWED_CHAT_GROUPS, IMAGE_BASE_PATH, SUPERUSER_QQ, find_data_path, get_data_dir, load_json_file
+from ..core import ALLOWED_CHAT_GROUPS, IMAGE_BASE_PATH, SUPERUSER_QQ, TZ_CN, find_data_path, get_data_dir, load_json_file
 
 DATA_FILE = "paro_pools.json"
+STATS_FILE = "paro_stats.json"
+EGG_LOG_FILE = "paro_egg_log.jsonl"
 DEFAULT_DATA = {"akito_pool": [], "toya_pool": []}
 
 PARO_DATA: dict = load_json_file(DATA_FILE, DEFAULT_DATA)
@@ -36,11 +39,171 @@ def _save():
     os.replace(tmp, path)
 
 
+def _stats_path() -> Path:
+    path = find_data_path(STATS_FILE)
+    if not path:
+        path = get_data_dir() / STATS_FILE
+    return path
+
+
+def _egg_log_path() -> Path:
+    path = find_data_path(EGG_LOG_FILE)
+    if not path:
+        path = get_data_dir() / EGG_LOG_FILE
+    return path
+
+
+def _new_period_stats(*, date: str | None = None) -> dict:
+    stats = {
+        "total_draws": 0,
+        "user_draw_counts": {},
+        "akito_hits": {},
+        "toya_hits": {},
+        "egg_user_counts": {},
+        "foxrabbit_total": 0,
+        "foxbun_total": 0,
+        "fox_total": 0,
+        "rabbit_total": 0,
+    }
+    if date is not None:
+        stats["date"] = date
+    return stats
+
+
+def _new_group_stats(today_str: str) -> dict:
+    return {
+        "profiles": {},
+        "daily": _new_period_stats(date=today_str),
+        "history": _new_period_stats(),
+    }
+
+
+def _new_stats_state() -> dict:
+    return {
+        "schema_version": 1,
+        "cooldowns": {},
+        "groups": {},
+    }
+
+
+def _safe_int(value, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _normalize_counter(raw: object) -> dict[str, int]:
+    if not isinstance(raw, dict):
+        return {}
+    normalized: dict[str, int] = {}
+    for key, value in raw.items():
+        count = _safe_int(value)
+        if count > 0:
+            normalized[str(key)] = count
+    return normalized
+
+
+def _normalize_period_stats(raw: object, *, date: str | None = None) -> dict:
+    stats = _new_period_stats(date=date)
+    if not isinstance(raw, dict):
+        return stats
+
+    if date is not None and isinstance(raw.get("date"), str):
+        stats["date"] = raw["date"]
+
+    stats["total_draws"] = max(0, _safe_int(raw.get("total_draws")))
+    for key in ("user_draw_counts", "akito_hits", "toya_hits", "egg_user_counts"):
+        stats[key] = _normalize_counter(raw.get(key))
+    for key in ("foxrabbit_total", "foxbun_total", "fox_total", "rabbit_total"):
+        stats[key] = max(0, _safe_int(raw.get(key)))
+    return stats
+
+
+def _normalize_group_stats(raw: object, today_str: str) -> dict:
+    stats = _new_group_stats(today_str)
+    if not isinstance(raw, dict):
+        return stats
+
+    if isinstance(raw.get("profiles"), dict):
+        stats["profiles"] = {
+            str(user_id): str(display_name)
+            for user_id, display_name in raw["profiles"].items()
+            if str(display_name).strip()
+        }
+    stats["daily"] = _normalize_period_stats(raw.get("daily"), date=today_str)
+    stats["history"] = _normalize_period_stats(raw.get("history"))
+    return stats
+
+
+def _load_stats() -> dict:
+    path = _stats_path()
+    if not path.exists():
+        return _new_stats_state()
+
+    try:
+        with open(path, encoding="utf-8") as f:
+            raw = json.load(f)
+    except Exception:
+        logger.warning(f"读取 {STATS_FILE} 失败，已重置派生统计数据")
+        return _new_stats_state()
+
+    today_str = datetime.now(TZ_CN).date().isoformat()
+    stats = _new_stats_state()
+    if isinstance(raw, dict):
+        stats["schema_version"] = _safe_int(raw.get("schema_version"), 1) or 1
+
+        raw_cooldowns = raw.get("cooldowns")
+        if isinstance(raw_cooldowns, dict):
+            cooldowns: dict[str, list[float]] = {}
+            for user_id, history in raw_cooldowns.items():
+                if not isinstance(history, list):
+                    continue
+                valid_history = []
+                for ts in history:
+                    try:
+                        valid_history.append(float(ts))
+                    except (TypeError, ValueError):
+                        continue
+                cooldowns[str(user_id)] = valid_history
+            stats["cooldowns"] = cooldowns
+
+        raw_groups = raw.get("groups")
+        if isinstance(raw_groups, dict):
+            stats["groups"] = {
+                str(group_id): _normalize_group_stats(group_stats, today_str)
+                for group_id, group_stats in raw_groups.items()
+            }
+
+    return stats
+
+
+def _save_stats() -> None:
+    path = _stats_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(PARO_STATS, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, path)
+
+
+def _append_egg_log(entry: dict) -> None:
+    path = _egg_log_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+
+PARO_STATS: dict = _load_stats()
+
+
 def reload_paro_data() -> None:
-    """热重载派生池数据（原地 clear+update，保持其他模块持有的引用不失效）。"""
+    """热重载派生池与排行榜数据（原地 clear+update，保持其他模块持有的引用不失效）。"""
     PARO_DATA.clear()
     PARO_DATA.update(load_json_file(DATA_FILE, DEFAULT_DATA))
-    logger.info("🔄 派生池数据已热重载")
+    PARO_STATS.clear()
+    PARO_STATS.update(_load_stats())
+    logger.info("🔄 派生池与排行榜数据已热重载")
 
 
 # ==================== 图片渲染 ====================
@@ -335,6 +498,177 @@ def _build_draw_limit_message(
     return f"30分钟内仅剩 {remaining_before} 次，无法抽 {requested_count} 次。"
 
 
+def _today_str() -> str:
+    return datetime.now(TZ_CN).date().isoformat()
+
+
+def _cooldown_store() -> dict[str, list[float]]:
+    cooldowns = PARO_STATS.setdefault("cooldowns", {})
+    if not isinstance(cooldowns, dict):
+        cooldowns = {}
+        PARO_STATS["cooldowns"] = cooldowns
+    return cooldowns
+
+
+def _bump_counter(counter: dict[str, int], key: str, amount: int = 1) -> None:
+    if amount <= 0:
+        return
+    counter[key] = counter.get(key, 0) + amount
+
+
+def _get_fixed_side(fixed_a: str | None, fixed_b: str | None) -> str | None:
+    if fixed_a:
+        return "akito"
+    if fixed_b:
+        return "toya"
+    return None
+
+
+def _roll_daily_stats(group_stats: dict, today_str: str) -> bool:
+    daily = group_stats.get("daily")
+    if isinstance(daily, dict) and daily.get("date") == today_str:
+        group_stats["daily"] = _normalize_period_stats(daily, date=today_str)
+        return False
+
+    group_stats["daily"] = _new_period_stats(date=today_str)
+    return True
+
+
+def _get_or_create_group_stats(group_id: str, today_str: str) -> tuple[dict, bool]:
+    groups = PARO_STATS.setdefault("groups", {})
+    group_stats = groups.get(group_id)
+    if not isinstance(group_stats, dict):
+        group_stats = _new_group_stats(today_str)
+        groups[group_id] = group_stats
+        return group_stats, True
+
+    normalized = _normalize_group_stats(group_stats, today_str)
+    groups[group_id] = normalized
+    rolled = _roll_daily_stats(normalized, today_str)
+    return normalized, rolled
+
+
+def _record_draw_stats_for_period(
+    period_stats: dict,
+    *,
+    user_id: str,
+    results: list[tuple[str, str, bool, str | None]],
+    fixed_side: str | None,
+) -> None:
+    draw_count = len(results)
+    period_stats["total_draws"] += draw_count
+    _bump_counter(period_stats["user_draw_counts"], user_id, draw_count)
+
+    for akito_name, toya_name, is_egg, fox_type in results:
+        if fox_type is None:
+            if fixed_side != "akito":
+                _bump_counter(period_stats["akito_hits"], akito_name)
+            if fixed_side != "toya":
+                _bump_counter(period_stats["toya_hits"], toya_name)
+
+        if is_egg or fox_type == "foxbun":
+            _bump_counter(period_stats["egg_user_counts"], user_id)
+
+        if fox_type == "foxrabbit":
+            period_stats["foxrabbit_total"] += 1
+        elif fox_type == "foxbun":
+            period_stats["foxbun_total"] += 1
+        elif fox_type == "fox":
+            period_stats["fox_total"] += 1
+        elif fox_type == "rabbit":
+            period_stats["rabbit_total"] += 1
+
+
+def _record_group_draw_stats(
+    *,
+    group_id: int,
+    user_id: str,
+    display_name: str,
+    results: list[tuple[str, str, bool, str | None]],
+    fixed_side: str | None,
+    fixed_name: str | None,
+    requested_count: int,
+    now_ts: float,
+) -> None:
+    today_str = _today_str()
+    group_stats, _rolled = _get_or_create_group_stats(str(group_id), today_str)
+    group_stats["profiles"][user_id] = display_name
+
+    _record_draw_stats_for_period(
+        group_stats["daily"],
+        user_id=user_id,
+        results=results,
+        fixed_side=fixed_side,
+    )
+    _record_draw_stats_for_period(
+        group_stats["history"],
+        user_id=user_id,
+        results=results,
+        fixed_side=fixed_side,
+    )
+
+    for idx, (akito_name, toya_name, is_egg, fox_type) in enumerate(results, 1):
+        if not is_egg and fox_type != "foxbun":
+            continue
+        _append_egg_log(
+            {
+                "ts": now_ts,
+                "date": today_str,
+                "group_id": str(group_id),
+                "user_id": user_id,
+                "display_name": display_name,
+                "egg_type": "cooking" if is_egg else "foxbun",
+                "akito": akito_name,
+                "toya": toya_name,
+                "draw_index": idx,
+                "requested_count": requested_count,
+                "fixed_side": fixed_side,
+                "fixed_name": fixed_name,
+            }
+        )
+
+    _save_stats()
+
+
+def _sorted_counter_items(counter: dict[str, int]) -> list[tuple[str, int]]:
+    return sorted(counter.items(), key=lambda item: (-item[1], item[0]))
+
+
+def _build_user_rows(counter: dict[str, int], profiles: dict[str, str], *, limit: int = 5) -> list[dict]:
+    rows = []
+    for index, (user_id, count) in enumerate(_sorted_counter_items(counter)[:limit], 1):
+        display_name = profiles.get(user_id) or f"用户{user_id}"
+        rows.append({"left": f"{index}. {display_name}", "right": f"{count}次"})
+    if not rows:
+        rows.append({"left": "暂无", "right": "0次"})
+    return rows
+
+
+def _build_character_rows(counter: dict[str, int], *, limit: int = 3, character: str) -> list[dict]:
+    grouped: list[tuple[list[str], int]] = []
+    for name, count in _sorted_counter_items(counter):
+        if grouped and grouped[-1][1] == count:
+            grouped[-1][0].append(name)
+        else:
+            grouped.append(([name], count))
+
+    rows = []
+    for rank, (names, count) in enumerate(grouped[:limit], 1):
+        unique_name = names[0] if len(names) == 1 else None
+        rows.append(
+            {
+                "left": f"TOP{rank} {' / '.join(names)}",
+                "right": f"{count}次",
+                "icon_kind": "avatar",
+                "icon_name": unique_name,
+                "character": character,
+            }
+        )
+    if not rows:
+        rows.append({"left": "暂无", "right": "0次"})
+    return rows
+
+
 # ==================== 多抽渲染 ====================
 
 SEQS = ["①", "②", "③"]
@@ -552,11 +886,329 @@ def _render_multi(results: list, remaining: int, nickname: str) -> bytes:
     return buf.getvalue()
 
 
+def _resize_to_fit(image: Image.Image, *, max_w: int, max_h: int) -> Image.Image:
+    width, height = image.size
+    if width <= max_w and height <= max_h:
+        return image.copy()
+    ratio = min(max_w / width, max_h / height)
+    size = (max(1, int(width * ratio)), max(1, int(height * ratio)))
+    return image.resize(size, Image.LANCZOS)
+
+
+def _load_avatar_thumb(character: str, name: str, size: int = 56) -> Image.Image | None:
+    path = _find_avatar(character, name)
+    if not path:
+        return None
+    image = Image.open(path).convert("RGB")
+    return image.resize((size, size), Image.LANCZOS)
+
+
+def _load_fox_stat_icon(fox_type: str) -> Image.Image | None:
+    if fox_type == "fox":
+        image = _load_foxrabbit_image("狐")
+        return _resize_to_fit(image, max_w=56, max_h=56) if image else None
+    if fox_type == "rabbit":
+        image = _load_foxrabbit_image("兔")
+        return _resize_to_fit(image, max_w=56, max_h=56) if image else None
+    if fox_type == "foxbun":
+        image = _load_foxbun_image()
+        return _resize_to_fit(image, max_w=96, max_h=56) if image else None
+    if fox_type == "foxrabbit":
+        fox = _load_foxrabbit_image("狐")
+        rabbit = _load_foxrabbit_image("兔")
+        if not fox or not rabbit:
+            return None
+        fox = _resize_to_fit(fox, max_w=56, max_h=56)
+        rabbit = _resize_to_fit(rabbit, max_w=56, max_h=56)
+        canvas = Image.new("RGB", (fox.width + rabbit.width + 6, max(fox.height, rabbit.height)), "#ffffff")
+        canvas.paste(fox, (0, (canvas.height - fox.height) // 2))
+        canvas.paste(rabbit, (fox.width + 6, (canvas.height - rabbit.height) // 2))
+        return canvas
+    return None
+
+
+def _text_width(font: ImageFont.FreeTypeFont | ImageFont.ImageFont, text: str, fallback_size: int = FONT_SIZE) -> int:
+    try:
+        bbox = font.getbbox(text)
+        width = bbox[2]
+        if isinstance(width, (int, float)):
+            return int(width)
+    except Exception:
+        pass
+    return max(len(text), 1) * fallback_size
+
+
+def _truncate_text(text: str, font: ImageFont.FreeTypeFont | ImageFont.ImageFont, max_width: int) -> str:
+    if max_width <= 0:
+        return ""
+    if _text_width(font, text) <= max_width:
+        return text
+
+    suffix = "..."
+    trimmed = text
+    while trimmed and _text_width(font, trimmed + suffix) > max_width:
+        trimmed = trimmed[:-1]
+    return (trimmed + suffix) if trimmed else suffix
+
+
+def _resolve_row_icon(row: dict) -> Image.Image | None:
+    if row.get("icon_kind") == "avatar":
+        icon_name = row.get("icon_name")
+        character = row.get("character")
+        if icon_name and character:
+            return _load_avatar_thumb(character, icon_name)
+        return None
+    if row.get("icon_kind") == "fox":
+        fox_type = row.get("fox_type")
+        if isinstance(fox_type, str):
+            return _load_fox_stat_icon(fox_type)
+    return None
+
+
+def _get_group_period_stats(group_id: int, scope: str) -> tuple[dict, dict]:
+    today_str = _today_str()
+    group_stats, rolled = _get_or_create_group_stats(str(group_id), today_str)
+    if rolled:
+        _save_stats()
+    period_key = "daily" if scope == "daily" else "history"
+    return group_stats, group_stats[period_key]
+
+
+def _render_leaderboard_card(title: str, subtitle: str, sections: list[dict]) -> bytes:
+    width = 760
+    pad_x = 34
+    pad_y = 26
+    row_gap = 8
+    section_gap = 12
+
+    font_title = _load_font(30)
+    font_subtitle = _load_font(18)
+    font_section = _load_font(22)
+    font_row = _load_font(20)
+    font_value = _load_font(20)
+
+    prepared_sections = []
+    height = pad_y + 38 + 28
+    for section in sections:
+        rows = []
+        height += 34
+        for row in section["rows"]:
+            icon = _resolve_row_icon(row)
+            row_height = max(44, (icon.height + 12) if icon else 44)
+            rows.append((row, icon, row_height))
+            height += row_height + row_gap
+        height += section_gap
+        prepared_sections.append((section["title"], rows))
+
+    height += pad_y - section_gap
+    canvas = Image.new("RGB", (width, height), color="#ffffff")
+    draw = ImageDraw.Draw(canvas)
+
+    y = pad_y
+    draw.text((width // 2, y), title, font=font_title, fill="#000000", anchor="ma")
+    y += 38
+    draw.text((width // 2, y), subtitle, font=font_subtitle, fill="#888888", anchor="ma")
+    y += 28
+
+    for section_title, rows in prepared_sections:
+        draw.text((pad_x, y), section_title, font=font_section, fill="#333333", anchor="la")
+        y += 34
+        for row, icon, row_height in rows:
+            text_x = pad_x
+            if icon:
+                icon_y = y + (row_height - icon.height) // 2
+                canvas.paste(icon, (pad_x, icon_y))
+                text_x += icon.width + 14
+
+            value_text = row.get("right", "")
+            value_width = _text_width(font_value, value_text)
+            available_width = width - pad_x - value_width - 18 - text_x
+            left_text = _truncate_text(row.get("left", ""), font_row, available_width)
+            row_center_y = y + row_height // 2
+            draw.text((text_x, row_center_y), left_text, font=font_row, fill="#000000", anchor="lm")
+            draw.text((width - pad_x, row_center_y), value_text, font=font_value, fill="#555555", anchor="rm")
+            y += row_height + row_gap
+        y += section_gap
+
+    buf = io.BytesIO()
+    canvas.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _build_paro_rank_image_from_stats(group_stats: dict, period_stats: dict, scope: str) -> bytes:
+    subtitle = f"{period_stats.get('date')} 00:00 起累计" if scope == "daily" else "功能上线后累计"
+    sections = [
+        {
+            "title": "本群累计抽取总次数",
+            "rows": [{"left": "总计", "right": f"{period_stats['total_draws']}次"}],
+        },
+        {
+            "title": "抽取次数最多的前 5 人",
+            "rows": _build_user_rows(period_stats["user_draw_counts"], group_stats["profiles"], limit=5),
+        },
+        {
+            "title": "被抽到最多次的彰人 TOP 3",
+            "rows": _build_character_rows(period_stats["akito_hits"], limit=3, character="彰人"),
+        },
+        {
+            "title": "被抽到最多次的冬弥 TOP 3",
+            "rows": _build_character_rows(period_stats["toya_hits"], limit=3, character="冬弥"),
+        },
+    ]
+    title = "每日派生排行榜" if scope == "daily" else "历史派生排行榜"
+    return _render_leaderboard_card(title, subtitle, sections)
+
+
+def _build_paro_rank_image(group_id: int, scope: str) -> bytes:
+    group_stats, period_stats = _get_group_period_stats(group_id, scope)
+    return _build_paro_rank_image_from_stats(group_stats, period_stats, scope)
+
+
+def _build_egg_rank_image_from_stats(group_stats: dict, period_stats: dict, scope: str) -> bytes:
+    subtitle = f"{period_stats.get('date')} 00:00 起累计" if scope == "daily" else "功能上线后累计"
+    sections = [
+        {
+            "title": "做饭 + 狐兔饭触发最多的前 5 人",
+            "rows": _build_user_rows(period_stats["egg_user_counts"], group_stats["profiles"], limit=5),
+        },
+        {
+            "title": "狐兔彩蛋触发次数",
+            "rows": [
+                {"left": "狐兔", "right": f"{period_stats['foxrabbit_total']}次", "icon_kind": "fox", "fox_type": "foxrabbit"},
+                {"left": "狐兔饭", "right": f"{period_stats['foxbun_total']}次", "icon_kind": "fox", "fox_type": "foxbun"},
+                {"left": "狐狸", "right": f"{period_stats['fox_total']}次", "icon_kind": "fox", "fox_type": "fox"},
+                {"left": "兔子", "right": f"{period_stats['rabbit_total']}次", "icon_kind": "fox", "fox_type": "rabbit"},
+            ],
+        },
+    ]
+    title = "每日做饭排行榜" if scope == "daily" else "历史做饭排行榜"
+    return _render_leaderboard_card(title, subtitle, sections)
+
+
+def _build_egg_rank_image(group_id: int, scope: str) -> bytes:
+    group_stats, period_stats = _get_group_period_stats(group_id, scope)
+    return _build_egg_rank_image_from_stats(group_stats, period_stats, scope)
+
+
+def _build_rank_preview_stats(scope: str) -> tuple[dict, dict]:
+    today_str = _today_str()
+    group_stats = _new_group_stats(today_str)
+    group_stats["profiles"] = {
+        "10001": "测试群友甲甲甲甲甲甲甲",
+        "10002": "测试群友乙乙乙乙乙乙乙",
+        "10003": "测试群友丙丙丙丙丙丙丙",
+        "10004": "测试群友丁丁丁丁丁丁丁",
+        "10005": "测试群友戊戊戊戊戊戊戊",
+        "10006": "测试群友己己己己己己己",
+    }
+
+    if scope == "daily":
+        period_stats = _new_period_stats(date=today_str)
+        period_stats.update(
+            {
+                "total_draws": 36,
+                "user_draw_counts": {
+                    "10001": 12,
+                    "10002": 8,
+                    "10003": 8,
+                    "10004": 4,
+                    "10005": 3,
+                    "10006": 1,
+                },
+                "akito_hits": {
+                    "Callboy彰": 9,
+                    "白骑": 8,
+                    "王子彰": 8,
+                    "WL2彰": 5,
+                    "白恶魔": 3,
+                },
+                "toya_hits": {
+                    "Callboy冬": 11,
+                    "白百合": 10,
+                    "王子冬": 10,
+                    "WL2冬": 4,
+                    "黑骑": 2,
+                },
+                "egg_user_counts": {
+                    "10001": 4,
+                    "10002": 3,
+                    "10003": 3,
+                    "10004": 2,
+                    "10005": 1,
+                },
+                "foxrabbit_total": 5,
+                "foxbun_total": 2,
+                "fox_total": 4,
+                "rabbit_total": 3,
+            }
+        )
+    else:
+        period_stats = _new_period_stats()
+        period_stats.update(
+            {
+                "total_draws": 128,
+                "user_draw_counts": {
+                    "10001": 48,
+                    "10002": 30,
+                    "10003": 30,
+                    "10004": 10,
+                    "10005": 7,
+                    "10006": 3,
+                },
+                "akito_hits": {
+                    "Callboy彰": 26,
+                    "白骑": 25,
+                    "王子彰": 25,
+                    "WL2彰": 18,
+                    "白恶魔": 11,
+                },
+                "toya_hits": {
+                    "Callboy冬": 31,
+                    "白百合": 29,
+                    "王子冬": 29,
+                    "WL2冬": 16,
+                    "黑骑": 9,
+                },
+                "egg_user_counts": {
+                    "10001": 10,
+                    "10002": 8,
+                    "10003": 8,
+                    "10004": 4,
+                    "10005": 2,
+                },
+                "foxrabbit_total": 18,
+                "foxbun_total": 9,
+                "fox_total": 11,
+                "rabbit_total": 7,
+            }
+        )
+
+    return group_stats, period_stats
+
+
+def _build_rank_preview_image(scope: str) -> bytes:
+    group_stats, period_stats = _build_rank_preview_stats(scope)
+    return _build_paro_rank_image_from_stats(group_stats, period_stats, scope)
+
+
+def _build_egg_rank_preview_image(scope: str) -> bytes:
+    group_stats, period_stats = _build_rank_preview_stats(scope)
+    return _build_egg_rank_image_from_stats(group_stats, period_stats, scope)
+
+
 # ==================== 抽派生 ====================
-_DRAW_COOLDOWNS: dict[str, list[float]] = {}
 _DRAW_LOCKS: dict[str, asyncio.Lock] = {}
 _DRAW_LIMIT = 3
 _DRAW_WINDOW = 1800  # 30 分钟
+
+
+def _resolve_group_command(event: Event) -> tuple[int | None, str | None]:
+    group_id = getattr(event, "group_id", None)
+    if group_id is None:
+        return None, "该指令仅支持群聊使用。"
+    if group_id not in ALLOWED_CHAT_GROUPS:
+        return None, None
+    return int(group_id), None
 
 
 draw_cmd = on_command("抽派生", priority=5, block=True)
@@ -564,7 +1216,10 @@ draw_cmd = on_command("抽派生", priority=5, block=True)
 
 @draw_cmd.handle()
 async def _(event: Event, args: Message = CommandArg()):
-    if isinstance(event, GroupMessageEvent) and event.group_id not in ALLOWED_CHAT_GROUPS:
+    group_id, rejection = _resolve_group_command(event)
+    if rejection:
+        await draw_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
+    if group_id is None:
         return
 
     user_id = event.get_user_id()
@@ -592,8 +1247,12 @@ async def _(event: Event, args: Message = CommandArg()):
 
         # 限频检查
         now = time.time()
-        history = _prune_draw_history(_DRAW_COOLDOWNS.get(user_id, []), now, _DRAW_WINDOW)
-        _DRAW_COOLDOWNS[user_id] = history
+        cooldowns = _cooldown_store()
+        previous_history = list(cooldowns.get(user_id, []))
+        history = _prune_draw_history(previous_history, now, _DRAW_WINDOW)
+        cooldowns[user_id] = history
+        if history != previous_history:
+            _save_stats()
         remaining_before = _DRAW_LIMIT - len(history)
         limit_message = _build_draw_limit_message(
             remaining_before=remaining_before,
@@ -634,8 +1293,21 @@ async def _(event: Event, args: Message = CommandArg()):
 
         for _ in range(count):
             history.append(now)
-        _DRAW_COOLDOWNS[user_id] = history
+        cooldowns[user_id] = history
         remaining = _DRAW_LIMIT - len(history)
+
+        fixed_side = _get_fixed_side(fixed_a, fixed_b)
+        fixed_name = fixed_a or fixed_b
+        _record_group_draw_stats(
+            group_id=group_id,
+            user_id=user_id,
+            display_name=nickname,
+            results=results,
+            fixed_side=fixed_side,
+            fixed_name=fixed_name,
+            requested_count=count,
+            now_ts=now,
+        )
 
         await asyncio.sleep(random.uniform(0.4, 0.8))
 
@@ -680,6 +1352,128 @@ async def _(event: Event, args: Message = CommandArg()):
             # 多抽 或 单抽含狐兔 → 走 _render_multi
             img_bytes = _render_multi(results, remaining, nickname)
             await draw_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes))
+
+
+daily_rank_cmd = on_command("每日排行", priority=5, block=True)
+
+
+@daily_rank_cmd.handle()
+async def _(event: Event):
+    group_id, rejection = _resolve_group_command(event)
+    if rejection:
+        await daily_rank_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
+    if group_id is None:
+        return
+    img_bytes = _build_paro_rank_image(group_id, "daily")
+    await daily_rank_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes))
+
+
+history_rank_cmd = on_command("历史排行", priority=5, block=True)
+
+
+@history_rank_cmd.handle()
+async def _(event: Event):
+    group_id, rejection = _resolve_group_command(event)
+    if rejection:
+        await history_rank_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
+    if group_id is None:
+        return
+    img_bytes = _build_paro_rank_image(group_id, "history")
+    await history_rank_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes))
+
+
+daily_egg_rank_cmd = on_command("每日做饭排行", priority=5, block=True)
+
+
+@daily_egg_rank_cmd.handle()
+async def _(event: Event):
+    group_id, rejection = _resolve_group_command(event)
+    if rejection:
+        await daily_egg_rank_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
+    if group_id is None:
+        return
+    img_bytes = _build_egg_rank_image(group_id, "daily")
+    await daily_egg_rank_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes))
+
+
+history_egg_rank_cmd = on_command("历史做饭排行", priority=5, block=True)
+
+
+@history_egg_rank_cmd.handle()
+async def _(event: Event):
+    group_id, rejection = _resolve_group_command(event)
+    if rejection:
+        await history_egg_rank_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
+    if group_id is None:
+        return
+    img_bytes = _build_egg_rank_image(group_id, "history")
+    await history_egg_rank_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes))
+
+
+# ==================== 测试排行榜 ====================
+
+test_daily_rank_cmd = on_command("测试每日排行", priority=5, block=True)
+
+
+@test_daily_rank_cmd.handle()
+async def _(event: Event):
+    if str(event.get_user_id()) != SUPERUSER_QQ:
+        return
+    group_id, rejection = _resolve_group_command(event)
+    if rejection:
+        await test_daily_rank_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
+    if group_id is None:
+        return
+    img_bytes = _build_rank_preview_image("daily")
+    await test_daily_rank_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes))
+
+
+test_history_rank_cmd = on_command("测试历史排行", priority=5, block=True)
+
+
+@test_history_rank_cmd.handle()
+async def _(event: Event):
+    if str(event.get_user_id()) != SUPERUSER_QQ:
+        return
+    group_id, rejection = _resolve_group_command(event)
+    if rejection:
+        await test_history_rank_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
+    if group_id is None:
+        return
+    img_bytes = _build_rank_preview_image("history")
+    await test_history_rank_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes))
+
+
+test_daily_egg_rank_cmd = on_command("测试每日做饭排行", priority=5, block=True)
+
+
+@test_daily_egg_rank_cmd.handle()
+async def _(event: Event):
+    if str(event.get_user_id()) != SUPERUSER_QQ:
+        return
+    group_id, rejection = _resolve_group_command(event)
+    if rejection:
+        await test_daily_egg_rank_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
+    if group_id is None:
+        return
+    img_bytes = _build_egg_rank_preview_image("daily")
+    await test_daily_egg_rank_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes))
+
+
+test_history_egg_rank_cmd = on_command("测试历史做饭排行", priority=5, block=True)
+
+
+@test_history_egg_rank_cmd.handle()
+async def _(event: Event):
+    if str(event.get_user_id()) != SUPERUSER_QQ:
+        return
+    group_id, rejection = _resolve_group_command(event)
+    if rejection:
+        await test_history_egg_rank_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
+    if group_id is None:
+        return
+    img_bytes = _build_egg_rank_preview_image("history")
+    await test_history_egg_rank_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes))
 
 
 # ==================== 测试做饭 ====================
