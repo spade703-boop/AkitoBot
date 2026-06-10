@@ -1058,6 +1058,17 @@ def _text_width(font: ImageFont.FreeTypeFont | ImageFont.ImageFont, text: str, f
     return max(len(text), 1) * fallback_size
 
 
+def _text_height(font: ImageFont.FreeTypeFont | ImageFont.ImageFont, text: str = "Hg", fallback_size: int = FONT_SIZE) -> int:
+    try:
+        bbox = font.getbbox(text)
+        height = bbox[3] - bbox[1]
+        if isinstance(height, (int, float)) and height > 0:
+            return int(height)
+    except Exception:
+        pass
+    return fallback_size
+
+
 def _truncate_text(text: str, font: ImageFont.FreeTypeFont | ImageFont.ImageFont, max_width: int) -> str:
     if max_width <= 0:
         return ""
@@ -1069,6 +1080,32 @@ def _truncate_text(text: str, font: ImageFont.FreeTypeFont | ImageFont.ImageFont
     while trimmed and _text_width(font, trimmed + suffix) > max_width:
         trimmed = trimmed[:-1]
     return (trimmed + suffix) if trimmed else suffix
+
+
+AKITO_ACCENT = "#f08a5d"
+TOYA_ACCENT = "#5d8df0"
+SECTION_BAR_BG = "#8c9198"
+
+
+def _draw_section_label(
+    draw: ImageDraw.ImageDraw,
+    *,
+    left: int,
+    right: int,
+    y: int,
+    text: str,
+    font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
+    fill: str = "#333333",
+    bg_fill: str | None = None,
+    height: int = 34,
+) -> int:
+    if bg_fill:
+        draw.rectangle([(left, y), (right, y + height)], fill=bg_fill)
+        draw.text((left + 12, y + height // 2), text, font=font, fill=fill, anchor="lm")
+        return height
+
+    draw.text((left, y + height // 2), text, font=font, fill=fill, anchor="lm")
+    return height
 
 
 def _resolve_row_icon(row: dict) -> Image.Image | None:
@@ -1271,7 +1308,14 @@ def _render_leaderboard_card(title: str, subtitle: str, sections: list[dict]) ->
             rows.append((row, prefix_icon, suffix_icons, row_height))
             height += row_height + row_gap
         height += section_gap
-        prepared_sections.append((section["title"], rows))
+        prepared_sections.append(
+            {
+                "title": section["title"],
+                "title_fill": section.get("title_fill", "#333333"),
+                "title_bg": section.get("title_bg"),
+                "rows": rows,
+            }
+        )
 
     height += pad_y - section_gap
     canvas = Image.new("RGB", (width, height), color="#ffffff")
@@ -1283,9 +1327,18 @@ def _render_leaderboard_card(title: str, subtitle: str, sections: list[dict]) ->
     draw.text((width // 2, y), subtitle, font=font_subtitle, fill="#888888", anchor="ma")
     y += 28
 
-    for section_title, rows in prepared_sections:
-        draw.text((pad_x, y), section_title, font=font_section, fill="#333333", anchor="la")
-        y += 34
+    for section in prepared_sections:
+        y += _draw_section_label(
+            draw,
+            left=pad_x,
+            right=width - pad_x,
+            y=y,
+            text=section["title"],
+            font=font_section,
+            fill=section["title_fill"],
+            bg_fill=section["title_bg"],
+        )
+        rows = section["rows"]
         for row, prefix_icon, suffix_icons, row_height in rows:
             text_x = pad_x
             if prefix_icon:
@@ -1320,34 +1373,41 @@ def _render_leaderboard_card(title: str, subtitle: str, sections: list[dict]) ->
 
 
 def _render_personal_paro_card(user_id: str, display_name: str, user_stats: dict, egg_history: dict) -> bytes:
-    width = 860
-    pad_x = 34
+    width = 760
+    pad_x = 30
     pad_y = 26
-    row_gap = 8
-    section_gap = 12
-    pair_tile_w = 150
-    pair_tile_h = 92
-    pair_gap = 12
-    fox_section_gap = 28
+    row_gap = 6
+    section_gap = 10
+    pair_tile_w = 132
+    pair_tile_h = 86
+    pair_gap = 10
+    pair_columns = 3
+    fox_section_gap = 24
 
-    font_title = _load_font(30)
-    font_subtitle = _load_font(18)
-    font_section = _load_font(22)
-    font_row = _load_font(20)
-    font_value = _load_font(20)
-    font_pair = _load_font(18)
-    font_name = _load_font(36)
+    font_section = _load_font(21)
+    font_row = _load_font(19)
+    font_value = _load_font(19)
+    font_pair = _load_font(17)
+    font_name = _load_font(38)
     name_text = display_name or f"用户{user_id}"
+    name_text = _truncate_text(name_text, font_name, width - pad_x * 2)
+    name_height = max(42, _text_height(font_name, name_text, fallback_size=38))
 
     summary_rows = [
         {"left": "累计抽取派生次数", "right": f"{user_stats['draw_count']}次"},
         {"left": "累计抽到做饭的次数", "right": f"{egg_history['cooking_count']}次"},
     ]
     prepared_sections = [
-        ("累计记录", _prepare_display_rows(summary_rows)),
-        (
-            "抽到最多的彰人派生 TOP 3",
-            _prepare_display_rows(
+        {
+            "title": "累计记录",
+            "title_fill": "#ffffff",
+            "title_bg": SECTION_BAR_BG,
+            "rows": _prepare_display_rows(summary_rows, min_row_height=42),
+        },
+        {
+            "title": "抽到最多的彰人派生 TOP 3",
+            "title_fill": AKITO_ACCENT,
+            "rows": _prepare_display_rows(
                 _build_character_rows(
                     user_stats["akito_hits"],
                     limit=3,
@@ -1355,10 +1415,11 @@ def _render_personal_paro_card(user_id: str, display_name: str, user_stats: dict
                     last_hit_seq=user_stats.get("akito_last_hit_seq"),
                 )
             ),
-        ),
-        (
-            "抽到最多的冬弥派生 TOP 3",
-            _prepare_display_rows(
+        },
+        {
+            "title": "抽到最多的冬弥派生 TOP 3",
+            "title_fill": TOYA_ACCENT,
+            "rows": _prepare_display_rows(
                 _build_character_rows(
                     user_stats["toya_hits"],
                     limit=3,
@@ -1366,22 +1427,23 @@ def _render_personal_paro_card(user_id: str, display_name: str, user_stats: dict
                     last_hit_seq=user_stats.get("toya_last_hit_seq"),
                 )
             ),
-        ),
+        },
     ]
 
     pair_items = _build_personal_cooking_pair_items(egg_history)
     content_width = width - pad_x * 2
-    pair_columns = max(1, (content_width + pair_gap) // (pair_tile_w + pair_gap))
     pair_row_count = (len(pair_items) + pair_columns - 1) // pair_columns if pair_items else 0
+    pair_grid_width = pair_columns * pair_tile_w + max(0, pair_columns - 1) * pair_gap
+    pair_grid_x = pad_x + max(0, (content_width - pair_grid_width) // 2)
 
     foxbun_icon = _load_fox_stat_icon("foxbun")
     foxbun_text = f"狐兔饭：累计触发 {egg_history['foxbun_count']} 次。"
     fox_line_height = max(56, (foxbun_icon.height if foxbun_icon else 0) + 8)
 
-    height = pad_y + 38 + 28 + 56
-    for _section_title, rows in prepared_sections:
+    height = pad_y + name_height + 18
+    for section in prepared_sections:
         height += 34
-        for _row, _prefix_icon, _suffix_icons, row_height in rows:
+        for _row, _prefix_icon, _suffix_icons, row_height in section["rows"]:
             height += row_height + row_gap
         height += section_gap
 
@@ -1399,16 +1461,21 @@ def _render_personal_paro_card(user_id: str, display_name: str, user_stats: dict
     draw = ImageDraw.Draw(canvas)
 
     y = pad_y
-    draw.text((width // 2, y), "我的派生", font=font_title, fill="#000000", anchor="ma")
-    y += 38
-    draw.text((width // 2, y), "当前群历史累计", font=font_subtitle, fill="#888888", anchor="ma")
-    y += 34
-    draw.text((width // 2, y), name_text, font=font_name, fill="#111111", anchor="ma")
-    y += 50
+    draw.text((pad_x, y), name_text, font=font_name, fill="#111111", anchor="la")
+    y += name_height + 18
 
-    for section_title, rows in prepared_sections:
-        draw.text((pad_x, y), section_title, font=font_section, fill="#333333", anchor="la")
-        y += 34
+    for section in prepared_sections:
+        y += _draw_section_label(
+            draw,
+            left=pad_x,
+            right=width - pad_x,
+            y=y,
+            text=section["title"],
+            font=font_section,
+            fill=section.get("title_fill", "#333333"),
+            bg_fill=section.get("title_bg"),
+        )
+        rows = section["rows"]
         for row, prefix_icon, suffix_icons, row_height in rows:
             text_x = pad_x
             if prefix_icon:
@@ -1437,13 +1504,21 @@ def _render_personal_paro_card(user_id: str, display_name: str, user_stats: dict
             y += row_height + row_gap
         y += section_gap
 
-    draw.text((pad_x, y), "你还没有做的派生饭……", font=font_section, fill="#333333", anchor="la")
-    y += 34
+    y += _draw_section_label(
+        draw,
+        left=pad_x,
+        right=width - pad_x,
+        y=y,
+        text="你还没有做的派生饭……",
+        font=font_section,
+        fill="#ffffff",
+        bg_fill=SECTION_BAR_BG,
+    )
     if pair_items:
         for index, item in enumerate(pair_items):
             row_index = index // pair_columns
             col_index = index % pair_columns
-            tile_x = pad_x + col_index * (pair_tile_w + pair_gap)
+            tile_x = pair_grid_x + col_index * (pair_tile_w + pair_gap)
             tile_y = y + row_index * (pair_tile_h + pair_gap)
             draw.rectangle(
                 [(tile_x, tile_y), (tile_x + pair_tile_w, tile_y + pair_tile_h)],
@@ -1451,9 +1526,9 @@ def _render_personal_paro_card(user_id: str, display_name: str, user_stats: dict
                 outline="#dddddd",
                 width=1,
             )
-            thumb = _build_pair_thumb(item["akito_name"], item["toya_name"], size=60)
+            thumb = _build_pair_thumb(item["akito_name"], item["toya_name"], size=54)
             thumb_x = tile_x + (pair_tile_w - thumb.width) // 2
-            canvas.paste(thumb, (thumb_x, tile_y + 10))
+            canvas.paste(thumb, (thumb_x, tile_y + 9))
             draw.text(
                 (tile_x + 10, tile_y + pair_tile_h - 12),
                 f"x{item['count']}",
@@ -1493,6 +1568,7 @@ def _build_paro_rank_image_from_stats(group_stats: dict, period_stats: dict, sco
         },
         {
             "title": "被抽到最多次的彰人 TOP 3",
+            "title_fill": AKITO_ACCENT,
             "rows": _build_character_rows(
                 period_stats["akito_hits"],
                 limit=3,
@@ -1502,6 +1578,7 @@ def _build_paro_rank_image_from_stats(group_stats: dict, period_stats: dict, sco
         },
         {
             "title": "被抽到最多次的冬弥 TOP 3",
+            "title_fill": TOYA_ACCENT,
             "rows": _build_character_rows(
                 period_stats["toya_hits"],
                 limit=3,
