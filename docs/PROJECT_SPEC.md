@@ -500,4 +500,8 @@ def reload_assets():
 2. 确认 `/data` 下无新增被追踪文件
 3. 确认 `.env.example` 已同步最新的可配置项
 4. `ruff check nonebot_plugin_akito/` 通过（必需，应为 0 错误）；`mypy` 可选，未纳入日常推送流程
-5. 关键路径测试通过：`pytest tests/ -v`
+5. 测试执行遵循“**先测改动处，再看风险补全量**”：
+   - 只改单个叶子模块时，至少跑对应测试文件；
+   - 改到 `core/`、`tests/conftest.py`、多模块共享逻辑、或一次改了多个功能模块时，必须补跑全量；
+   - 准备推送前，原则上应完成一次全量回归。
+6. 关键路径测试通过：`pytest tests/ -v`

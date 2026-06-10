@@ -28,6 +28,44 @@ from ..core import (
 )
 
 
+def _prune_temp_implants(mem: dict, now_ts: float | None = None) -> list[tuple[dict, float]]:
+    """Drop expired temp implants in-place and return active items with expiry timestamps."""
+    now_ts = time.time() if now_ts is None else now_ts
+    valid = [
+        (item, item.get("expire_at", item.get("expire_time", 0)))
+        for item in mem.get("temp_implants", [])
+        if item.get("expire_at", item.get("expire_time", 0)) > now_ts
+    ]
+    mem["temp_implants"] = [item for item, _expire_at in valid]
+    return valid
+
+
+def _build_temp_memory_view(valid_implants: list[tuple[dict, float]], now_ts: float) -> str:
+    """Format the temp memory status view shown by the command."""
+    if not valid_implants:
+        return "🧠 当前没有额外的设定。\n这是一个普通的东云彰人。"
+
+    output = "🧠 【当前生效的设定】\n========================\n"
+    for idx, (implant, expire_at) in enumerate(valid_implants, 1):
+        left = int(expire_at - now_ts)
+        output += f"{idx}. {implant['content']}\n   ⏳ 剩余：{left // 60}分 {left % 60}秒\n"
+    output += '========================\n💡 发送"清除记忆"可立刻恢复原状。'
+    return output.strip()
+
+
+def _inject_temp_memory(mem: dict, content: str, duration: int, now_ts: float | None = None) -> tuple[float, bool]:
+    """Append a temp implant, clamping duration to 2 hours."""
+    now_ts = time.time() if now_ts is None else now_ts
+    limited = False
+    if duration > 7200:
+        duration = 7200
+        limited = True
+
+    expire_time = now_ts + duration
+    mem.setdefault("temp_implants", []).append({"content": content, "expire_at": expire_time})
+    return expire_time, limited
+
+
 def _stamp_trigger(event: Event) -> None:
     """在任何指令回复前调用：
     1. 记录触发者身份（供 self_monitor 使用）
@@ -49,17 +87,9 @@ async def _(event: Event):
     if isinstance(event, GroupMessageEvent) and event.group_id not in ALLOWED_MEMORY_GROUPS: return
     mem = get_user_memory(get_memory_key(event))
     now = time.time()
-    valid_implants = [(m, m.get("expire_at", m.get("expire_time", 0))) for m in mem.get("temp_implants", []) if m.get("expire_at", m.get("expire_time", 0)) > now]
-    mem["temp_implants"] = [x[0] for x in valid_implants]
+    valid_implants = _prune_temp_implants(mem, now)
     _stamp_trigger(event)
-    if not valid_implants:
-        await view_cmd.finish("🧠 当前没有额外的设定。\n这是一个普通的东云彰人。")
-    output = "🧠 【当前生效的设定】\n========================\n"
-    for idx, (implant, et) in enumerate(valid_implants, 1):
-        left = int(et - now)
-        output += f"{idx}. {implant['content']}\n   ⏳ 剩余：{left // 60}分 {left % 60}秒\n"
-    output += '========================\n💡 发送"清除记忆"可立刻恢复原状。'
-    await view_cmd.finish(output.strip())
+    await view_cmd.finish(_build_temp_memory_view(valid_implants, now))
 
 
 view_facts_cmd = on_command("查看长期记忆", aliases={"小彰都记住了什么", "记忆列表"}, priority=5, block=True)
@@ -89,11 +119,8 @@ async def _(event: Event, args: Message = CommandArg()):
     raw_text = args.extract_plain_text().strip()
     if not raw_text: await inject_cmd.finish("请告诉我时间和内容，例如：接下来的事是 10m 外面下大雨了")
     duration, content = parse_duration_and_content(raw_text)
-    is_limited = False
-    if duration > 7200: duration, is_limited = 7200, True
-    expire_time = time.time() + duration
     mem = get_user_memory(get_memory_key(event))
-    mem.setdefault("temp_implants", []).append({"content": content, "expire_at": expire_time})
+    expire_time, is_limited = _inject_temp_memory(mem, content, duration)
     end_time = datetime.datetime.fromtimestamp(expire_time, TZ_CN).strftime('%H:%M')
     msg = f"✅ 记忆追加成功！(当前共 {len(mem['temp_implants'])} 条)\n内容：{content}\n"
     msg += f"⚠️ 时间过长，已强制限制为 2 小时（直到 {end_time} 失效）" if is_limited else f"直到 {end_time} 失效"

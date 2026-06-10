@@ -12,6 +12,29 @@ Galgame 级导演骰子 — 亲密互动剧本生成模块。
 import random
 
 
+def _detect_spicy_stage(text: str) -> str:
+    """Resolve which stage the spicy scene text is currently in."""
+    if any(k in text for k in ["不行了", "停下", "求饶", "结束", "不吃了", "累", "清理", "拔出"]):
+        return "aftercare"
+    if any(k in text for k in ["高潮", "内射", "白光", "顶端", "要去了", "去了", "射了", "快射"]):
+        return "climax"
+    if any(k in text for k in ["进", "插", "动", "顶", "抽送", "结合", "腰", "扩张", "磨", "蹭", "含", "吞"]):
+        return "mid_game"
+    return "foreplay"
+
+
+def _build_dynamic_words(stage: str, director_db: dict) -> str:
+    """Pick three dynamic lexicon words for the current stage when available."""
+    lexicon_db = director_db.get("dynamic_lexicon", {})
+    if isinstance(lexicon_db, dict):
+        combined_pool = lexicon_db.get(stage, []) + lexicon_db.get("general", [])
+        if len(combined_pool) >= 3:
+            return f"👉 {', '.join(random.sample(combined_pool, 3))}"
+    elif isinstance(lexicon_db, list) and len(lexicon_db) >= 3:
+        return f"👉 {', '.join(random.sample(lexicon_db, 3))}"
+    return ""
+
+
 def build_director_note(
     text: str,
     is_toya_context: bool,
@@ -68,13 +91,7 @@ def _build_spicy_format_breaker(
 ) -> str:
     """内部：根据当前剧情阶段生成 Galgame 导演指令文本。"""
     # ---- 阶段检测 ----
-    stage = "foreplay"
-    if any(k in text for k in ["不行了", "停下", "求饶", "结束", "不吃了", "累", "清理", "拔出"]):
-        stage = "aftercare"
-    elif any(k in text for k in ["高潮", "射", "白光", "去", "顶端", "内射"]):
-        stage = "climax"
-    elif any(k in text for k in ["进", "插", "动", "顶", "抽送", "结合", "腰", "扩张", "磨", "蹭", "含", "吞"]):
-        stage = "mid_game"
+    stage = _detect_spicy_stage(text)
 
     is_begging       = any(k in text for k in ["求", "给", "要", "快点", "受不了", "继续"])
     is_drained       = any(k in text for k in ["晕", "昏", "坏掉", "真的不行", "没力气", "散架", "饶了"])
@@ -83,14 +100,7 @@ def _build_spicy_format_breaker(
     is_ready_to_enter = any(k in text for k in ["进来", "可以了", "插进来", "准备好了", "到底"])
 
     # ---- 动态词库 ----
-    lexicon_db = director_db.get("dynamic_lexicon", {})
-    words_str = ""
-    if isinstance(lexicon_db, dict):
-        combined_pool = lexicon_db.get(stage, []) + lexicon_db.get("general", [])
-        if len(combined_pool) >= 3:
-            words_str = f"👉 {', '.join(random.sample(combined_pool, 3))}"
-    elif isinstance(lexicon_db, list) and len(lexicon_db) >= 3:
-        words_str = f"👉 {', '.join(random.sample(lexicon_db, 3))}"
+    words_str = _build_dynamic_words(stage, director_db)
 
     # ---- 感官描写重点 ----
     sensory_focus = [

@@ -25,6 +25,68 @@ def _data_file(filename: str) -> Path:
 CONFIG_FILE = _data_file("verify_config.json")
 VERIFY_FILE = _data_file("pending_verify.json")
 
+
+def _format_wait_time(diff_seconds: float) -> str:
+    """Format wait duration for list output."""
+    days = int(diff_seconds // 86400)
+    hours = int((diff_seconds % 86400) // 3600)
+    mins = int((diff_seconds % 3600) // 60)
+
+    if days > 0:
+        return f"{days}天{hours}小时前"
+    if hours > 0:
+        return f"{hours}小时{mins}分钟前"
+    return f"{mins}分钟前" if mins > 0 else "刚刚"
+
+
+def _split_qq_tokens(raw_text: str) -> tuple[list[str], list[str]]:
+    """Split whitespace-separated input into digit tokens and invalid tokens."""
+    valid: list[str] = []
+    invalid: list[str] = []
+    for token in raw_text.split():
+        if token.isdigit():
+            valid.append(token)
+        else:
+            invalid.append(token)
+    return valid, invalid
+
+
+def _append_unique_ids(queue: list[dict], qqs: list[str], now_ts: float) -> tuple[list[str], list[str]]:
+    """Append new ids to a queue and return (success, duplicates)."""
+    success: list[str] = []
+    duplicates: list[str] = []
+
+    for qq in qqs:
+        if any(item["uid"] == qq for item in queue):
+            duplicates.append(qq)
+            continue
+        queue.append({"uid": qq, "join_time": now_ts})
+        success.append(qq)
+    return success, duplicates
+
+
+def _remove_ids_from_queue(queue: list[dict], qqs: list[str]) -> int:
+    """Remove matching ids from a queue and return the number removed."""
+    original_len = len(queue)
+    remaining = [item for item in queue if item["uid"] not in set(qqs)]
+    queue[:] = remaining
+    return original_len - len(queue)
+
+
+def _append_hold_entries(queue: list[dict], qqs: list[str], reason: str, now_ts: float) -> tuple[list[str], list[str]]:
+    """Append ids to the hold queue with reason and return (success, duplicates)."""
+    success: list[str] = []
+    duplicates: list[str] = []
+
+    for qq in qqs:
+        if any(item["uid"] == qq for item in queue):
+            duplicates.append(qq)
+            continue
+        queue.append({"uid": qq, "join_time": now_ts, "reason": reason})
+        success.append(qq)
+    return success, duplicates
+
+
 def load_config() -> dict:
     """读取 verify_config.json（群号配置）；失败返回空配置（审核功能整体静默停用）。"""
     try:
@@ -85,10 +147,7 @@ async def _(bot: Bot, event: GroupDecreaseNoticeEvent):
     if gid_str not in data: return
 
     uid_str = str(event.user_id)
-    original_len = len(data[gid_str])
-    data[gid_str] = [item for item in data[gid_str] if item['uid'] != uid_str]
-
-    if len(data[gid_str]) < original_len:
+    if _remove_ids_from_queue(data[gid_str], [uid_str]) > 0:
         save_verify_queue(data)
         logger.info(f"🗑️ 新人 {uid_str} 退群，已清理名单")
 
@@ -109,12 +168,7 @@ async def _(event: Event):
     msg = "📋 【停车场待核对名单】\n"
     for item in pending_list:
         uid = item['uid']
-        diff = now_ts - item['join_time']
-        days, hours, mins = int(diff // 86400), int((diff % 86400) // 3600), int((diff % 3600) // 60)
-
-        if days > 0: time_tag = f"{days}天{hours}小时前"
-        elif hours > 0: time_tag = f"{hours}小时{mins}分钟前"
-        else: time_tag = f"{mins}分钟前" if mins > 0 else "刚刚"
+        time_tag = _format_wait_time(now_ts - item['join_time'])
         msg += f"- {uid} ({time_tag})\n"
 
     msg += "\n💡 确认收到后请发：通过审核/审核通过 [QQ号]"
@@ -130,9 +184,7 @@ async def _(event: Event, args: Message = CommandArg()):
 
     data = load_verify_queue()
     if TARGET_GROUP_ID in data:
-        original_len = len(data[TARGET_GROUP_ID])
-        data[TARGET_GROUP_ID] = [item for item in data[TARGET_GROUP_ID] if item['uid'] != target_qq]
-        if len(data[TARGET_GROUP_ID]) < original_len:
+        if _remove_ids_from_queue(data[TARGET_GROUP_ID], [target_qq]) > 0:
             save_verify_queue(data)
             await pass_verify_cmd.finish(f"✅ OK，已将 {target_qq} 从名单中划掉。")
         else:
@@ -147,31 +199,12 @@ async def _(event: Event, args: Message = CommandArg()):
     if not raw_text:
         await add_verify_cmd.finish("（叹气）……你要加谁？把QQ号发过来，多个号用空格隔开。")
 
-    # 用空格/换行符将输入的字符串打碎成列表
-    target_qqs = raw_text.split()
-
     data = load_verify_queue()
     if TARGET_GROUP_ID not in data:
         data[TARGET_GROUP_ID] = []
 
-    success_list = []
-    duplicate_list = []
-    invalid_list = []
-
-    # 遍历处理每一个提取出来的 QQ 号
-    for qq in target_qqs:
-        if not qq.isdigit():
-            invalid_list.append(qq)
-            continue
-
-        # 防止重复添加
-        if any(item['uid'] == qq for item in data[TARGET_GROUP_ID]):
-            duplicate_list.append(qq)
-            continue
-
-        # 加入成功名单
-        data[TARGET_GROUP_ID].append({"uid": qq, "join_time": time.time()})
-        success_list.append(qq)
+    valid_qqs, invalid_list = _split_qq_tokens(raw_text)
+    success_list, duplicate_list = _append_unique_ids(data[TARGET_GROUP_ID], valid_qqs, time.time())
 
     # 只要有成功添加的，就统一保存一次
     if success_list:
@@ -223,34 +256,18 @@ async def _(event: Event, args: Message = CommandArg()):
     if not raw_text:
         await add_bond_cmd.finish("（抱臂）……谁没刷够羁绊？把QQ号发过来，多个号用空格隔开。")
 
-    target_qqs = raw_text.split()
-
     # 同时加载两个名单的数据
     bond_data = load_bond_queue()
     verify_data = load_verify_queue()
 
     if TARGET_GROUP_ID not in bond_data: bond_data[TARGET_GROUP_ID] = []
 
-    success_list, duplicate_list = [], []
-    transferred_count = 0  # 记录成功从原名单里挪出来的人数
+    valid_qqs, _invalid_list = _split_qq_tokens(raw_text)
+    transferred_count = 0
+    if TARGET_GROUP_ID in verify_data:
+        transferred_count = _remove_ids_from_queue(verify_data[TARGET_GROUP_ID], valid_qqs)
 
-    for qq in target_qqs:
-        if not qq.isdigit(): continue
-
-        # 1. 核心联动：自动从原【待审核名单】中删掉这个号
-        if TARGET_GROUP_ID in verify_data:
-            original_len = len(verify_data[TARGET_GROUP_ID])
-            verify_data[TARGET_GROUP_ID] = [item for item in verify_data[TARGET_GROUP_ID] if item['uid'] != qq]
-            if len(verify_data[TARGET_GROUP_ID]) < original_len:
-                transferred_count += 1
-
-        # 2. 加入【羁绊名单】
-        if any(item['uid'] == qq for item in bond_data[TARGET_GROUP_ID]):
-            duplicate_list.append(qq)
-            continue
-
-        bond_data[TARGET_GROUP_ID].append({"uid": qq, "join_time": time.time()})
-        success_list.append(qq)
+    success_list, duplicate_list = _append_unique_ids(bond_data[TARGET_GROUP_ID], valid_qqs, time.time())
 
     # 只要有任何变动，就保存数据
     if success_list or transferred_count > 0:
@@ -304,9 +321,7 @@ async def _(event: Event, args: Message = CommandArg()):
 
     data = load_bond_queue()
     if TARGET_GROUP_ID in data:
-        original_len = len(data[TARGET_GROUP_ID])
-        data[TARGET_GROUP_ID] = [item for item in data[TARGET_GROUP_ID] if item['uid'] != target_qq]
-        if len(data[TARGET_GROUP_ID]) < original_len:
+        if _remove_ids_from_queue(data[TARGET_GROUP_ID], [target_qq]) > 0:
             save_bond_queue(data)
             await pass_bond_cmd.finish(f"✅ 知道了，{target_qq} 已从羁绊名单划掉。")
         else:
@@ -342,11 +357,7 @@ async def _(event: Event, args: Message = CommandArg()):
     if not raw_text:
         await add_hold_cmd.finish("（叹气）……格式：特殊挂号 [QQ号] [理由]。多个QQ号和理由用空格隔开就行。")
 
-    # 智能分词核心逻辑
-    parts = raw_text.split()
-    target_qqs = [p for p in parts if p.isdigit()]        # 把所有纯数字提出来当做 QQ 号
-    reason_parts = [p for p in parts if not p.isdigit()]  # 把所有非数字提出来当做理由
-
+    target_qqs, reason_parts = _split_qq_tokens(raw_text)
     if not target_qqs:
         await add_hold_cmd.finish("（皱眉）……你发了一堆字，但没有包含任何纯数字的QQ号，我怎么知道你要挂起谁？")
 
@@ -358,25 +369,16 @@ async def _(event: Event, args: Message = CommandArg()):
 
     if TARGET_GROUP_ID not in hold_data: hold_data[TARGET_GROUP_ID] = []
 
-    success_list, duplicate_list = [], []
     transferred_count = 0
+    if TARGET_GROUP_ID in verify_data:
+        transferred_count = _remove_ids_from_queue(verify_data[TARGET_GROUP_ID], target_qqs)
 
-    for qq in target_qqs:
-        # 1. 自动从初始【待审核名单】中删掉这个号
-        if TARGET_GROUP_ID in verify_data:
-            original_len = len(verify_data[TARGET_GROUP_ID])
-            verify_data[TARGET_GROUP_ID] = [item for item in verify_data[TARGET_GROUP_ID] if item['uid'] != qq]
-            if len(verify_data[TARGET_GROUP_ID]) < original_len:
-                transferred_count += 1
-
-        # 2. 查重
-        if any(item['uid'] == qq for item in hold_data[TARGET_GROUP_ID]):
-            duplicate_list.append(qq)
-            continue
-
-        # 3. 加入新名单（带上 custom_reason 字段）
-        hold_data[TARGET_GROUP_ID].append({"uid": qq, "join_time": time.time(), "reason": custom_reason})
-        success_list.append(qq)
+    success_list, duplicate_list = _append_hold_entries(
+        hold_data[TARGET_GROUP_ID],
+        target_qqs,
+        custom_reason,
+        time.time(),
+    )
 
     # 只要有任何变动，就保存数据
     if success_list or transferred_count > 0:
@@ -430,9 +432,7 @@ async def _(event: Event, args: Message = CommandArg()):
 
     data = load_hold_queue()
     if TARGET_GROUP_ID in data:
-        original_len = len(data[TARGET_GROUP_ID])
-        data[TARGET_GROUP_ID] = [item for item in data[TARGET_GROUP_ID] if item['uid'] != target_qq]
-        if len(data[TARGET_GROUP_ID]) < original_len:
+        if _remove_ids_from_queue(data[TARGET_GROUP_ID], [target_qq]) > 0:
             save_hold_queue(data)
             await pass_hold_cmd.finish(f"✅ OK，{target_qq} 已从特殊延期名单中划掉。")
         else:

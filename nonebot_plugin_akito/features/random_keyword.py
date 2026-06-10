@@ -227,6 +227,50 @@ def _fuzzy_match_in_categories(name: str) -> tuple[str | list | None, str | None
     return None, None
 
 
+def _resolve_keyword_category_name(cat_name: str, category_names: list[str]) -> str | None:
+    """Match a category by exact name first, then by unique prefix."""
+    for current in category_names:
+        if current.lower() == cat_name.lower():
+            return current
+    for current in category_names:
+        if current.lower().startswith(cat_name.lower()):
+            return current
+    return None
+
+
+def _get_existing_keyword_draw_message(user_record: dict | None, today_str: str) -> str | None:
+    """Return the 'already drawn today' message when the stored record is still valid."""
+    if not user_record:
+        return None
+
+    stored_date_str = user_record.get("date", "")
+    try:
+        stored_date = date_type.fromisoformat(stored_date_str)
+        today = date_type.fromisoformat(today_str)
+    except (ValueError, TypeError):
+        logger.warning("用户抽取日期记录异常，已重置")
+        return None
+
+    if stored_date < today:
+        return None
+
+    prev_items = user_record.get("items", [])
+    prev = "、".join(prev_items) if prev_items else "（无记录）"
+    return f"你今天已经领取过关键词了：{prev}，明天 0:00 刷新哦。"
+
+
+def _select_daily_keywords(
+    categories: list[tuple[str, list]],
+    count: int,
+    *,
+    sample_fn=random.sample,
+    choice_fn=random.choice,
+) -> list[str]:
+    """Pick one keyword from each randomly chosen category."""
+    chosen_cats = sample_fn(categories, k=min(count, len(categories)))
+    return [choice_fn(items) for _cat_name, items in chosen_cats]
+
+
 # ==================== 今日关键词 ====================
 
 _DRAW_LOCKS: dict[str, asyncio.Lock] = {}
@@ -258,31 +302,13 @@ async def _(event: Event):
         # 普通用户每日限 1 次；超管不限制
         if not is_superuser:
             draws = _load_draws()
-            user_record = draws.get(user_id)
-
-            if user_record:
-                stored_date_str = user_record.get("date", "")
-                try:
-                    stored_date = date_type.fromisoformat(stored_date_str)
-                    today = date_type.fromisoformat(today_str)
-                    if stored_date >= today:
-                        prev_items = user_record.get("items", [])
-                        prev = "、".join(prev_items) if prev_items else "（无记录）"
-                        await draw_cmd.finish(
-                            MessageSegment.reply(event.message_id)
-                            + f"你今天已经领取过关键词了：{prev}，明天 0:00 刷新哦。"
-                        )
-                except (ValueError, TypeError):
-                    logger.warning(f"用户 {user_id} 的抽取日期记录异常，已重置")
+            existing_message = _get_existing_keyword_draw_message(draws.get(user_id), today_str)
+            if existing_message:
+                await draw_cmd.finish(MessageSegment.reply(event.message_id) + existing_message)
 
         # 随机选 N 个不同分类，每个分类随机抽 1 个
         count = random.randint(1, 3)
-        count = min(count, len(cats))
-        chosen_cats = random.sample(cats, k=count)
-        selected: list[str] = []
-        for _cat_name, items in chosen_cats:
-            kw = random.choice(items)
-            selected.append(kw)
+        selected = _select_daily_keywords(cats, count)
 
         # 保存普通用户记录；超管不保存
         if not is_superuser:
@@ -343,16 +369,7 @@ async def _(event: Event, args: Message = CommandArg()):
     cat_name, kw_name = parts[0], parts[1]
     categories = KEYWORD_DATA.setdefault("categories", {})
 
-    cat_match = None
-    for c in categories:
-        if c.lower() == cat_name.lower():
-            cat_match = c
-            break
-    if not cat_match:
-        for c in _get_category_names():
-            if c.lower().startswith(cat_name.lower()):
-                cat_match = c
-                break
+    cat_match = _resolve_keyword_category_name(cat_name, _get_category_names())
     if not cat_match:
         await add_cmd.finish(
             f"未找到分类「{cat_name}」。可用分类：{' / '.join(_get_category_names())}"

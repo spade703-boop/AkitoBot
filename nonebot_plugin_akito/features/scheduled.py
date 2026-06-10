@@ -16,20 +16,34 @@ from ..core import MEMORY_DB, REACTIONS_DB, TARGET_GROUPS, TZ_CN, grant_safety_p
 # 定时任务模块 (SCHEDULED TASKS)
 # ==============================================================================
 
+
+def _clean_memory_db(memory_db: dict, now_ts: float) -> int:
+    """Prune expired temp implants in-place and return the total removed count."""
+    cleaned_count = 0
+    for key in list(memory_db.keys()):
+        memory = memory_db[key]
+        if "temp_implants" not in memory:
+            continue
+        original_len = len(memory["temp_implants"])
+        memory["temp_implants"] = [
+            item for item in memory["temp_implants"]
+            if item.get("expire_at", item.get("expire_time", 0)) > now_ts
+        ]
+        cleaned_count += original_len - len(memory["temp_implants"])
+    return cleaned_count
+
+
+def _get_scheduled_greeting(period: str, reactions_db: dict) -> str:
+    """Pick the morning or night greeting with a safe default."""
+    defaults = {"morning": ["早。"], "night": ["晚安。"]}
+    quotes = reactions_db.get("greetings", {}).get(period) or defaults[period]
+    return random.choice(quotes)
+
+
 @scheduler.scheduled_job("interval", hours=1, id="clean_expired_memory")
 async def clean_expired_memory() -> None:
     """每小时清理一次过期的临时记忆"""
-    now = time.time()
-    cleaned_count = 0
-    for key in list(MEMORY_DB.keys()):
-        memory = MEMORY_DB[key]
-        if "temp_implants" in memory:
-            original_len = len(memory["temp_implants"])
-            memory["temp_implants"] = [
-                i for i in memory["temp_implants"]
-                if i.get("expire_at", i.get("expire_time", 0)) > now
-            ]
-            cleaned_count += (original_len - len(memory["temp_implants"]))
+    cleaned_count = _clean_memory_db(MEMORY_DB, time.time())
 
     if cleaned_count > 0:
         save_memory()
@@ -41,8 +55,7 @@ async def akito_morning() -> None:
     """早安问候"""
     try:
         bot = get_bot()
-        morning_quotes = REACTIONS_DB.get("greetings", {}).get("morning") or ["早。"]
-        msg = random.choice(morning_quotes)
+        msg = _get_scheduled_greeting("morning", REACTIONS_DB)
         grant_safety_pass(10)
         for gid in TARGET_GROUPS:
             try:
@@ -60,8 +73,7 @@ async def akito_night() -> None:
     """晚安问候"""
     try:
         bot = get_bot()
-        night_quotes = REACTIONS_DB.get("greetings", {}).get("night") or ["晚安。"]
-        msg = random.choice(night_quotes)
+        msg = _get_scheduled_greeting("night", REACTIONS_DB)
         grant_safety_pass(10)
         for gid in TARGET_GROUPS:
             try:

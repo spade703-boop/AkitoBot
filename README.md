@@ -4,7 +4,7 @@
 
 - **CP 立场**：彰冬（不拆不逆）
 - **AI 后端**：DeepSeek API（对话）/ 智谱 GLM-4V（图片识别）/ Tavily（联网搜索）
-- **当前版本**：0.3.1
+- **当前版本**：0.3.2
 
 ---
 
@@ -215,6 +215,71 @@ akito_bot/
 ```
 
 > 依赖方向：`features/` → `core/` ← `handlers/`，三层职责与每个文件的接口详见 `PLUGIN_MAINTENANCE.md`。
+
+---
+
+## 本地测试
+
+这套测试是给“本地沙箱里先测核心逻辑”准备的，不会去碰云服务器上的实时聊天数据。
+
+- 改代码后**不会自动跑测试**。只有你手动执行 `pytest`，测试才会开始。
+- `pytest -q` 会跑**整套测试**。
+- 测试按模块拆成独立文件，可以只跑某一块，不需要每次全量回归。
+- 更实用的做法是：**AI 改了哪块，就先跑哪块对应的测试文件**；只有改到共享底层、跨多个模块，或者准备统一提交前，再跑一次全量。
+
+常用命令：
+
+```bash
+ruff check .
+pytest -q
+pytest tests/test_chat_helpers.py -q
+pytest tests/test_commands_helpers.py -q
+pytest tests/test_reactions_helpers.py -q
+pytest tests/test_impression_helpers.py -q
+pytest tests/test_verify_helpers.py -q
+pytest tests/test_gallery_helpers.py -q
+pytest tests/test_random_paro_helpers.py -q
+pytest tests/test_random_keyword_helpers.py -q
+pytest tests/test_data.py -q
+pytest tests/test_director.py -q
+pytest tests/test_event_mode_helpers.py -q
+pytest tests/test_scheduled_helpers.py -q
+```
+
+常见对应关系：
+
+- 改 `handlers/chat.py` → 先跑 `pytest tests/test_chat_helpers.py -q`
+- 改 `handlers/commands.py` → 先跑 `pytest tests/test_commands_helpers.py -q`
+- 改 `handlers/reactions.py` → 先跑 `pytest tests/test_reactions_helpers.py -q`
+- 改 `features/impression.py` → 先跑 `pytest tests/test_impression_helpers.py -q`
+- 改 `features/verify.py` → 先跑 `pytest tests/test_verify_helpers.py -q`
+- 改 `features/gallery.py` → 先跑 `pytest tests/test_gallery_helpers.py -q`
+- 改 `features/random_paro.py` → 先跑 `pytest tests/test_random_paro_helpers.py -q`
+- 改 `features/random_keyword.py` → 先跑 `pytest tests/test_random_keyword_helpers.py -q`
+- 改 `features/director.py` → 先跑 `pytest tests/test_director.py -q`
+- 改 `features/event_mode.py` → 先跑 `pytest tests/test_event_mode_helpers.py -q`
+- 改 `features/scheduled.py` → 先跑 `pytest tests/test_scheduled_helpers.py -q`
+- 改 `core/data.py` → 先跑 `pytest tests/test_data.py -q`
+- 改 `core/` 里的共享底层，或一次改了多块联动逻辑 → 直接补跑 `pytest -q`
+
+本地测试怎么绕开真实运行环境：
+
+- `tests/conftest.py` 会把 `tests/fixtures/test_data/` 复制到临时目录。
+- 然后通过环境变量 `AKITO_DATA_DIR` 把代码里的读写路径指向这个临时目录，不碰你真实的 `data/`。
+- `AKITO_SKIP_PLUGIN_LOAD=1` 会跳过真实插件加载。
+- NoneBot、OneBot、OpenAI、HTML 渲染、网络请求这些边界都换成了假对象，所以本地能测“真业务逻辑 + 假平台外壳”。
+
+这意味着本地最适合测的是：
+
+- 指令参数解析
+- 名单/记忆/路径这类数据处理
+- 不依赖真实 QQ 收发的核心判断逻辑
+
+不适合直接在本地测的是：
+
+- 云端 `/data` 里的实时聊天记录
+- 真实 QQ 发消息行为
+- 外部 API 的真实返回
 
 ---
 

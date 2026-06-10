@@ -31,6 +31,32 @@ from ..core import (
 # 原独立的「冬弥呢」指令（toya_status_cmd / get_toya_location_reply）已移除。
 
 
+def _has_wl2_implant(mem: dict) -> bool:
+    """Return True when the current memory indicates WL2 mode."""
+    return any(item.get("id") == "WL2" for item in mem.get("temp_implants", []))
+
+
+def _resolve_poke_reactions(current_state: object, daily_routine: dict) -> list[str]:
+    """Return poke replies from the current state, falling back to defaults."""
+    reactions = current_state.get("poke", []) if isinstance(current_state, dict) else []
+    return reactions or daily_routine.get("fallback_poke", ["喂，别乱戳啊。"])
+
+
+def _should_skip_self_complaint(
+    *,
+    sleeping: bool,
+    now_ts: float,
+    safe_until: float,
+    last_complaint: float,
+    group_key: str,
+    superuser_times: dict[str, float],
+) -> bool:
+    """Return True when the late-night self complaint should not be sent."""
+    if not sleeping or now_ts < safe_until or now_ts - last_complaint < 10:
+        return True
+    return now_ts - superuser_times.get(group_key, 0) < 30
+
+
 # --- 1. 戳一戳互动 ---
 poke = on_notice()
 @poke.handle()
@@ -41,7 +67,7 @@ async def _(bot: Bot, event: NoticeEvent):
     if group_id and group_id not in ALLOWED_CHAT_GROUPS: return
 
     mem = get_user_memory(get_memory_key(event))
-    if any(item.get("id") == "WL2" for item in mem.get("temp_implants", [])):
+    if _has_wl2_implant(mem):
         grant_safety_pass(5)
         await poke.finish(random.choice([
             "……别碰我，我现在没心情理人。",
@@ -60,8 +86,7 @@ async def _(bot: Bot, event: NoticeEvent):
     now_full = datetime.datetime.now(TZ_CN)
     get_daily_activity(now_full.hour, now_full.weekday(), now_full.minute)
     current_state = AKITO_STATUS.get("cached_content", "")
-    reactions = current_state.get("poke", []) if isinstance(current_state, dict) else []
-    if not reactions: reactions = DAILY_ROUTINE.get("fallback_poke", ["喂，别乱戳啊。"])
+    reactions = _resolve_poke_reactions(current_state, DAILY_ROUTINE)
 
     await asyncio.sleep(random.uniform(0.5, 1.5))
     grant_safety_pass(5)
@@ -80,15 +105,21 @@ async def _(bot: Bot, event: Event):
     if group_id and group_id not in ALLOWED_CHAT_GROUPS:
         return
 
-    if not is_sleeping() or time.time() < get_safe_until() or time.time() - get_last_complaint() < 10:
-        return
+    now_ts = time.time()
     # 该群30秒内由超管触发过回复，跳过抱怨（防止测试时刷抱怨）
     # 使用 per-group 时间戳，避免超管在 A 群说话后误压制 B 群的抱怨
-    _su_group_id = str(getattr(event, "group_id", "private"))
-    _su_times = AKITO_STATUS.get("last_superuser_trigger_time", {})
-    if time.time() - _su_times.get(_su_group_id, 0) < 30:
+    group_key = str(getattr(event, "group_id", "private"))
+    superuser_times = AKITO_STATUS.get("last_superuser_trigger_time", {})
+    if _should_skip_self_complaint(
+        sleeping=is_sleeping(),
+        now_ts=now_ts,
+        safe_until=get_safe_until(),
+        last_complaint=get_last_complaint(),
+        group_key=group_key,
+        superuser_times=superuser_times,
+    ):
         return
-    set_last_complaint(time.time())
+    set_last_complaint(now_ts)
     await asyncio.sleep(random.uniform(2.0, 4.0))
     grant_safety_pass(10)
     try:

@@ -260,6 +260,81 @@ def _fuzzy_match(name: str, pool: list) -> str | list | None:
     return None
 
 
+def _parse_draw_request(raw_text: str) -> tuple[int, str]:
+    """Parse the draw count and any directional request from user input."""
+    count = 1
+    directional = ""
+    raw = raw_text.strip()
+    if not raw:
+        return count, directional
+
+    tokens = raw.split()
+    for i, token in enumerate(tokens):
+        if token.isdigit() and 1 <= int(token) <= 3:
+            return int(token), " ".join(tokens[:i] + tokens[i + 1 :])
+    return count, raw
+
+
+def _resolve_directional_draw(
+    directional: str,
+    akito_pool: list[str],
+    toya_pool: list[str],
+) -> tuple[str | None, str | None, str | None]:
+    """Resolve a fixed Akito/Toya draw request into chosen entries or an error message."""
+    if not directional:
+        return None, None, None
+
+    directional_lower = directional.lower()
+    if directional_lower.startswith("彰人"):
+        name = directional[2:].strip()
+        if not name:
+            return None, None, "请指定彰人的派生名称，例如：抽派生 彰人 黑百合"
+        match = _fuzzy_match(name, akito_pool)
+        if not match:
+            return None, None, f"彰人的派生池里没有与「{name}」匹配的条目。"
+        if isinstance(match, list):
+            return None, None, f"「{name}」匹配到多个条目：{' / '.join(match)}，请补充完整。"
+        return match, None, None
+
+    if directional_lower.startswith("冬弥"):
+        name = directional[2:].strip()
+        if not name:
+            return None, None, "请指定冬弥的派生名称，例如：抽派生 冬弥 王子冬"
+        match = _fuzzy_match(name, toya_pool)
+        if not match:
+            return None, None, f"冬弥的派生池里没有与「{name}」匹配的条目。"
+        if isinstance(match, list):
+            return None, None, f"「{name}」匹配到多个条目：{' / '.join(match)}，请补充完整。"
+        return None, match, None
+
+    return None, None, "请指定要固定哪一方的派生，例如：抽派生 彰人 黑百合。\n彰冬不拆不逆，一方派生固定则另一方派生随机。"
+
+
+def _prune_draw_history(history: list[float], now_ts: float, window: int) -> list[float]:
+    """Drop expired draw timestamps within the rolling window."""
+    return [ts for ts in history if now_ts - ts < window]
+
+
+def _build_draw_limit_message(
+    *,
+    remaining_before: int,
+    requested_count: int,
+    history: list[float],
+    now_ts: float,
+    draw_limit: int,
+    draw_window: int,
+) -> str | None:
+    """Return the cooldown message when the request exceeds the current allowance."""
+    if remaining_before >= requested_count:
+        return None
+    if remaining_before <= 0:
+        oldest = min(history)
+        wait = int(draw_window - (now_ts - oldest))
+        mins, secs = wait // 60, wait % 60
+        return f"30分钟内最多抽{draw_limit}次，你已用完次数，请在 {mins} 分 {secs} 秒后再试。"
+    return f"30分钟内仅剩 {remaining_before} 次，无法抽 {requested_count} 次。"
+
+
 # ==================== 多抽渲染 ====================
 
 SEQS = ["①", "②", "③"]
@@ -510,67 +585,26 @@ async def _(event: Event, args: Message = CommandArg()):
             )
 
         # 解析参数：提取数字 token（1-3）+ 方向/名称
-        raw = args.extract_plain_text().strip()
-        count = 1
-        directional = ""  # 剩余的方向+名称字符串
-        if raw:
-            tokens = raw.split()
-            for i, t in enumerate(tokens):
-                if t.isdigit() and 1 <= int(t) <= 3:
-                    count = int(t)
-                    directional = " ".join(tokens[:i] + tokens[i+1:])
-                    break
-            else:
-                directional = raw
-
-        fixed_a = None
-        fixed_b = None
-        if directional:
-            dl = directional.lower()
-            if dl.startswith("彰人"):
-                name = directional[2:].strip()
-                if not name:
-                    await draw_cmd.finish("请指定彰人的派生名称，例如：抽派生 彰人 黑百合")
-                match = _fuzzy_match(name, akito_pool)
-                if not match:
-                    await draw_cmd.finish(f"彰人的派生池里没有与「{name}」匹配的条目。")
-                if isinstance(match, list):
-                    await draw_cmd.finish(f"「{name}」匹配到多个条目：{' / '.join(match)}，请补充完整。")
-                fixed_a = match
-            elif dl.startswith("冬弥"):
-                name = directional[2:].strip()
-                if not name:
-                    await draw_cmd.finish("请指定冬弥的派生名称，例如：抽派生 冬弥 王子冬")
-                match = _fuzzy_match(name, toya_pool)
-                if not match:
-                    await draw_cmd.finish(f"冬弥的派生池里没有与「{name}」匹配的条目。")
-                if isinstance(match, list):
-                    await draw_cmd.finish(f"「{name}」匹配到多个条目：{' / '.join(match)}，请补充完整。")
-                fixed_b = match
-            else:
-                await draw_cmd.finish("请指定要固定哪一方的派生，例如：抽派生 彰人 黑百合。\n彰冬不拆不逆，一方派生固定则另一方派生随机。")
+        count, directional = _parse_draw_request(args.extract_plain_text())
+        fixed_a, fixed_b, directional_error = _resolve_directional_draw(directional, akito_pool, toya_pool)
+        if directional_error:
+            await draw_cmd.finish(directional_error)
 
         # 限频检查
         now = time.time()
-        history = _DRAW_COOLDOWNS.get(user_id, [])
-        history = [t for t in history if now - t < _DRAW_WINDOW]
+        history = _prune_draw_history(_DRAW_COOLDOWNS.get(user_id, []), now, _DRAW_WINDOW)
         _DRAW_COOLDOWNS[user_id] = history
         remaining_before = _DRAW_LIMIT - len(history)
-
-        if remaining_before < count:
-            if remaining_before <= 0:
-                oldest = min(history)
-                wait = int(_DRAW_WINDOW - (now - oldest))
-                mins, secs = wait // 60, wait % 60
-                await draw_cmd.finish(
-                    MessageSegment.reply(event.message_id)
-                    + f"30分钟内最多抽{_DRAW_LIMIT}次，你已用完次数，请在 {mins} 分 {secs} 秒后再试。"
-                )
-            else:
-                await draw_cmd.finish(
-                    MessageSegment.reply(event.message_id)
-                    + f"30分钟内仅剩 {remaining_before} 次，无法抽 {count} 次。"
-                )
+        limit_message = _build_draw_limit_message(
+            remaining_before=remaining_before,
+            requested_count=count,
+            history=history,
+            now_ts=now,
+            draw_limit=_DRAW_LIMIT,
+            draw_window=_DRAW_WINDOW,
+        )
+        if limit_message:
+            await draw_cmd.finish(MessageSegment.reply(event.message_id) + limit_message)
 
         nickname = event.sender.card or event.sender.nickname or f"用户{user_id}"
 

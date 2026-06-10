@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+from collections.abc import Callable
 from io import BytesIO
 from pathlib import Path
 import random
@@ -34,6 +35,123 @@ from ..core import (
 # ==============================================================================
 # 模块 8：相册图库引擎 (IMAGE & GALLERY SYSTEM)
 # ==============================================================================
+
+IMAGE_CATEGORIES = ("toya", "self", "food", "groupmate", "vbs", "meme")
+ITEMS_PER_PAGE = 30
+
+
+def _match_category(text: str, rules: tuple[tuple[str, tuple[str, ...]], ...], default: str = "") -> str:
+    """Match the first category whose keyword appears in the input text."""
+    for category, keywords in rules:
+        if any(keyword in text for keyword in keywords):
+            return category
+    return default
+
+
+def _resolve_save_category_and_reply(
+    text: str,
+    replies_db: dict,
+    chooser: Callable[[list[str]], str] = random.choice,
+) -> tuple[str, str]:
+    """Resolve which category a manual save request targets and pick its reply."""
+    defaults = {
+        "toya": ["……哦，谢了。"],
+        "self": ["……发这个干嘛。"],
+        "food": ["……看起来还行。"],
+        "groupmate": ["又在说什么傻话？"],
+        "vbs": ["……哼。"],
+        "meme": ["……啧。"],
+    }
+    category = _match_category(
+        text,
+        (
+            ("toya", ("冬弥", "搭档", "toya", "老婆")),
+            ("self", ("你自己", "彰人", "自拍", "akito")),
+            ("food", ("松饼", "吃的", "蛋糕", "甜点")),
+            ("groupmate", ("群友",)),
+            ("vbs", ("合照", "vbs", "队友")),
+            ("meme", ("表情", "梗图", "meme")),
+        ),
+    )
+    if not category:
+        return "", ""
+    return category, chooser(replies_db.get(category, defaults[category]))
+
+
+def _build_collect_session_key(group_id: int | None, user_id: str) -> str:
+    """Build the collecting session key for a group or private chat."""
+    return f"group_{group_id}" if group_id else f"private_{user_id}"
+
+
+def _resolve_collect_category(text: str) -> str:
+    """Resolve the target category for collect mode, defaulting to toya."""
+    return _match_category(
+        text,
+        (
+            ("self", ("你自己", "彰人", "自拍", "akito")),
+            ("food", ("松饼", "吃的", "蛋糕", "甜点")),
+            ("groupmate", ("群友",)),
+            ("vbs", ("合照", "vbs", "队友")),
+            ("meme", ("表情", "meme", "梗图")),
+        ),
+        default="toya",
+    )
+
+
+def _resolve_send_image_request(
+    text: str,
+    allowed_categories: list[str],
+    is_wl2_active: bool,
+    chooser: Callable[[list[str]], str] = random.choice,
+) -> tuple[str, str]:
+    """Resolve the send-image category and prompt hint from user input."""
+    explicit_rules = (
+        ("toya", ("冬弥", "搭档", "toya", "老婆"), "表现：嘴上说'为什么要给你看'，但还是发了。"),
+        ("self", ("你自己", "自拍", "彰人", "akito"), "表现：稍微有点自恋但又装作不在意。"),
+        ("groupmate", ("群友",), ""),
+        ("food", ("松饼", "吃的", "蛋糕", "甜点"), "发一张探店图并评价。"),
+        ("vbs", ("合照", "vbs", "队友"), "发一张大家的日常。"),
+        ("meme", ("表情", "梗图", "meme"), "随便发一张手机里存的表情。"),
+    )
+    for category, keywords, prompt_hint in explicit_rules:
+        if any(keyword in text for keyword in keywords):
+            return category, prompt_hint
+
+    if "all" in allowed_categories:
+        category = "self" if is_wl2_active else chooser(["toya", "self"])
+    else:
+        valid_choices = [category for category in allowed_categories if category in IMAGE_CATEGORIES]
+        if is_wl2_active:
+            valid_choices = [category for category in valid_choices if category not in {"toya", "vbs"}]
+        if not valid_choices:
+            return "", ""
+        category = chooser(valid_choices)
+
+    return category, "用户只说了看看。随机发一张，并问他想干嘛。"
+
+
+def _resolve_gallery_category(text: str) -> str:
+    """Resolve the category named in a gallery list request."""
+    return _match_category(
+        text,
+        (
+            ("toya", ("冬弥", "搭档", "toya")),
+            ("self", ("你", "彰人", "自拍", "self", "akito")),
+            ("food", ("吃", "食", "food", "松饼", "蛋糕", "甜点")),
+            ("groupmate", ("群友", "groupmate")),
+            ("vbs", ("合照", "vbs", "队友")),
+            ("meme", ("表情", "meme", "梗图")),
+        ),
+    )
+
+
+def _paginate_gallery(total_files: int, requested_page: int, items_per_page: int) -> tuple[int, int, int, int]:
+    """Clamp the requested page and return (page, total_pages, start, end)."""
+    total_pages = max(1, (total_files + items_per_page - 1) // items_per_page)
+    page = max(1, min(requested_page, total_pages))
+    start = (page - 1) * items_per_page
+    end = page * items_per_page
+    return page, total_pages, start, end
 
 def get_random_local_image(category: str) -> Path | None:
     """从某分类图库随机返回一张有效图片路径；目录不存在则创建后返回 None。"""
@@ -74,15 +192,9 @@ async def _(bot: Bot, event: GroupMessageEvent):
             if seg.type == "image": img_url = seg.data.get("url"); break
     if not img_url: return
 
-    category, save_msg = "", ""
     replies_db = REACTIONS_DB.get("save_img_replies", {})
-    if any(k in text for k in ["冬弥", "搭档", "toya", "老婆"]): category, save_msg = "toya", random.choice(replies_db.get("toya", ["……哦，谢了。"]))
-    elif any(k in text for k in ["你自己", "彰人", "自拍", "akito"]): category, save_msg = "self", random.choice(replies_db.get("self", ["……发这个干嘛。"]))
-    elif any(k in text for k in ["松饼", "吃的", "蛋糕", "甜点"]): category, save_msg = "food", random.choice(replies_db.get("food", ["……看起来还行。"]))
-    elif any(k in text for k in ["群友"]): category, save_msg = "groupmate", random.choice(replies_db.get("groupmate", ["又在说什么傻话？"]))
-    elif any(k in text for k in ["合照", "vbs", "队友"]): category, save_msg = "vbs", random.choice(replies_db.get("vbs", ["……哼。"]))
-    elif any(k in text for k in ["表情", "梗图", "meme"]): category, save_msg = "meme", random.choice(replies_db.get("meme", ["……啧。"]))
-    else: return
+    category, save_msg = _resolve_save_category_and_reply(text, replies_db)
+    if not category: return
 
     try:
         save_dir = IMAGE_BASE_PATH / category
@@ -103,9 +215,9 @@ collect_cmd = on_command("开始进货", aliases={"开始收图", "停止进货"
 async def _(event: Event, args: Message = CommandArg()):
     group_id, user_id = getattr(event, 'group_id', None), event.get_user_id()
     if group_id:
-        session_key = f"group_{group_id}"
+        session_key = _build_collect_session_key(group_id, user_id)
         if group_id not in GROUP_IMAGE_PERMISSIONS: return
-    else: session_key = f"private_{user_id}"
+    else: session_key = _build_collect_session_key(group_id, user_id)
 
     text = event.get_plaintext()
     if "停止" in text or "结束" in text:
@@ -115,12 +227,7 @@ async def _(event: Event, args: Message = CommandArg()):
         else: await collect_cmd.finish("哦，行。")
 
     target = args.extract_plain_text().strip()
-    category = "toya"
-    if any(k in target for k in ["你自己", "彰人", "自拍", "akito"]): category = "self"
-    elif any(k in target for k in ["松饼", "吃的", "蛋糕", "甜点"]): category = "food"
-    elif any(k in target for k in ["群友"]): category = "groupmate"
-    elif any(k in target for k in ["合照", "vbs", "队友"]): category = "vbs"
-    elif any(k in target for k in ["表情", "meme", "梗图"]): category = "meme"
+    category = _resolve_collect_category(target)
 
     if group_id and not check_img_permission(group_id, category):
         await collect_cmd.finish("（皱眉）……这是什么图。")
@@ -133,7 +240,7 @@ auto_save_monitor = on_message(priority=7, block=False)
 @auto_save_monitor.handle()
 async def _(bot: Bot, event: Event):
     group_id, user_id = getattr(event, 'group_id', None), event.get_user_id()
-    session_key = f"group_{group_id}" if group_id else f"private_{user_id}"
+    session_key = _build_collect_session_key(group_id, user_id)
     if session_key not in COLLECTING_MODE: return
     if any(k in event.get_plaintext().strip() for k in ["存", "收下", "投喂", "增加"]): return
 
@@ -183,30 +290,10 @@ async def _(event: Event, args: Message = CommandArg()):
     is_wl2_active = any(item.get("id") == "WL2" for item in mem.get("temp_implants", []))
 
     text = args.extract_plain_text().strip()
-    category, prompt_hint = "", ""
-    if any(k in text for k in ["冬弥", "搭档", "toya", "老婆"]):
-        category, prompt_hint = "toya", "表现：嘴上说'为什么要给你看'，但还是发了。"
-    elif any(k in text for k in ["你自己", "自拍", "彰人", "akito"]):
-        category, prompt_hint = "self", "表现：稍微有点自恋但又装作不在意。"
-    elif any(k in text for k in ["群友"]):
-        category, prompt_hint = "groupmate", ""
-    elif any(k in text for k in ["松饼", "吃的", "蛋糕", "甜点"]):
-        category, prompt_hint = "food", "发一张探店图并评价。"
-    elif any(k in text for k in ["合照", "vbs", "队友"]):
-        category, prompt_hint = "vbs", "发一张大家的日常。"
-    elif any(k in text for k in ["表情", "梗图", "meme"]):
-        category, prompt_hint = "meme", "随便发一张手机里存的表情。"
-    else:
-        allowed = GROUP_IMAGE_PERMISSIONS.get(group_id, [])
-        if "all" in allowed:
-            category = "self" if is_wl2_active else random.choice(["toya", "self"])
-        else:
-            valid_choices = [c for c in allowed if c in ["toya", "self", "food", "vbs", "meme", "groupmate"]]
-            if is_wl2_active:
-                valid_choices = [c for c in valid_choices if c not in ["toya", "vbs"]]
-            if not valid_choices: await send_img_cmd.finish("（摊手）……这儿没什么能发的。")
-            category = random.choice(valid_choices)
-        prompt_hint = "用户只说了看看。随机发一张，并问他想干嘛。"
+    allowed = GROUP_IMAGE_PERMISSIONS.get(group_id, [])
+    category, prompt_hint = _resolve_send_image_request(text, allowed, is_wl2_active)
+    if not category:
+        await send_img_cmd.finish("（摊手）……这儿没什么能发的。")
 
     if is_wl2_active and category in ["toya", "vbs"]:
         grant_safety_pass(5)
@@ -308,25 +395,16 @@ async def _(event: Event, args: Message = CommandArg()):
     cat_raw = params[0] if len(params) > 0 else ""
     page = int(params[1]) if len(params) > 1 and params[1].isdigit() else 1
 
-    target_cat = ""
-    if any(k in cat_raw for k in ["冬弥", "搭档", "toya"]): target_cat = "toya"
-    elif any(k in cat_raw for k in ["你", "自拍", "self"]): target_cat = "self"
-    elif any(k in cat_raw for k in ["吃", "食", "food", "松饼"]): target_cat = "food"
-    elif any(k in cat_raw for k in ["群友", "groupmate"]): target_cat = "groupmate"
-    elif any(k in cat_raw for k in ["合照", "vbs"]): target_cat = "vbs"
-    elif any(k in cat_raw for k in ["表情", "meme"]): target_cat = "meme"
-
+    target_cat = _resolve_gallery_category(cat_raw)
     if not target_cat: await gallery_cmd.finish("请指定分类！例如：图库清单 表情")
     if "all" not in allowed_cats and target_cat not in allowed_cats: await gallery_cmd.finish(f"🚫 本群没有查看【{target_cat}】的权限。")
 
     all_files = get_file_list_safe(target_cat)
     if not all_files: await gallery_cmd.finish(f"📂 【{target_cat}】相册是空的！")
 
-    ITEMS_PER_PAGE = 30
     total_files = len(all_files)
-    total_pages = (total_files + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE
-    page = max(1, min(page, total_pages))
-    current_files = all_files[(page-1)*ITEMS_PER_PAGE : page*ITEMS_PER_PAGE]
+    page, total_pages, start, end = _paginate_gallery(total_files, page, ITEMS_PER_PAGE)
+    current_files = all_files[start:end]
 
     html = f"""
     <html>
