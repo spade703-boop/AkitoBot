@@ -1147,6 +1147,86 @@ def _build_personal_pair_items(user_stats: dict) -> list[dict]:
     return items
 
 
+def _new_user_egg_history() -> dict:
+    return {
+        "cooking_count": 0,
+        "foxbun_count": 0,
+        "cooking_pair_hits": {},
+        "cooking_pair_last_hit_seq": {},
+        "_seq": 0,
+    }
+
+
+def _record_user_egg_history_entry(
+    egg_history: dict,
+    *,
+    akito_name: str,
+    toya_name: str,
+    egg_type: str,
+) -> None:
+    if egg_type == "cooking":
+        egg_history["cooking_count"] += 1
+        pair_key = _make_pair_key(akito_name, toya_name)
+        egg_history["_seq"] += 1
+        _bump_counter(egg_history["cooking_pair_hits"], pair_key)
+        egg_history["cooking_pair_last_hit_seq"][pair_key] = egg_history["_seq"]
+        return
+    if egg_type == "foxbun":
+        egg_history["foxbun_count"] += 1
+
+
+def _collect_user_egg_history(group_id: int, user_id: str) -> dict:
+    egg_history = _new_user_egg_history()
+    path = _egg_log_path()
+    if not path.exists():
+        return egg_history
+
+    target_group_id = str(group_id)
+    target_user_id = str(user_id)
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except Exception:
+                    continue
+                if str(entry.get("group_id")) != target_group_id or str(entry.get("user_id")) != target_user_id:
+                    continue
+                egg_type = str(entry.get("egg_type") or "")
+                if egg_type not in {"cooking", "foxbun"}:
+                    continue
+                _record_user_egg_history_entry(
+                    egg_history,
+                    akito_name=str(entry.get("akito") or ""),
+                    toya_name=str(entry.get("toya") or ""),
+                    egg_type=egg_type,
+                )
+    except Exception:
+        logger.warning(f"读取 {EGG_LOG_FILE} 失败，无法构建个人做饭彩蛋历史")
+    return egg_history
+
+
+def _build_personal_cooking_pair_items(egg_history: dict) -> list[dict]:
+    items = []
+    for pair_key, count in _sorted_ranked_items(
+        egg_history["cooking_pair_hits"],
+        egg_history.get("cooking_pair_last_hit_seq"),
+    ):
+        akito_name, toya_name = _split_pair_key(pair_key)
+        items.append(
+            {
+                "pair_key": pair_key,
+                "akito_name": akito_name,
+                "toya_name": toya_name,
+                "count": count,
+            }
+        )
+    return items
+
+
 def _get_group_stats(group_id: int) -> dict:
     today_str = _today_str()
     group_stats, rolled = _get_or_create_group_stats(str(group_id), today_str)
@@ -1239,7 +1319,7 @@ def _render_leaderboard_card(title: str, subtitle: str, sections: list[dict]) ->
     return buf.getvalue()
 
 
-def _render_personal_paro_card(user_id: str, display_name: str, user_stats: dict) -> bytes:
+def _render_personal_paro_card(user_id: str, display_name: str, user_stats: dict, egg_history: dict) -> bytes:
     width = 860
     pad_x = 34
     pad_y = 26
@@ -1261,7 +1341,7 @@ def _render_personal_paro_card(user_id: str, display_name: str, user_stats: dict
 
     summary_rows = [
         {"left": "累计抽取派生次数", "right": f"{user_stats['draw_count']}次"},
-        {"left": "累计抽到做饭的次数", "right": f"{user_stats['egg_count']}次"},
+        {"left": "累计抽到做饭的次数", "right": f"{egg_history['cooking_count']}次"},
     ]
     prepared_sections = [
         ("累计记录", _prepare_display_rows(summary_rows)),
@@ -1289,13 +1369,13 @@ def _render_personal_paro_card(user_id: str, display_name: str, user_stats: dict
         ),
     ]
 
-    pair_items = _build_personal_pair_items(user_stats)
+    pair_items = _build_personal_cooking_pair_items(egg_history)
     content_width = width - pad_x * 2
     pair_columns = max(1, (content_width + pair_gap) // (pair_tile_w + pair_gap))
     pair_row_count = (len(pair_items) + pair_columns - 1) // pair_columns if pair_items else 0
 
     foxbun_icon = _load_fox_stat_icon("foxbun")
-    foxbun_text = f"狐兔彩蛋：累计触发 {user_stats['foxbun_count']} 次。"
+    foxbun_text = f"狐兔饭：累计触发 {egg_history['foxbun_count']} 次。"
     fox_line_height = max(56, (foxbun_icon.height if foxbun_icon else 0) + 8)
 
     height = pad_y + 38 + 28 + 56
@@ -1383,7 +1463,7 @@ def _render_personal_paro_card(user_id: str, display_name: str, user_stats: dict
             )
         y += pair_row_count * pair_tile_h + max(0, pair_row_count - 1) * pair_gap
     else:
-        draw.text((pad_x, y + 20), "暂无可见派生记录", font=font_row, fill="#888888", anchor="la")
+        draw.text((pad_x, y + 20), "还没有抽到做饭彩蛋", font=font_row, fill="#888888", anchor="la")
         y += 44
     y += fox_section_gap
 
@@ -1393,7 +1473,7 @@ def _render_personal_paro_card(user_id: str, display_name: str, user_stats: dict
         icon_y = y + (fox_line_height - foxbun_icon.height) // 2
         canvas.paste(foxbun_icon, (pad_x, icon_y))
         text_x += foxbun_icon.width + 14
-    draw.text((text_x, line_y), foxbun_text, font=font_row, fill="#333333", anchor="lm")
+    draw.text((text_x, line_y), foxbun_text, font=font_section, fill="#333333", anchor="lm")
 
     buf = io.BytesIO()
     canvas.save(buf, format="PNG")
@@ -1460,14 +1540,25 @@ def _build_egg_rank_image(group_id: int, scope: str) -> bytes:
     return _build_egg_rank_image_from_stats(group_stats, period_stats, scope)
 
 
-def _build_personal_paro_image_from_user_stats(user_id: str, display_name: str, user_stats: dict) -> bytes:
-    return _render_personal_paro_card(user_id, display_name, _normalize_user_stats(user_stats))
+def _build_personal_paro_image_from_user_stats(
+    user_id: str,
+    display_name: str,
+    user_stats: dict,
+    egg_history: dict | None = None,
+) -> bytes:
+    return _render_personal_paro_card(
+        user_id,
+        display_name,
+        _normalize_user_stats(user_stats),
+        egg_history or _new_user_egg_history(),
+    )
 
 
 def _build_personal_paro_image(group_id: int, user_id: str, display_name: str) -> bytes:
     group_stats = _get_group_stats(group_id)
     user_stats = _normalize_user_stats(group_stats.get("users", {}).get(user_id))
-    return _build_personal_paro_image_from_user_stats(user_id, display_name, user_stats)
+    egg_history = _collect_user_egg_history(group_id, user_id)
+    return _build_personal_paro_image_from_user_stats(user_id, display_name, user_stats, egg_history)
 
 
 def _build_rank_preview_stats(scope: str) -> tuple[dict, dict]:
@@ -1610,28 +1701,42 @@ def _build_egg_rank_preview_image(scope: str) -> bytes:
 
 def _build_personal_preview_image() -> bytes:
     user_stats = _new_user_stats()
-    _record_user_draw_stats(
-        user_stats,
-        results=[
-            ("Callboy彰", "Callboy冬", True, None),
-            ("白骑", "王子冬", False, None),
-            ("白骑", "王子冬", False, None),
-            ("王子彰", "白百合", False, None),
-            ("WL2彰", "WL2冬", False, None),
-            ("Callboy彰", "Callboy冬", False, None),
-            ("法师彰", "青鸟", False, None),
-            ("白恶魔", "黑骑", False, None),
-            ("白骑", "黑骑", False, None),
-            ("王子彰", "白百合", False, None),
-            ("Callboy彰", "Callboy冬", False, "foxbun"),
-            ("白骑", "王子冬", False, "foxrabbit"),
-            ("向日葵彰", "向日葵冬", False, None),
-            ("野营彰", "野营冬", False, None),
-            ("模特彰", "模特冬", False, None),
-            ("厨子", "2星厨冬", False, None),
-        ],
-    )
-    return _build_personal_paro_image_from_user_stats("10001", "测试群友甲甲甲甲", user_stats)
+    egg_history = _new_user_egg_history()
+    results = [
+        ("Callboy彰", "Callboy冬", True, None),
+        ("白骑", "王子冬", True, None),
+        ("白骑", "王子冬", False, None),
+        ("王子彰", "白百合", True, None),
+        ("WL2彰", "WL2冬", False, None),
+        ("Callboy彰", "Callboy冬", False, None),
+        ("法师彰", "青鸟", True, None),
+        ("白恶魔", "黑骑", False, None),
+        ("白骑", "黑骑", False, None),
+        ("王子彰", "白百合", False, None),
+        ("Callboy彰", "Callboy冬", False, "foxbun"),
+        ("白骑", "王子冬", False, "foxrabbit"),
+        ("向日葵彰", "向日葵冬", False, None),
+        ("野营彰", "野营冬", False, None),
+        ("模特彰", "模特冬", False, None),
+        ("厨子", "2星厨冬", True, None),
+    ]
+    _record_user_draw_stats(user_stats, results=results)
+    for akito_name, toya_name, is_egg, fox_type in results:
+        if is_egg:
+            _record_user_egg_history_entry(
+                egg_history,
+                akito_name=akito_name,
+                toya_name=toya_name,
+                egg_type="cooking",
+            )
+        elif fox_type == "foxbun":
+            _record_user_egg_history_entry(
+                egg_history,
+                akito_name=akito_name,
+                toya_name=toya_name,
+                egg_type="foxbun",
+            )
+    return _build_personal_paro_image_from_user_stats("10001", "测试群友甲甲甲甲", user_stats, egg_history)
 
 
 # ==================== 抽派生 ====================
