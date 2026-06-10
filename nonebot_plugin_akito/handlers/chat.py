@@ -92,6 +92,225 @@ AGENT_TOOLS = [
 ]
 
 
+def _build_interact_instruction(
+    plain_text_content: str,
+    sender_nickname: str,
+    user_id: str,
+    is_talking_to_toya: bool,
+    reply_target_is_toya: bool,
+    has_reply: bool,
+    current_image_identity: str,
+    origin_sender: str,
+) -> str:
+    """Build the audience/interaction instruction block for the current turn."""
+    if is_talking_to_toya:
+        return f"🛑【交互对象锁定】对话对象是 **青柳冬弥本人** (ID: {user_id})。切换至 [搭档/CP模式]，语气信任、护短。"
+    if reply_target_is_toya:
+        return f"""
+            🛑【交互对象锁定：中转站模式】
+            用户 **{sender_nickname}** 引用了 **青柳冬弥** 的话。
+            必须执行"两段式"回复：1. 先对 {sender_nickname} 嫌弃吐槽，让他少管闲事。 2. 无视群友，直接针对引用的冬弥的话做出包容反应。
+            """
+    if "冬弥" in plain_text_content:
+        return f"""
+            🛑【交互对象锁定：涉冬弥话题模式】
+            群友 **{sender_nickname}** 提到了"冬弥"。⚠️ 开启【极度双标/护短】判定：
+            1. 如果群友在【报告冬弥的状况】（如：他在楼下摔倒了/他不舒服）：对报告状态的群友表现出被打扰的急躁，但难掩关心（"啧，他在哪？"）。⚠️你必须结合你当前的【生物钟状态】做出【合理且克制的急切反应】。
+             - 严禁写成夸张的偶像剧（绝对不要写"冲出教室"、"发疯般地跑"等降智描写）！
+             - 正确的动作参考：上课时（眉头紧锁，举手跟老师借口去洗手间然后快步离开）；睡觉时（烦躁地抓着头发爬起来，套上外套就走）；街头练习时（停下动作，直接拎起包）。
+             - 在动作中找到冬弥后，态度极其自然地切入【照顾模式】。不准大惊小怪，而是语气放缓、压低声音询问，绝对不能对虚弱的冬弥说重话（例如："……撞到哪了？我看看。"）。
+            2. 如果群友在括号里【模拟冬弥的动作/台词】：直接把这当成冬弥本人的互动！无视群友，对"冬弥"展现你的占有欲和特有的包容，严禁对"冬弥"粗暴！
+            3. 如果只是普通提及：用护短的酷哥态度回应群友。
+               🚫【防复读强制令】：绝对禁止使用"哈？你脑子没问题吧"、"少拿我和那家伙瞎起哄"这类套话！你必须根据群友说的【具体内容】给出针对性的不同反应！
+               可用的反应方向：沉默不接话、反问对方为什么问、用当前状态岔开话题、简短确认然后立刻转移、表现出被打扰的轻微烦躁但不重复固定句式。
+            """
+    if has_reply:
+        if current_image_identity:
+            return f"🛑【交互对象锁定：识图模式】对象是 {sender_nickname}。他回复并让你看一张图片。请你保持态度，对图片内容进行吐槽或评价。"
+        return f"🛑【交互对象锁定：旁观模式】对象是 {sender_nickname}。他给你看了路人 {origin_sender} 的话。保持酷哥态度吐槽即可。"
+    return f"""🛑【交互对象锁定】对话对象是普通群友 **{sender_nickname}**。保持 [独立街头歌手/直率/嫌麻烦但有教养] 的态度。\n💡【你的行为准则（请顺应本能反应）】：\n1. 【应对调侃】：保持情绪稳定。用无语的叹气、平淡的反问（"你很闲吗"）或直球承认来终结话题。\n2. 【应对倒霉/送礼】：遇到群友沉船就顺毛安抚两句；收到礼物就叹着气收下（"给我这个干嘛，谢了"），保持游刃有余。\n3. 【应对使唤】：你是有自己生活重心（练歌/打工）的独立男高。面对群友的跑腿要求，优先顺从你的不耐烦：直接冷漠拒绝（"你自己去。"），或用自己的日程当挡箭牌（"没空，正要去练歌"）。仅在心情极好或顺路时，才会勉强帮个小忙（"啧，放那吧我等下弄"）。\n🎯 核心语感：干脆利落的短句。把注意力放在你自己的事上，而不是被群友牵着鼻子走。"""
+
+
+def _fold_stale_history_into_time_gap_prompt(
+    user_mem: dict,
+    time_gap_awareness: str,
+    group_id: int | str | None,
+) -> str:
+    """Compress old history into a background note after a long time gap."""
+    if not (time_gap_awareness and user_mem.get("history")):
+        return time_gap_awareness
+
+    past_lines = []
+    for m in user_mem["history"][-8:]:
+        role_label = "（小彰）" if m["role"] == "assistant" else "（对方）"
+        content = m["content"]
+        try:
+            parsed = json.loads(content)
+            text = str(parsed.get("reply") or parsed.get("dialogue") or content)
+        except Exception:
+            text = str(content)
+        if m["role"] == "user":
+            text = re.sub(r"^\[.+?\]:\s*", "", text)
+        past_lines.append(f"{role_label}{text[:60]}")
+
+    if past_lines:
+        time_gap_awareness += (
+            "\n📚【上次对话摘要（已是过去的话题，仅供参考）】：\n"
+            + "\n".join(past_lines)
+            + "\n↑ 以上是旧话题。被问起时可用「那会儿」「之前」自然带过，不要主动续接。\n"
+        )
+    user_mem["history"] = []
+    logger.info(f"⏱️ [TimeAwareness] 群 {group_id} 长间隔：旧历史已压缩为背景注释")
+    return time_gap_awareness
+
+
+def _build_final_system_prompt(
+    system_header: str,
+    current_time: str,
+    daily_status: str,
+    toya_anchor: str,
+    time_gap_awareness: str,
+    festival_buff: str,
+    morning_run_buff: str,
+    sleep_buffer_buff: str,
+    relationship_context: str,
+    group_context: str,
+    interact_instruction: str,
+    base_persona: str,
+    script_examples: str,
+    pjsk_block: str,
+    song_memories: str,
+    long_term_memory_text: str,
+    reality_overwrite_instruction: str,
+    acting_guide: str,
+    sleep_instruction: str,
+    vitality_guide: str,
+    memory_capture_rule: str,
+    tone_limiter: str,
+    schema_inner_os: str,
+    schema_action: str,
+    schema_dialogue: str,
+) -> str:
+    """Assemble the final system prompt string sent to the model."""
+    return f"""
+        {system_header}
+
+        # 1. 物理现实与环境
+        - 当前系统时间：{current_time}
+        - 你的生物钟状态：{daily_status}
+        {toya_anchor}
+        {time_gap_awareness}
+        - 今日特殊日历：{festival_buff}
+        {morning_run_buff}
+        {sleep_buffer_buff}
+
+        # 2. 动态情报栈
+        {relationship_context}
+
+        # 3. 社交上下文
+        📜【群聊背景流】
+        {group_context}
+        🎯【当前交互对象】：
+        {interact_instruction}
+
+        # 4. 核心人设与记忆
+        {base_persona}
+        {script_examples}
+        🎮【PJSK 世界观/黑话库】：
+        {pjsk_block}
+        {song_memories}
+        🧠【你的长期记忆】：
+        {long_term_memory_text}
+        ⚡【强制临时状态/指令】：
+        {reality_overwrite_instruction}
+        {acting_guide}
+        {sleep_instruction}
+
+        {vitality_guide}
+
+        {memory_capture_rule}
+
+        {tone_limiter}
+
+        # ================= 强制输出格式 (JSON) =================
+        {{
+          "inner_os": "{schema_inner_os}",
+          "action": "{schema_action}",
+          "dialogue": "{schema_dialogue}"
+        }}
+        """
+
+
+def _parse_model_reply(raw_result: str, is_toya_context: bool) -> tuple[str, str]:
+    """Parse model JSON-ish output into final dialogue text and inner thoughts."""
+    result = ""
+    clean_json_str = extract_json_block(raw_result)
+    inner_os = ""
+    try:
+        response_data = json.loads(clean_json_str)
+        inner_os = response_data.get("inner_os", "") or response_data.get("Inner_os", "") or response_data.get("内心OS", "")
+        if inner_os:
+            logger.info(f"🎭【小彰内心OS】: {inner_os}")
+
+        dialogue = response_data.get("dialogue", "") or response_data.get("reply", "") or response_data.get("Reply", "") or response_data.get("回复", "")
+        action = response_data.get("action", "")
+
+        if not action and dialogue:
+            match = re.match(r"^[（(]([^）)\n]{1,15})[）)]\s*([\s\S]+)", dialogue)
+            if match:
+                action = match.group(1).strip()
+                dialogue = match.group(2).strip()
+                logger.debug(f"🎭 从dialogue回收内联动作: [{action}] | 台词: {dialogue[:40]}")
+
+        if not action:
+            result = dialogue
+        else:
+            action_norm = re.sub(r"^\((.+)\)$", r"\1", action.strip())
+            action_text = action_norm.lower()
+            if any(k in action_text for k in ["递", "指", "看", "拿", "接", "扔", "抱", "拉"]):
+                layout_choices = [
+                    f"({action_norm}){dialogue}",
+                    f"({action_norm})\n{dialogue}",
+                ]
+            else:
+                layout_choices = [
+                    f"({action_norm}){dialogue}",
+                    f"{dialogue}({action_norm})",
+                    f"……{dialogue}",
+                    f"{dialogue}",
+                ]
+
+            if not is_toya_context and len(layout_choices) > 2:
+                weights = [0.15, 0.15, 0.2, 0.5]
+                result = random.choices(layout_choices, weights=weights)[0]
+            else:
+                result = random.choice(layout_choices)
+
+        if not result:
+            result = "……"
+    except Exception as e:
+        logger.warning(f"⚠️ 解析JSON失败 ({e}) | 原始返回: {raw_result}")
+        rescued = rescue_field(raw_result, "dialogue", "reply")
+        if rescued is not None:
+            result = rescued
+            logger.info(f"🔧 正则救援成功，提取到回复内容: {result[:60]}")
+        else:
+            inner_os_end = re.search(r'"inner_os"\s*:\s*"(?:[^"\\]|\\.)*"', raw_result)
+            if inner_os_end:
+                remainder = raw_result[inner_os_end.end():].strip()
+                remainder = re.sub(r'^,\s*"[^"]*"\s*[>:]\s*', "", remainder)
+                remainder = remainder.strip('"} \n')
+                if remainder:
+                    result = remainder
+                    logger.info(f"🔧 二次救援成功（key名幻觉），提取内容: {result[:60]}")
+                else:
+                    result = raw_result
+            else:
+                result = raw_result
+
+    return result, inner_os
+
+
 async def starts_with_trigger(event: Event) -> bool:
     """消息匹配规则：是否以触发名（东云小彰 / 小彰）开头，且群在白名单内。"""
     group_id = getattr(event, 'group_id', None)
@@ -266,35 +485,16 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage()):
         sender_nickname = event.sender.card or event.sender.nickname or f"用户{user_id}"
         is_talking_to_toya = (user_id == TOYA_QQ_ID)
 
-        interact_instruction = ""
-        if is_talking_to_toya:
-            interact_instruction = f"🛑【交互对象锁定】对话对象是 **青柳冬弥本人** (ID: {user_id})。切换至 [搭档/CP模式]，语气信任、护短。"
-        elif reply_target_is_toya:
-            interact_instruction = f"""
-            🛑【交互对象锁定：中转站模式】
-            用户 **{sender_nickname}** 引用了 **青柳冬弥** 的话。
-            必须执行"两段式"回复：1. 先对 {sender_nickname} 嫌弃吐槽，让他少管闲事。 2. 无视群友，直接针对引用的冬弥的话做出包容反应。
-            """
-        elif "冬弥" in plain_text_content:
-            interact_instruction = f"""
-            🛑【交互对象锁定：涉冬弥话题模式】
-            群友 **{sender_nickname}** 提到了"冬弥"。⚠️ 开启【极度双标/护短】判定：
-            1. 如果群友在【报告冬弥的状况】（如：他在楼下摔倒了/他不舒服）：对报告状态的群友表现出被打扰的急躁，但难掩关心（"啧，他在哪？"）。⚠️你必须结合你当前的【生物钟状态】做出【合理且克制的急切反应】。
-             - 严禁写成夸张的偶像剧（绝对不要写"冲出教室"、"发疯般地跑"等降智描写）！
-             - 正确的动作参考：上课时（眉头紧锁，举手跟老师借口去洗手间然后快步离开）；睡觉时（烦躁地抓着头发爬起来，套上外套就走）；街头练习时（停下动作，直接拎起包）。
-             - 在动作中找到冬弥后，态度极其自然地切入【照顾模式】。不准大惊小怪，而是语气放缓、压低声音询问，绝对不能对虚弱的冬弥说重话（例如："……撞到哪了？我看看。"）。
-            2. 如果群友在括号里【模拟冬弥的动作/台词】：直接把这当成冬弥本人的互动！无视群友，对"冬弥"展现你的占有欲和特有的包容，严禁对"冬弥"粗暴！
-            3. 如果只是普通提及：用护短的酷哥态度回应群友。
-               🚫【防复读强制令】：绝对禁止使用"哈？你脑子没问题吧"、"少拿我和那家伙瞎起哄"这类套话！你必须根据群友说的【具体内容】给出针对性的不同反应！
-               可用的反应方向：沉默不接话、反问对方为什么问、用当前状态岔开话题、简短确认然后立刻转移、表现出被打扰的轻微烦躁但不重复固定句式。
-            """
-        elif has_reply:
-            if current_image_identity:
-                interact_instruction = f"🛑【交互对象锁定：识图模式】对象是 {sender_nickname}。他回复并让你看一张图片。请你保持态度，对图片内容进行吐槽或评价。"
-            else:
-                interact_instruction = f"🛑【交互对象锁定：旁观模式】对象是 {sender_nickname}。他给你看了路人 {origin_sender} 的话。保持酷哥态度吐槽即可。"
-        else:
-            interact_instruction = f"""🛑【交互对象锁定】对话对象是普通群友 **{sender_nickname}**。保持 [独立街头歌手/直率/嫌麻烦但有教养] 的态度。\n💡【你的行为准则（请顺应本能反应）】：\n1. 【应对调侃】：保持情绪稳定。用无语的叹气、平淡的反问（"你很闲吗"）或直球承认来终结话题。\n2. 【应对倒霉/送礼】：遇到群友沉船就顺毛安抚两句；收到礼物就叹着气收下（"给我这个干嘛，谢了"），保持游刃有余。\n3. 【应对使唤】：你是有自己生活重心（练歌/打工）的独立男高。面对群友的跑腿要求，优先顺从你的不耐烦：直接冷漠拒绝（"你自己去。"），或用自己的日程当挡箭牌（"没空，正要去练歌"）。仅在心情极好或顺路时，才会勉强帮个小忙（"啧，放那吧我等下弄"）。\n🎯 核心语感：干脆利落的短句。把注意力放在你自己的事上，而不是被群友牵着鼻子走。"""
+        interact_instruction = _build_interact_instruction(
+            plain_text_content=plain_text_content,
+            sender_nickname=sender_nickname,
+            user_id=user_id,
+            is_talking_to_toya=is_talking_to_toya,
+            reply_target_is_toya=reply_target_is_toya,
+            has_reply=has_reply,
+            current_image_identity=current_image_identity,
+            origin_sender=origin_sender,
+        )
 
         relationship_context, script_examples, pjsk_block = await asyncio.gather(
             get_hybrid_relationship(plain_text_content),
@@ -304,30 +504,7 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage()):
         group_id = getattr(event, 'group_id', None)
         group_context = get_group_context(group_id) if group_id else ""
         time_gap_awareness = build_time_gap_prompt(group_id) if group_id else ""
-        if time_gap_awareness and user_mem.get("history"):
-            # 将旧对话历史「降级」为背景摘要，注入 time_gap_awareness 末尾
-            # 而非直接清空——这样 AI 被问起「之前的事」时仍能正常引用，
-            # 但不会把旧历史当作活跃对话继续接着聊
-            past_lines = []
-            for m in user_mem["history"][-8:]:
-                role_label = "（小彰）" if m["role"] == "assistant" else "（对方）"
-                content = m["content"]
-                try:
-                    parsed = json.loads(content)
-                    text = str(parsed.get("reply") or parsed.get("dialogue") or content)
-                except Exception:
-                    text = str(content)
-                if m["role"] == "user":
-                    text = re.sub(r'^\[.+?\]:\s*', '', text)
-                past_lines.append(f"{role_label}{text[:60]}")
-            if past_lines:
-                time_gap_awareness += (
-                    "\n📚【上次对话摘要（已是过去的话题，仅供参考）】：\n"
-                    + "\n".join(past_lines)
-                    + "\n↑ 以上是旧话题。被问起时可用「那会儿」「之前」自然带过，不要主动续接。\n"
-                )
-            user_mem["history"] = []
-            logger.info(f"⏱️ [TimeAwareness] 群 {group_id} 长间隔：旧历史已压缩为背景注释")
+        time_gap_awareness = _fold_stale_history_into_time_gap_prompt(user_mem, time_gap_awareness, group_id)
 
         # --- 6. 记忆融合引擎 ---
         implant_context = ""
@@ -394,53 +571,33 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage()):
         schema_action       = PROMPTS_DB.get("schema_action", "角色的肢体动作或微表情。没有时留空。")
         schema_dialogue     = PROMPTS_DB.get("schema_dialogue", "角色实际说出的话，纯对话文本。")
 
-        final_system_prompt = f"""
-        {system_header}
-
-        # 1. 物理现实与环境
-        - 当前系统时间：{current_time}
-        - 你的生物钟状态：{daily_status}
-        {toya_anchor}
-        {time_gap_awareness}
-        - 今日特殊日历：{festival_buff}
-        {morning_run_buff}
-        {sleep_buffer_buff}
-
-        # 2. 动态情报栈
-        {relationship_context}
-
-        # 3. 社交上下文
-        📜【群聊背景流】
-        {group_context}
-        🎯【当前交互对象】：
-        {interact_instruction}
-
-        # 4. 核心人设与记忆
-        {get_base_persona()}
-        {script_examples}
-        🎮【PJSK 世界观/黑话库】：
-        {pjsk_block}
-        {get_song_memories()}
-        🧠【你的长期记忆】：
-        {long_term_memory_text}
-        ⚡【强制临时状态/指令】：
-        {reality_overwrite_instruction}
-        {acting_guide}
-        {sleep_instruction}
-
-        {vitality_guide}
-
-        {memory_capture_rule}
-
-        {tone_limiter}
-
-        # ================= 强制输出格式 (JSON) =================
-        {{
-          "inner_os": "{schema_inner_os}",
-          "action": "{schema_action}",
-          "dialogue": "{schema_dialogue}"
-        }}
-        """
+        final_system_prompt = _build_final_system_prompt(
+            system_header=system_header,
+            current_time=current_time,
+            daily_status=daily_status,
+            toya_anchor=toya_anchor,
+            time_gap_awareness=time_gap_awareness,
+            festival_buff=festival_buff,
+            morning_run_buff=morning_run_buff,
+            sleep_buffer_buff=sleep_buffer_buff,
+            relationship_context=relationship_context,
+            group_context=group_context,
+            interact_instruction=interact_instruction,
+            base_persona=get_base_persona(),
+            script_examples=script_examples,
+            pjsk_block=pjsk_block,
+            song_memories=get_song_memories(),
+            long_term_memory_text=long_term_memory_text,
+            reality_overwrite_instruction=reality_overwrite_instruction,
+            acting_guide=acting_guide,
+            sleep_instruction=sleep_instruction,
+            vitality_guide=vitality_guide,
+            memory_capture_rule=memory_capture_rule,
+            tone_limiter=tone_limiter,
+            schema_inner_os=schema_inner_os,
+            schema_action=schema_action,
+            schema_dialogue=schema_dialogue,
+        )
 
         messages_list = [{"role": "system", "content": final_system_prompt}]
         messages_list.extend(user_mem["history"])
@@ -517,85 +674,7 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage()):
         else:
             raw_result = await call_deepseek_api(messages_list, force_json=True)
 
-        result = ""
-        clean_json_str = extract_json_block(raw_result)
-        inner_os = ""
-        try:
-            response_data = json.loads(clean_json_str)
-            inner_os = response_data.get("inner_os", "") or response_data.get("Inner_os", "") or response_data.get("内心OS", "")
-            if inner_os:
-                logger.info(f"🎭【小彰内心OS】: {inner_os}")
-
-            # 分别提取动作和台词
-            dialogue = response_data.get("dialogue", "") or response_data.get("reply", "") or response_data.get("Reply", "") or response_data.get("回复", "")
-            action = response_data.get("action", "")
-
-            # action 字段为空时，尝试从 dialogue 开头回收内联动作交给排版层
-            # 只处理"开头单个短动作"的情形（≤15字），多动作混排不干预
-            if not action and dialogue:
-                m = re.match(r'^[（(]([^）)\n]{1,15})[）)]\s*([\s\S]+)', dialogue)
-                if m:
-                    action = m.group(1).strip()
-                    dialogue = m.group(2).strip()
-                    logger.debug(f"🎭 从dialogue回收内联动作: [{action}] | 台词: {dialogue[:40]}")
-
-            # Python端智能接管排版
-            if not action:
-                result = dialogue
-            else:
-                # 归一化：剥掉 action 自带的外层括号，统一由下方排版层补回
-                # 例：(叹气) → 叹气，叹气 → 叹气，(叹气)(皱眉) → 不变（不是单层包裹）
-                action_norm = re.sub(r'^\((.+)\)$', r'\1', action.strip())
-                # 嗅探动作类型
-                action_text = action_norm.lower()
-                # 交互类、指向类动作，强制前置，保证时序连贯
-                if any(k in action_text for k in ["递", "指", "看", "拿", "接", "扔", "抱", "拉"]):
-                    layout_choices = [
-                        f"({action_norm}){dialogue}",
-                        f"({action_norm})\n{dialogue}"
-                    ]
-                else:
-                    # 情绪类、状态类动作，完全随机（前置、后置、舍弃），打碎复读感
-                    layout_choices = [
-                        f"({action_norm}){dialogue}",
-                        f"{dialogue}({action_norm})",
-                        f"……{dialogue}",
-                        f"{dialogue}"
-                    ]
-
-                # 日常状态下大幅提高纯文本概率
-                if not is_toya_context and len(layout_choices) > 2:
-                    weights = [0.15, 0.15, 0.2, 0.5]
-                    result = random.choices(layout_choices, weights=weights)[0]
-                else:
-                    result = random.choice(layout_choices)
-
-            if not result:
-                result = "……"
-        except Exception as e:
-            logger.warning(f"⚠️ 解析JSON失败 ({e}) | 原始返回: {raw_result}")
-            # 正则救援：从截断/残缺 JSON 里直接抠出 dialogue/reply 的值
-            rescued = rescue_field(raw_result, "dialogue", "reply")
-            if rescued is not None:
-                result = rescued
-                logger.info(f"🔧 正则救援成功，提取到回复内容: {result[:60]}")
-            else:
-                # 二次救援：key 名幻觉（模型把动作描写写成了 key 名）
-                # 策略：定位 inner_os 值结束位置，把后面剩余内容当作回复
-                inner_os_end = re.search(r'"inner_os"\s*:\s*"(?:[^"\\]|\\.)*"', raw_result)
-                if inner_os_end:
-                    remainder = raw_result[inner_os_end.end():].strip()
-                    # 剔除：逗号 + 非标准 key 名（带引号）+ 分隔符（> 或 :）
-                    remainder = re.sub(r'^,\s*"[^"]*"\s*[>:]\s*', '', remainder)
-                    # 剔除：首尾多余引号和 JSON 闭合符号
-                    remainder = remainder.strip('"} \n')
-                    if remainder:
-                        result = remainder
-                        logger.info(f"🔧 二次救援成功（key名幻觉），提取内容: {result[:60]}")
-                    else:
-                        result = raw_result
-                else:
-                    result = raw_result
+        result, inner_os = _parse_model_reply(raw_result, is_toya_context)
 
         # --- 10. 长期记忆提取与保存 ---
         memory_pattern = r"\[\[记下[:：]\s*(.*?)\]\]"

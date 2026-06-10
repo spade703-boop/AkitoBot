@@ -1,0 +1,12 @@
+[
+  {
+    "type": "home",
+    "context": "在练习室被人催着再唱一遍",
+    "dialogue": "知道了，再来一次。"
+  },
+  {
+    "type": "story",
+    "context": "有人夸你唱得不错",
+    "dialogue": "……谢了。别突然靠这么近。"
+  }
+]

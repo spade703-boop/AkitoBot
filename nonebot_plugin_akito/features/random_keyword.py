@@ -8,7 +8,6 @@ from datetime import datetime
 import io
 import json
 import os
-from pathlib import Path
 import random
 
 from nonebot import on_command
@@ -18,7 +17,7 @@ from nonebot.log import logger
 from nonebot.params import CommandArg
 from PIL import Image, ImageDraw, ImageFont
 
-from ..core import ALLOWED_CHAT_GROUPS, SUPERUSER_QQ, TZ_CN, find_data_path, load_json_file
+from ..core import ALLOWED_CHAT_GROUPS, SUPERUSER_QQ, TZ_CN, find_data_path, get_data_dir, load_json_file
 
 DATA_FILE = "fanfic_keywords.json"
 DRAWS_FILE = "keyword_draws.json"
@@ -37,7 +36,7 @@ def _get_category_names() -> list[str]:
 def _save_pool():
     path = find_data_path(DATA_FILE)
     if not path:
-        path = Path("data") / DATA_FILE
+        path = get_data_dir() / DATA_FILE
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
     with open(tmp, "w", encoding="utf-8") as f:
@@ -48,7 +47,7 @@ def _save_pool():
 def _load_draws() -> dict:
     path = find_data_path(DRAWS_FILE)
     if not path:
-        path = Path("data") / DRAWS_FILE
+        path = get_data_dir() / DRAWS_FILE
     if not path.exists():
         return {}
     try:
@@ -62,7 +61,7 @@ def _load_draws() -> dict:
 def _save_draws(data: dict):
     path = find_data_path(DRAWS_FILE)
     if not path:
-        path = Path("data") / DRAWS_FILE
+        path = get_data_dir() / DRAWS_FILE
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
     with open(tmp, "w", encoding="utf-8") as f:

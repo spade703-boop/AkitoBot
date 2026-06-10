@@ -1,0 +1,15 @@
+{
+  "late_night": [
+    {
+      "status": "正在犯困。",
+      "poke": ["……别戳。"]
+    }
+  ],
+  "morning_weekday": [
+    {
+      "status": "刚起床，准备出门。",
+      "poke": ["有事快说。"]
+    }
+  ],
+  "fallback_poke": ["喂，别乱戳。"]
+}

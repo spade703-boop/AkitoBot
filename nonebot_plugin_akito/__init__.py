@@ -1,5 +1,7 @@
 """东云彰人 Bot 插件入口：声明插件元数据、require 依赖插件，并加载 core/handlers/features 三层。"""
 
+import os
+
 import nonebot
 from nonebot import require
 from nonebot.plugin import PluginMetadata, inherit_supported_adapters
@@ -18,5 +20,7 @@ __plugin_meta__ = PluginMetadata(
 )
 
 from . import core
-from . import handlers
-from . import features
+
+if os.environ.get("AKITO_SKIP_PLUGIN_LOAD") != "1":
+    from . import handlers
+    from . import features

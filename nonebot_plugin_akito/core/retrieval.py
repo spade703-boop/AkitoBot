@@ -15,6 +15,7 @@ from typing import Any
 from nonebot.log import logger
 
 from . import np
+from .paths import iter_data_roots
 
 # ── 语料注册表 ──────────────────────────────────────────────────────────────
 # db: 惰性取值函数（避免循环 import）；npz: .npz 文件名
@@ -52,11 +53,9 @@ _INDICES: dict[str, _Index | None] = {}  # corpus → _Index | None（None = 不
 
 def _find_npz_path(filename: str) -> Path | None:
     """在候选数据目录中定位 .npz 文件。"""
-    from .data import _DATA_SEARCH_DIRS
-
-    for base in _DATA_SEARCH_DIRS:
+    for base in iter_data_roots():
         for sub in ("content", ""):
-            p = Path(base) / sub / filename if sub else Path(base) / filename
+            p = base / sub / filename if sub else base / filename
             if p.exists():
                 return p
     return None

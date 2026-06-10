@@ -8,34 +8,12 @@ from typing import Any
 
 from nonebot.log import logger
 
+from .paths import find_data_path as _find_data_path
+from .paths import get_data_dir as _get_data_dir
+
 PJSK_KNOWLEDGE_BASE = ""
 PJSK_INTRO = ""
 PJSK_ENTRIES: list[dict] = []
-
-
-_DATA_SEARCH_DIRS = [
-    "/app/akito_bot/data",
-    "data",
-    "/akito_bot/data",
-    ".",
-]
-
-# 只读内容按用途归入子目录；"" = 根目录兜底，旧 flat 布局仍能命中（向后兼容）
-_DATA_SUBDIRS = ["persona", "content", ""]
-
-
-def _find_data_path(filename: str) -> Path | None:
-    """在候选数据目录（含 persona/ content/ 子目录）中定位文件，返回第一个存在的路径；都不存在返回 None。"""
-    for base in _DATA_SEARCH_DIRS:
-        for sub in _DATA_SUBDIRS:
-            p = Path(base) / sub / filename if sub else Path(base) / filename
-            if p.exists():
-                return p
-    return None
-
-
-# 公共别名：features/handlers 统一通过 from ..core import find_data_path 调用，避免直引 core 子模块
-find_data_path = _find_data_path
 
 
 def get_data_dir() -> Path:
@@ -43,11 +21,11 @@ def get_data_dir() -> Path:
 
     memory / time_awareness 等需要写文件的模块共用此函数，避免各自维护一份路径搜索逻辑。
     """
-    for base in _DATA_SEARCH_DIRS:
-        p = Path(base)
-        if p.exists():
-            return p
-    return Path("data")
+    return _get_data_dir()
+
+
+# 公共别名：features/handlers 统一通过 from ..core import find_data_path 调用，避免直引 core 子模块
+find_data_path = _find_data_path
 
 
 def load_json_file(filename: str, default_data: Any = None) -> Any:

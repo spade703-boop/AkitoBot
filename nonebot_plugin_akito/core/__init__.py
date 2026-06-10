@@ -11,17 +11,20 @@
 import json
 import os
 import datetime
-from pathlib import Path
+
 from dotenv import load_dotenv
 from nonebot.log import logger
 from openai import AsyncOpenAI
+
+from .paths import get_data_dir
 
 load_dotenv()  # 显式将 .env 写入 os.environ（NoneBot2 自身不做这一步）
 
 TZ_CN  = datetime.timezone(datetime.timedelta(hours=8))
 TZ_JST = datetime.timezone(datetime.timedelta(hours=9))
-DB_PATH = Path("data/impression_history.db")
-IMAGE_BASE_PATH = Path("data/images")
+DATA_DIR = get_data_dir()
+DB_PATH = DATA_DIR / "impression_history.db"
+IMAGE_BASE_PATH = DATA_DIR / "images"
 MAX_HISTORY_LEN = 40
 
 DEEPSEEK_API_KEY    = os.environ.get("DEEPSEEK_API_KEY", "")
@@ -76,7 +79,7 @@ from .memory import (
     get_group_context, record_bot_message,
 )
 from .data import (
-    load_json_file, load_prompt_template, reload_assets, find_data_path,
+    load_json_file, load_prompt_template, reload_assets, find_data_path, get_data_dir,
     SCRIPT_DB, REACTIONS_DB, PROMPTS_DB, DIRECTOR_DB,
     DAILY_ROUTINE, WL2_ROUTINE,
     SONG_DATA, RELATIONSHIP_DATA, SLEEP_DB,
@@ -109,7 +112,7 @@ from .retrieval import (
 # ── 统一公共导出面（显式声明，避免 import * 时泄漏内部名） ────────────────
 __all__ = [
     # 常量 / 客户端
-    "TZ_CN", "TZ_JST", "DB_PATH", "IMAGE_BASE_PATH", "MAX_HISTORY_LEN",
+    "TZ_CN", "TZ_JST", "DATA_DIR", "DB_PATH", "IMAGE_BASE_PATH", "MAX_HISTORY_LEN",
     "DEEPSEEK_API_KEY", "TAVILY_API_KEY", "ZHIPU_API_KEY", "SILICONFLOW_API_KEY",
     "client", "vision_client", "embedding_client", "np",
     "TOYA_QQ_ID", "SUPERUSER_QQ", "TRIGGER_NAMES",
@@ -119,7 +122,7 @@ __all__ = [
     "MEMORY_DB", "load_memory", "save_memory", "get_memory_key", "get_user_memory",
     "get_group_context", "record_bot_message",
     # data
-    "load_json_file", "load_prompt_template", "reload_assets", "find_data_path",
+    "load_json_file", "load_prompt_template", "reload_assets", "find_data_path", "get_data_dir",
     "SCRIPT_DB", "REACTIONS_DB", "PROMPTS_DB", "DIRECTOR_DB",
     "DAILY_ROUTINE", "WL2_ROUTINE", "SONG_DATA", "RELATIONSHIP_DATA",
     "SLEEP_DB",

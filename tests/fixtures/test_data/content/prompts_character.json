@@ -1,0 +1,7 @@
+{
+  "toya_acting_guide": "风格：{selected}。",
+  "toya_high_tension_guide": "高张力风格：{selected}。",
+  "schema_inner_os": "你的真实心理活动。",
+  "schema_action": "角色的肢体动作或微表情。没有时留空。",
+  "schema_dialogue": "角色实际说出的话，纯对话文本。"
+}

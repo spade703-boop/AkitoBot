@@ -17,7 +17,7 @@ from nonebot.log import logger
 from nonebot.params import CommandArg
 from PIL import Image, ImageDraw, ImageFont
 
-from ..core import ALLOWED_CHAT_GROUPS, SUPERUSER_QQ, find_data_path, load_json_file
+from ..core import ALLOWED_CHAT_GROUPS, IMAGE_BASE_PATH, SUPERUSER_QQ, find_data_path, get_data_dir, load_json_file
 
 DATA_FILE = "paro_pools.json"
 DEFAULT_DATA = {"akito_pool": [], "toya_pool": []}
@@ -28,7 +28,7 @@ PARO_DATA: dict = load_json_file(DATA_FILE, DEFAULT_DATA)
 def _save():
     path = find_data_path(DATA_FILE)
     if not path:
-        path = Path("data") / DATA_FILE
+        path = get_data_dir() / DATA_FILE
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
     with open(tmp, "w", encoding="utf-8") as f:
@@ -97,7 +97,7 @@ def _render_pool_image(title: str, pool: list) -> bytes:
 
 # ==================== 头像拼合 ====================
 
-AVATAR_BASE = Path("data/images/paro_avatars")
+AVATAR_BASE = IMAGE_BASE_PATH / "paro_avatars"
 
 
 def _find_avatar(character: str, name: str) -> Path | None:

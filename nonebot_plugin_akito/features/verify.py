@@ -11,11 +11,19 @@ from nonebot.adapters.onebot.v11 import Bot, GroupDecreaseNoticeEvent, GroupIncr
 from nonebot.log import logger
 from nonebot.params import CommandArg
 
+from ..core import find_data_path, get_data_dir
+
 # ==============================================================================
 # 1. 配置与数据加载区
 # ==============================================================================
-CONFIG_FILE = Path("data/verify_config.json")
-VERIFY_FILE = Path("data/pending_verify.json")
+
+
+def _data_file(filename: str) -> Path:
+    return find_data_path(filename) or (get_data_dir() / filename)
+
+
+CONFIG_FILE = _data_file("verify_config.json")
+VERIFY_FILE = _data_file("pending_verify.json")
 
 def load_config() -> dict:
     """读取 verify_config.json（群号配置）；失败返回空配置（审核功能整体静默停用）。"""
@@ -187,7 +195,7 @@ async def _(event: Event, args: Message = CommandArg()):
 # ==============================================================================
 # 4. 羁绊刷取管理区 (冲榜专属)
 # ==============================================================================
-BOND_FILE = Path("data/bond_verify.json")
+BOND_FILE = _data_file("bond_verify.json")
 
 def load_bond_queue() -> dict:
     """读取羁绊待刷名单；文件不存在或损坏返回空 dict。"""
@@ -307,7 +315,7 @@ async def _(event: Event, args: Message = CommandArg()):
 # ==============================================================================
 # 5. 自定义理由延期/挂起区
 # ==============================================================================
-HOLD_FILE = Path("data/hold_verify.json")
+HOLD_FILE = _data_file("hold_verify.json")
 
 def load_hold_queue() -> dict:
     """读取特殊挂起名单；文件不存在或损坏返回空 dict。"""
