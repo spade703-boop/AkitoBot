@@ -154,6 +154,46 @@ def test_record_draw_stats_respects_fixed_side_and_hidden_pairs():
     assert period_stats["rabbit_total"] == 1
     assert period_stats["foxrabbit_total"] == 1
     assert period_stats["foxbun_total"] == 1
+    assert period_stats["toya_last_hit_seq"] == {"王子冬": 1, "黑骑": 2}
+
+
+def test_build_character_rows_keeps_first_three_tied_names_and_ellipsis():
+    rows = random_paro._build_character_rows(
+        {
+            "白骑": 8,
+            "王子彰": 8,
+            "WL2彰": 8,
+            "白恶魔": 8,
+            "Callboy彰": 9,
+        },
+        limit=3,
+        character="彰人",
+        last_hit_seq={
+            "Callboy彰": 9,
+            "白骑": 12,
+            "王子彰": 15,
+            "WL2彰": 20,
+            "白恶魔": 23,
+        },
+    )
+
+    assert rows[0]["left"] == "TOP1 Callboy彰"
+    assert rows[0]["suffix_avatar_names"] == ["Callboy彰"]
+    assert rows[1]["left"] == "TOP2 白骑 / 王子彰 / WL2彰 / ..."
+    assert rows[1]["suffix_avatar_names"] == ["白骑", "王子彰", "WL2彰"]
+
+
+def test_build_fox_rows_sorts_by_count_desc():
+    rows = random_paro._build_fox_rows(
+        {
+            "foxrabbit_total": 3,
+            "foxbun_total": 7,
+            "fox_total": 2,
+            "rabbit_total": 9,
+        }
+    )
+
+    assert [row["fox_type"] for row in rows] == ["rabbit", "foxbun", "foxrabbit", "fox"]
 
 
 def test_record_group_draw_stats_persists_counts_and_egg_log(isolated_paro_stats):
@@ -191,6 +231,67 @@ def test_record_group_draw_stats_persists_counts_and_egg_log(isolated_paro_stats
     assert all(entry["user_id"] == "42" for entry in egg_entries)
 
 
+def test_record_group_draw_stats_tracks_personal_visible_history(isolated_paro_stats):
+    results = [
+        ("黑百合", "王子冬", False, None),
+        ("白骑士", "黑骑士", True, None),
+        ("Callboy彰", "Callboy冬", False, "fox"),
+        ("神代类", "天马司", False, "foxbun"),
+    ]
+
+    random_paro._record_group_draw_stats(
+        group_id=1001,
+        user_id="42",
+        display_name="测试用户",
+        results=results,
+        fixed_side=None,
+        fixed_name=None,
+        requested_count=4,
+        now_ts=123.0,
+    )
+
+    user_stats = random_paro.PARO_STATS["groups"]["1001"]["users"]["42"]
+
+    assert user_stats["draw_count"] == 4
+    assert user_stats["egg_count"] == 2
+    assert user_stats["foxbun_count"] == 1
+    assert user_stats["akito_hits"] == {"黑百合": 1, "白骑士": 1}
+    assert user_stats["toya_hits"] == {"王子冬": 1, "黑骑士": 1}
+    assert user_stats["pair_hits"] == {
+        random_paro._make_pair_key("黑百合", "王子冬"): 1,
+        random_paro._make_pair_key("白骑士", "黑骑士"): 1,
+    }
+
+
+def test_record_group_draw_stats_keeps_personal_visible_history_for_fixed_side(isolated_paro_stats):
+    results = [
+        ("白骑士", "王子冬", False, None),
+        ("白骑士", "黑骑士", False, None),
+    ]
+
+    random_paro._record_group_draw_stats(
+        group_id=1001,
+        user_id="42",
+        display_name="测试用户",
+        results=results,
+        fixed_side="akito",
+        fixed_name="白骑士",
+        requested_count=2,
+        now_ts=123.0,
+    )
+
+    group_stats = random_paro.PARO_STATS["groups"]["1001"]
+    user_stats = group_stats["users"]["42"]
+
+    assert group_stats["history"]["akito_hits"] == {}
+    assert user_stats["akito_hits"] == {"白骑士": 2}
+    assert user_stats["toya_hits"] == {"王子冬": 1, "黑骑士": 1}
+    assert user_stats["pair_hits"] == {
+        random_paro._make_pair_key("白骑士", "王子冬"): 1,
+        random_paro._make_pair_key("白骑士", "黑骑士"): 1,
+    }
+
+
 def test_save_and_reload_stats_preserves_cooldowns(isolated_paro_stats):
     random_paro._cooldown_store()["42"] = [100.0, 200.0]
     random_paro._save_stats()
@@ -216,8 +317,10 @@ def test_build_rank_images_do_not_crash_without_assets(isolated_paro_stats):
 
     assert isinstance(random_paro._build_paro_rank_image(1001, "daily"), bytes)
     assert isinstance(random_paro._build_egg_rank_image(1001, "history"), bytes)
+    assert isinstance(random_paro._build_personal_paro_image(1001, "42", "测试用户"), bytes)
     assert isinstance(random_paro._build_rank_preview_image("daily"), bytes)
     assert isinstance(random_paro._build_egg_rank_preview_image("history"), bytes)
+    assert isinstance(random_paro._build_personal_preview_image(), bytes)
 
 
 @pytest.mark.asyncio
@@ -241,6 +344,16 @@ async def test_daily_rank_command_rejects_private_chat():
 
 
 @pytest.mark.asyncio
+async def test_my_paro_command_rejects_private_chat():
+    event = Event()
+
+    with pytest.raises(FinishedException) as exc:
+        await random_paro.my_paro_cmd.handlers[0](event)
+
+    assert "该指令仅支持群聊使用" in str(exc.value.result)
+
+
+@pytest.mark.asyncio
 async def test_preview_rank_commands_ignore_non_superuser_group_event():
     event = Event(group_id=1001, user_id="12345")
 
@@ -248,3 +361,4 @@ async def test_preview_rank_commands_ignore_non_superuser_group_event():
     await random_paro.test_history_rank_cmd.handlers[0](event)
     await random_paro.test_daily_egg_rank_cmd.handlers[0](event)
     await random_paro.test_history_egg_rank_cmd.handlers[0](event)
+    await random_paro.test_my_paro_cmd.handlers[0](event)

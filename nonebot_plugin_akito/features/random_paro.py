@@ -59,20 +59,39 @@ def _new_period_stats(*, date: str | None = None) -> dict:
         "user_draw_counts": {},
         "akito_hits": {},
         "toya_hits": {},
+        "akito_last_hit_seq": {},
+        "toya_last_hit_seq": {},
         "egg_user_counts": {},
         "foxrabbit_total": 0,
         "foxbun_total": 0,
         "fox_total": 0,
         "rabbit_total": 0,
+        "_seq": 0,
     }
     if date is not None:
         stats["date"] = date
     return stats
 
 
+def _new_user_stats() -> dict:
+    return {
+        "draw_count": 0,
+        "egg_count": 0,
+        "foxbun_count": 0,
+        "akito_hits": {},
+        "toya_hits": {},
+        "pair_hits": {},
+        "akito_last_hit_seq": {},
+        "toya_last_hit_seq": {},
+        "pair_last_hit_seq": {},
+        "_seq": 0,
+    }
+
+
 def _new_group_stats(today_str: str) -> dict:
     return {
         "profiles": {},
+        "users": {},
         "daily": _new_period_stats(date=today_str),
         "history": _new_period_stats(),
     }
@@ -80,7 +99,7 @@ def _new_group_stats(today_str: str) -> dict:
 
 def _new_stats_state() -> dict:
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "cooldowns": {},
         "groups": {},
     }
@@ -113,10 +132,23 @@ def _normalize_period_stats(raw: object, *, date: str | None = None) -> dict:
         stats["date"] = raw["date"]
 
     stats["total_draws"] = max(0, _safe_int(raw.get("total_draws")))
-    for key in ("user_draw_counts", "akito_hits", "toya_hits", "egg_user_counts"):
+    stats["_seq"] = max(0, _safe_int(raw.get("_seq")))
+    for key in ("user_draw_counts", "akito_hits", "toya_hits", "egg_user_counts", "akito_last_hit_seq", "toya_last_hit_seq"):
         stats[key] = _normalize_counter(raw.get(key))
     for key in ("foxrabbit_total", "foxbun_total", "fox_total", "rabbit_total"):
         stats[key] = max(0, _safe_int(raw.get(key)))
+    return stats
+
+
+def _normalize_user_stats(raw: object) -> dict:
+    stats = _new_user_stats()
+    if not isinstance(raw, dict):
+        return stats
+
+    for key in ("draw_count", "egg_count", "foxbun_count", "_seq"):
+        stats[key] = max(0, _safe_int(raw.get(key)))
+    for key in ("akito_hits", "toya_hits", "pair_hits", "akito_last_hit_seq", "toya_last_hit_seq", "pair_last_hit_seq"):
+        stats[key] = _normalize_counter(raw.get(key))
     return stats
 
 
@@ -130,6 +162,11 @@ def _normalize_group_stats(raw: object, today_str: str) -> dict:
             str(user_id): str(display_name)
             for user_id, display_name in raw["profiles"].items()
             if str(display_name).strip()
+        }
+    if isinstance(raw.get("users"), dict):
+        stats["users"] = {
+            str(user_id): _normalize_user_stats(user_stats)
+            for user_id, user_stats in raw["users"].items()
         }
     stats["daily"] = _normalize_period_stats(raw.get("daily"), date=today_str)
     stats["history"] = _normalize_period_stats(raw.get("history"))
@@ -151,7 +188,7 @@ def _load_stats() -> dict:
     today_str = datetime.now(TZ_CN).date().isoformat()
     stats = _new_stats_state()
     if isinstance(raw, dict):
-        stats["schema_version"] = _safe_int(raw.get("schema_version"), 1) or 1
+        stats["schema_version"] = max(2, _safe_int(raw.get("schema_version"), 2) or 2)
 
         raw_cooldowns = raw.get("cooldowns")
         if isinstance(raw_cooldowns, dict):
@@ -516,6 +553,53 @@ def _bump_counter(counter: dict[str, int], key: str, amount: int = 1) -> None:
     counter[key] = counter.get(key, 0) + amount
 
 
+_PAIR_KEY_SEPARATOR = "|||"
+
+
+def _make_pair_key(akito_name: str, toya_name: str) -> str:
+    return f"{akito_name}{_PAIR_KEY_SEPARATOR}{toya_name}"
+
+
+def _split_pair_key(pair_key: str) -> tuple[str, str]:
+    akito_name, separator, toya_name = pair_key.partition(_PAIR_KEY_SEPARATOR)
+    if not separator:
+        return pair_key, ""
+    return akito_name, toya_name
+
+
+def _record_period_hit(period_stats: dict, counter_key: str, order_key: str, name: str) -> None:
+    period_stats["_seq"] += 1
+    _bump_counter(period_stats[counter_key], name)
+    period_stats[order_key][name] = period_stats["_seq"]
+
+
+def _record_user_hit(user_stats: dict, counter_key: str, order_key: str, name: str) -> None:
+    user_stats["_seq"] += 1
+    _bump_counter(user_stats[counter_key], name)
+    user_stats[order_key][name] = user_stats["_seq"]
+
+
+def _record_user_draw_stats(
+    user_stats: dict,
+    *,
+    results: list[tuple[str, str, bool, str | None]],
+) -> None:
+    user_stats["draw_count"] += len(results)
+
+    for akito_name, toya_name, is_egg, fox_type in results:
+        if is_egg or fox_type == "foxbun":
+            user_stats["egg_count"] += 1
+        if fox_type == "foxbun":
+            user_stats["foxbun_count"] += 1
+        if fox_type is not None:
+            continue
+
+        pair_key = _make_pair_key(akito_name, toya_name)
+        _record_user_hit(user_stats, "pair_hits", "pair_last_hit_seq", pair_key)
+        _record_user_hit(user_stats, "akito_hits", "akito_last_hit_seq", akito_name)
+        _record_user_hit(user_stats, "toya_hits", "toya_last_hit_seq", toya_name)
+
+
 def _get_fixed_side(fixed_a: str | None, fixed_b: str | None) -> str | None:
     if fixed_a:
         return "akito"
@@ -562,9 +646,9 @@ def _record_draw_stats_for_period(
     for akito_name, toya_name, is_egg, fox_type in results:
         if fox_type is None:
             if fixed_side != "akito":
-                _bump_counter(period_stats["akito_hits"], akito_name)
+                _record_period_hit(period_stats, "akito_hits", "akito_last_hit_seq", akito_name)
             if fixed_side != "toya":
-                _bump_counter(period_stats["toya_hits"], toya_name)
+                _record_period_hit(period_stats, "toya_hits", "toya_last_hit_seq", toya_name)
 
         if is_egg or fox_type == "foxbun":
             _bump_counter(period_stats["egg_user_counts"], user_id)
@@ -593,6 +677,8 @@ def _record_group_draw_stats(
     today_str = _today_str()
     group_stats, _rolled = _get_or_create_group_stats(str(group_id), today_str)
     group_stats["profiles"][user_id] = display_name
+    user_stats = _normalize_user_stats(group_stats["users"].get(user_id))
+    group_stats["users"][user_id] = user_stats
 
     _record_draw_stats_for_period(
         group_stats["daily"],
@@ -606,6 +692,7 @@ def _record_group_draw_stats(
         results=results,
         fixed_side=fixed_side,
     )
+    _record_user_draw_stats(user_stats, results=results)
 
     for idx, (akito_name, toya_name, is_egg, fox_type) in enumerate(results, 1):
         if not is_egg and fox_type != "foxbun":
@@ -644,9 +731,24 @@ def _build_user_rows(counter: dict[str, int], profiles: dict[str, str], *, limit
     return rows
 
 
-def _build_character_rows(counter: dict[str, int], *, limit: int = 3, character: str) -> list[dict]:
+def _sorted_ranked_items(counter: dict[str, int], last_hit_seq: dict[str, int] | None = None) -> list[tuple[str, int]]:
+    if last_hit_seq is None:
+        last_hit_seq = {}
+    return sorted(
+        counter.items(),
+        key=lambda item: (-item[1], last_hit_seq.get(item[0], 10**9), item[0]),
+    )
+
+
+def _build_character_rows(
+    counter: dict[str, int],
+    *,
+    limit: int = 3,
+    character: str,
+    last_hit_seq: dict[str, int] | None = None,
+) -> list[dict]:
     grouped: list[tuple[list[str], int]] = []
-    for name, count in _sorted_counter_items(counter):
+    for name, count in _sorted_ranked_items(counter, last_hit_seq):
         if grouped and grouped[-1][1] == count:
             grouped[-1][0].append(name)
         else:
@@ -654,18 +756,36 @@ def _build_character_rows(counter: dict[str, int], *, limit: int = 3, character:
 
     rows = []
     for rank, (names, count) in enumerate(grouped[:limit], 1):
-        unique_name = names[0] if len(names) == 1 else None
+        visible_names = names[:3]
+        display_text = " / ".join(visible_names)
+        if len(names) > 3:
+            display_text += " / ..."
         rows.append(
             {
-                "left": f"TOP{rank} {' / '.join(names)}",
+                "left": f"TOP{rank} {display_text}",
                 "right": f"{count}次",
-                "icon_kind": "avatar",
-                "icon_name": unique_name,
-                "character": character,
+                "suffix_avatar_names": visible_names,
+                "suffix_character": character,
             }
         )
     if not rows:
         rows.append({"left": "暂无", "right": "0次"})
+    return rows
+
+
+def _build_fox_rows(period_stats: dict) -> list[dict]:
+    entries = [
+        ("foxrabbit", "狐兔", period_stats["foxrabbit_total"]),
+        ("foxbun", "狐兔饭", period_stats["foxbun_total"]),
+        ("fox", "狐狸", period_stats["fox_total"]),
+        ("rabbit", "兔子", period_stats["rabbit_total"]),
+    ]
+    rows = []
+    for _idx, (fox_type, label, count) in sorted(
+        enumerate(entries),
+        key=lambda item: (-item[1][2], item[0]),
+    ):
+        rows.append({"left": label, "right": f"{count}次", "icon_kind": "fox", "fox_type": fox_type})
     return rows
 
 
@@ -952,12 +1072,6 @@ def _truncate_text(text: str, font: ImageFont.FreeTypeFont | ImageFont.ImageFont
 
 
 def _resolve_row_icon(row: dict) -> Image.Image | None:
-    if row.get("icon_kind") == "avatar":
-        icon_name = row.get("icon_name")
-        character = row.get("character")
-        if icon_name and character:
-            return _load_avatar_thumb(character, icon_name)
-        return None
     if row.get("icon_kind") == "fox":
         fox_type = row.get("fox_type")
         if isinstance(fox_type, str):
@@ -965,11 +1079,84 @@ def _resolve_row_icon(row: dict) -> Image.Image | None:
     return None
 
 
-def _get_group_period_stats(group_id: int, scope: str) -> tuple[dict, dict]:
+def _resolve_row_suffix_icons(row: dict) -> list[Image.Image]:
+    names = row.get("suffix_avatar_names")
+    character = row.get("suffix_character")
+    if not isinstance(names, list) or not character:
+        return []
+
+    icons = []
+    for name in names:
+        if not isinstance(name, str):
+            continue
+        icon = _load_avatar_thumb(character, name, size=40)
+        if icon:
+            icons.append(icon)
+    return icons
+
+
+def _prepare_display_rows(rows: list[dict], *, min_row_height: int = 44) -> list[tuple[dict, Image.Image | None, list[Image.Image], int]]:
+    prepared_rows = []
+    for row in rows:
+        prefix_icon = _resolve_row_icon(row)
+        suffix_icons = _resolve_row_suffix_icons(row)
+        icon_heights = []
+        if prefix_icon:
+            icon_heights.append(prefix_icon.height)
+        if suffix_icons:
+            icon_heights.extend(icon.height for icon in suffix_icons)
+        row_height = max(min_row_height, max(icon_heights, default=0) + 12)
+        prepared_rows.append((row, prefix_icon, suffix_icons, row_height))
+    return prepared_rows
+
+
+def _build_placeholder_avatar(label: str, *, size: int, bg_color: str) -> Image.Image:
+    canvas = Image.new("RGB", (size, size), color=bg_color)
+    draw = ImageDraw.Draw(canvas)
+    font = _load_font(max(18, size // 2))
+    draw.rectangle([(0, 0), (size - 1, size - 1)], outline="#dddddd", width=1)
+    draw.text((size // 2, size // 2), label, font=font, fill="#ffffff", anchor="mm")
+    return canvas
+
+
+def _build_pair_thumb(akito_name: str, toya_name: str, *, size: int = 52, gap: int = 4) -> Image.Image:
+    akito_thumb = _load_avatar_thumb("彰人", akito_name, size=size) or _build_placeholder_avatar(
+        "彰", size=size, bg_color="#f08a5d"
+    )
+    toya_thumb = _load_avatar_thumb("冬弥", toya_name, size=size) or _build_placeholder_avatar(
+        "冬", size=size, bg_color="#5d8df0"
+    )
+    canvas = Image.new("RGB", (size * 2 + gap, size), color="#ffffff")
+    canvas.paste(akito_thumb, (0, 0))
+    canvas.paste(toya_thumb, (size + gap, 0))
+    return canvas
+
+
+def _build_personal_pair_items(user_stats: dict) -> list[dict]:
+    items = []
+    for pair_key, count in _sorted_ranked_items(user_stats["pair_hits"], user_stats.get("pair_last_hit_seq")):
+        akito_name, toya_name = _split_pair_key(pair_key)
+        items.append(
+            {
+                "pair_key": pair_key,
+                "akito_name": akito_name,
+                "toya_name": toya_name,
+                "count": count,
+            }
+        )
+    return items
+
+
+def _get_group_stats(group_id: int) -> dict:
     today_str = _today_str()
     group_stats, rolled = _get_or_create_group_stats(str(group_id), today_str)
     if rolled:
         _save_stats()
+    return group_stats
+
+
+def _get_group_period_stats(group_id: int, scope: str) -> tuple[dict, dict]:
+    group_stats = _get_group_stats(group_id)
     period_key = "daily" if scope == "daily" else "history"
     return group_stats, group_stats[period_key]
 
@@ -993,9 +1180,15 @@ def _render_leaderboard_card(title: str, subtitle: str, sections: list[dict]) ->
         rows = []
         height += 34
         for row in section["rows"]:
-            icon = _resolve_row_icon(row)
-            row_height = max(44, (icon.height + 12) if icon else 44)
-            rows.append((row, icon, row_height))
+            prefix_icon = _resolve_row_icon(row)
+            suffix_icons = _resolve_row_suffix_icons(row)
+            icon_heights = []
+            if prefix_icon:
+                icon_heights.append(prefix_icon.height)
+            if suffix_icons:
+                icon_heights.extend(icon.height for icon in suffix_icons)
+            row_height = max(44, max(icon_heights, default=0) + 12)
+            rows.append((row, prefix_icon, suffix_icons, row_height))
             height += row_height + row_gap
         height += section_gap
         prepared_sections.append((section["title"], rows))
@@ -1013,22 +1206,204 @@ def _render_leaderboard_card(title: str, subtitle: str, sections: list[dict]) ->
     for section_title, rows in prepared_sections:
         draw.text((pad_x, y), section_title, font=font_section, fill="#333333", anchor="la")
         y += 34
-        for row, icon, row_height in rows:
+        for row, prefix_icon, suffix_icons, row_height in rows:
             text_x = pad_x
-            if icon:
-                icon_y = y + (row_height - icon.height) // 2
-                canvas.paste(icon, (pad_x, icon_y))
-                text_x += icon.width + 14
+            if prefix_icon:
+                icon_y = y + (row_height - prefix_icon.height) // 2
+                canvas.paste(prefix_icon, (pad_x, icon_y))
+                text_x += prefix_icon.width + 14
 
             value_text = row.get("right", "")
             value_width = _text_width(font_value, value_text)
-            available_width = width - pad_x - value_width - 18 - text_x
+            suffix_width = 0
+            if suffix_icons:
+                suffix_width = sum(icon.width for icon in suffix_icons) + 8 * len(suffix_icons)
+            available_width = width - pad_x - value_width - 18 - text_x - suffix_width
             left_text = _truncate_text(row.get("left", ""), font_row, available_width)
             row_center_y = y + row_height // 2
             draw.text((text_x, row_center_y), left_text, font=font_row, fill="#000000", anchor="lm")
+
+            left_text_width = _text_width(font_row, left_text)
+            suffix_x = text_x + left_text_width + 8
+            for icon in suffix_icons:
+                icon_y = y + (row_height - icon.height) // 2
+                canvas.paste(icon, (suffix_x, icon_y))
+                suffix_x += icon.width + 8
+
             draw.text((width - pad_x, row_center_y), value_text, font=font_value, fill="#555555", anchor="rm")
             y += row_height + row_gap
         y += section_gap
+
+    buf = io.BytesIO()
+    canvas.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _render_personal_paro_card(user_id: str, display_name: str, user_stats: dict) -> bytes:
+    width = 860
+    pad_x = 34
+    pad_y = 26
+    row_gap = 8
+    section_gap = 12
+    pair_tile_w = 150
+    pair_tile_h = 112
+    pair_gap = 12
+
+    font_title = _load_font(30)
+    font_subtitle = _load_font(18)
+    font_section = _load_font(22)
+    font_row = _load_font(20)
+    font_value = _load_font(20)
+    font_pair = _load_font(18)
+
+    info_rows = [
+        {"left": "当前群名片", "right": display_name or f"用户{user_id}"},
+        {"left": "QQ", "right": user_id},
+    ]
+    summary_rows = [
+        {"left": "历史抽取派生", "right": f"{user_stats['draw_count']}次"},
+        {"left": "历史做饭 + foxbun", "right": f"{user_stats['egg_count']}次"},
+    ]
+    prepared_sections = [
+        ("用户信息", _prepare_display_rows(info_rows)),
+        ("累计记录", _prepare_display_rows(summary_rows)),
+        (
+            "抽到最多的彰人派生 TOP 3",
+            _prepare_display_rows(
+                _build_character_rows(
+                    user_stats["akito_hits"],
+                    limit=3,
+                    character="彰人",
+                    last_hit_seq=user_stats.get("akito_last_hit_seq"),
+                )
+            ),
+        ),
+        (
+            "抽到最多的冬弥派生 TOP 3",
+            _prepare_display_rows(
+                _build_character_rows(
+                    user_stats["toya_hits"],
+                    limit=3,
+                    character="冬弥",
+                    last_hit_seq=user_stats.get("toya_last_hit_seq"),
+                )
+            ),
+        ),
+    ]
+
+    pair_items = _build_personal_pair_items(user_stats)
+    content_width = width - pad_x * 2
+    pair_columns = max(1, (content_width + pair_gap) // (pair_tile_w + pair_gap))
+    pair_row_count = (len(pair_items) + pair_columns - 1) // pair_columns if pair_items else 0
+
+    foxbun_image = _load_foxbun_image()
+    if foxbun_image:
+        foxbun_image = _resize_to_fit(foxbun_image, max_w=content_width, max_h=140)
+
+    height = pad_y + 38 + 28
+    for _section_title, rows in prepared_sections:
+        height += 34
+        for _row, _prefix_icon, _suffix_icons, row_height in rows:
+            height += row_height + row_gap
+        height += section_gap
+
+    height += 34
+    if pair_row_count:
+        height += pair_row_count * pair_tile_h + max(0, pair_row_count - 1) * pair_gap
+    else:
+        height += 44
+    height += section_gap
+
+    height += 34 + 32
+    if foxbun_image:
+        height += foxbun_image.height + 12
+    else:
+        height += 24
+    height += pad_y
+
+    canvas = Image.new("RGB", (width, height), color="#ffffff")
+    draw = ImageDraw.Draw(canvas)
+
+    y = pad_y
+    draw.text((width // 2, y), "我的派生", font=font_title, fill="#000000", anchor="ma")
+    y += 38
+    draw.text((width // 2, y), "当前群历史累计", font=font_subtitle, fill="#888888", anchor="ma")
+    y += 28
+
+    for section_title, rows in prepared_sections:
+        draw.text((pad_x, y), section_title, font=font_section, fill="#333333", anchor="la")
+        y += 34
+        for row, prefix_icon, suffix_icons, row_height in rows:
+            text_x = pad_x
+            if prefix_icon:
+                icon_y = y + (row_height - prefix_icon.height) // 2
+                canvas.paste(prefix_icon, (pad_x, icon_y))
+                text_x += prefix_icon.width + 14
+
+            value_text = row.get("right", "")
+            value_width = _text_width(font_value, value_text)
+            suffix_width = 0
+            if suffix_icons:
+                suffix_width = sum(icon.width for icon in suffix_icons) + 8 * len(suffix_icons)
+            available_width = width - pad_x - value_width - 18 - text_x - suffix_width
+            left_text = _truncate_text(row.get("left", ""), font_row, available_width)
+            row_center_y = y + row_height // 2
+            draw.text((text_x, row_center_y), left_text, font=font_row, fill="#000000", anchor="lm")
+
+            left_text_width = _text_width(font_row, left_text)
+            suffix_x = text_x + left_text_width + 8
+            for icon in suffix_icons:
+                icon_y = y + (row_height - icon.height) // 2
+                canvas.paste(icon, (suffix_x, icon_y))
+                suffix_x += icon.width + 8
+
+            draw.text((width - pad_x, row_center_y), value_text, font=font_value, fill="#555555", anchor="rm")
+            y += row_height + row_gap
+        y += section_gap
+
+    draw.text((pad_x, y), "抽到过的所有派生组合", font=font_section, fill="#333333", anchor="la")
+    y += 34
+    if pair_items:
+        for index, item in enumerate(pair_items):
+            row_index = index // pair_columns
+            col_index = index % pair_columns
+            tile_x = pad_x + col_index * (pair_tile_w + pair_gap)
+            tile_y = y + row_index * (pair_tile_h + pair_gap)
+            draw.rectangle(
+                [(tile_x, tile_y), (tile_x + pair_tile_w, tile_y + pair_tile_h)],
+                fill="#fafafa",
+                outline="#dddddd",
+                width=1,
+            )
+            thumb = _build_pair_thumb(item["akito_name"], item["toya_name"])
+            thumb_x = tile_x + (pair_tile_w - thumb.width) // 2
+            canvas.paste(thumb, (thumb_x, tile_y + 10))
+
+            pair_label = f"{item['akito_name']}×{item['toya_name']}" if item["toya_name"] else item["akito_name"]
+            pair_label = _truncate_text(pair_label, font_pair, pair_tile_w - 16)
+            draw.text((tile_x + pair_tile_w // 2, tile_y + 74), pair_label, font=font_pair, fill="#333333", anchor="ma")
+            draw.text(
+                (tile_x + pair_tile_w - 10, tile_y + 96),
+                f"x{item['count']}",
+                font=font_pair,
+                fill="#666666",
+                anchor="rm",
+            )
+        y += pair_row_count * pair_tile_h + max(0, pair_row_count - 1) * pair_gap
+    else:
+        draw.text((pad_x, y + 20), "暂无可见派生记录", font=font_row, fill="#888888", anchor="la")
+        y += 44
+    y += section_gap
+
+    draw.text((pad_x, y), "foxbun 彩蛋", font=font_section, fill="#333333", anchor="la")
+    y += 34
+    draw.text((pad_x, y), f"累计触发 {user_stats['foxbun_count']} 次", font=font_row, fill="#333333", anchor="la")
+    y += 32
+    if foxbun_image:
+        foxbun_x = pad_x + (content_width - foxbun_image.width) // 2
+        canvas.paste(foxbun_image, (foxbun_x, y))
+    else:
+        draw.text((pad_x, y + 12), "暂无 foxbun 图片素材", font=font_subtitle, fill="#888888", anchor="la")
 
     buf = io.BytesIO()
     canvas.save(buf, format="PNG")
@@ -1048,11 +1423,21 @@ def _build_paro_rank_image_from_stats(group_stats: dict, period_stats: dict, sco
         },
         {
             "title": "被抽到最多次的彰人 TOP 3",
-            "rows": _build_character_rows(period_stats["akito_hits"], limit=3, character="彰人"),
+            "rows": _build_character_rows(
+                period_stats["akito_hits"],
+                limit=3,
+                character="彰人",
+                last_hit_seq=period_stats.get("akito_last_hit_seq"),
+            ),
         },
         {
             "title": "被抽到最多次的冬弥 TOP 3",
-            "rows": _build_character_rows(period_stats["toya_hits"], limit=3, character="冬弥"),
+            "rows": _build_character_rows(
+                period_stats["toya_hits"],
+                limit=3,
+                character="冬弥",
+                last_hit_seq=period_stats.get("toya_last_hit_seq"),
+            ),
         },
     ]
     title = "每日派生排行榜" if scope == "daily" else "历史派生排行榜"
@@ -1073,12 +1458,7 @@ def _build_egg_rank_image_from_stats(group_stats: dict, period_stats: dict, scop
         },
         {
             "title": "狐兔彩蛋触发次数",
-            "rows": [
-                {"left": "狐兔", "right": f"{period_stats['foxrabbit_total']}次", "icon_kind": "fox", "fox_type": "foxrabbit"},
-                {"left": "狐兔饭", "right": f"{period_stats['foxbun_total']}次", "icon_kind": "fox", "fox_type": "foxbun"},
-                {"left": "狐狸", "right": f"{period_stats['fox_total']}次", "icon_kind": "fox", "fox_type": "fox"},
-                {"left": "兔子", "right": f"{period_stats['rabbit_total']}次", "icon_kind": "fox", "fox_type": "rabbit"},
-            ],
+            "rows": _build_fox_rows(period_stats),
         },
     ]
     title = "每日做饭排行榜" if scope == "daily" else "历史做饭排行榜"
@@ -1088,6 +1468,16 @@ def _build_egg_rank_image_from_stats(group_stats: dict, period_stats: dict, scop
 def _build_egg_rank_image(group_id: int, scope: str) -> bytes:
     group_stats, period_stats = _get_group_period_stats(group_id, scope)
     return _build_egg_rank_image_from_stats(group_stats, period_stats, scope)
+
+
+def _build_personal_paro_image_from_user_stats(user_id: str, display_name: str, user_stats: dict) -> bytes:
+    return _render_personal_paro_card(user_id, display_name, _normalize_user_stats(user_stats))
+
+
+def _build_personal_paro_image(group_id: int, user_id: str, display_name: str) -> bytes:
+    group_stats = _get_group_stats(group_id)
+    user_stats = _normalize_user_stats(group_stats.get("users", {}).get(user_id))
+    return _build_personal_paro_image_from_user_stats(user_id, display_name, user_stats)
 
 
 def _build_rank_preview_stats(scope: str) -> tuple[dict, dict]:
@@ -1119,29 +1509,47 @@ def _build_rank_preview_stats(scope: str) -> tuple[dict, dict]:
                     "Callboy彰": 9,
                     "白骑": 8,
                     "王子彰": 8,
-                    "WL2彰": 5,
-                    "白恶魔": 3,
+                    "WL2彰": 8,
+                    "白恶魔": 8,
+                    "法师彰": 8,
+                },
+                "akito_last_hit_seq": {
+                    "Callboy彰": 15,
+                    "白骑": 21,
+                    "王子彰": 24,
+                    "WL2彰": 29,
+                    "白恶魔": 32,
+                    "法师彰": 38,
                 },
                 "toya_hits": {
                     "Callboy冬": 11,
                     "白百合": 10,
                     "王子冬": 10,
-                    "WL2冬": 4,
-                    "黑骑": 2,
+                    "WL2冬": 10,
+                    "黑骑": 10,
+                    "青鸟": 10,
+                },
+                "toya_last_hit_seq": {
+                    "Callboy冬": 18,
+                    "白百合": 20,
+                    "王子冬": 23,
+                    "WL2冬": 28,
+                    "黑骑": 31,
+                    "青鸟": 36,
                 },
                 "egg_user_counts": {
                     "10001": 4,
                     "10002": 3,
                     "10003": 3,
                     "10004": 2,
-                    "10005": 1,
                 },
-                "foxrabbit_total": 5,
-                "foxbun_total": 2,
+                "foxrabbit_total": 3,
+                "foxbun_total": 5,
                 "fox_total": 4,
-                "rabbit_total": 3,
+                "rabbit_total": 1,
             }
         )
+        period_stats["egg_user_counts"]["10005"] = 1
     else:
         period_stats = _new_period_stats()
         period_stats.update(
@@ -1159,15 +1567,29 @@ def _build_rank_preview_stats(scope: str) -> tuple[dict, dict]:
                     "Callboy彰": 26,
                     "白骑": 25,
                     "王子彰": 25,
-                    "WL2彰": 18,
-                    "白恶魔": 11,
+                    "WL2彰": 25,
+                    "白恶魔": 25,
+                },
+                "akito_last_hit_seq": {
+                    "Callboy彰": 41,
+                    "白骑": 52,
+                    "王子彰": 58,
+                    "WL2彰": 64,
+                    "白恶魔": 71,
                 },
                 "toya_hits": {
                     "Callboy冬": 31,
                     "白百合": 29,
                     "王子冬": 29,
-                    "WL2冬": 16,
-                    "黑骑": 9,
+                    "WL2冬": 29,
+                    "黑骑": 29,
+                },
+                "toya_last_hit_seq": {
+                    "Callboy冬": 44,
+                    "白百合": 50,
+                    "王子冬": 59,
+                    "WL2冬": 68,
+                    "黑骑": 74,
                 },
                 "egg_user_counts": {
                     "10001": 10,
@@ -1176,10 +1598,10 @@ def _build_rank_preview_stats(scope: str) -> tuple[dict, dict]:
                     "10004": 4,
                     "10005": 2,
                 },
-                "foxrabbit_total": 18,
+                "foxrabbit_total": 7,
                 "foxbun_total": 9,
                 "fox_total": 11,
-                "rabbit_total": 7,
+                "rabbit_total": 18,
             }
         )
 
@@ -1196,6 +1618,30 @@ def _build_egg_rank_preview_image(scope: str) -> bytes:
     return _build_egg_rank_image_from_stats(group_stats, period_stats, scope)
 
 
+def _build_personal_preview_image() -> bytes:
+    user_stats = _new_user_stats()
+    _record_user_draw_stats(
+        user_stats,
+        results=[
+            ("Callboy彰人", "Callboy冬弥", True, None),
+            ("白骑士", "王子冬弥", False, None),
+            ("白骑士", "王子冬弥", False, None),
+            ("王子彰人", "白百合", False, None),
+            ("WL2彰人", "WL2冬弥", False, None),
+            ("Callboy彰人", "Callboy冬弥", False, None),
+            ("法师彰人", "青鸟", False, None),
+            ("白恶魔", "黑骑士", False, None),
+            ("白骑士", "黑骑士", False, None),
+            ("王子彰人", "白百合", False, None),
+            ("Callboy彰人", "Callboy冬弥", False, "foxbun"),
+            ("白骑士", "王子冬弥", False, "foxrabbit"),
+            ("Callboy彰人", "青鸟", False, None),
+            ("白恶魔", "WL2冬弥", False, None),
+        ],
+    )
+    return _build_personal_paro_image_from_user_stats("10001", "测试群友甲甲甲甲", user_stats)
+
+
 # ==================== 抽派生 ====================
 _DRAW_LOCKS: dict[str, asyncio.Lock] = {}
 _DRAW_LIMIT = 3
@@ -1209,6 +1655,15 @@ def _resolve_group_command(event: Event) -> tuple[int | None, str | None]:
     if group_id not in ALLOWED_CHAT_GROUPS:
         return None, None
     return int(group_id), None
+
+
+def _event_display_name(event: Event) -> str:
+    sender = getattr(event, "sender", None)
+    if sender:
+        display_name = getattr(sender, "card", None) or getattr(sender, "nickname", None)
+        if isinstance(display_name, str) and display_name.strip():
+            return display_name
+    return f"用户{event.get_user_id()}"
 
 
 draw_cmd = on_command("抽派生", priority=5, block=True)
@@ -1265,7 +1720,7 @@ async def _(event: Event, args: Message = CommandArg()):
         if limit_message:
             await draw_cmd.finish(MessageSegment.reply(event.message_id) + limit_message)
 
-        nickname = event.sender.card or event.sender.nickname or f"用户{user_id}"
+        nickname = _event_display_name(event)
 
         # N 次独立抽取（做饭 > 狐兔，多抽时狐兔最多一次）
         results = []
@@ -1352,6 +1807,20 @@ async def _(event: Event, args: Message = CommandArg()):
             # 多抽 或 单抽含狐兔 → 走 _render_multi
             img_bytes = _render_multi(results, remaining, nickname)
             await draw_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes))
+
+
+my_paro_cmd = on_command("我的派生", priority=5, block=True)
+
+
+@my_paro_cmd.handle()
+async def _(event: Event):
+    group_id, rejection = _resolve_group_command(event)
+    if rejection:
+        await my_paro_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
+    if group_id is None:
+        return
+    img_bytes = _build_personal_paro_image(group_id, event.get_user_id(), _event_display_name(event))
+    await my_paro_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes))
 
 
 daily_rank_cmd = on_command("每日排行", priority=5, block=True)
@@ -1474,6 +1943,22 @@ async def _(event: Event):
         return
     img_bytes = _build_egg_rank_preview_image("history")
     await test_history_egg_rank_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes))
+
+
+test_my_paro_cmd = on_command("测试我的派生", priority=5, block=True)
+
+
+@test_my_paro_cmd.handle()
+async def _(event: Event):
+    if str(event.get_user_id()) != SUPERUSER_QQ:
+        return
+    group_id, rejection = _resolve_group_command(event)
+    if rejection:
+        await test_my_paro_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
+    if group_id is None:
+        return
+    img_bytes = _build_personal_preview_image()
+    await test_my_paro_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes))
 
 
 # ==================== 测试做饭 ====================
