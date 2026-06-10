@@ -7,11 +7,11 @@ from nonebot.log import logger
 from .api import expand_query_for_retrieval, smart_search
 from .data import (
     PJSK_ENTRIES,
-    PJSK_INTRO,
-    PJSK_KNOWLEDGE_BASE,
     RELATIONSHIP_DATA,
     SCRIPT_DB,
     SONG_DATA,
+    get_pjsk_intro,
+    get_pjsk_knowledge_base,
     load_prompt_template,
 )
 from .retrieval import retrieve
@@ -155,7 +155,6 @@ async def get_relevant_examples(query: str, num: int = 5) -> str:
     relevant = [SCRIPT_DB[i] for i in relevant_ids if 0 <= i < len(SCRIPT_DB)]
     rand_sources: list[int] = []  # 记录哪些是随机来的
     if random_count > 0:
-        import random
         remaining = [
             i for i in range(len(SCRIPT_DB))
             if i not in relevant_ids and SCRIPT_DB[i].get("type") != "noise"
@@ -194,16 +193,16 @@ async def get_relevant_pjsk(query: str, num: int = 6) -> str:
     ids = await retrieve("pjsk", query, num) if query and query.strip() else None
     if ids is None or not PJSK_ENTRIES:
         logger.debug(f"🔍 PJSK检索不可用，回退全量 base query={query[:40]}")
-        return PJSK_KNOWLEDGE_BASE
+        return get_pjsk_knowledge_base()
 
     relevant = [PJSK_ENTRIES[i] for i in ids if 0 <= i < len(PJSK_ENTRIES)]
     logger.debug(f"🔍 PJSK命中 [{len(relevant)}条] query={query[:40]}")
     for item in relevant:
         logger.debug(f"  [PJSK] {item.get('category','')[:20]} {item.get('text','')[:40]}")
     if not relevant:
-        return PJSK_KNOWLEDGE_BASE
+        return get_pjsk_knowledge_base()
 
-    intro = PJSK_INTRO or ""
+    intro = get_pjsk_intro() or ""
     text = intro + "\n\n"
     for item in relevant:
         text += f"{item['category']}：{item['text']}\n"

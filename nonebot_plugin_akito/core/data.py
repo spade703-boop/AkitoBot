@@ -38,6 +38,18 @@ def _find_data_path(filename: str) -> Path | None:
 find_data_path = _find_data_path
 
 
+def get_data_dir() -> Path:
+    """返回第一个存在的数据根目录（写回文件的统一落点）；都不存在时回退 "data"。
+
+    memory / time_awareness 等需要写文件的模块共用此函数，避免各自维护一份路径搜索逻辑。
+    """
+    for base in _DATA_SEARCH_DIRS:
+        p = Path(base)
+        if p.exists():
+            return p
+    return Path("data")
+
+
 def load_json_file(filename: str, default_data: Any = None) -> Any:
     """加载 JSON 数据文件；未找到或解析失败时回落到 default_data。"""
     path = _find_data_path(filename)
@@ -142,9 +154,23 @@ SONG_DATA         = load_json_file("akito_songs.json", {})
 RELATIONSHIP_DATA = load_json_file("akito_relationships.json", [])
 
 
+def get_pjsk_knowledge_base() -> str:
+    """返回拼接好的 PJSK 黑话知识库全文（检索不可用时的兜底全量注入文本）。
+
+    str 是不可变类型，热重载重新赋值后，其他模块在 import 时拿到的旧引用不会更新
+    （见 PROJECT_SPEC §11 模式 B），因此消费方必须通过本函数在调用时读取最新值。
+    """
+    return PJSK_KNOWLEDGE_BASE
+
+
+def get_pjsk_intro() -> str:
+    """返回 PJSK 语境锁前言（检索结果注入时始终在最前）。热重载理由同 get_pjsk_knowledge_base。"""
+    return PJSK_INTRO
+
+
 def init_pjsk_knowledge() -> None:
     """加载并拼装 PJSK 黑话知识库到 PJSK_KNOWLEDGE_BASE + PJSK_INTRO + PJSK_ENTRIES（缺文件则保持空串/空列表）。"""
-    global PJSK_KNOWLEDGE_BASE, PJSK_INTRO, PJSK_ENTRIES
+    global PJSK_KNOWLEDGE_BASE, PJSK_INTRO
     data = load_json_file("pjsk_knowledge.json", {})
     if not data:
         return
@@ -155,16 +181,20 @@ def init_pjsk_knowledge() -> None:
             for entry in item.get("entries", []):
                 text += f"   {entry}\n"
             text += "\n"
-        PJSK_KNOWLEDGE_BASE = text.strip()
 
         # 结构化导出供检索引擎使用
-        PJSK_INTRO = data.get("introduction", "")
         flat: list[dict] = []
         for item in data.get("knowledge_list", []):
             category = item.get("category", "")
             for entry in item.get("entries", []):
                 flat.append({"category": category, "text": entry})
-        PJSK_ENTRIES = flat
+
+        # 全部解析成功后才更新，异常时保留旧数据；
+        # PJSK_ENTRIES 是 list → 模式 A 原地更新，已持有引用的模块（context/retrieval）即时生效
+        PJSK_KNOWLEDGE_BASE = text.strip()
+        PJSK_INTRO = data.get("introduction", "")
+        PJSK_ENTRIES.clear()
+        PJSK_ENTRIES.extend(flat)
     except Exception as e:
         logger.error(f"❌ PJSK黑话库拼装失败: {e}")
 

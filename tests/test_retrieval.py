@@ -193,12 +193,14 @@ async def test_get_relevant_pjsk_fallback_to_full_base():
     from nonebot_plugin_akito.core.context import get_relevant_pjsk
 
     # mock 返回 None → 应回退到全量 base
+    # 注：patch 的是 data 模块的源变量——context 经 get_pjsk_knowledge_base() 在调用时实时读取，
+    # 这正是热重载安全路径（PROJECT_SPEC §11 模式 B 的 getter 访问惯例）
     with mock.patch(
         "nonebot_plugin_akito.core.context.retrieve",
         return_value=None,
     ):
         with mock.patch(
-            "nonebot_plugin_akito.core.context.PJSK_KNOWLEDGE_BASE",
+            "nonebot_plugin_akito.core.data.PJSK_KNOWLEDGE_BASE",
             "MOCK_BASE",
         ):
             result = await get_relevant_pjsk("test query")
@@ -222,8 +224,9 @@ async def test_get_relevant_pjsk_intro_always_first():
             "nonebot_plugin_akito.core.context.PJSK_ENTRIES",
             fake_entries,
         ):
+            # intro 经 data.get_pjsk_intro() 实时读取，patch 源变量
             with mock.patch(
-                "nonebot_plugin_akito.core.context.PJSK_INTRO",
+                "nonebot_plugin_akito.core.data.PJSK_INTRO",
                 fake_intro,
             ):
                 result = await get_relevant_pjsk("测试", num=1)

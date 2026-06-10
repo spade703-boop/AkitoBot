@@ -2,13 +2,13 @@
 
 import json
 import os
-from pathlib import Path
 import sqlite3
 
 from nonebot.adapters import Event
 from nonebot.log import logger
 
 from . import DB_PATH
+from .data import find_data_path, get_data_dir
 
 MEMORY_DB: dict = {}
 
@@ -40,22 +40,17 @@ init_db()
 
 def load_memory() -> None:
     """从磁盘加载长期记忆到 MEMORY_DB（原地 clear+update，保持其他模块持有的引用不失效）。"""
-    possible_paths = [
-        Path("/app/akito_bot/data/akito_memories.json"),
-        Path("data/akito_memories.json"),
-        Path("./akito_memories.json"),
-    ]
-    for path in possible_paths:
-        if path.exists():
-            try:
-                with open(path, encoding="utf-8") as f:
-                    loaded = json.load(f)
-                MEMORY_DB.clear()
-                MEMORY_DB.update(loaded)
-                logger.info(f"💾 长期记忆已加载！包含 {len(MEMORY_DB)} 个会话数据")
-                return
-            except Exception as e:
-                logger.error(f"⚠️ 记忆文件损坏: {e}")
+    path = find_data_path("akito_memories.json")
+    if path:
+        try:
+            with open(path, encoding="utf-8") as f:
+                loaded = json.load(f)
+            MEMORY_DB.clear()
+            MEMORY_DB.update(loaded)
+            logger.info(f"💾 长期记忆已加载！包含 {len(MEMORY_DB)} 个会话数据")
+            return
+        except Exception as e:
+            logger.error(f"⚠️ 记忆文件损坏: {e}")
     logger.info("🆕 未找到记忆文件，初始化空记忆库。")
     MEMORY_DB.clear()
 
@@ -63,11 +58,8 @@ def load_memory() -> None:
 def save_memory() -> None:
     """将 MEMORY_DB 原子写入磁盘（.tmp + os.replace），失败仅记日志不抛出。"""
     try:
-        if Path("/app/akito_bot/data").exists():
-            target_path = Path("/app/akito_bot/data/akito_memories.json")
-        else:
-            target_path = Path("data/akito_memories.json")
-            target_path.parent.mkdir(parents=True, exist_ok=True)
+        target_path = get_data_dir() / "akito_memories.json"
+        target_path.parent.mkdir(parents=True, exist_ok=True)
         tmp_path = target_path.with_suffix(".tmp")
         with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(MEMORY_DB, f, ensure_ascii=False, indent=2)

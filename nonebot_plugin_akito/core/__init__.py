@@ -1,4 +1,4 @@
-"""core 包入口：定义全局常量与 API 客户端，并统一导出 memory/data/life_state/api/context/time_awareness 六个子模块的公共接口。"""
+"""core 包入口：定义全局常量与 API 客户端，并统一导出 memory/data/life_state/api/context/time_awareness/retrieval 七个子模块的公共接口。"""
 
 # ============================================================================
 # core/__init__.py — 包入口
@@ -39,8 +39,13 @@ try:
 except ImportError:  # pragma: no cover — 生产环境可选依赖
     np = None
 
-TOYA_QQ_ID   = os.environ.get("TOYA_QQ_ID", "3958033212")
-SUPERUSER_QQ = os.environ.get("SUPERUSER_QQ", "2403925946")
+# 敏感 ID 一律走 .env，代码内不留真实号码兜底（PROJECT_SPEC §15.3）
+TOYA_QQ_ID   = os.environ.get("TOYA_QQ_ID", "")
+SUPERUSER_QQ = os.environ.get("SUPERUSER_QQ", "")
+if not SUPERUSER_QQ:
+    logger.warning("⚠️ SUPERUSER_QQ 未在 .env 配置，超管指令（重置对话/热更新/WL2 等）将全部不可用")
+if not TOYA_QQ_ID:
+    logger.warning("⚠️ TOYA_QQ_ID 未在 .env 配置，冬弥本人识别（CP/搭档模式）将不生效")
 TRIGGER_NAMES = {"东云小彰", "小彰"}
 
 def _parse_group_list(key: str) -> list[int]:
@@ -74,8 +79,10 @@ from .data import (
     load_json_file, load_prompt_template, reload_assets, find_data_path,
     SCRIPT_DB, REACTIONS_DB, PROMPTS_DB, DIRECTOR_DB,
     DAILY_ROUTINE, WL2_ROUTINE,
-    SONG_DATA, RELATIONSHIP_DATA, PJSK_KNOWLEDGE_BASE, SLEEP_DB,
+    SONG_DATA, RELATIONSHIP_DATA, SLEEP_DB,
 )
+# 注：PJSK_KNOWLEDGE_BASE / PJSK_INTRO 是会被热重载重新赋值的 str，
+# 不做模块级再导出（避免旧引用失效）；需要时经 data.get_pjsk_knowledge_base() 等 getter 取。
 from .life_state import (
     AKITO_STATUS, STATE_DURATION,
     grant_safety_pass, get_safe_until, get_last_complaint, set_last_complaint,
@@ -86,7 +93,7 @@ from .life_state import (
 )
 from .api import (
     call_deepseek_api, call_deepseek_api_agent, smart_search, describe_image, to_image_data, embed_text,
-    expand_query_for_retrieval,
+    expand_query_for_retrieval, extract_json_block, rescue_field,
 )
 from .context import (
     get_random_examples, get_base_persona, reload_persona, get_song_memories, get_hybrid_relationship,
@@ -114,7 +121,7 @@ __all__ = [
     # data
     "load_json_file", "load_prompt_template", "reload_assets", "find_data_path",
     "SCRIPT_DB", "REACTIONS_DB", "PROMPTS_DB", "DIRECTOR_DB",
-    "DAILY_ROUTINE", "WL2_ROUTINE", "SONG_DATA", "RELATIONSHIP_DATA", "PJSK_KNOWLEDGE_BASE",
+    "DAILY_ROUTINE", "WL2_ROUTINE", "SONG_DATA", "RELATIONSHIP_DATA",
     "SLEEP_DB",
     # life_state
     "AKITO_STATUS", "STATE_DURATION",
@@ -124,7 +131,7 @@ __all__ = [
     "is_sleeping", "sleep_block",
     # api
     "call_deepseek_api", "call_deepseek_api_agent", "smart_search", "describe_image", "to_image_data", "embed_text",
-    "expand_query_for_retrieval",
+    "expand_query_for_retrieval", "extract_json_block", "rescue_field",
     # context
     "get_random_examples", "get_base_persona", "reload_persona", "get_song_memories",
     "get_hybrid_relationship", "get_relevant_examples", "get_relevant_pjsk",

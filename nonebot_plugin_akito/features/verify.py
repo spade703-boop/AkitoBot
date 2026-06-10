@@ -18,16 +18,19 @@ CONFIG_FILE = Path("data/verify_config.json")
 VERIFY_FILE = Path("data/pending_verify.json")
 
 def load_config() -> dict:
-    """读取 verify_config.json（群号配置）；失败返回内置默认配置。"""
+    """读取 verify_config.json（群号配置）；失败返回空配置（审核功能整体静默停用）。"""
     try:
         with open(CONFIG_FILE, encoding="utf-8") as f: return json.load(f)
     except Exception as e:
-        logger.warning(f"⚠️ 读取 verify_config.json 失败，使用默认配置: {e}")
-        return {"TARGET_GROUP_ID": "1058884117", "ADMIN_GROUP_ID": "1078300612"}
+        # 群号不在代码内兜底（PROJECT_SPEC §15.3）：缺配置文件 = 审核系统不启用
+        logger.warning(f"⚠️ 读取 verify_config.json 失败: {e}")
+        return {}
 
 config = load_config()
 TARGET_GROUP_ID = config.get("TARGET_GROUP_ID")
 ADMIN_GROUP_ID = config.get("ADMIN_GROUP_ID")
+if not TARGET_GROUP_ID or not ADMIN_GROUP_ID:
+    logger.warning("⚠️ verify_config.json 缺少 TARGET_GROUP_ID / ADMIN_GROUP_ID，加群审核系统将不响应任何事件")
 
 def load_verify_queue() -> dict:
     """读取待审核名单；文件不存在或损坏返回空 dict。"""

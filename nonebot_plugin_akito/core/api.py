@@ -1,9 +1,13 @@
-"""外部 API 封装：DeepSeek 对话 / Agent、Tavily 搜索、智谱 GLM-4V 图像识别，均带超时与降级处理。"""
+"""外部 API 封装：DeepSeek 对话 / Agent、Tavily 搜索、智谱 GLM-4V 图像识别，均带超时与降级处理；
+另提供 LLM JSON 输出的提取 / 救援工具（chat 与 impression 共用的单一真相源）。"""
+
+from __future__ import annotations
 
 import asyncio
 import base64
 from io import BytesIO
 from pathlib import Path
+import re
 from typing import Any
 
 import aiohttp
@@ -11,6 +15,29 @@ from nonebot.log import logger
 from PIL import Image as PILImage
 
 from . import TAVILY_API_KEY, ZHIPU_API_KEY, client, embedding_client, vision_client
+
+# ── LLM JSON 输出的提取与救援（chat.py / impression.py 共用） ──────────────────
+
+_JSON_BLOCK_RE = re.compile(r"\{[\s\S]*\}")
+
+
+def extract_json_block(raw: str) -> str:
+    """从 LLM 原始返回中提取最外层 ``{...}`` 片段；无匹配时原样返回（交由调用方的解析失败兜底处理）。"""
+    match = _JSON_BLOCK_RE.search(raw)
+    return match.group(0) if match else raw
+
+
+def rescue_field(raw: str, *fields: str) -> str | None:
+    """从残缺 JSON 文本中正则抠出第一个命中的字符串字段值；无匹配返回 None。
+
+    用于 ``json.loads`` 失败后的降级救援（典型原因：字段值内裸引号未转义、输出被截断）。
+    注意返回值可能是空字符串（字段存在但值为空），调用方需用 ``is not None`` 判断是否命中。
+    """
+    if not fields:
+        return None
+    names = "|".join(re.escape(f) for f in fields)
+    m = re.search(r'"(?:' + names + r')"\s*:\s*"((?:[^"\\]|\\.)*)"', raw)
+    return m.group(1) if m else None
 
 # ── 查询扩散 Prompt（检索辅助，非人设，不改彰人语气） ──────────────────────────
 _EXPANSION_PROMPT = """你是检索关键词助手，服务于 Project Sekai 角色【东云彰人】（毒舌、嫌麻烦但讲义气的街头歌手）。
