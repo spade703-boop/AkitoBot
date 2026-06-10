@@ -325,6 +325,7 @@ def test_个人做饭历史_只统计真实做饭和狐兔饭(隔离派生统计
         random_paro._make_pair_key(彰人_白骑, 冬弥_黑骑): 1,
         random_paro._make_pair_key(彰人_王子, 冬弥_白百合): 1,
     }
+    assert random_paro._count_total_cooking_hits(做饭历史) == 3
 
 
 def test_个人预览里用到的派生都有真实头像素材(使用真实派生头像):

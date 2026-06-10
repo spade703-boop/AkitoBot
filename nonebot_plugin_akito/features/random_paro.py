@@ -1264,6 +1264,10 @@ def _build_personal_cooking_pair_items(egg_history: dict) -> list[dict]:
     return items
 
 
+def _count_total_cooking_hits(egg_history: dict) -> int:
+    return int(egg_history.get("cooking_count", 0)) + int(egg_history.get("foxbun_count", 0))
+
+
 def _get_group_stats(group_id: int) -> dict:
     today_str = _today_str()
     group_stats, rolled = _get_or_create_group_stats(str(group_id), today_str)
@@ -1295,7 +1299,8 @@ def _render_leaderboard_card(title: str, subtitle: str, sections: list[dict]) ->
     height = pad_y + 38 + 28
     for section in sections:
         rows = []
-        height += 34
+        title_gap_after = int(section.get("title_gap_after", 0) or 0)
+        height += 34 + title_gap_after
         for row in section["rows"]:
             prefix_icon = _resolve_row_icon(row)
             suffix_icons = _resolve_row_suffix_icons(row)
@@ -1313,6 +1318,7 @@ def _render_leaderboard_card(title: str, subtitle: str, sections: list[dict]) ->
                 "title": section["title"],
                 "title_fill": section.get("title_fill", "#333333"),
                 "title_bg": section.get("title_bg"),
+                "title_gap_after": title_gap_after,
                 "rows": rows,
             }
         )
@@ -1338,6 +1344,7 @@ def _render_leaderboard_card(title: str, subtitle: str, sections: list[dict]) ->
             fill=section["title_fill"],
             bg_fill=section["title_bg"],
         )
+        y += section.get("title_gap_after", 0)
         rows = section["rows"]
         for row, prefix_icon, suffix_icons, row_height in rows:
             text_x = pad_x
@@ -1396,7 +1403,7 @@ def _render_personal_paro_card(user_id: str, display_name: str, user_stats: dict
 
     summary_rows = [
         {"left": "累计抽取派生次数", "right": f"{user_stats['draw_count']}次"},
-        {"left": "累计抽到做饭的次数", "right": f"{egg_history['cooking_count']}次"},
+        {"left": "累计抽到做饭的次数", "right": f"{_count_total_cooking_hits(egg_history)}次"},
     ]
     prepared_sections = [
         {
@@ -1563,10 +1570,16 @@ def _build_paro_rank_image_from_stats(group_stats: dict, period_stats: dict, sco
     sections = [
         {
             "title": "本群累计抽取总次数",
+            "title_fill": "#ffffff",
+            "title_bg": SECTION_BAR_BG,
+            "title_gap_after": 10,
             "rows": [{"left": "总计", "right": f"{period_stats['total_draws']}次"}],
         },
         {
             "title": "抽取次数最多的前 5 人",
+            "title_fill": "#ffffff",
+            "title_bg": SECTION_BAR_BG,
+            "title_gap_after": 10,
             "rows": _build_user_rows(period_stats["user_draw_counts"], group_stats["profiles"], limit=5),
         },
         {
@@ -1604,10 +1617,16 @@ def _build_egg_rank_image_from_stats(group_stats: dict, period_stats: dict, scop
     sections = [
         {
             "title": "做饭 + 狐兔饭触发最多的前 5 人",
+            "title_fill": "#ffffff",
+            "title_bg": SECTION_BAR_BG,
+            "title_gap_after": 10,
             "rows": _build_user_rows(period_stats["egg_user_counts"], group_stats["profiles"], limit=5),
         },
         {
             "title": "狐兔彩蛋触发次数",
+            "title_fill": "#ffffff",
+            "title_bg": SECTION_BAR_BG,
+            "title_gap_after": 10,
             "rows": _build_fox_rows(period_stats),
         },
     ]
