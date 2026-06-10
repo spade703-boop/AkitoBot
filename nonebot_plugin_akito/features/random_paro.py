@@ -1082,8 +1082,8 @@ def _truncate_text(text: str, font: ImageFont.FreeTypeFont | ImageFont.ImageFont
     return (trimmed + suffix) if trimmed else suffix
 
 
-AKITO_ACCENT = "#f08a5d"
-TOYA_ACCENT = "#5d8df0"
+AKITO_ACCENT = "#FF7722"
+TOYA_ACCENT = "#0077DD"
 SECTION_BAR_BG = "#8c9198"
 
 
@@ -1381,7 +1381,8 @@ def _render_personal_paro_card(user_id: str, display_name: str, user_stats: dict
     pair_tile_w = 132
     pair_tile_h = 86
     pair_gap = 10
-    pair_columns = 3
+    pair_columns = 4
+    pair_section_top_gap = 8
     fox_section_gap = 24
 
     font_section = _load_font(21)
@@ -1449,6 +1450,7 @@ def _render_personal_paro_card(user_id: str, display_name: str, user_stats: dict
 
     height += 34
     if pair_row_count:
+        height += pair_section_top_gap
         height += pair_row_count * pair_tile_h + max(0, pair_row_count - 1) * pair_gap
     else:
         height += 44
@@ -1515,6 +1517,7 @@ def _render_personal_paro_card(user_id: str, display_name: str, user_stats: dict
         bg_fill=SECTION_BAR_BG,
     )
     if pair_items:
+        y += pair_section_top_gap
         for index, item in enumerate(pair_items):
             row_index = index // pair_columns
             col_index = index % pair_columns
