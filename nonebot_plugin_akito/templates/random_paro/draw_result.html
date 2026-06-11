@@ -297,7 +297,7 @@
   {% for it in results %}
     {% if it.type == "pair" %}
     <div class="ticket{% if it.cooking %} cooking{% endif %}">
-      {% if it.cooking %}<div class="cook-badge">★ 做饭彩蛋</div>{% endif %}
+      {% if it.cooking %}<div class="cook-badge">★ 该做饭啦！</div>{% endif %}
       <div class="pair-art">
         {% if it.akito_img %}
         <img class="tile l" src="{{ it.akito_img }}">
@@ -358,10 +358,10 @@
   <div class="summary">
     {% if cooking_summary.mode == "single" %}
     <div class="s-at">@{{ cooking_summary.nickname }}</div>
-    <div class="s-title">对，就是你，你是被选中的彰冬妈咪！</div>
+    <div class="s-title">对，就是你，你是被选中的彰冬姐！</div>
     <div class="s-line">奖励你现在来做<b class="fa">{{ cooking_summary.akito }}</b>×<b class="ft">{{ cooking_summary.toya }}</b>的饭！</div>
     {% elif cooking_summary.mode == "multi" %}
-    <div class="s-title">恭喜你是被选中的彰冬妈咪！</div>
+    <div class="s-title">恭喜你是被选中的彰冬姐！</div>
     <div class="s-line">快来做{% for d in cooking_summary.dishes %}{% if not loop.first %}、{% endif %}<b class="fa">{{ d.akito }}</b>×<b class="ft">{{ d.toya }}</b>{% endfor %}{% if cooking_summary.with_foxbun %}、<b class="fa">狐</b><b class="ft">兔</b>{% endif %}的饭吧！</div>
     {% elif cooking_summary.mode == "foxbun_only" %}
     <div class="s-line">快来做<b class="fa">狐</b><b class="ft">兔</b>饭吧！</div>
