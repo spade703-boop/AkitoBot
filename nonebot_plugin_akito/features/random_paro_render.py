@@ -19,6 +19,11 @@ _RENDER_SEM = asyncio.Semaphore(2)
 async def render_random_paro_page(template_name: str, data: dict, *, viewport_width: int = 760) -> bytes:
     template = _TEMPLATE_ENV.get_template(template_name)
     html = template.render(**data)
+    default_width = viewport_width
+    try:
+        viewport_width = int(data.get("page_width", default_width))
+    except (TypeError, ValueError):
+        viewport_width = default_width
     async with _RENDER_SEM:
         return await html_to_pic(
             html,

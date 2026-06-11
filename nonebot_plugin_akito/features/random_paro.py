@@ -1413,6 +1413,7 @@ def _build_profile_pair_contract(egg_history: dict) -> list[dict]:
 def _build_paro_rank_page_data_from_stats(group_stats: dict, period_stats: dict, scope: str) -> dict:
     return {
         "theme": "dark",
+        "page_width": 680,
         "eyebrow_tail": "DAILY DRAW REPORT" if scope == "daily" else "HISTORY DRAW REPORT",
         "title": "每日派生排行榜" if scope == "daily" else "历史派生排行榜",
         "pill": _subtitle_for_scope(period_stats, scope),
@@ -1440,6 +1441,7 @@ def _build_paro_rank_page_data_from_stats(group_stats: dict, period_stats: dict,
 def _build_egg_rank_page_data_from_stats(group_stats: dict, period_stats: dict, scope: str) -> dict:
     return {
         "theme": "dark",
+        "page_width": 680,
         "eyebrow_tail": "DAILY COOKING REPORT" if scope == "daily" else "HISTORY COOKING REPORT",
         "title": "每日做饭排行榜" if scope == "daily" else "历史做饭排行榜",
         "pill": _subtitle_for_scope(period_stats, scope),
@@ -1453,6 +1455,7 @@ def _build_egg_rank_page_data_from_stats(group_stats: dict, period_stats: dict, 
 def _build_personal_paro_page_data_from_user_stats(user_id: str, display_name: str, user_stats: dict, egg_history: dict) -> dict:
     return {
         "theme": "dark",
+        "page_width": 680,
         "eyebrow_tail": "PLAYER PROFILE",
         "title": display_name or f"用户{user_id}",
         "pill": "",
@@ -1536,6 +1539,7 @@ def _build_draw_result_page_data(
 
     return {
         "theme": "light",
+        "page_width": 620,
         "eyebrow_tail": "GACHA RESULT",
         "title": "派生抽取结果",
         "pill": f"本次共 {len(results)} 抽",
