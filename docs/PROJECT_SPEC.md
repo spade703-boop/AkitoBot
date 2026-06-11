@@ -16,7 +16,7 @@
 | AI 对话 | DeepSeek API (`deepseek-v4-flash`) |
 | 图像识别 | 智谱 GLM-4.6V-Flash（免费，thinking 开启） |
 | 网络搜索 | Tavily API |
-| 语义检索 | SiliconFlow BGE-M3 embedding + numpy（可选，未配置自动降级） |
+| 语义检索 | SiliconFlow BGE-M3 embedding + bge-reranker-v2-m3 精排 + numpy（可选，未配置自动降级） |
 | 图像渲染 | Pillow + nonebot-plugin-htmlrender |
 | 持久化 | JSON 文件 + SQLite |
 | 定时任务 | APScheduler |
@@ -72,7 +72,7 @@ gemini_bot/
 │   ├── conftest.py
 │   └── test_*.py
 │
-├── tools/                        # 维护工具脚本（剧本分类 / LLM 富集 / 向量库构建）
+├── tools/                        # 维护工具脚本（剧本分类 / LLM 富集 / 向量库构建 / 检索评测）
 │
 └── nonebot_plugin_akito/         # 主插件包
     ├── __init__.py               # 插件入口：元数据 + require() + 导入三大子包

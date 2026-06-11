@@ -223,6 +223,7 @@ AKITO_SAFE_UNTIL = time.time() + 10   # 无效！
 | `format_image_analysis_for_chat(analysis)` | 把 `ImageAnalysis` 渲染成注入 history/Prompt 的五段式文本（标签/识别角色/画面核心/OCR/细节，各段截断防膨胀） |
 | `to_image_data(image)` | 从 AlcImage 获取原始字节（支持 raw/path/url 三种来源） |
 | `embed_text(text)` | BGE-M3 单条 embedding（SiliconFlow），返回 1024 维 float list；未配置 key / 失败返回 None，不抛异常 |
+| `rerank_documents(query, documents, top_n)` | bge-reranker-v2-m3 重排序（SiliconFlow，与 embed 同 key 门控），返回 `[(候选下标, 相关分)]` 按分降序；未配置 key / 失败返回 None，不抛异常 |
 | `extract_json_block(raw)` | 从 LLM 原始返回中提取最外层 `{...}` 片段；无匹配时原样返回（chat / impression 共用） |
 | `rescue_field(raw, *fields)` | 从残缺 JSON 中正则抠出第一个命中的字符串字段值；无匹配返回 None。可能返回空串，调用方需用 `is not None` 判断命中 |
 
@@ -234,26 +235,28 @@ AKITO_SAFE_UNTIL = time.time() + 10   # 无效！
 |------|------|
 | `get_base_persona()` | 读取 `data/akito_persona.txt` 人设文本 |
 | `get_random_examples(n)` | 从 `SCRIPT_DB` 随机抽取 n 条台词示例注入 Prompt（检索不可用时的兜底） |
-| `get_relevant_examples(query, n)` | 语义检索剧本示例；检索失败回退到 `get_random_examples` |
-| `get_relevant_pjsk(query, n)` | 语义检索 PJSK 黑话；检索失败回退到全量 `PJSK_KNOWLEDGE_BASE`；`PJSK_INTRO` 始终在前 |
+| `get_relevant_examples(query, n)` | 语义检索剧本示例；检索不可用或无相关命中均回退到 `get_random_examples` |
+| `get_relevant_pjsk(query, n)` | 语义检索 PJSK 黑话；检索不可用回退全量 `PJSK_KNOWLEDGE_BASE`，无相关命中仅注入前言（降噪）；`PJSK_INTRO` 始终在前 |
 | `get_song_memories()` | 将 `SONG_DATA` 格式化为背景知识条目，每次对话静态注入 |
 | `get_hybrid_relationship(text)` | 本地关键词白名单扫描 + 可选联网补充，返回 Prompt 片段 |
 | `reload_persona()` | 重新读取 `akito_persona.txt`，返回新内容（`重载配置 persona` 触发） |
 
 ### retrieval.py
 
-通用语义检索引擎，BGE-M3（1024 维）+ 均值中心化。设计为 registry 驱动，加新语料只需一条配置 + 跑一次 build。
+通用语义检索引擎，BGE-M3（1024 维）+ 均值中心化；可用时 cosine 粗召回后经 bge-reranker-v2-m3 精排 + 阈值过滤。设计为 registry 驱动，加新语料只需一条配置（含 `doc_text` 精排文本构造器）+ 跑一次 build。
 
 | 函数 | 说明 |
 |------|------|
-| `retrieve(corpus, query, top_k)` | 异步语义检索，返回源 DB 下标列表；任一环节失败返回 None（降级） |
+| `retrieve(corpus, query, top_k)` | 异步语义检索（cosine 召回 → 精排重排）。三态返回：None=不可用（降级）、`[]`=无相关命中、`[id, ...]`=命中的源 DB 下标 |
 | `reload_indices()` | 重读所有 `.npz` 并重建缓存，返回成功加载数（`reload_assets()` 联动调用） |
+
+精排开关与调参均为模块常量：`_RERANK_ENABLED`（一键回退纯 cosine）、`_RERANK_RECALL_K`（召回深度，默认 20）、`_RERANK_MIN_SCORE`（相关分阈值，默认 0.0=不过滤；用 `tools/eval_retrieval.py` 调参后上调）。
 
 **.npz schema**（每语料一份 `data/content/<name>_embeddings.npz`）：
 `vectors`(N×1024 float32)、`mean`(1024 float32)、`indices`(N int32)、`count`(int)
 
 **降级链路**（5 层）：
-无 numpy → 无 `.npz` 文件 → 无 API key → embed 返回 None → count 不符 → 均回退静态/随机行为，不抛错、不空窗。
+无 numpy → 无 `.npz` 文件 → 无 API key → embed 返回 None → count 不符 → 均回退静态/随机行为；精排失败另回退纯 cosine 顺序。不抛错、不空窗。
 
 ### time_awareness.py
 
@@ -607,6 +610,10 @@ py tools/classify_scripts.py --write --yes
 py tools/build_embeddings.py all     # 全量构建
 py tools/build_embeddings.py scripts # 仅剧本
 py tools/build_embeddings.py pjsk    # 仅 PJSK
+
+# 检索精度评测（考题集 tools/eval_set.json；阈值调参看输出末尾的分数统计）
+py tools/eval_retrieval.py compare   # cosine 基线 vs 精排逐题对比
+py tools/eval_retrieval.py rerank 0.2  # 用指定阈值试跑精排臂
 ```
 
 生成的 `data/content/*_embeddings.npz` 不纳入 Git（已在 `/data` gitignore）。服务器端部署：本地建好 `.npz` 上传到服务器 `data/content/` 目录，或服务器上直接运行 build 工具。

@@ -186,7 +186,9 @@ akito_bot/
 ├── tools/                          # 维护工具脚本
 │   ├── classify_scripts.py         # 剧本分类打标（home/story/noise）
 │   ├── enrich_scripts.py           # LLM 富集（生成 cn_key + category + topics，断点续跑）
-│   └── build_embeddings.py         # 语义向量库构建（scripts/pjsk/all）
+│   ├── build_embeddings.py         # 语义向量库构建（scripts/pjsk/all）
+│   ├── eval_retrieval.py           # 检索精度评测（cosine 基线 vs bge-reranker 精排）
+│   └── eval_set.json               # 评测黄金考题集（纯文本可直接编辑）
 ├── tests/                          # 关键路径测试（pytest）
 ├── nonebot_plugin_akito/
 │   ├── __init__.py                 # 插件入口
@@ -367,6 +369,7 @@ nonebot-plugin-uninfo     >= 0.7.0
 > py tools/classify_scripts.py --write --yes     # 首次：剧本打 type
 > py tools/enrich_scripts.py --write             # LLM 富集（cn_key + category + topics）
 > py tools/build_embeddings.py all               # 构建 .npz 向量库
+> py tools/eval_retrieval.py compare             # 检索精度评测（基线 vs 精排）
 > ```
 > 未配置 key 时自动降级为原有随机/全量注入行为，不影响正常对话。
 
