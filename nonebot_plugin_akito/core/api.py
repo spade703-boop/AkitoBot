@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import asyncio
 import base64
+from dataclasses import dataclass, field
 from io import BytesIO
+import json
 from pathlib import Path
 import re
 from typing import Any
@@ -169,70 +171,354 @@ async def smart_search(query: str) -> str:
         return ""
 
 
-async def describe_image(image_data: bytes) -> str:
-    """用智谱 GLM-4V 识别图片，返回结构化情报文本；未配置 key 或失败返回空串。"""
-    try:
-        if "请在这里" in ZHIPU_API_KEY:
-            return ""
+# ── GLM-4.6V 视觉识别：结构化输出 + 代码侧裁决 ─────────────────────────────
 
+_VISION_MODEL = "glm-4.6v-flash"
+_VISION_THINKING = "enabled"   # 首轮深度思考：免费档拿精度；嫌慢改 "disabled"
+_OCR_THINKING = "disabled"     # OCR 轮纯转写，要速度
+_VISION_TIMEOUT = 45.0         # thinking 模式需要更长预算
+_OCR_TIMEOUT = 30.0
+_CONFIDENCE_GATE = 0.7         # 低于此置信度的角色判定一律降级，宁可不认不许认错
+_PASSTHROUGH_MAX_BYTES = 3_500_000  # 3.5MB 原图 ≈ 4.7MB base64，低于智谱单图 5MB 上限
+_MAX_IMAGES = 3                # 单条消息最多识别的图片数
+_MAX_PAYLOAD_ENTRIES = 4       # 多图 + 动图抽帧后的图像条目总上限
+_ANIMATED_FRAMES = 3           # 动图最多抽帧数
+
+_SCENE_LABELS = {"character_art", "merch", "screenshot_or_text", "meme", "food", "daily_photo", "unknown"}
+_CHARACTER_IDS = {
+    "ichika", "saki", "honami", "shiho",
+    "minori", "haruka", "airi", "shizuku",
+    "kohane", "an", "akito", "toya",
+    "tsukasa", "emu", "nene", "rui",
+    "kanade", "mafuyu", "ena", "mizuki",
+    "miku", "rin", "len", "luka", "meiko", "kaito",
+}
+_CHAR_TAG_CN = {
+    "ichika": "一歌", "saki": "咲希", "honami": "穗波", "shiho": "志步",
+    "minori": "实乃理", "haruka": "遥", "airi": "爱莉", "shizuku": "雫",
+    "kohane": "心羽", "an": "杏", "akito": "彰人", "toya": "冬弥",
+    "tsukasa": "天马司", "emu": "笑梦", "nene": "宁宁", "rui": "类",
+    "kanade": "奏", "mafuyu": "真冬", "ena": "绘名", "mizuki": "瑞希",
+    "miku": "初音未来", "rin": "镜音铃", "len": "镜音连", "luka": "流歌",
+    "meiko": "MEIKO", "kaito": "KAITO",
+    "pair": "合照",  # 裁决标签，复用同一映射渲染标签行
+}
+_SCENE_TAG_CN = {
+    "character_art": "二次元角色", "merch": "周边谷子", "screenshot_or_text": "截图文字",
+    "meme": "梗图表情", "food": "美食", "daily_photo": "日常", "unknown": "未知",
+}
+
+
+@dataclass
+class ImageAnalysis:
+    """describe_image 的结构化结果；character_label 为代码侧裁决后的最终标签。"""
+
+    scene_label: str = "unknown"    # character_art/merch/screenshot_or_text/meme/food/daily_photo/unknown
+    character_label: str = "none"   # akito/toya/pair/kaito/none（裁决后，驱动 RP 分支与标签行）
+    characters: list[str] = field(default_factory=list)  # 画面中全部确认角色（26 枚举 id，仅供描述文本）
+    confidence: float = 0.0         # 模型自报置信度（粗粒度，仅用于门控与日志）
+    summary: str = ""
+    ocr_text: str = ""
+    details: str = ""
+
+
+_VISION_PROMPT = """你是一个精通《世界计划 (Project Sekai/PJSK)》与二次元文化的视觉分析专家。仔细观察图片（可能有多张图或同一动图的多帧），只输出一个 JSON 对象，不要 markdown 代码块、不要任何解释文字。字段定义如下：
+
+{
+  "scene_label": "图片类型，只能取以下之一：character_art(动漫角色图/同人图/立绘) / merch(实体周边：徽章吧唧、亚克力立牌、毛绒、橡胶挂件等) / screenshot_or_text(游戏界面、聊天记录、网页等以文字为主的截图) / meme(梗图表情包) / food(美食) / daily_photo(现实日常照片) / unknown(无法判断)",
+  "characters": ["画面中能确认在场的PJSK角色id数组，只能用下方名册里的26个id，认不出或不确定的不要列，没有就给空数组"],
+  "confidence": 0到1之间的小数，表示你对 characters 判断的整体把握,
+  "features": {
+    "orange_hair": 画面中是否有橙色短发的男生（true/false）,
+    "yellow_streak_bangs": 该橙发男生刘海处是否有明显的黄色挑染（true/false）,
+    "blue_gray_split_hair": 是否有男生发色为左右双拼——半边深蓝、半边浅灰/银色（true/false）,
+    "tear_mole": 该双拼发色男生左眼下方是否有泪痣（看不清就填 false）,
+    "full_blue_hair": 是否有男生是纯粹的全头蓝发（通常配蓝色围巾或风衣）（true/false）,
+    "two_persons": 画面主体是否为两个人物同框（true/false）
+  },
+  "summary": "一两句话精准描述画面主体（例如：一个画着KAITO的镭射吧唧）",
+  "ocr_text": "图中显眼的配字/界面文字/数值，按阅读顺序原样提取；没有就填空字符串",
+  "details": "一句话描述画面情绪氛围，或一个最吸引人注意的小细节"
+}
+
+【PJSK 角色名册（id：识别特征）】
+Leo/need：ichika(星乃一歌：蓝灰色齐刘海直发，常背吉他) / saki(天马咲希：奶油金色长发元气少女，司的妹妹) / honami(望月穗波：粉棕色头发温柔系，常见编发) / shiho(日野森志步：浅金色长直发冷脸，贝斯手)
+MORE MORE JUMP!：minori(花里实乃理：橙棕色中长发元气) / haruka(桐谷遥：浅蓝色长直发冷静前偶像) / airi(桃井爱莉：粉色小双马尾+虎牙) / shizuku(日野森雫：浅灰绿色长卷发温柔，志步的姐姐)
+Vivid BAD SQUAD：kohane(小豆泽心羽：杏橙色双马尾乖巧) / an(白石杏：深蓝色双马尾发尾浅蓝，街头风) / akito(东云彰人：橙色短发+刘海黄色挑染) / toya(青柳冬弥：深蓝×浅灰左右对半发色)
+Wonderlands×Showtime：tsukasa(天马司：金黄色短发发尾橙色渐变，浮夸自信) / emu(凤笑梦：粉色头发带星星发饰，超元气) / nene(草薙宁宁：浅绿色长发低双马尾) / rui(神代类：紫灰色乱翘卷发高个男，黄眼)
+25时、Nightcord见。：kanade(宵崎奏：银白色蓬松长发，常穿连帽衫) / mafuyu(朝比奈真冬：灰紫色长发，眼神空洞) / ena(东云绘名：米棕色长发，彰人的姐姐) / mizuki(晓山瑞希：浅粉色长发高侧马尾，中性可爱打扮)
+虚拟歌手：miku(初音未来：青绿色超长双马尾) / rin(镜音铃：金色短发+白色大蝴蝶结) / len(镜音连：金色短发扎小后马尾) / luka(巡音流歌：粉色长直发成熟) / meiko(MEIKO：棕色短发红衣) / kaito(KAITO：纯蓝短发+蓝围巾)
+
+判定须知（重要，认错会扣分）：
+1. 不要凭印象猜角色：先如实勾选 features 里的发色特征，characters 必须与 features 自洽。
+2. 橙发但没有黄色挑染的不是彰人(akito)；金黄发带橙色渐变的是天马司(tsukasa)。
+3. 全头纯蓝发是 KAITO(kaito)，绝不是冬弥；只有蓝灰对半劈开的发色才是冬弥(toya)。
+4. 金发易混：白色大蝴蝶结=镜音铃(rin)；后扎小马尾=镜音连(len)；长发女性=咲希(saki)或志步(shiho)——冷脸直发是志步。
+5. 粉发易混：小双马尾+虎牙=爱莉(airi)；星星发饰超元气=笑梦(emu)；浅粉高侧马尾=瑞希(mizuki)；粉长直成熟=流歌(luka)。
+6. 周边按真实物理材质描述：带角色印花的圆形金属徽章叫"吧唧/谷子"，透明亚克力的叫"立牌"。
+7. 常见游戏优先识别：《世界计划(PJSK)》《明日方舟》《绝区零》《崩坏：星穹铁道》《炉石传说》。
+8. 拿不准时 characters 给空数组、scene_label 填 unknown，不要硬猜。"""
+
+_OCR_PROMPT = """你是 OCR 文字提取助手。请按阅读顺序、逐字原样提取图片中所有可见文字（包括界面按钮、数值、水印、对话气泡里的字）。只输出提取出的文字本身，不要任何解释、概括或翻译。如果图中确实没有文字，只输出：无"""
+
+
+def _sniff_image_mime(data: bytes) -> str | None:
+    """纯 magic-bytes 嗅探常见图片格式；认不出返回 None。"""
+    if data.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if data.startswith((b"GIF87a", b"GIF89a")):
+        return "image/gif"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
+
+def _should_passthrough(mime: str | None, long_side: int, byte_len: int, is_animated: bool, max_side: int) -> bool:
+    """静态 JPEG/PNG 且尺寸体积都达标时直接透传原图，避免重编码损失细节（截图 OCR 受益最大）。"""
+    return (
+        mime in ("image/jpeg", "image/png")
+        and not is_animated
+        and long_side <= max_side
+        and byte_len <= _PASSTHROUGH_MAX_BYTES
+    )
+
+
+def _select_frame_indices(n_frames: int, max_frames: int = _ANIMATED_FRAMES) -> list[int]:
+    """动图取帧索引：帧数不多就全取，否则首/中/尾均匀采样（保序去重）。"""
+    if n_frames <= 0:
+        return [0]
+    if n_frames <= max_frames:
+        return list(range(n_frames))
+    if max_frames == 1:
+        return [0]
+    step = (n_frames - 1) / (max_frames - 1)
+    indices: list[int] = []
+    for i in range(max_frames):
+        idx = round(i * step)
+        if idx not in indices:
+            indices.append(idx)
+    return indices
+
+
+def _encode_as_jpeg(image: Any, max_side: int, quality: int) -> tuple[str, str]:
+    """PIL 图像 → RGB → 限边长 → JPEG base64，返回 (b64, mime)。"""
+    if image.mode != "RGB":
+        image = image.convert("RGB")
+    image.thumbnail((max_side, max_side))
+    buff = BytesIO()
+    image.save(buff, format="JPEG", quality=quality)
+    return base64.b64encode(buff.getvalue()).decode("utf-8"), "image/jpeg"
+
+
+def _prepare_image_payloads(
+    images: list[bytes], max_side: int = 1536, quality: int = 90, animated_frames: int = _ANIMATED_FRAMES
+) -> list[tuple[str, str]]:
+    """逐图清洗转码为 (base64, mime) 列表：静态小图透传原编码，动图均匀抽帧，超限缩放重编码。
+
+    单图失败跳过不拖累整批；全部失败返回空列表（调用方降级）。
+    """
+    payloads: list[tuple[str, str]] = []
+    for image_data in images[:_MAX_IMAGES]:
+        if len(payloads) >= _MAX_PAYLOAD_ENTRIES:
+            break
         try:
             image = PILImage.open(BytesIO(image_data))
             if getattr(image, "is_animated", False):
-                image.seek(0)
-            if image.mode in ("RGBA", "P", "LA"):
-                image = image.convert("RGB")
-            image.thumbnail((1024, 1024))
-            buff = BytesIO()
-            image.save(buff, format="JPEG", quality=85)
-            base64_image = base64.b64encode(buff.getvalue()).decode("utf-8")
+                n_frames = int(getattr(image, "n_frames", 1) or 1)
+                for idx in _select_frame_indices(n_frames, animated_frames):
+                    if len(payloads) >= _MAX_PAYLOAD_ENTRIES:
+                        break
+                    image.seek(idx)
+                    payloads.append(_encode_as_jpeg(image.convert("RGB"), max_side, quality))
+                continue
+            mime = _sniff_image_mime(image_data)
+            if _should_passthrough(mime, max(image.size), len(image_data), False, max_side):
+                payloads.append((base64.b64encode(image_data).decode("utf-8"), mime))
+                continue
+            payloads.append(_encode_as_jpeg(image, max_side, quality))
         except Exception as e:
             logger.error(f"❌ 图片清洗/转码失败 (可能是下载到了假图片): {e}")
+    return payloads
+
+
+def _parse_vision_reply(raw: str) -> dict:
+    """三级降级解析视觉模型返回：完整 JSON → rescue_field 抠字段 → 原文包装为 unknown。"""
+    try:
+        parsed = json.loads(extract_json_block(raw))
+        if isinstance(parsed, dict):
+            return parsed
+    except Exception:
+        pass
+    summary = rescue_field(raw, "summary")
+    ocr = rescue_field(raw, "ocr_text")
+    if summary is not None or ocr is not None:
+        return {"summary": summary or "", "ocr_text": ocr or "", "scene_label": "unknown"}
+    return {"summary": raw.strip()[:200], "scene_label": "unknown"}
+
+
+def _adjudicate(parsed: dict) -> ImageAnalysis:
+    """把模型输出裁决为最终 ImageAnalysis：RP 角色标签只认布尔特征证据，证据不足一律降级 none。
+
+    彰人=橙发+黄挑染缺一不可；纯蓝发硬裁 KAITO 杜绝认成冬弥；置信度低于门槛全部降级。
+    characters 数组仅做枚举过滤，供描述文本展示，不驱动 RP 分支。
+    """
+    raw_features = parsed.get("features")
+    features = raw_features if isinstance(raw_features, dict) else {}
+
+    def flag(name: str) -> bool:
+        return bool(features.get(name))
+
+    raw_chars = parsed.get("characters")
+    characters: list[str] = []
+    for c in raw_chars if isinstance(raw_chars, list) else []:
+        if isinstance(c, str) and c in _CHARACTER_IDS and c not in characters:
+            characters.append(c)
+    characters = characters[:6]
+
+    try:
+        confidence = float(parsed.get("confidence", 0.0))
+    except (TypeError, ValueError):
+        confidence = 0.0
+
+    is_akito = flag("orange_hair") and flag("yellow_streak_bangs")
+    if flag("two_persons") and is_akito and flag("blue_gray_split_hair"):
+        label = "pair"
+    elif flag("full_blue_hair"):
+        label = "kaito"  # 纯蓝发硬裁 KAITO，绝不落冬弥
+    elif is_akito:
+        label = "akito"
+    elif flag("blue_gray_split_hair"):
+        label = "toya"
+    else:
+        label = "none"
+    if label != "none" and confidence < _CONFIDENCE_GATE:
+        label = "none"
+
+    scene = parsed.get("scene_label")
+    if scene not in _SCENE_LABELS:
+        scene = "unknown"
+
+    def text_of(key: str) -> str:
+        value = parsed.get(key)
+        return value.strip() if isinstance(value, str) else ""
+
+    return ImageAnalysis(
+        scene_label=scene,
+        character_label=label,
+        characters=characters,
+        confidence=confidence,
+        summary=text_of("summary"),
+        ocr_text=text_of("ocr_text")[:1500],
+        details=text_of("details"),
+    )
+
+
+def _should_run_ocr_pass(scene_label: str, finish_reason: str | None) -> bool:
+    """截图/文字为主的图，或首轮输出被截断时，追加一次高清专项 OCR。"""
+    return scene_label == "screenshot_or_text" or finish_reason == "length"
+
+
+def _build_vision_content(prompt: str, payloads: list[tuple[str, str]]) -> list[dict]:
+    """拼多模态消息体：1 个文本指令 + N 个图像条目。"""
+    content: list[dict] = [{"type": "text", "text": prompt}]
+    content.extend(
+        {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}}
+        for b64, mime in payloads
+    )
+    return content
+
+
+async def _run_ocr_pass(images: list[bytes]) -> str:
+    """对原图做高分辨率重编码（2048/q95，动图只取首帧）后专项 OCR；失败返回空串保留首轮结果。"""
+    try:
+        payloads = _prepare_image_payloads(images, max_side=2048, quality=95, animated_frames=1)
+        if not payloads:
             return ""
+        response = await asyncio.wait_for(
+            vision_client.chat.completions.create(
+                model=_VISION_MODEL,
+                messages=[{"role": "user", "content": _build_vision_content(_OCR_PROMPT, payloads)}],
+                max_tokens=8192,
+                temperature=0.1,
+                extra_body={"thinking": {"type": _OCR_THINKING}},
+            ),
+            timeout=_OCR_TIMEOUT,
+        )
+        text = (response.choices[0].message.content or "").strip()
+        if not text or text == "无":
+            return ""
+        logger.info("🔍 二次 OCR 增强成功")
+        return text[:1500]
+    except Exception as e:
+        logger.warning(f"⚠️ 二次 OCR 增强失败，保留首轮结果: {e}")
+        return ""
 
-        vision_prompt = """
-        你是一个拥有"二次元与游戏雷达"的顶级视觉分析专家。请严格按照要求，输出一张精准的情报报告。
 
-        【🚨 核心先验知识库 (极高优先级)】：
-        1. 二次元周边：遇到别人晒动漫周边时，请如实描述其真实物理材质（如：毛绒玩偶/团子、橡胶挂件等）。如果是带有角色印花的圆形金属徽章请叫它"吧唧"或"谷子"，透明亚克力材质的叫"立牌"。
-        2. 常见游戏：优先识别是否为《世界计划 (PJSK)》、《明日方舟》、《绝区零》、《崩坏：星穹铁道》或《炉石传说》，并点明具体状态。
+async def describe_image(images: list[bytes]) -> ImageAnalysis | None:
+    """用智谱 GLM-4.6V 识别图片（支持多张、动图自动抽帧），返回裁决后的 ImageAnalysis。
 
-        【⚠️ 角色精准防伪鉴定（最高指令，认错会扣分！）⚠️】：
-        - [彰人]：必须是【橙色短发 + 明显的黄色挑染（通常在刘海处）】的男生。
-          🚫防错指南：如果是纯粹的全头橙发，或者黄发带橙色渐变（如天马司），绝对不是彰人！没有黄色挑染就绝对不能打[彰人]标签！
-        - [冬弥]：必须是【明显的双拼发色：左半边深蓝色，右半边浅灰色/银色 + 左眼下方有泪痣】的男生。
-          🚫防错指南（重点！）：绝对不要把 KAITO 认成冬弥！如果画面中的男生是【纯粹的全头蓝色头发】，且通常戴着蓝色围巾或穿着风衣，那他是 KAITO，绝不是冬弥！只有【蓝灰对半劈开】的发色才是冬弥！
-
-        【输出格式强制要求】：
-        请严格按照以下结构输出，不要啰嗦，直奔主题：
-        【标签】：[彰人] / [冬弥] / [合照] / [KAITO] / [天马司] / [周边谷子] / [游戏截图] / [梗图表情] / [美食] / [日常] (选择最贴切的1个)
-        【画面核心】：用一两句话精准描述主体（例如："一个画着KAITO的镭射吧唧"）。
-        【OCR提取】：提取图中显眼的配字或游戏面板上的字（没有填无）。
-        【关键细节】：简述画面的情绪氛围，或一个最能引起人注意的微小细节。
-        """
+    未配置 key、预处理全军覆没或调用失败返回 None（fail-silent，不阻断主对话）；
+    截图类/输出截断时自动追加一次高清 OCR 调用并合并结果。
+    """
+    try:
+        if "请在这里" in ZHIPU_API_KEY:
+            return None
+        payloads = _prepare_image_payloads(images)
+        if not payloads:
+            return None
 
         try:
-            response = await vision_client.chat.completions.create(
-                model="glm-4v-flash",
-                messages=[{
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": vision_prompt},
-                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}},
-                    ],
-                }],
-                max_tokens=150,
-                temperature=0.1,
+            response = await asyncio.wait_for(
+                vision_client.chat.completions.create(
+                    model=_VISION_MODEL,
+                    messages=[{"role": "user", "content": _build_vision_content(_VISION_PROMPT, payloads)}],
+                    max_tokens=4096,
+                    temperature=0.1,
+                    extra_body={"thinking": {"type": _VISION_THINKING}},
+                ),
+                timeout=_VISION_TIMEOUT,
             )
-            ans = response.choices[0].message.content
-            logger.info(f"🤖 智谱特工侦察结果: \n{ans}")
-            return ans
+        except asyncio.TimeoutError:
+            logger.error(f"❌ 智谱视觉调用超时（{_VISION_TIMEOUT:.0f}s）")
+            return None
         except Exception as api_e:
             logger.error(f"❌ 智谱 API 请求彻底失败: {api_e}")
-            return ""
+            return None
+
+        choice = response.choices[0]
+        analysis = _adjudicate(_parse_vision_reply(choice.message.content or ""))
+        logger.info(
+            f"🤖 智谱特工侦察结果: scene={analysis.scene_label} char={analysis.character_label} "
+            f"chars={analysis.characters} conf={analysis.confidence:.2f}"
+        )
+
+        if _should_run_ocr_pass(analysis.scene_label, getattr(choice, "finish_reason", None)):
+            ocr = await _run_ocr_pass(images)
+            if ocr:
+                analysis.ocr_text = ocr
+        return analysis
 
     except Exception as final_e:
         logger.error(f"❌ 视觉模块发生未知异常: {final_e}")
-        return ""
+        return None
+
+
+def format_image_analysis_for_chat(analysis: ImageAnalysis) -> str:
+    """把 ImageAnalysis 渲染成历史/LLM 注入用文本（与旧版四段式兼容，新增识别角色行）。
+
+    各段截断上限防 history 膨胀（同一串会进入最多 40 条的群记忆）。
+    """
+    tag = _CHAR_TAG_CN.get(analysis.character_label) or _SCENE_TAG_CN.get(analysis.scene_label, "未知")
+    chars = "、".join(_CHAR_TAG_CN[c] for c in analysis.characters if c in _CHAR_TAG_CN) or "无"
+    summary = analysis.summary.strip()[:150] or "（看不清的画面）"
+    ocr = analysis.ocr_text.strip()[:500] or "无"
+    details = analysis.details.strip()[:100] or "无"
+    return (
+        f"【标签】：[{tag}]\n【识别角色】：{chars}\n【画面核心】：{summary}\n"
+        f"【OCR提取】：{ocr}\n【关键细节】：{details}"
+    )
 
 
 async def to_image_data(image: Any) -> bytes:

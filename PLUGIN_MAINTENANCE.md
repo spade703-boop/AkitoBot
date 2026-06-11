@@ -219,7 +219,8 @@ AKITO_SAFE_UNTIL = time.time() + 10   # 无效！
 | `call_deepseek_api(messages, model, force_json)` | 标准调用，15s 超时熔断，失败返回中文提示字符串 |
 | `call_deepseek_api_agent(messages, tools, model)` | 带 Function Calling 的 Agent 调用，返回完整 `ChatCompletionMessage`，失败返回 `None` |
 | `smart_search(query)` | Tavily 搜索，返回摘要字符串，失败返回空字符串 |
-| `describe_image(bytes)` | 智谱 GLM-4V 图片分析，返回结构化描述文本 |
+| `describe_image(list[bytes])` | 智谱 GLM-4.6V-Flash 图片分析（多图/动图抽帧），JSON 输出 + 布尔特征代码侧裁决，返回 `ImageAnalysis`；失败返回 `None`。最多 2 次调用（截图/截断时追加高清 OCR），各 45s/30s 超时；首轮 thinking 默认开启（`_VISION_THINKING` 常量可关） |
+| `format_image_analysis_for_chat(analysis)` | 把 `ImageAnalysis` 渲染成注入 history/Prompt 的五段式文本（标签/识别角色/画面核心/OCR/细节，各段截断防膨胀） |
 | `to_image_data(image)` | 从 AlcImage 获取原始字节（支持 raw/path/url 三种来源） |
 | `embed_text(text)` | BGE-M3 单条 embedding（SiliconFlow），返回 1024 维 float list；未配置 key / 失败返回 None，不抛异常 |
 | `extract_json_block(raw)` | 从 LLM 原始返回中提取最外层 `{...}` 片段；无匹配时原样返回（chat / impression 共用） |
@@ -288,7 +289,8 @@ AKITO_SAFE_UNTIL = time.time() + 10   # 无效！
 
 ```
 1. 回复溯源        提取 Reply 引用的原始文本和图片
-2. 文本/视觉解析   分离纯文本和图片；图片调用 GLM-4V 识别
+2. 文本/视觉解析   分离纯文本和图片；图片（最多 3 张）一次调用 GLM-4.6V 结构化识别
+                   （JSON + 布尔特征裁决，26 角色名册，截图自动二次 OCR）
 3. 并发保护        asyncio.Lock（per 会话键）防止同一会话并发
 4. 睡眠检测        check_sleep_status → 深夜可能忽略或返回睡觉提示
 5. Prompt 组装     人设 + 时间感知 + 临时记忆 + 关系链 + 搜索结果 +

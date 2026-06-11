@@ -34,6 +34,7 @@ from ..core import (
     check_sleep_status,
     describe_image,
     extract_json_block,
+    format_image_analysis_for_chat,
     get_base_persona,
     get_daily_activity,
     get_festival_buff,
@@ -129,6 +130,17 @@ def _build_interact_instruction(
             return f"🛑【交互对象锁定：识图模式】对象是 {sender_nickname}。他回复并让你看一张图片。请你保持态度，对图片内容进行吐槽或评价。"
         return f"🛑【交互对象锁定：旁观模式】对象是 {sender_nickname}。他给你看了路人 {origin_sender} 的话。保持酷哥态度吐槽即可。"
     return f"""🛑【交互对象锁定】对话对象是普通群友 **{sender_nickname}**。保持 [独立街头歌手/直率/嫌麻烦但有教养] 的态度。\n💡【你的行为准则（请顺应本能反应）】：\n1. 【应对调侃】：保持情绪稳定。用无语的叹气、平淡的反问（"你很闲吗"）或直球承认来终结话题。\n2. 【应对倒霉/送礼】：遇到群友沉船就顺毛安抚两句；收到礼物就叹着气收下（"给我这个干嘛，谢了"），保持游刃有余。\n3. 【应对使唤】：你是有自己生活重心（练歌/打工）的独立男高。面对群友的跑腿要求，优先顺从你的不耐烦：直接冷漠拒绝（"你自己去。"），或用自己的日程当挡箭牌（"没空，正要去练歌"）。仅在心情极好或顺路时，才会勉强帮个小忙（"啧，放那吧我等下弄"）。\n🎯 核心语感：干脆利落的短句。把注意力放在你自己的事上，而不是被群友牵着鼻子走。"""
+
+
+def _build_image_director_instruction(character_label: str) -> str:
+    """根据识图裁决出的角色标签选导演指导；kaito/none 及其余角色（含绘名）一律走通用吐槽分支。"""
+    if character_label == "akito":
+        return "🎬【导演指导】：照片里是你自己。请表现出嫌弃、无语或稍显别扭的态度，简短吐槽即可，无需大惊小怪。"
+    if character_label == "toya":
+        return "🎬【导演指导】：照片里是冬弥。请保持你一贯护短但克制的态度，语气可以稍微放缓，但没必要显得太激动。"
+    if character_label == "pair":
+        return "🎬【导演指导】：这是你和冬弥的合照。请表现出平淡、认可或无语吐槽的态度。"
+    return "🎬【导演指导】：请看一眼这张图并给出简短的评价。必须保持男高中生的疏离和一点嫌弃感，【严禁】一惊一乍或长篇大论！"
 
 
 def _fold_stale_history_into_time_gap_prompt(
@@ -405,6 +417,8 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage()):
         name_stripped = False
         plain_text_content = ""
         current_image_identity = ""
+        image_analysis = None
+        collected_images: list[bytes] = []
         has_image = False
 
         # --- 1. 解析文本与视觉 ---
@@ -423,13 +437,21 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage()):
             elif isinstance(seg, Image):
                 has_image = True
                 try:
-                    img_data = await to_image_data(seg)
-                    raw_code = await describe_image(img_data)
-                    if raw_code:
-                        current_image_identity = raw_code.strip()
-                        logger.info(f"👁️ 视觉系统成功将画面传递给大脑: {current_image_identity}")
+                    if len(collected_images) < 3:
+                        collected_images.append(await to_image_data(seg))
                 except Exception as e:
-                    logger.error(f"视觉解析后赋值失败: {e}")
+                    logger.error(f"图片下载失败: {e}")
+
+        # 多图一次识别（修掉旧版逐图覆盖、只剩最后一张的问题）
+        if collected_images:
+            try:
+                analysis = await describe_image(collected_images)
+                if analysis:
+                    image_analysis = analysis
+                    current_image_identity = format_image_analysis_for_chat(analysis)
+                    logger.info(f"👁️ 视觉系统成功将画面传递给大脑: {current_image_identity}")
+            except Exception as e:
+                logger.error(f"视觉解析后赋值失败: {e}")
 
         # --- 2. 睡眠拦截 ---
         _is_superuser = str(event.get_user_id()) == SUPERUSER_QQ
@@ -606,14 +628,9 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage()):
         tagged_user_msg_for_history = f"[{sender_nickname}({user_id})]: {plain_text_content}"
 
         if current_image_identity:
-            if "[彰人]" in current_image_identity:
-                role_force = "🎬【导演指导】：照片里是你自己。请表现出嫌弃、无语或稍显别扭的态度，简短吐槽即可，无需大惊小怪。"
-            elif "[冬弥]" in current_image_identity:
-                role_force = "🎬【导演指导】：照片里是冬弥。请保持你一贯护短但克制的态度，语气可以稍微放缓，但没必要显得太激动。"
-            elif "[合照]" in current_image_identity:
-                role_force = "🎬【导演指导】：这是你和冬弥的合照。请表现出平淡、认可或无语吐槽的态度。"
-            else:
-                role_force = "🎬【导演指导】：请看一眼这张图并给出简短的评价。必须保持男高中生的疏离和一点嫌弃感，【严禁】一惊一乍或长篇大论！"
+            role_force = _build_image_director_instruction(
+                image_analysis.character_label if image_analysis else "none"
+            )
 
             tagged_user_msg_for_llm += f"\n\n📱 [系统旁白：你瞥了一眼对方发来的图片，画面内容是：{current_image_identity}]\n{role_force}"
             tagged_user_msg_for_history += f"\n[看了一眼图片: {current_image_identity}]"

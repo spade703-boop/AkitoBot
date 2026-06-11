@@ -14,7 +14,7 @@
 |------|------|
 | 框架 | NoneBot2 (>=2.4.4) + OneBot V11 适配器 |
 | AI 对话 | DeepSeek API (`deepseek-v4-flash`) |
-| 图像识别 | 智谱 GLM-4V |
+| 图像识别 | 智谱 GLM-4.6V-Flash（免费，thinking 开启） |
 | 网络搜索 | Tavily API |
 | 语义检索 | SiliconFlow BGE-M3 embedding + numpy（可选，未配置自动降级） |
 | 图像渲染 | Pillow + nonebot-plugin-htmlrender |

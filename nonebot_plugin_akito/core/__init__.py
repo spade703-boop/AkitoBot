@@ -95,8 +95,9 @@ from .life_state import (
     is_sleeping, sleep_block,
 )
 from .api import (
+    ImageAnalysis,
     call_deepseek_api, call_deepseek_api_agent, smart_search, describe_image, to_image_data, embed_text,
-    expand_query_for_retrieval, extract_json_block, rescue_field,
+    expand_query_for_retrieval, extract_json_block, format_image_analysis_for_chat, rescue_field,
 )
 from .context import (
     get_random_examples, get_base_persona, reload_persona, get_song_memories, get_hybrid_relationship,
@@ -133,8 +134,9 @@ __all__ = [
     "get_sleep_buffer_buff", "get_toya_anchor", "parse_duration_and_content", "check_img_permission",
     "is_sleeping", "sleep_block",
     # api
+    "ImageAnalysis",
     "call_deepseek_api", "call_deepseek_api_agent", "smart_search", "describe_image", "to_image_data", "embed_text",
-    "expand_query_for_retrieval", "extract_json_block", "rescue_field",
+    "expand_query_for_retrieval", "extract_json_block", "format_image_analysis_for_chat", "rescue_field",
     # context
     "get_random_examples", "get_base_persona", "reload_persona", "get_song_memories",
     "get_hybrid_relationship", "get_relevant_examples", "get_relevant_pjsk",

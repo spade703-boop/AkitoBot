@@ -23,6 +23,26 @@ def test_build_interact_instruction_for_toya_reply_bridge():
     assert "青柳冬弥" in result
 
 
+def test_build_image_director_instruction_akito():
+    assert "照片里是你自己" in chat._build_image_director_instruction("akito")
+
+
+def test_build_image_director_instruction_toya():
+    result = chat._build_image_director_instruction("toya")
+    assert "照片里是冬弥" in result
+    assert "护短" in result
+
+
+def test_build_image_director_instruction_pair():
+    assert "合照" in chat._build_image_director_instruction("pair")
+
+
+def test_build_image_director_instruction_others_fall_to_generic():
+    # kaito/绘名/none 等一律走通用吐槽分支；选择只看裁决标签，OCR 文本含"彰人"不再误触发
+    for label in ("kaito", "ena", "tsukasa", "none"):
+        assert "严禁" in chat._build_image_director_instruction(label)
+
+
 def test_fold_stale_history_into_time_gap_prompt_clears_history():
     user_mem = {
         "history": [
