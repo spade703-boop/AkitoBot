@@ -69,3 +69,11 @@ def test_base_template_keeps_two_column_footer_when_footer_right_present():
     assert '<div class="foot center">' not in html
     assert html.count("<span>") == 2
     assert "2026-06-11 22:00" in html
+
+
+def test_draw_result_template_uses_150px_pair_tiles():
+    template_text = (random_paro_render.TEMPLATE_DIR / "draw_result.html").read_text(encoding="utf-8")
+
+    assert ".tile {" in template_text
+    assert "width: 150px;" in template_text
+    assert "height: 150px;" in template_text
