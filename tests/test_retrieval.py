@@ -585,3 +585,175 @@ async def test_get_relevant_examples_short_query_skip_expansion():
                     await get_relevant_examples("早", num=1)
     assert len(short_called) == 0
     assert captured_query[0] == "早"
+
+
+# ── 重排序精排 ────────────────────────────────────────────────────────────────
+
+
+def _fake_script_db(n: int = 4) -> list[dict]:
+    """cn_key=d0..dN 的假剧本库（供精排 doc_text 构造）。"""
+    return [{"cn_key": f"d{i}", "context": f"ctx{i}", "dialogue": f"dl{i}"} for i in range(n)]
+
+
+def _patch_scripts_registry(db, with_doc_text: bool = True):
+    """把 scripts 语料注入 registry（测试后自动还原）。"""
+    cfg = {"db": db, "npz": "fake.npz"}
+    if with_doc_text:
+        cfg["doc_text"] = retrieval._script_doc_text
+    return mock.patch.dict(retrieval._registry, {"scripts": cfg})
+
+
+def _cand_ids_from_call(rerank_mock) -> list[int]:
+    """从捕获的 documents（cn_key=dN）反推候选源下标顺序（cosine 平分项顺序不保证，须实测）。"""
+    docs = rerank_mock.await_args.args[1]
+    return [int(d[1:]) for d in docs]
+
+
+@pytest.mark.asyncio
+async def test_retrieve_rerank_reorders(dummy_index):
+    """精排返回的顺序覆盖 cosine 顺序；query 原样传递、documents 来自 doc_text。"""
+    rerank_mock = mock.AsyncMock(return_value=[(1, 0.9), (0, 0.8)])
+    with mock.patch("nonebot_plugin_akito.core.api.embed_text", _mk_embed):
+        with mock.patch("nonebot_plugin_akito.core.api.rerank_documents", rerank_mock):
+            with _patch_scripts_registry(_fake_script_db()):
+                retrieval._INDICES["scripts"] = dummy_index
+                ids = await retrieval.retrieve("scripts", "match_0", top_k=2)
+    assert rerank_mock.await_count == 1
+    query_arg, docs_arg = rerank_mock.await_args.args
+    assert query_arg == "match_0"
+    assert docs_arg[0] == "d0"  # cosine 头名 = 下标 0 的 cn_key
+    assert rerank_mock.await_args.kwargs["top_n"] == 2
+    cand = _cand_ids_from_call(rerank_mock)
+    assert ids == [cand[1], cand[0]]  # 精排把第 2 名提到第 1
+
+
+@pytest.mark.asyncio
+async def test_retrieve_rerank_none_falls_back_to_cosine(dummy_index):
+    """精排返回 None（不可用/失败）→ 与旧行为一致的 cosine top-k。"""
+    rerank_mock = mock.AsyncMock(return_value=None)
+    with mock.patch("nonebot_plugin_akito.core.api.embed_text", _mk_embed):
+        with mock.patch("nonebot_plugin_akito.core.api.rerank_documents", rerank_mock):
+            with _patch_scripts_registry(_fake_script_db()):
+                retrieval._INDICES["scripts"] = dummy_index
+                ids = await retrieval.retrieve("scripts", "match_0", top_k=2)
+    assert rerank_mock.await_count == 1
+    assert ids is not None
+    assert ids[0] == 0
+    assert len(ids) == 2
+
+
+@pytest.mark.asyncio
+async def test_retrieve_rerank_disabled_skips_rerank(dummy_index):
+    """_RERANK_ENABLED=False → 不调精排，纯 cosine 旧行为。"""
+    rerank_mock = mock.AsyncMock(return_value=[(1, 0.9)])
+    with mock.patch("nonebot_plugin_akito.core.api.embed_text", _mk_embed):
+        with mock.patch("nonebot_plugin_akito.core.api.rerank_documents", rerank_mock):
+            with mock.patch.object(retrieval, "_RERANK_ENABLED", False):
+                with _patch_scripts_registry(_fake_script_db()):
+                    retrieval._INDICES["scripts"] = dummy_index
+                    ids = await retrieval.retrieve("scripts", "match_0", top_k=2)
+    assert rerank_mock.await_count == 0
+    assert ids is not None
+    assert ids[0] == 0
+    assert len(ids) == 2
+
+
+@pytest.mark.asyncio
+async def test_retrieve_rerank_threshold_drops(dummy_index):
+    """低于 _RERANK_MIN_SCORE 的候选被丢弃。"""
+    rerank_mock = mock.AsyncMock(return_value=[(0, 0.9), (1, 0.2)])
+    with mock.patch("nonebot_plugin_akito.core.api.embed_text", _mk_embed):
+        with mock.patch("nonebot_plugin_akito.core.api.rerank_documents", rerank_mock):
+            with mock.patch.object(retrieval, "_RERANK_MIN_SCORE", 0.5):
+                with _patch_scripts_registry(_fake_script_db()):
+                    retrieval._INDICES["scripts"] = dummy_index
+                    ids = await retrieval.retrieve("scripts", "match_0", top_k=2)
+    cand = _cand_ids_from_call(rerank_mock)
+    assert ids == [cand[0]]  # 仅 0.9 的那条存活
+
+
+@pytest.mark.asyncio
+async def test_retrieve_rerank_all_below_threshold_returns_empty(dummy_index):
+    """全部低于阈值 → 返回 []（区别于 None，三态契约的关键断言）。"""
+    rerank_mock = mock.AsyncMock(return_value=[(0, 0.1), (1, 0.05)])
+    with mock.patch("nonebot_plugin_akito.core.api.embed_text", _mk_embed):
+        with mock.patch("nonebot_plugin_akito.core.api.rerank_documents", rerank_mock):
+            with mock.patch.object(retrieval, "_RERANK_MIN_SCORE", 0.5):
+                with _patch_scripts_registry(_fake_script_db()):
+                    retrieval._INDICES["scripts"] = dummy_index
+                    ids = await retrieval.retrieve("scripts", "match_0", top_k=2)
+    assert ids is not None
+    assert ids == []
+
+
+@pytest.mark.asyncio
+async def test_retrieve_rerank_invalid_indices_ignored(dummy_index):
+    """精排返回越界候选下标 → 忽略不抛，其余正常。"""
+    rerank_mock = mock.AsyncMock(return_value=[(99, 0.9), (0, 0.8)])
+    with mock.patch("nonebot_plugin_akito.core.api.embed_text", _mk_embed):
+        with mock.patch("nonebot_plugin_akito.core.api.rerank_documents", rerank_mock):
+            with _patch_scripts_registry(_fake_script_db()):
+                retrieval._INDICES["scripts"] = dummy_index
+                ids = await retrieval.retrieve("scripts", "match_0", top_k=2)
+    cand = _cand_ids_from_call(rerank_mock)
+    assert ids == [cand[0]]
+
+
+@pytest.mark.asyncio
+async def test_retrieve_rerank_recall_k(dummy_index):
+    """_RERANK_RECALL_K 控制送审候选数（top_k=2 但送 3 条）。"""
+    rerank_mock = mock.AsyncMock(return_value=[(0, 0.9)])
+    with mock.patch("nonebot_plugin_akito.core.api.embed_text", _mk_embed):
+        with mock.patch("nonebot_plugin_akito.core.api.rerank_documents", rerank_mock):
+            with mock.patch.object(retrieval, "_RERANK_RECALL_K", 3):
+                with _patch_scripts_registry(_fake_script_db()):
+                    retrieval._INDICES["scripts"] = dummy_index
+                    await retrieval.retrieve("scripts", "match_0", top_k=2)
+    docs_arg = rerank_mock.await_args.args[1]
+    assert len(docs_arg) == 3
+    assert rerank_mock.await_args.kwargs["top_n"] == 2
+
+
+@pytest.mark.asyncio
+async def test_retrieve_rerank_missing_doc_text_falls_back(dummy_index):
+    """registry 无 doc_text（旧形状）→ 不调精排，回退 cosine 顺序。"""
+    rerank_mock = mock.AsyncMock(return_value=[(1, 0.9)])
+    with mock.patch("nonebot_plugin_akito.core.api.embed_text", _mk_embed):
+        with mock.patch("nonebot_plugin_akito.core.api.rerank_documents", rerank_mock):
+            with _patch_scripts_registry(_fake_script_db(), with_doc_text=False):
+                retrieval._INDICES["scripts"] = dummy_index
+                ids = await retrieval.retrieve("scripts", "match_0", top_k=2)
+    assert rerank_mock.await_count == 0
+    assert ids is not None
+    assert ids[0] == 0
+
+
+# ── 三态语义：[] 在 get_relevant_* 的注入策略 ─────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_get_relevant_examples_empty_ids_falls_back_random():
+    """retrieve 返回 []（精排判定无相关）→ 回退随机抽取版头部，而非语义匹配版。"""
+    from nonebot_plugin_akito.core.context import get_relevant_examples
+
+    fake_db = [{"type": "home", "context": "ctx", "dialogue": "dl"}]
+    with mock.patch("nonebot_plugin_akito.core.context.retrieve", return_value=[]):
+        with mock.patch("nonebot_plugin_akito.core.context.SCRIPT_DB", fake_db):
+            result = await get_relevant_examples("毫无关联的消息", num=1)
+    assert "请严格模仿" in result
+    assert "语义匹配" not in result
+
+
+@pytest.mark.asyncio
+async def test_get_relevant_pjsk_empty_ids_intro_only():
+    """retrieve 返回 [] 且条目库非空 → 仅注入前言，不再全量灌注。"""
+    from nonebot_plugin_akito.core.context import get_relevant_pjsk
+
+    fake_entries = [{"category": "测试", "text": "条目1"}]
+    with mock.patch("nonebot_plugin_akito.core.context.retrieve", return_value=[]):
+        with mock.patch("nonebot_plugin_akito.core.context.PJSK_ENTRIES", fake_entries):
+            with mock.patch("nonebot_plugin_akito.core.data.PJSK_INTRO", "【语境锁】前言"):
+                with mock.patch("nonebot_plugin_akito.core.data.PJSK_KNOWLEDGE_BASE", "FULL_BASE"):
+                    result = await get_relevant_pjsk("毫无关联的消息")
+    assert result == "【语境锁】前言"
+    assert "FULL_BASE" not in result

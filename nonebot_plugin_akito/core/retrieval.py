@@ -1,4 +1,5 @@
 """通用语义检索引擎：每轮 embed 一次用户消息、并发检索各语料、只注入相关片段。
+可用时在 cosine 粗召回后经 bge-reranker-v2-m3 精排 + 阈值过滤（失败回退纯 cosine，零回归）。
 
 .npz schema（每语料）：
   vectors (N×1024 float32)  — 原始 embedding
@@ -18,7 +19,21 @@ from . import np
 from .paths import iter_data_roots
 
 # ── 语料注册表 ──────────────────────────────────────────────────────────────
-# db: 惰性取值函数（避免循环 import）；npz: .npz 文件名
+# db: 惰性取值函数（避免循环 import）；npz: .npz 文件名；doc_text: 条目 → 精排文本
+
+
+def _script_doc_text(entry: dict) -> str:
+    """剧本条目 → 精排文本：cn_key 优先、缺失回退 context（与 build_embeddings.py 的 embed 文本一致）。"""
+    text = (entry.get("cn_key") or "").strip() or (entry.get("context") or "").strip()
+    return text or "（空）"
+
+
+def _pjsk_doc_text(entry: dict) -> str:
+    """PJSK 条目 → 精排文本：「category text」拼接（与 build_embeddings.py 一致）。"""
+    text = f"{entry.get('category', '')} {entry.get('text', '')}".strip()
+    return text or "（空）"
+
+
 _registry: dict[str, dict[str, Any]] = {}
 
 
@@ -28,8 +43,8 @@ def _ensure_registry() -> None:
         return
     from .data import PJSK_ENTRIES, SCRIPT_DB
 
-    _registry["scripts"] = {"db": SCRIPT_DB, "npz": "scripts_embeddings.npz"}
-    _registry["pjsk"] = {"db": PJSK_ENTRIES, "npz": "pjsk_embeddings.npz"}
+    _registry["scripts"] = {"db": SCRIPT_DB, "npz": "scripts_embeddings.npz", "doc_text": _script_doc_text}
+    _registry["pjsk"] = {"db": PJSK_ENTRIES, "npz": "pjsk_embeddings.npz", "doc_text": _pjsk_doc_text}
 
 
 # ── 缓存结构 ────────────────────────────────────────────────────────────────
@@ -120,10 +135,61 @@ def reload_indices() -> int:
 reload_indices()
 
 
+# ── 重排序精排（bge-reranker-v2-m3） ─────────────────────────────────────────
+# cosine 粗召回 _RERANK_RECALL_K 条 → reranker 逐对精读打分 → 阈值过滤 → 取 top_k。
+
+_RERANK_ENABLED = True  # 一键回退开关：False = 纯 cosine 排序（旧行为）
+_RERANK_RECALL_K = 20  # cosine 粗召回条数（送入 reranker 的候选量）
+_RERANK_MIN_SCORE = 0.0  # 相关分阈值，低于即丢弃；0.0 = 不过滤（用 tools/eval_retrieval.py 调参后上调，预期 ~0.1）
+
+
+async def _rerank_candidates(corpus: str, query: str, idx: _Index, rows: Any, top_k: int) -> list[int] | None:
+    """对 cosine 召回的候选行做 bge-reranker 精排 + 阈值过滤。三态返回：
+
+    - None       精排不可用 / 失败 → 调用方回退 cosine 顺序（零回归）
+    - []         精排成功但全部低于 _RERANK_MIN_SCORE → 调用方原样上抛（无相关命中）
+    - [id, ...]  精排序的源 DB 下标，至多 top_k 条
+    """
+    try:
+        cfg = _registry.get(corpus) or {}
+        db = cfg.get("db")
+        doc_fn = cfg.get("doc_text")
+        if db is None or doc_fn is None:
+            return None
+
+        cand_ids: list[int] = []
+        docs: list[str] = []
+        for row in rows:
+            orig = int(idx.indices[int(row)])
+            if 0 <= orig < len(db):
+                cand_ids.append(orig)
+                docs.append(doc_fn(db[orig]))
+        if not docs:
+            return None
+
+        from .api import rerank_documents
+
+        ranked = await rerank_documents(query, docs, top_n=min(top_k, len(docs)))
+        if ranked is None:
+            return None
+
+        kept = [cand_ids[i] for i, score in ranked if 0 <= i < len(cand_ids) and score >= _RERANK_MIN_SCORE]
+        logger.debug(f"🔍 精排 [{corpus}] 召回{len(docs)} → 保留{len(kept)}")
+        return kept[:top_k]
+    except Exception as e:
+        logger.warning(f"🔍 精排 [{corpus}] 异常，回退 cosine 顺序: {e}")
+        return None
+
+
 # ── 检索 ────────────────────────────────────────────────────────────────────
 
 async def retrieve(corpus: str, query: str, top_k: int) -> list[int] | None:
-    """语义检索：返回源 DB 下标列表；任一环节失败返回 None（降级回静态/随机行为）。"""
+    """语义检索：cosine 粗召回 →（可用时）bge-reranker 精排 + 阈值过滤，返回源 DB 下标列表。
+
+    三态返回：None = 任一环节不可用（降级回静态/随机行为）；
+    [] = 检索正常但精排判定无任何相关条目；[id, ...] = 命中。
+    精排失败时回退纯 cosine top-k（与旧行为一致）。
+    """
     if np is None:
         return None
     _ensure_registry()
@@ -143,8 +209,14 @@ async def retrieve(corpus: str, query: str, top_k: int) -> list[int] | None:
     try:
         qc = np.asarray(qv, dtype="float32") - idx.mean
         sims = (idx.centered @ qc) / (idx.norms * (np.linalg.norm(qc) + 1e-8) + 1e-8)
-        top = np.argsort(-sims)[:top_k]
-        return [int(idx.indices[i]) for i in top]
+        recall_k = max(top_k, _RERANK_RECALL_K) if _RERANK_ENABLED else top_k
+        top = np.argsort(-sims)[:recall_k]
+        cosine_ids = [int(idx.indices[i]) for i in top[:top_k]]
     except Exception as e:
         logger.warning(f"🔍 检索 [{corpus}] 失败，降级: {e}")
         return None
+
+    if not _RERANK_ENABLED:
+        return cosine_ids
+    reranked = await _rerank_candidates(corpus, query, idx, top, top_k)
+    return cosine_ids if reranked is None else reranked

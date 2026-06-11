@@ -16,7 +16,7 @@ import aiohttp
 from nonebot.log import logger
 from PIL import Image as PILImage
 
-from . import TAVILY_API_KEY, ZHIPU_API_KEY, client, embedding_client, vision_client
+from . import SILICONFLOW_API_KEY, TAVILY_API_KEY, ZHIPU_API_KEY, client, embedding_client, vision_client
 
 # ── LLM JSON 输出的提取与救援（chat.py / impression.py 共用） ──────────────────
 
@@ -558,4 +558,72 @@ async def embed_text(text: str) -> list[float] | None:
         return r.data[0].embedding
     except Exception as e:
         logger.warning(f"embed_text 失败，降级: {e}")
+        return None
+
+
+# ── SiliconFlow 重排序（bge-reranker-v2-m3，检索精排用） ──────────────────────
+
+_RERANK_URL = "https://api.siliconflow.cn/v1/rerank"
+_RERANK_MODEL = "BAAI/bge-reranker-v2-m3"
+_RERANK_TIMEOUT = 5  # 秒；超时即降级（调用方回退 cosine 顺序）
+_RERANK_DOC_MAX_CHARS = 512  # 单文档截断，防 payload 超限
+_RERANK_QUERY_MAX_CHARS = 512  # query（含扩散 blend）截断
+
+
+def _parse_rerank_response(data: Any, n_docs: int) -> list[tuple[int, float]] | None:
+    """解析 rerank API 返回 → [(候选下标, 相关分)]，按分降序；结构异常返回 None。
+
+    空 results / 全部条目非法也返回 None——解析层的「空」一律视为异常，调用方回退 cosine 顺序；
+    合法的「无相关命中」空列表由 retrieval 层的阈值过滤产生，不在此处。
+    """
+    results = data.get("results") if isinstance(data, dict) else None
+    if not isinstance(results, list) or not results:
+        return None
+    out: list[tuple[int, float]] = []
+    for item in results:
+        if not isinstance(item, dict):
+            continue
+        index = item.get("index")
+        if not isinstance(index, int) or not (0 <= index < n_docs):
+            continue
+        try:
+            out.append((index, float(item.get("relevance_score"))))
+        except (TypeError, ValueError):
+            continue
+    if not out:
+        return None
+    out.sort(key=lambda pair: pair[1], reverse=True)  # 不信任 API 返回顺序
+    return out
+
+
+async def rerank_documents(query: str, documents: list[str], top_n: int) -> list[tuple[int, float]] | None:
+    """bge-reranker-v2-m3 重排序：返回 [(documents 下标, 相关分 0~1)] 按分降序；失败返回 None（绝不抛到调用方）。
+
+    与 embed_text 共用 SILICONFLOW_API_KEY 门控：embedding_client 为 None（未配置 key）→ 直接降级。
+    """
+    if not embedding_client:
+        return None
+    if not query or not query.strip() or not documents:
+        return None
+    try:
+        payload = {
+            "model": _RERANK_MODEL,
+            "query": query[:_RERANK_QUERY_MAX_CHARS],
+            "documents": [d[:_RERANK_DOC_MAX_CHARS] for d in documents],
+            "top_n": min(top_n, len(documents)),
+            "return_documents": False,
+        }
+        headers = {"Authorization": f"Bearer {SILICONFLOW_API_KEY}"}
+        timeout = aiohttp.ClientTimeout(total=_RERANK_TIMEOUT)
+        async with aiohttp.ClientSession(timeout=timeout) as session, session.post(
+            _RERANK_URL, json=payload, headers=headers
+        ) as resp:
+            if resp.status != 200:
+                error_text = await resp.text()
+                logger.warning(f"⚠️ rerank API 报错，降级: HTTP {resp.status} - {error_text[:120]}")
+                return None
+            data = await resp.json()
+        return _parse_rerank_response(data, len(documents))
+    except Exception as e:
+        logger.warning(f"⚠️ rerank 失败，降级: {e}")
         return None

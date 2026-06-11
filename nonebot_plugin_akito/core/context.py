@@ -128,7 +128,7 @@ _QUERY_EXPANSION_ENABLED = True
 
 
 async def get_relevant_examples(query: str, num: int = 5) -> str:
-    """语义检索剧本示例；检索失败 / 不可用时回退到随机抽取（零改动行为）。
+    """语义检索剧本示例；检索不可用（None）或精排判定无相关命中（[]）时回退到随机抽取。
 
     检索前用 LLM 扩散 query（游戏黑话翻含义 + 潜台词/情绪），
     原文 + 联想词 blend 后 embed，让 BGE-M3 突破字面屏障。
@@ -143,8 +143,9 @@ async def get_relevant_examples(query: str, num: int = 5) -> str:
             logger.debug(f"🔍 查询扩散: {query[:40]} → +{expanded[:60]}")
 
     ids = await retrieve("scripts", retrieval_query, num) if retrieval_query.strip() else None
-    if ids is None:
-        logger.debug(f"🔍 剧本检索不可用，回退随机抽取 query={query[:40]}")
+    if not ids:
+        # None=检索不可用；[]=精排判定全部不相关——均回退随机抽取（与旧兜底一致）
+        logger.debug(f"🔍 剧本检索无果，回退随机抽取 query={query[:40]}")
         return get_random_examples(num)
 
     # 取 top-(num-1) 相关 + 1 随机
@@ -189,18 +190,25 @@ async def get_relevant_examples(query: str, num: int = 5) -> str:
 
 
 async def get_relevant_pjsk(query: str, num: int = 6) -> str:
-    """语义检索 PJSK 黑话；检索失败回退到全量 base；PJSK_INTRO 永远在前。"""
+    """语义检索 PJSK 黑话，三态注入；PJSK_INTRO 永远在前。
+
+    检索不可用（None）→ 全量 base 兜底；精排判定无相关命中（[]）→ 仅注入前言（降噪）；
+    命中 → 前言 + 相关条目。
+    """
     ids = await retrieve("pjsk", query, num) if query and query.strip() else None
     if ids is None or not PJSK_ENTRIES:
         logger.debug(f"🔍 PJSK检索不可用，回退全量 base query={query[:40]}")
         return get_pjsk_knowledge_base()
 
     relevant = [PJSK_ENTRIES[i] for i in ids if 0 <= i < len(PJSK_ENTRIES)]
+    if not relevant:
+        # 检索可用但精排判定无任何相关条目 → 刻意降噪：仅注入语境锁前言，不再全量灌注
+        logger.debug(f"🔍 PJSK无相关命中，仅注入前言 query={query[:40]}")
+        return (get_pjsk_intro() or "").strip()
+
     logger.debug(f"🔍 PJSK命中 [{len(relevant)}条] query={query[:40]}")
     for item in relevant:
         logger.debug(f"  [PJSK] {item.get('category','')[:20]} {item.get('text','')[:40]}")
-    if not relevant:
-        return get_pjsk_knowledge_base()
 
     intro = get_pjsk_intro() or ""
     text = intro + "\n\n"

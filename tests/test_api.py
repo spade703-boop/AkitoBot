@@ -1,12 +1,14 @@
 """
-测试 JSON 提取逻辑 —— 验证 LLM 响应中 JSON 的提取 + json.loads 解析 + 字段救援。
+测试 core/api.py 纯逻辑 —— LLM 响应 JSON 提取 / 字段救援 + rerank 门控与响应解析。
 
-直接测试 core/api.py 的 extract_json_block / rescue_field 真函数
+直接测试 extract_json_block / rescue_field 真函数
 （chat.py 与 impression.py 共用的单一真相源），不再维护本地正则副本。
 """
 import json
+from unittest import mock
 
-from nonebot_plugin_akito.core.api import extract_json_block, rescue_field
+from nonebot_plugin_akito.core import api as api_module
+from nonebot_plugin_akito.core.api import _parse_rerank_response, extract_json_block, rescue_field
 
 
 def extract_json(raw: str) -> dict | None:
@@ -114,3 +116,64 @@ def test_real_world_impression_response_format():
     assert result is not None
     assert result["inner_os"] == "这个人很活跃"
     assert result["reply"] == "他经常在群里聊天"
+
+
+# ── rerank_documents 门控与降级 ────────────────────────────────────────────
+
+async def test_rerank_documents_no_client_returns_none():
+    """未配置 SILICONFLOW_API_KEY（embedding_client=None）→ 直接降级 None。"""
+    with mock.patch.object(api_module, "embedding_client", None):
+        result = await api_module.rerank_documents("query", ["doc"], top_n=1)
+    assert result is None
+
+
+async def test_rerank_documents_empty_inputs_return_none():
+    """空 query / 空 documents → 门控直接 None（不触发 HTTP）。"""
+    with mock.patch.object(api_module, "embedding_client", mock.MagicMock()):
+        assert await api_module.rerank_documents("", ["doc"], top_n=1) is None
+        assert await api_module.rerank_documents("   ", ["doc"], top_n=1) is None
+        assert await api_module.rerank_documents("query", [], top_n=1) is None
+
+
+async def test_rerank_documents_http_failure_returns_none():
+    """HTTP 层任意异常 → None 不外抛。"""
+    fake_aiohttp = mock.MagicMock()
+    fake_aiohttp.ClientSession.side_effect = RuntimeError("连接失败")
+    with mock.patch.object(api_module, "embedding_client", mock.MagicMock()):
+        with mock.patch.object(api_module, "aiohttp", fake_aiohttp):
+            result = await api_module.rerank_documents("query", ["d0", "d1"], top_n=2)
+    assert result is None
+
+
+# ── _parse_rerank_response 解析 ─────────────────────────────────────────────
+
+def test_parse_rerank_response_happy():
+    """标准返回 → [(index, score)] 按分降序。"""
+    data = {"results": [{"index": 1, "relevance_score": 0.9}, {"index": 0, "relevance_score": 0.3}]}
+    assert _parse_rerank_response(data, 2) == [(1, 0.9), (0, 0.3)]
+
+
+def test_parse_rerank_response_sorts_desc():
+    """不信任 API 顺序：乱序输入按分重排。"""
+    data = {"results": [{"index": 0, "relevance_score": 0.2}, {"index": 1, "relevance_score": 0.8}]}
+    assert _parse_rerank_response(data, 2) == [(1, 0.8), (0, 0.2)]
+
+
+def test_parse_rerank_response_filters_invalid_entries():
+    """坏条目（越界 / 非 int 下标 / 分数不可转 float / 非 dict）逐条跳过，保留合法项。"""
+    data = {
+        "results": [
+            {"index": 5, "relevance_score": 0.9},
+            {"index": "x", "relevance_score": 0.8},
+            {"index": 1, "relevance_score": "bad"},
+            {"index": 0, "relevance_score": 0.5},
+            "not a dict",
+        ]
+    }
+    assert _parse_rerank_response(data, 2) == [(0, 0.5)]
+
+
+def test_parse_rerank_response_malformed_returns_none():
+    """整体结构异常 / 全员非法 → None（调用方回退 cosine 顺序）。"""
+    for bad in ({}, {"results": "x"}, {"results": []}, [], None, {"results": [{"index": 9, "relevance_score": 1.0}]}):
+        assert _parse_rerank_response(bad, 2) is None
