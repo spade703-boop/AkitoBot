@@ -1,0 +1,33 @@
+{
+  "_comment": "检索评测黄金考题集（tools/eval_retrieval.py 使用）。query=模拟群友原话；corpus=scripts|pjsk；expect_any=top-k 条目文本包含任一子串即命中（scripts 匹配 cn_key+context+dialogue，pjsk 匹配 category+text）；expect_none=true 为负例（精排+阈值后应零返回）；k 可选（默认 scripts=5、pjsk=6）；note 仅备注。考题请按自己语料的实际口径增删校准——expect_any 子串必须真的出现在语料文本里，命中率才有意义。",
+  "cases": [
+    {"query": "今天加班到十一点才回来，累死了", "corpus": "scripts", "expect_any": ["疲惫", "辛苦", "休息", "累"]},
+    {"query": "呜呜考试考砸了，心情好差", "corpus": "scripts", "expect_any": ["失落", "沮丧", "安慰", "失败"]},
+    {"query": "小彰你唱歌真的好好听", "corpus": "scripts", "expect_any": ["夸", "称赞", "唱歌", "歌声"]},
+    {"query": "明天就要上台表演了，好紧张", "corpus": "scripts", "expect_any": ["演出", "舞台", "紧张", "观众"]},
+    {"query": "我和朋友吵架了，怎么办", "corpus": "scripts", "expect_any": ["吵架", "争执", "和好", "道歉"]},
+    {"query": "最近练歌总是不在状态", "corpus": "scripts", "expect_any": ["练习", "练歌", "唱", "瓶颈"]},
+    {"query": "冬弥今天怎么没和你一起", "corpus": "scripts", "expect_any": ["冬弥"]},
+    {"query": "你和冬弥的关系真好啊", "corpus": "scripts", "expect_any": ["冬弥", "搭档", "信任"]},
+    {"query": "绘名姐最近在赶稿吗", "corpus": "scripts", "expect_any": ["绘名", "画"]},
+    {"query": "杏最近在店里帮忙吗", "corpus": "scripts", "expect_any": ["杏"]},
+    {"query": "心羽好像又在喂兔子", "corpus": "scripts", "expect_any": ["心羽", "兔"]},
+    {"query": "早上跑步遇到好多人", "corpus": "scripts", "expect_any": ["晨跑", "跑步", "早晨"]},
+    {"query": "这次对决绝对不能输", "corpus": "scripts", "expect_any": ["比赛", "对决", "输", "胜负"]},
+    {"query": "RAD WEEKEND 那场演出真的存在吗", "corpus": "scripts", "expect_any": ["RAD", "WEEKEND", "传奇"]},
+    {"query": "沉船了，一个彩都没出", "corpus": "pjsk", "expect_any": ["抽卡", "出货", "沉船", "彩"]},
+    {"query": "这期活动我怕是要吃井了", "corpus": "pjsk", "expect_any": ["井", "保底"]},
+    {"query": "来个人开车，缺一个", "corpus": "pjsk", "expect_any": ["车", "组队", "协力"]},
+    {"query": "今天挂机打虾打了一下午", "corpus": "pjsk", "expect_any": ["虾", "协力"]},
+    {"query": "这首歌的 Master 谱面也太难了", "corpus": "pjsk", "expect_any": ["Master", "难度", "谱面"]},
+    {"query": "大佬都在控分上分", "corpus": "pjsk", "expect_any": ["控分"]},
+    {"query": "新活的卡面也太好看了", "corpus": "pjsk", "expect_any": ["卡面", "活动", "卡"]},
+    {"query": "这次是混活还是箱活", "corpus": "pjsk", "expect_any": ["箱活", "混活", "活动"]},
+    {"query": "小彰加油", "corpus": "scripts", "expect_none": true, "note": "应援刷屏：无情境信息，不应硬塞剧本"},
+    {"query": "哈哈哈哈哈哈", "corpus": "scripts", "expect_none": true, "note": "纯笑声"},
+    {"query": "在吗", "corpus": "scripts", "expect_none": true, "note": "纯打招呼"},
+    {"query": "？？？", "corpus": "scripts", "expect_none": true, "note": "纯符号"},
+    {"query": "666", "corpus": "pjsk", "expect_none": true, "note": "口头禅，与黑话库无关"},
+    {"query": "今晚吃什么好呢", "corpus": "pjsk", "expect_none": true, "note": "日常话题，与黑话库无关"}
+  ]
+}
