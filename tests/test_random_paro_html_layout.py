@@ -85,6 +85,9 @@ def test_draw_result_template_uses_120px_pair_tiles():
     assert "linear-gradient(90deg, #FF7722 0%, #FF7722 40%, #0077DD 60%, #0077DD 100%)" in template_text
     assert "width: 30px;" in template_text
     assert "height: 30px;" in template_text
+    assert "background: linear-gradient(var(--card), var(--card)) padding-box," in template_text
+    assert "linear-gradient(90deg, #FF7722 0%, #FF7722 40%, #0077DD 60%, #0077DD 100%) border-box;" in template_text
+    assert "border: 2px solid transparent;" in template_text
     assert '.x-badge::before {' in template_text
     assert "margin: 12px auto 0;" in template_text
     assert "font-size: 20px;" in template_text

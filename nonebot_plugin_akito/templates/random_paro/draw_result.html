@@ -80,12 +80,13 @@
     width: 30px;
     height: 30px;
     border-radius: 50%;
-    background: linear-gradient(90deg, #FF7722 0%, #FF7722 40%, #0077DD 60%, #0077DD 100%);
-    border: 2px solid var(--ava-ring);
+    background: linear-gradient(var(--card), var(--card)) padding-box,
+      linear-gradient(90deg, #FF7722 0%, #FF7722 40%, #0077DD 60%, #0077DD 100%) border-box;
+    border: 2px solid transparent;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #fff;
+    color: var(--text);
     font-size: 0;
     font-weight: 900;
   }
