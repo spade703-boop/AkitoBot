@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{# ============================================================
+   profile v2 — 关键契约:
+   pending_dishes: [
+     {"count": int, "akito_img": uri, "toya_img": uri,
+      "akito_initial": str, "toya_initial": str,
+      "akito_name": str, "toya_name": str}
+   ]
+   fox_rabbit_icons: [uri...]
+   ============================================================ #}
+{% block extra_style %}
+  .dish-wrap { margin: 0 38px; display: flex; flex-wrap: wrap; gap: 10px; }
+  .dish {
+    display: inline-flex; align-items: center; gap: 9px;
+    border: 1px solid var(--box-border); border-radius: 999px;
+    background: var(--card); padding: 7px 14px 7px 8px;
+  }
+  .ava.sm { width: 26px; height: 26px; font-size: 12px; margin-left: -7px; }
+  .avas .ava.sm:first-child { margin-left: 0; }
+  .dish .dn { font-size: 14px; font-weight: 700; }
+  .dish .dn b.fa { color: var(--akito-soft); }
+  .dish .dn b.ft { color: var(--toya-soft); }
+  .dish .dc { font-size: 12.5px; font-weight: 900; color: var(--muted); }
+
+  .fr-strip {
+    margin: 24px 38px 0; padding: 14px 22px;
+    border: 1px solid var(--box-border); border-radius: var(--radius);
+    background: var(--card); box-shadow: var(--shadow);
+    display: flex; align-items: center; gap: 14px;
+  }
+  .fr-strip .fr-img { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; border: 2px solid var(--ava-ring); margin-left: -9px; }
+  .fr-strip .fr-img:first-child { margin-left: 0; }
+  .fr-strip .egg-name { flex: 1; font-size: 15.5px; font-weight: 700; }
+{% endblock %}
+
+{% block content %}
+  <div class="stats">
+    {% for s in stats %}
+    <div class="stat">
+      <div class="stat-label">{{ s.label }}</div>
+      <div class="stat-num">{{ s.value }}<i>{{ s.unit | default('次') }}</i></div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% for sec in characters %}
+  <div class="cbox {{ sec.cls }}">
+    <div class="sec"><span class="mark"></span>{{ sec.title }}<span class="en">{{ sec.en }}</span></div>
+    {% for it in sec['items'] %}
+    <div class="crow">
+      <span class="tag {{ 'solid' if loop.index == 1 else 'line' }}">TOP{{ loop.index }}</span>
+      <span class="cnames">{{ it.names | join(' / ') }}{% if it.more %}<span class="more"> / …</span>{% endif %}</span>
+      <span class="avas">
+        {%- if it.icons -%}
+          {%- for ic in it.icons[:3] -%}<img class="ava" src="{{ ic }}">{%- endfor -%}
+        {%- else -%}
+          {%- for n in it.names[:3] -%}<span class="ava {{ 'a' if sec.cls == 'akito' else 't' }}">{{ n[:1] }}</span>{%- endfor -%}
+        {%- endif -%}
+      </span>
+      <span class="ccount">{{ it.count }}<i>次</i></span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+
+  <div class="sec"><span class="mark"></span>你还没有做的派生饭<span class="en">DISHES TO COOK</span></div>
+  {% if pending_dishes %}
+  <div class="dish-wrap">
+    {% for d in pending_dishes %}
+    <span class="dish">
+      <span class="avas">
+        {%- if d.akito_img -%}<img class="ava sm" src="{{ d.akito_img }}">{%- else -%}<span class="ava sm a">{{ d.akito_initial | default('彰') }}</span>{%- endif -%}
+        {%- if d.toya_img -%}<img class="ava sm" src="{{ d.toya_img }}">{%- else -%}<span class="ava sm t">{{ d.toya_initial | default('冬') }}</span>{%- endif -%}
+      </span>
+      <span class="dn"><b class="fa">{{ d.akito_name }}</b>×<b class="ft">{{ d.toya_name }}</b></span>
+      {% if d.count and d.count > 1 %}<span class="dc">×{{ d.count }}</span>{% endif %}
+    </span>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty">{{ dish_empty_text | default('还没有抽到做饭彩蛋') }}</div>
+  {% endif %}
+
+  <div class="fr-strip">
+    {% if fox_rabbit_icons %}
+      <span class="avas">{% for ic in fox_rabbit_icons %}<img class="fr-img" src="{{ ic }}">{% endfor %}</span>
+    {% else %}
+      <span class="avas"><span class="ava a">狐</span><span class="ava t">兔</span></span>
+    {% endif %}
+    <span class="egg-name">狐兔饭</span>
+    <span class="ccount">累计触发 {{ fox_rabbit_count }}<i>次</i></span>
+  </div>
+{% endblock %}

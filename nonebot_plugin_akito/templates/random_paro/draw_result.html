@@ -1,0 +1,373 @@
+{% extends "base.html" %}
+{# ============================================================
+   draw_result v2 - 数据契约:
+   results: [
+     {"type":"pair","akito","toya","akito_img","toya_img","cooking":bool},
+     {"type":"fox","fox_type":"fox|rabbit|foxrabbit|foxbun","imgs":[uri...]},
+   ]
+   cooking_summary: None
+     | {"mode":"multi","dishes":[{"akito","toya"}...],"with_foxbun":bool}
+     | {"mode":"single","nickname","akito","toya"}
+     | {"mode":"foxbun_only"}
+   quota_text: str
+   ============================================================ #}
+{% block extra_style %}
+  .ticket {
+    position: relative;
+    margin: 18px 38px 0;
+    padding: 22px 20px 18px;
+    border: 1px solid var(--box-border);
+    border-radius: 18px;
+    background: var(--card);
+    box-shadow: var(--shadow);
+  }
+
+  .pair-art {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    gap: 5px;
+  }
+
+  .tile {
+    width: 190px;
+    height: 190px;
+    object-fit: cover;
+    display: block;
+  }
+
+  .tile.l { border-radius: 14px 6px 6px 14px; }
+  .tile.r { border-radius: 6px 14px 14px 6px; }
+
+  .tile.ph {
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .tile.ph.a { background: linear-gradient(150deg, #FFB36B 0%, #E2601E 100%); }
+  .tile.ph.t { background: linear-gradient(150deg, #6FB4FF 0%, #0061B8 100%); }
+
+  .tile.ph .big {
+    position: absolute;
+    right: -8px;
+    bottom: -22px;
+    font-size: 88px;
+    font-weight: 900;
+    color: rgba(255, 255, 255, 0.16);
+    line-height: 1;
+  }
+
+  .tile.ph .nm {
+    position: relative;
+    font-size: 17px;
+    font-weight: 900;
+    color: #fff;
+    letter-spacing: 1px;
+  }
+
+  .x-badge {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--grad-at);
+    border: 3px solid var(--ava-ring);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 16px;
+    font-weight: 900;
+  }
+
+  .pair-names {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 16px;
+  }
+
+  .idx {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    flex: none;
+    background: var(--chip-bg);
+    color: var(--chip-text);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 900;
+  }
+
+  .pair-names .lbl {
+    color: var(--muted);
+    font-size: 15px;
+    font-weight: 700;
+  }
+
+  .pair-names .na {
+    color: var(--akito-soft);
+    font-size: 26px;
+    font-weight: 900;
+  }
+
+  .pair-names .nx {
+    color: var(--muted-2);
+    font-size: 18px;
+    font-weight: 900;
+    margin: 0 2px;
+  }
+
+  .pair-names .nt {
+    color: var(--toya-soft);
+    font-size: 26px;
+    font-weight: 900;
+  }
+
+  .ticket.cooking { border-color: rgba(242, 169, 57, 0.6); }
+
+  .cook-badge {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    background: linear-gradient(135deg, #FFD166, #F2A93B);
+    color: #5A3A00;
+    font-size: 12px;
+    font-weight: 900;
+    letter-spacing: 1px;
+    padding: 5px 12px;
+    border-radius: 999px;
+  }
+
+  .ticket.fox-tk {
+    border-style: dashed;
+    border-width: 1.5px;
+  }
+
+  .ticket.fox-tk.fox {
+    border-color: rgba(255, 119, 34, 0.5);
+    background: rgba(255, 119, 34, 0.05);
+  }
+
+  .ticket.fox-tk.rabbit {
+    border-color: rgba(0, 119, 221, 0.5);
+    background: rgba(0, 119, 221, 0.05);
+  }
+
+  .ticket.fox-tk.foxrabbit,
+  .ticket.fox-tk.foxbun {
+    border-color: rgba(180, 95, 168, 0.5);
+    background: linear-gradient(
+      110deg,
+      rgba(255, 119, 34, 0.07) 0%,
+      rgba(255, 255, 255, 0) 45%,
+      rgba(0, 119, 221, 0.08) 100%
+    );
+  }
+
+  .fox-art {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .fox-img {
+    width: 150px;
+    height: 150px;
+    object-fit: cover;
+    border-radius: 14px;
+    display: block;
+  }
+
+  .fox-img.wide {
+    width: auto;
+    max-width: 100%;
+    height: auto;
+    max-height: 200px;
+  }
+
+  .fox-ph {
+    width: 150px;
+    height: 150px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 58px;
+    font-weight: 900;
+    color: #fff;
+  }
+
+  .fox-ph.wide {
+    width: 280px;
+    font-size: 44px;
+    letter-spacing: 4px;
+  }
+
+  .fox-ph.a { background: linear-gradient(150deg, #FFB36B, #E2601E); }
+  .fox-ph.t { background: linear-gradient(150deg, #6FB4FF, #0061B8); }
+  .fox-ph.at { background: linear-gradient(120deg, #FFA257 0%, #C77BB4 50%, #4DA6FF 100%); }
+
+  .fox-text {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 16px;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  .fox-text b.fa {
+    color: var(--akito-soft);
+    font-weight: 900;
+  }
+
+  .fox-text b.ft {
+    color: var(--toya-soft);
+    font-weight: 900;
+  }
+
+  .summary {
+    margin: 26px 38px 0;
+    padding: 20px 24px;
+    text-align: center;
+    border: 1.5px solid transparent;
+    border-radius: 18px;
+    background: linear-gradient(var(--card), var(--card)) padding-box, var(--grad-at) border-box;
+    box-shadow: var(--shadow);
+  }
+
+  .summary .s-at {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+
+  .summary .s-title {
+    font-size: 22px;
+    font-weight: 900;
+    letter-spacing: 1px;
+  }
+
+  .summary .s-line {
+    margin-top: 10px;
+    font-size: 19px;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  .summary .s-line b.fa {
+    color: var(--akito-soft);
+    font-weight: 900;
+    font-size: 21px;
+  }
+
+  .summary .s-line b.ft {
+    color: var(--toya-soft);
+    font-weight: 900;
+    font-size: 21px;
+  }
+
+  .quota {
+    margin: 26px auto 0;
+    width: fit-content;
+    font-size: 13px;
+    color: var(--muted);
+    font-weight: 700;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    padding: 7px 16px;
+  }
+{% endblock %}
+
+{% block content %}
+  {% set show_seq = results | length > 1 %}
+  {% for it in results %}
+    {% if it.type == "pair" %}
+    <div class="ticket{% if it.cooking %} cooking{% endif %}">
+      {% if it.cooking %}<div class="cook-badge">★ 做饭彩蛋</div>{% endif %}
+      <div class="pair-art">
+        {% if it.akito_img %}
+        <img class="tile l" src="{{ it.akito_img }}">
+        {% else %}
+        <div class="tile l ph a">
+          <span class="big">{{ it.akito[:1] }}</span>
+          <span class="nm">{{ it.akito }}</span>
+        </div>
+        {% endif %}
+        {% if it.toya_img %}
+        <img class="tile r" src="{{ it.toya_img }}">
+        {% else %}
+        <div class="tile r ph t">
+          <span class="big">{{ it.toya[:1] }}</span>
+          <span class="nm">{{ it.toya }}</span>
+        </div>
+        {% endif %}
+        <div class="x-badge">×</div>
+      </div>
+      <div class="pair-names">
+        {% if show_seq %}<span class="idx">{{ loop.index }}</span>{% endif %}
+        <span class="lbl">你抽到了</span>
+        <span class="na">{{ it.akito }}</span><span class="nx">×</span><span class="nt">{{ it.toya }}</span>
+      </div>
+    </div>
+    {% elif it.type == "fox" %}
+    <div class="ticket fox-tk {{ it.fox_type }}">
+      <div class="fox-art">
+        {% if it.imgs %}
+          {% for im in it.imgs %}
+          <img class="fox-img{% if it.fox_type == 'foxbun' %} wide{% endif %}" src="{{ im }}">
+          {% endfor %}
+        {% elif it.fox_type == "fox" %}
+        <div class="fox-ph a">狐</div>
+        {% elif it.fox_type == "rabbit" %}
+        <div class="fox-ph t">兔</div>
+        {% elif it.fox_type == "foxrabbit" %}
+        <div class="fox-ph a">狐</div>
+        <div class="fox-ph t">兔</div>
+        {% else %}
+        <div class="fox-ph at wide">狐兔</div>
+        {% endif %}
+      </div>
+      <div class="fox-text">
+        {% if show_seq %}<span class="idx">{{ loop.index }}</span>{% endif %}
+        <span>
+          {% if it.fox_type == "fox" %}一只得意的<b class="fa">狐狸</b>赶走了这里的派生。
+          {% elif it.fox_type == "rabbit" %}一只圆圆的<b class="ft">兔子</b>挡住了这里的派生。
+          {% elif it.fox_type == "foxrabbit" %}一对眼熟的<b class="fa">狐</b><b class="ft">兔</b>出现在了这里……
+          {% else %}发现了一对正在贴贴的<b class="fa">狐</b><b class="ft">兔</b>！{% endif %}
+        </span>
+      </div>
+    </div>
+    {% endif %}
+  {% endfor %}
+
+  {% if cooking_summary %}
+  <div class="summary">
+    {% if cooking_summary.mode == "single" %}
+    <div class="s-at">@{{ cooking_summary.nickname }}</div>
+    <div class="s-title">对，就是你，你是被选中的彰冬妈咪！</div>
+    <div class="s-line">奖励你现在来做<b class="fa">{{ cooking_summary.akito }}</b>×<b class="ft">{{ cooking_summary.toya }}</b>的饭！</div>
+    {% elif cooking_summary.mode == "multi" %}
+    <div class="s-title">恭喜你是被选中的彰冬妈咪！</div>
+    <div class="s-line">快来做{% for d in cooking_summary.dishes %}{% if not loop.first %}、{% endif %}<b class="fa">{{ d.akito }}</b>×<b class="ft">{{ d.toya }}</b>{% endfor %}{% if cooking_summary.with_foxbun %}、<b class="fa">狐</b><b class="ft">兔</b>{% endif %}的饭吧！</div>
+    {% elif cooking_summary.mode == "foxbun_only" %}
+    <div class="s-line">快来做<b class="fa">狐</b><b class="ft">兔</b>饭吧！</div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if quota_text %}<div class="quota">{{ quota_text }}</div>{% endif %}
+{% endblock %}

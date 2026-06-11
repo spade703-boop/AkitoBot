@@ -19,10 +19,12 @@ from nonebot.params import CommandArg
 from PIL import Image, ImageDraw, ImageFont
 
 from ..core import ALLOWED_CHAT_GROUPS, IMAGE_BASE_PATH, SUPERUSER_QQ, TZ_CN, find_data_path, get_data_dir, load_json_file
+from .random_paro_render import render_random_paro_page
 
 DATA_FILE = "paro_pools.json"
 STATS_FILE = "paro_stats.json"
 EGG_LOG_FILE = "paro_egg_log.jsonl"
+PARO_USE_HTML_RENDER = os.environ.get("PARO_USE_HTML_RENDER", "1").strip() not in {"0", "false", "False"}
 DEFAULT_DATA = {"akito_pool": [], "toya_pool": []}
 
 PARO_DATA: dict = load_json_file(DATA_FILE, DEFAULT_DATA)
@@ -1268,6 +1270,312 @@ def _count_total_cooking_hits(egg_history: dict) -> int:
     return int(egg_history.get("cooking_count", 0)) + int(egg_history.get("foxbun_count", 0))
 
 
+_HTML_PAGE_CACHE: dict[str, tuple[str, bytes]] = {}
+
+
+def _run_async_render_sync(awaitable):
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(awaitable)
+    raise RuntimeError("不能在运行中的事件循环里同步执行 HTML 渲染")
+
+
+def _path_to_uri(path: Path | None) -> str:
+    if not path:
+        return ""
+    try:
+        return path.resolve().as_uri()
+    except Exception:
+        return ""
+
+
+def _find_foxrabbit_asset(name: str) -> Path | None:
+    for ext in (".png", ".jpg", ".jpeg"):
+        candidate = FOXRABBIT_DIR / f"{name}{ext}"
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _avatar_uri(character: str, name: str) -> str:
+    return _path_to_uri(_find_avatar(character, name))
+
+
+def _fox_icon_uris(fox_type: str) -> list[str]:
+    if fox_type == "fox":
+        return [_path_to_uri(_find_foxrabbit_asset("狐"))] if _find_foxrabbit_asset("狐") else []
+    if fox_type == "rabbit":
+        return [_path_to_uri(_find_foxrabbit_asset("兔"))] if _find_foxrabbit_asset("兔") else []
+    if fox_type == "foxrabbit":
+        icons = []
+        fox_path = _find_foxrabbit_asset("狐")
+        rabbit_path = _find_foxrabbit_asset("兔")
+        if fox_path:
+            icons.append(_path_to_uri(fox_path))
+        if rabbit_path:
+            icons.append(_path_to_uri(rabbit_path))
+        return icons
+    if fox_type == "foxbun":
+        foxbun_path = _find_foxrabbit_asset("狐&兔")
+        return [_path_to_uri(foxbun_path)] if foxbun_path else []
+    return []
+
+
+def _footer_text() -> str:
+    return datetime.now(TZ_CN).strftime("%Y-%m-%d %H:%M")
+
+
+def _subtitle_for_scope(period_stats: dict, scope: str) -> str:
+    return f"{period_stats.get('date')} 00:00 起累计" if scope == "daily" else "功能上线后累计"
+
+
+def _build_user_contract(counter: dict[str, int], profiles: dict[str, str], *, limit: int = 5) -> list[dict]:
+    users = []
+    for user_id, count in _sorted_counter_items(counter)[:limit]:
+        users.append({"name": profiles.get(user_id) or f"用户{user_id}", "count": count})
+    if not users:
+        users.append({"name": "暂无", "count": 0})
+    return users
+
+
+def _build_character_contract(
+    counter: dict[str, int],
+    *,
+    title: str,
+    cls: str,
+    last_hit_seq: dict[str, int] | None = None,
+    limit: int = 3,
+) -> dict:
+    items = []
+    grouped: list[tuple[list[str], int]] = []
+    for name, count in _sorted_ranked_items(counter, last_hit_seq):
+        if grouped and grouped[-1][1] == count:
+            grouped[-1][0].append(name)
+        else:
+            grouped.append(([name], count))
+
+    for names, count in grouped[:limit]:
+        visible_names = names[:3]
+        items.append(
+            {
+                "names": visible_names,
+                "count": count,
+                "more": len(names) > 3,
+                "icons": [_avatar_uri("彰人" if cls == "akito" else "冬弥", name) for name in visible_names if name != "暂无"],
+            }
+        )
+
+    if not items:
+        items.append({"names": ["暂无"], "count": 0, "more": False, "icons": []})
+
+    return {
+        "cls": cls,
+        "title": title,
+        "en": "AKITO" if cls == "akito" else "TOYA",
+        "items": items,
+    }
+
+
+def _build_fox_rows_contract(period_stats: dict) -> list[dict]:
+    entries = [
+        ("foxrabbit", "狐兔", period_stats["foxrabbit_total"], ["狐", "兔"]),
+        ("foxbun", "狐兔饭", period_stats["foxbun_total"], ["狐", "兔"]),
+        ("fox", "狐狸", period_stats["fox_total"], ["狐"]),
+        ("rabbit", "兔子", period_stats["rabbit_total"], ["兔"]),
+    ]
+    rows = []
+    for _idx, (fox_type, label, count, kinds) in sorted(
+        enumerate(entries),
+        key=lambda item: (-item[1][2], item[0]),
+    ):
+        rows.append({"name": label, "kinds": kinds, "count": count, "icons": _fox_icon_uris(fox_type)})
+    return rows
+
+
+def _build_profile_pair_contract(egg_history: dict) -> list[dict]:
+    items = []
+    for pair_item in _build_personal_cooking_pair_items(egg_history):
+        items.append(
+            {
+                "count": pair_item["count"],
+                "akito_img": _avatar_uri("彰人", pair_item["akito_name"]),
+                "toya_img": _avatar_uri("冬弥", pair_item["toya_name"]),
+                "akito_initial": pair_item["akito_name"][:1] or "彰",
+                "toya_initial": pair_item["toya_name"][:1] or "冬",
+                "akito_name": pair_item["akito_name"],
+                "toya_name": pair_item["toya_name"],
+            }
+        )
+    return items
+
+
+def _build_paro_rank_page_data_from_stats(group_stats: dict, period_stats: dict, scope: str) -> dict:
+    return {
+        "theme": "dark",
+        "eyebrow_tail": "DAILY DRAW REPORT" if scope == "daily" else "HISTORY DRAW REPORT",
+        "title": "每日派生排行榜" if scope == "daily" else "历史派生排行榜",
+        "pill": _subtitle_for_scope(period_stats, scope),
+        "total": period_stats["total_draws"],
+        "users_title": "抽取次数最多的前 5 人",
+        "users": _build_user_contract(period_stats["user_draw_counts"], group_stats["profiles"], limit=5),
+        "characters": [
+            _build_character_contract(
+                period_stats["akito_hits"],
+                title="被抽到最多次的彰人 TOP 3",
+                cls="akito",
+                last_hit_seq=period_stats.get("akito_last_hit_seq"),
+            ),
+            _build_character_contract(
+                period_stats["toya_hits"],
+                title="被抽到最多次的冬弥 TOP 3",
+                cls="toya",
+                last_hit_seq=period_stats.get("toya_last_hit_seq"),
+            ),
+        ],
+        "footer_right": "",
+    }
+
+
+def _build_egg_rank_page_data_from_stats(group_stats: dict, period_stats: dict, scope: str) -> dict:
+    return {
+        "theme": "dark",
+        "eyebrow_tail": "DAILY COOKING REPORT" if scope == "daily" else "HISTORY COOKING REPORT",
+        "title": "每日做饭排行榜" if scope == "daily" else "历史做饭排行榜",
+        "pill": _subtitle_for_scope(period_stats, scope),
+        "users_title": "做饭 + 狐兔饭触发最多的前 5 人",
+        "users": _build_user_contract(period_stats["egg_user_counts"], group_stats["profiles"], limit=5),
+        "eggs": _build_fox_rows_contract(period_stats),
+        "footer_right": "",
+    }
+
+
+def _build_personal_paro_page_data_from_user_stats(user_id: str, display_name: str, user_stats: dict, egg_history: dict) -> dict:
+    return {
+        "theme": "dark",
+        "eyebrow_tail": "PLAYER PROFILE",
+        "title": display_name or f"用户{user_id}",
+        "pill": "",
+        "stats": [
+            {"label": "累计抽取派生次数", "value": user_stats["draw_count"]},
+            {"label": "累计抽到做饭的次数", "value": _count_total_cooking_hits(egg_history)},
+        ],
+        "characters": [
+            _build_character_contract(
+                user_stats["akito_hits"],
+                title="抽到最多的彰人派生 TOP 3",
+                cls="akito",
+                last_hit_seq=user_stats.get("akito_last_hit_seq"),
+            ),
+            _build_character_contract(
+                user_stats["toya_hits"],
+                title="抽到最多的冬弥派生 TOP 3",
+                cls="toya",
+                last_hit_seq=user_stats.get("toya_last_hit_seq"),
+            ),
+        ],
+        "pending_dishes": _build_profile_pair_contract(egg_history),
+        "dish_empty_text": "还没有抽到做饭彩蛋",
+        "fox_rabbit_count": egg_history["foxbun_count"],
+        "fox_rabbit_icons": _fox_icon_uris("foxbun"),
+        "footer_right": "",
+    }
+
+
+def _build_draw_result_page_data(
+    results: list[tuple[str, str, bool, str | None]],
+    remaining: int,
+    nickname: str,
+) -> dict:
+    items = []
+    dishes = []
+    foxbun_hit = False
+
+    for akito_name, toya_name, is_egg, fox_type in results:
+        if fox_type:
+            items.append(
+                {
+                    "type": "fox",
+                    "fox_type": fox_type,
+                    "imgs": _fox_icon_uris(fox_type),
+                }
+            )
+            foxbun_hit = foxbun_hit or fox_type == "foxbun"
+            continue
+
+        items.append(
+            {
+                "type": "pair",
+                "akito": akito_name,
+                "toya": toya_name,
+                "akito_img": _avatar_uri("彰人", akito_name),
+                "toya_img": _avatar_uri("冬弥", toya_name),
+                "cooking": is_egg,
+            }
+        )
+        if is_egg:
+            dishes.append({"akito": akito_name, "toya": toya_name})
+
+    if dishes and len(results) == 1:
+        summary = {
+            "mode": "single",
+            "nickname": nickname,
+            "akito": dishes[0]["akito"],
+            "toya": dishes[0]["toya"],
+        }
+    elif dishes:
+        summary = {
+            "mode": "multi",
+            "dishes": dishes,
+            "with_foxbun": foxbun_hit,
+        }
+    elif foxbun_hit:
+        summary = {"mode": "foxbun_only"}
+    else:
+        summary = None
+
+    return {
+        "theme": "light",
+        "eyebrow_tail": "GACHA RESULT",
+        "title": "派生抽取结果",
+        "pill": f"本次共 {len(results)} 抽",
+        "results": items,
+        "cooking_summary": summary,
+        "quota_text": f"30 分钟内剩余 {remaining} 次",
+        "footer_right": "",
+    }
+
+
+async def _render_html_page(
+    template_name: str,
+    data: dict,
+    *,
+    cache_key: str | None = None,
+    fallback=None,
+) -> bytes:
+    if cache_key:
+        signature = json.dumps(data, ensure_ascii=False, sort_keys=True)
+        cached = _HTML_PAGE_CACHE.get(cache_key)
+        if cached and cached[0] == signature:
+            return cached[1]
+        try:
+            pic = await render_random_paro_page(template_name, data)
+        except Exception:
+            logger.exception(f"{template_name} HTML 渲染失败")
+            if fallback is not None:
+                return fallback()
+            raise
+        _HTML_PAGE_CACHE[cache_key] = (signature, pic)
+        return pic
+    try:
+        return await render_random_paro_page(template_name, data)
+    except Exception:
+        logger.exception(f"{template_name} HTML 渲染失败")
+        if fallback is not None:
+            return fallback()
+        raise
+
+
 def _get_group_stats(group_id: int) -> dict:
     today_str = _today_str()
     group_stats, rolled = _get_or_create_group_stats(str(group_id), today_str)
@@ -1565,8 +1873,8 @@ def _render_personal_paro_card(user_id: str, display_name: str, user_stats: dict
     return buf.getvalue()
 
 
-def _build_paro_rank_image_from_stats(group_stats: dict, period_stats: dict, scope: str) -> bytes:
-    subtitle = f"{period_stats.get('date')} 00:00 起累计" if scope == "daily" else "功能上线后累计"
+def _build_paro_rank_pil_image_from_stats(group_stats: dict, period_stats: dict, scope: str) -> bytes:
+    subtitle = _subtitle_for_scope(period_stats, scope)
     sections = [
         {
             "title": "本群累计抽取总次数",
@@ -1607,13 +1915,8 @@ def _build_paro_rank_image_from_stats(group_stats: dict, period_stats: dict, sco
     return _render_leaderboard_card(title, subtitle, sections)
 
 
-def _build_paro_rank_image(group_id: int, scope: str) -> bytes:
-    group_stats, period_stats = _get_group_period_stats(group_id, scope)
-    return _build_paro_rank_image_from_stats(group_stats, period_stats, scope)
-
-
-def _build_egg_rank_image_from_stats(group_stats: dict, period_stats: dict, scope: str) -> bytes:
-    subtitle = f"{period_stats.get('date')} 00:00 起累计" if scope == "daily" else "功能上线后累计"
+def _build_egg_rank_pil_image_from_stats(group_stats: dict, period_stats: dict, scope: str) -> bytes:
+    subtitle = _subtitle_for_scope(period_stats, scope)
     sections = [
         {
             "title": "做饭 + 狐兔饭触发最多的前 5 人",
@@ -1634,12 +1937,7 @@ def _build_egg_rank_image_from_stats(group_stats: dict, period_stats: dict, scop
     return _render_leaderboard_card(title, subtitle, sections)
 
 
-def _build_egg_rank_image(group_id: int, scope: str) -> bytes:
-    group_stats, period_stats = _get_group_period_stats(group_id, scope)
-    return _build_egg_rank_image_from_stats(group_stats, period_stats, scope)
-
-
-def _build_personal_paro_image_from_user_stats(
+def _build_personal_paro_pil_image_from_user_stats(
     user_id: str,
     display_name: str,
     user_stats: dict,
@@ -1653,11 +1951,96 @@ def _build_personal_paro_image_from_user_stats(
     )
 
 
-def _build_personal_paro_image(group_id: int, user_id: str, display_name: str) -> bytes:
+async def _render_paro_rank_image_from_stats(group_stats: dict, period_stats: dict, scope: str, *, cache_key: str | None = None) -> bytes:
+    data = _build_paro_rank_page_data_from_stats(group_stats, period_stats, scope)
+    return await _render_html_page(
+        "ranking.html",
+        data,
+        cache_key=cache_key,
+        fallback=lambda: _build_paro_rank_pil_image_from_stats(group_stats, period_stats, scope),
+    )
+
+
+def _build_paro_rank_image_from_stats(group_stats: dict, period_stats: dict, scope: str) -> bytes:
+    return _run_async_render_sync(_render_paro_rank_image_from_stats(group_stats, period_stats, scope))
+
+
+async def _render_paro_rank_image(group_id: int, scope: str) -> bytes:
+    group_stats, period_stats = _get_group_period_stats(group_id, scope)
+    return await _render_paro_rank_image_from_stats(
+        group_stats,
+        period_stats,
+        scope,
+        cache_key=f"paro_rank:{group_id}:{scope}",
+    )
+
+
+def _build_paro_rank_image(group_id: int, scope: str) -> bytes:
+    return _run_async_render_sync(_render_paro_rank_image(group_id, scope))
+
+
+async def _render_egg_rank_image_from_stats(group_stats: dict, period_stats: dict, scope: str, *, cache_key: str | None = None) -> bytes:
+    data = _build_egg_rank_page_data_from_stats(group_stats, period_stats, scope)
+    return await _render_html_page(
+        "cook_rank.html",
+        data,
+        cache_key=cache_key,
+        fallback=lambda: _build_egg_rank_pil_image_from_stats(group_stats, period_stats, scope),
+    )
+
+
+def _build_egg_rank_image_from_stats(group_stats: dict, period_stats: dict, scope: str) -> bytes:
+    return _run_async_render_sync(_render_egg_rank_image_from_stats(group_stats, period_stats, scope))
+
+
+async def _render_egg_rank_image(group_id: int, scope: str) -> bytes:
+    group_stats, period_stats = _get_group_period_stats(group_id, scope)
+    return await _render_egg_rank_image_from_stats(
+        group_stats,
+        period_stats,
+        scope,
+        cache_key=f"egg_rank:{group_id}:{scope}",
+    )
+
+
+def _build_egg_rank_image(group_id: int, scope: str) -> bytes:
+    return _run_async_render_sync(_render_egg_rank_image(group_id, scope))
+
+
+async def _render_personal_paro_image_from_user_stats(
+    user_id: str,
+    display_name: str,
+    user_stats: dict,
+    egg_history: dict | None = None,
+) -> bytes:
+    normalized = _normalize_user_stats(user_stats)
+    history = egg_history or _new_user_egg_history()
+    data = _build_personal_paro_page_data_from_user_stats(user_id, display_name, normalized, history)
+    return await _render_html_page(
+        "profile.html",
+        data,
+        fallback=lambda: _build_personal_paro_pil_image_from_user_stats(user_id, display_name, normalized, history),
+    )
+
+
+def _build_personal_paro_image_from_user_stats(
+    user_id: str,
+    display_name: str,
+    user_stats: dict,
+    egg_history: dict | None = None,
+) -> bytes:
+    return _build_personal_paro_pil_image_from_user_stats(user_id, display_name, user_stats, egg_history)
+
+
+async def _render_personal_paro_image(group_id: int, user_id: str, display_name: str) -> bytes:
     group_stats = _get_group_stats(group_id)
     user_stats = _normalize_user_stats(group_stats.get("users", {}).get(user_id))
     egg_history = _collect_user_egg_history(group_id, user_id)
-    return _build_personal_paro_image_from_user_stats(user_id, display_name, user_stats, egg_history)
+    return await _render_personal_paro_image_from_user_stats(user_id, display_name, user_stats, egg_history)
+
+
+def _build_personal_paro_image(group_id: int, user_id: str, display_name: str) -> bytes:
+    return _run_async_render_sync(_render_personal_paro_image(group_id, user_id, display_name))
 
 
 def _build_rank_preview_stats(scope: str) -> tuple[dict, dict]:
@@ -1788,17 +2171,25 @@ def _build_rank_preview_stats(scope: str) -> tuple[dict, dict]:
     return group_stats, period_stats
 
 
-def _build_rank_preview_image(scope: str) -> bytes:
+async def _render_rank_preview_image(scope: str) -> bytes:
     group_stats, period_stats = _build_rank_preview_stats(scope)
-    return _build_paro_rank_image_from_stats(group_stats, period_stats, scope)
+    return await _render_paro_rank_image_from_stats(group_stats, period_stats, scope)
+
+
+def _build_rank_preview_image(scope: str) -> bytes:
+    return _run_async_render_sync(_render_rank_preview_image(scope))
+
+
+async def _render_egg_rank_preview_image(scope: str) -> bytes:
+    group_stats, period_stats = _build_rank_preview_stats(scope)
+    return await _render_egg_rank_image_from_stats(group_stats, period_stats, scope)
 
 
 def _build_egg_rank_preview_image(scope: str) -> bytes:
-    group_stats, period_stats = _build_rank_preview_stats(scope)
-    return _build_egg_rank_image_from_stats(group_stats, period_stats, scope)
+    return _run_async_render_sync(_render_egg_rank_preview_image(scope))
 
 
-def _build_personal_preview_image() -> bytes:
+async def _render_personal_preview_image() -> bytes:
     user_stats = _new_user_stats()
     egg_history = _new_user_egg_history()
     results = [
@@ -1835,10 +2226,37 @@ def _build_personal_preview_image() -> bytes:
                 toya_name=toya_name,
                 egg_type="foxbun",
             )
-    return _build_personal_paro_image_from_user_stats("10001", "测试群友甲甲甲甲", user_stats, egg_history)
+    return await _render_personal_paro_image_from_user_stats("10001", "测试群友甲甲甲甲", user_stats, egg_history)
+
+
+def _build_personal_preview_image() -> bytes:
+    return _run_async_render_sync(_render_personal_preview_image())
 
 
 # ==================== 抽派生 ====================
+async def _render_draw_result_image(
+    results: list[tuple[str, str, bool, str | None]],
+    remaining: int,
+    nickname: str,
+) -> bytes:
+    data = _build_draw_result_page_data(results, remaining, nickname)
+    return await _render_html_page(
+        "draw_result.html",
+        data,
+        fallback=lambda: _render_multi(results, remaining, nickname),
+    )
+
+
+async def _render_draw_result_preview_image(
+    results: list[tuple[str, str, bool, str | None]],
+    remaining: int,
+    nickname: str,
+) -> bytes:
+    if PARO_USE_HTML_RENDER:
+        return await _render_draw_result_image(results, remaining, nickname)
+    return _render_multi(results, remaining, nickname)
+
+
 _DRAW_LOCKS: dict[str, asyncio.Lock] = {}
 _DRAW_LIMIT = 3
 _DRAW_WINDOW = 1800  # 30 分钟
@@ -1962,6 +2380,10 @@ async def _(event: Event, args: Message = CommandArg()):
 
         await asyncio.sleep(random.uniform(0.4, 0.8))
 
+        if PARO_USE_HTML_RENDER:
+            img_bytes = await _render_draw_result_image(results, remaining, nickname)
+            await draw_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes))
+
         has_any_fr = any(ft for _, _, _, ft in results)
         if count == 1 and not has_any_fr:
             # 单抽无狐兔 — 保持原有输出
@@ -2015,7 +2437,7 @@ async def _(event: Event):
         await my_paro_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
     if group_id is None:
         return
-    img_bytes = _build_personal_paro_image(group_id, event.get_user_id(), _event_display_name(event))
+    img_bytes = await _render_personal_paro_image(group_id, event.get_user_id(), _event_display_name(event))
     await my_paro_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes))
 
 
@@ -2029,7 +2451,7 @@ async def _(event: Event):
         await daily_rank_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
     if group_id is None:
         return
-    img_bytes = _build_paro_rank_image(group_id, "daily")
+    img_bytes = await _render_paro_rank_image(group_id, "daily")
     await daily_rank_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes))
 
 
@@ -2043,7 +2465,7 @@ async def _(event: Event):
         await history_rank_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
     if group_id is None:
         return
-    img_bytes = _build_paro_rank_image(group_id, "history")
+    img_bytes = await _render_paro_rank_image(group_id, "history")
     await history_rank_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes))
 
 
@@ -2057,7 +2479,7 @@ async def _(event: Event):
         await daily_egg_rank_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
     if group_id is None:
         return
-    img_bytes = _build_egg_rank_image(group_id, "daily")
+    img_bytes = await _render_egg_rank_image(group_id, "daily")
     await daily_egg_rank_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes))
 
 
@@ -2071,7 +2493,7 @@ async def _(event: Event):
         await history_egg_rank_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
     if group_id is None:
         return
-    img_bytes = _build_egg_rank_image(group_id, "history")
+    img_bytes = await _render_egg_rank_image(group_id, "history")
     await history_egg_rank_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes))
 
 
@@ -2089,7 +2511,7 @@ async def _(event: Event):
         await test_daily_rank_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
     if group_id is None:
         return
-    img_bytes = _build_rank_preview_image("daily")
+    img_bytes = await _render_rank_preview_image("daily")
     await test_daily_rank_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes))
 
 
@@ -2105,7 +2527,7 @@ async def _(event: Event):
         await test_history_rank_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
     if group_id is None:
         return
-    img_bytes = _build_rank_preview_image("history")
+    img_bytes = await _render_rank_preview_image("history")
     await test_history_rank_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes))
 
 
@@ -2121,7 +2543,7 @@ async def _(event: Event):
         await test_daily_egg_rank_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
     if group_id is None:
         return
-    img_bytes = _build_egg_rank_preview_image("daily")
+    img_bytes = await _render_egg_rank_preview_image("daily")
     await test_daily_egg_rank_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes))
 
 
@@ -2137,7 +2559,7 @@ async def _(event: Event):
         await test_history_egg_rank_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
     if group_id is None:
         return
-    img_bytes = _build_egg_rank_preview_image("history")
+    img_bytes = await _render_egg_rank_preview_image("history")
     await test_history_egg_rank_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes))
 
 
@@ -2153,7 +2575,7 @@ async def _(event: Event):
         await test_my_paro_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
     if group_id is None:
         return
-    img_bytes = _build_personal_preview_image()
+    img_bytes = await _render_personal_preview_image()
     await test_my_paro_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes))
 
 
@@ -2166,6 +2588,11 @@ test_egg_cmd = on_command("test做饭", priority=5, block=True)
 async def _(event: Event):
     if str(event.get_user_id()) != SUPERUSER_QQ:
         return
+    sender = getattr(event, "sender", None)
+    nickname = getattr(sender, "card", None) or getattr(sender, "nickname", None) or "测试者"
+    results = [("Callboy彰", "Callboy冬", True, None)]
+    img = await _render_draw_result_preview_image(results, remaining=2, nickname=nickname)
+    await test_egg_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img))
     nickname = event.sender.card or event.sender.nickname or "测试者"
     a, b = "Callboy彰", "Callboy冬"
     text_lines = [
@@ -2204,7 +2631,7 @@ async def _(event: Event):
         (pool_a[1], pool_b[1], True, None),
         (pool_a[0], pool_b[1], False, None),
     ]
-    img = _render_multi(results, remaining=1, nickname=nickname)
+    img = await _render_draw_result_preview_image(results, remaining=1, nickname=nickname)
     await test_multi_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img))
 
 
@@ -2225,7 +2652,7 @@ async def _(event: Event):
         (pool_a[1], pool_b[1], False, None),
         (pool_a[0], pool_b[1], False, "foxrabbit"),
     ]
-    img = _render_multi(results, remaining=2, nickname=nickname)
+    img = await _render_draw_result_preview_image(results, remaining=2, nickname=nickname)
     await test_fr_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img))
 
 
@@ -2246,7 +2673,7 @@ async def _(event: Event):
         (pool_a[1], pool_b[1], False, "foxbun"),
         (pool_a[0], pool_b[1], False, None),
     ]
-    img = _render_multi(results, remaining=2, nickname=nickname)
+    img = await _render_draw_result_preview_image(results, remaining=2, nickname=nickname)
     await test_foxbun_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img))
 
 

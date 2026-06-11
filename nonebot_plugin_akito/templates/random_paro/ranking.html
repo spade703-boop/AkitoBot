@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="hero">
+    <div class="hero-label">本群累计抽取总次数</div>
+    <div class="hero-num">{{ total }}<i>次</i></div>
+  </div>
+
+  <div class="sec"><span class="mark"></span>{{ users_title | default('抽取次数最多的前 ' ~ (users | length) ~ ' 人') }}<span class="en">MOST ACTIVE</span></div>
+  <div class="ulist">
+    {% set maxc = users[0].count if users else 1 %}
+    {% for u in users %}
+    <div class="urow">
+      <div class="rank{% if loop.index <= 3 %} r{{ loop.index }}{% endif %}">{{ loop.index }}</div>
+      <div class="uinfo">
+        <div class="uline">
+          <span class="uname">{{ u.name }}</span>
+          <span class="ucount">{{ u.count }}<i>次</i></span>
+        </div>
+        <div class="track"><div class="fill" style="width: {{ (u.count / maxc * 100) | round(1) }}%"></div></div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% for sec in characters %}
+  <div class="cbox {{ sec.cls }}">
+    <div class="sec"><span class="mark"></span>{{ sec.title }}<span class="en">{{ sec.en }}</span></div>
+    {% for it in sec['items'] %}
+    <div class="crow">
+      <span class="tag {{ 'solid' if loop.index == 1 else 'line' }}">TOP{{ loop.index }}</span>
+      <span class="cnames">{{ it.names | join(' / ') }}{% if it.more %}<span class="more"> / …</span>{% endif %}</span>
+      <span class="avas">
+        {%- if it.icons -%}
+          {%- for ic in it.icons[:3] -%}<img class="ava" src="{{ ic }}">{%- endfor -%}
+        {%- else -%}
+          {%- for n in it.names[:3] -%}<span class="ava {{ 'a' if sec.cls == 'akito' else 't' }}">{{ n[:1] }}</span>{%- endfor -%}
+        {%- endif -%}
+      </span>
+      <span class="ccount">{{ it.count }}<i>次</i></span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+{% endblock %}
