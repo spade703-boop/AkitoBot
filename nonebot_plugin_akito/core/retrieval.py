@@ -140,7 +140,7 @@ reload_indices()
 
 _RERANK_ENABLED = True  # 一键回退开关：False = 纯 cosine 排序（旧行为）
 _RERANK_RECALL_K = 20  # cosine 粗召回条数（送入 reranker 的候选量）
-_RERANK_MIN_SCORE = 0.0  # 相关分阈值，低于即丢弃；0.0 = 不过滤（用 tools/eval_retrieval.py 调参后上调，预期 ~0.1）
+_RERANK_MIN_SCORE = 0.1  # 相关分阈值，低于即丢弃；经 tools/eval_retrieval.py 实测调定：负例全场最高 0.090，扩散 blend 后的弱正例 0.166+
 
 
 async def _rerank_candidates(corpus: str, query: str, idx: _Index, rows: Any, top_k: int) -> list[int] | None:

@@ -745,6 +745,28 @@ async def test_get_relevant_examples_empty_ids_falls_back_random():
 
 
 @pytest.mark.asyncio
+async def test_get_relevant_pjsk_uses_expanded_query():
+    """PJSK 检索同样走查询扩散：扩散成功 → 用 blend query 调用 retrieve。"""
+    from nonebot_plugin_akito.core.context import get_relevant_pjsk
+
+    fake_entries = [{"category": "测试", "text": "条目1"}]
+    captured_query = []
+
+    async def fake_retrieve(corpus, query, num):
+        captured_query.append(query)
+        return [0]
+
+    with mock.patch("nonebot_plugin_akito.core.context.retrieve", fake_retrieve):
+        with mock.patch("nonebot_plugin_akito.core.context.PJSK_ENTRIES", fake_entries):
+            with mock.patch("nonebot_plugin_akito.core.context.expand_query_for_retrieval", return_value="组队打歌 协力"):
+                with mock.patch("nonebot_plugin_akito.core.context._QUERY_EXPANSION_ENABLED", True):
+                    await get_relevant_pjsk("来个人开车", num=1)
+    assert len(captured_query) == 1
+    assert "来个人开车" in captured_query[0]
+    assert "组队打歌" in captured_query[0]
+
+
+@pytest.mark.asyncio
 async def test_get_relevant_pjsk_empty_ids_intro_only():
     """retrieve 返回 [] 且条目库非空 → 仅注入前言，不再全量灌注。"""
     from nonebot_plugin_akito.core.context import get_relevant_pjsk

@@ -192,10 +192,19 @@ async def get_relevant_examples(query: str, num: int = 5) -> str:
 async def get_relevant_pjsk(query: str, num: int = 6) -> str:
     """语义检索 PJSK 黑话，三态注入；PJSK_INTRO 永远在前。
 
+    检索前与剧本检索一致做 query 扩散 blend（黑话同形词如"开车"需要扩散词
+    才能被 reranker 正确关联到词典体条目——评测实测 0.003 → 0.166）。
     检索不可用（None）→ 全量 base 兜底；精排判定无相关命中（[]）→ 仅注入前言（降噪）；
     命中 → 前言 + 相关条目。
     """
-    ids = await retrieve("pjsk", query, num) if query and query.strip() else None
+    retrieval_query = query or ""
+    if _QUERY_EXPANSION_ENABLED and query and len(query.strip()) >= 3:
+        expanded = await expand_query_for_retrieval(query)
+        if expanded:
+            retrieval_query = f"{query} {expanded}"
+            logger.debug(f"🔍 PJSK查询扩散: {query[:40]} → +{expanded[:60]}")
+
+    ids = await retrieve("pjsk", retrieval_query, num) if retrieval_query.strip() else None
     if ids is None or not PJSK_ENTRIES:
         logger.debug(f"🔍 PJSK检索不可用，回退全量 base query={query[:40]}")
         return get_pjsk_knowledge_base()

@@ -236,7 +236,7 @@ AKITO_SAFE_UNTIL = time.time() + 10   # 无效！
 | `get_base_persona()` | 读取 `data/akito_persona.txt` 人设文本 |
 | `get_random_examples(n)` | 从 `SCRIPT_DB` 随机抽取 n 条台词示例注入 Prompt（检索不可用时的兜底） |
 | `get_relevant_examples(query, n)` | 语义检索剧本示例；检索不可用或无相关命中均回退到 `get_random_examples` |
-| `get_relevant_pjsk(query, n)` | 语义检索 PJSK 黑话；检索不可用回退全量 `PJSK_KNOWLEDGE_BASE`，无相关命中仅注入前言（降噪）；`PJSK_INTRO` 始终在前 |
+| `get_relevant_pjsk(query, n)` | 语义检索 PJSK 黑话（检索前与剧本一致做 query 扩散 blend）；检索不可用回退全量 `PJSK_KNOWLEDGE_BASE`，无相关命中仅注入前言（降噪）；`PJSK_INTRO` 始终在前 |
 | `get_song_memories()` | 将 `SONG_DATA` 格式化为背景知识条目，每次对话静态注入 |
 | `get_hybrid_relationship(text)` | 本地关键词白名单扫描 + 可选联网补充，返回 Prompt 片段 |
 | `reload_persona()` | 重新读取 `akito_persona.txt`，返回新内容（`重载配置 persona` 触发） |
