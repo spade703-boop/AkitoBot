@@ -309,7 +309,7 @@ pytest tests/test_scheduled_helpers.py -q
 | `greetings.json` | 早晚安问候 |
 | `akito_scripts.json` | 台词剧本库（含 `type`/`category`/`topics`/`cn_key`/`context`/`dialogue`，检索键为 `cn_key`） |
 | `scripts_embeddings.npz` | 剧本语义向量库（`tools/build_embeddings.py` 生成，embed key=cn_key） |
-| `akito_songs.json` | 歌曲知识库 |
+| `akito_songs.json` | 歌曲知识库（含 `keywords`，用于歌曲圈内昵称 / 别名匹配） |
 | `akito_relationships.json` | 人物关系档案（含 `keywords` 白名单） |
 | `akito_director.json` | 导演骰子资产 |
 | `pjsk_knowledge.json` | PJSK 世界观 / 黑话库 |

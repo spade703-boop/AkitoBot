@@ -46,6 +46,7 @@ from ..core import (
     get_relevant_pjsk,
     get_sleep_buffer_buff,
     get_song_memories,
+    get_song_mention,
     get_toya_anchor,
     get_user_memory,
     grant_safety_pass,
@@ -523,6 +524,7 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage()):
             get_relevant_examples(plain_text_content, 5),
             get_relevant_pjsk(plain_text_content, 6),
         )
+        song_context = get_song_memories() + get_song_mention(plain_text_content)
         group_id = getattr(event, 'group_id', None)
         group_context = get_group_context(group_id) if group_id else ""
         time_gap_awareness = build_time_gap_prompt(group_id) if group_id else ""
@@ -608,7 +610,7 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage()):
             base_persona=get_base_persona(),
             script_examples=script_examples,
             pjsk_block=pjsk_block,
-            song_memories=get_song_memories(),
+            song_memories=song_context,
             long_term_memory_text=long_term_memory_text,
             reality_overwrite_instruction=reality_overwrite_instruction,
             acting_guide=acting_guide,

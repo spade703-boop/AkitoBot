@@ -237,7 +237,8 @@ AKITO_SAFE_UNTIL = time.time() + 10   # 无效！
 | `get_random_examples(n)` | 从 `SCRIPT_DB` 随机抽取 n 条台词示例注入 Prompt（检索不可用时的兜底） |
 | `get_relevant_examples(query, n)` | 语义检索剧本示例；检索不可用或无相关命中均回退到 `get_random_examples` |
 | `get_relevant_pjsk(query, n)` | 语义检索 PJSK 黑话（检索前与剧本一致做 query 扩散 blend）；检索不可用回退全量 `PJSK_KNOWLEDGE_BASE`，无相关命中仅注入前言（降噪）；`PJSK_INTRO` 始终在前 |
-| `get_song_memories()` | 将 `SONG_DATA` 格式化为背景知识条目，每次对话静态注入 |
+| `get_song_memories()` | 将 `SONG_DATA` 格式化为静态曲名清单，每次对话先注入；具体点名某首歌时再补充详细记忆 |
+| `get_song_mention(text)` | 对消息做 `keywords` 子串匹配，命中时最多注入 2 首歌的完整 `description` |
 | `get_hybrid_relationship(text)` | 本地关键词白名单扫描 + 可选联网补充，返回 Prompt 片段 |
 | `reload_persona()` | 重新读取 `akito_persona.txt`，返回新内容（`重载配置 persona` 触发） |
 
@@ -488,7 +489,7 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（戳一戳
 | `content/gallery_text.json` | 图库文案（save_img_replies / send_img_angles） |
 | `content/greetings.json` | 早晚安问候（morning / night） |
 | `content/akito_relationships.json` | 人物关系档案（keywords 白名单 + content） |
-| `content/akito_songs.json` | 歌曲背景知识（song_name / description / keywords） |
+| `content/akito_songs.json` | 歌曲背景知识（song_name / description / keywords；其中 `keywords` 由 `get_song_mention` 消费，用于歌曲别名匹配） |
 | `content/akito_scripts.json` | 台词剧本库（每条含 `type`/`category`/`topics`/`cn_key`/`context`/`dialogue`；检索 key 为 `cn_key`，缺失回退 `context`） |
 | `content/pjsk_knowledge.json` | PJSK 黑话知识库（`introduction` + `knowledge_list` → `PJSK_INTRO` + `PJSK_ENTRIES`） |
 | `content/scripts_embeddings.npz` | 剧本语义向量库（`tools/build_embeddings.py` 生成；embed key=`cn_key`，gitignore） |
@@ -710,7 +711,7 @@ py tools/eval_retrieval.py rerank 0.2  # 用指定阈值试跑精排臂
 > ⚠️ `.env` 需要 `DEEPSEEK_API_KEY`（富集用）和 `SILICONFLOW_API_KEY`（embed 用）。缺少任一 key 则跳过对应步骤，bot 自动降级。
 
 ### 新增歌曲知识
-在 `data/akito_songs.json` 追加一个 key：
+在 `data/content/akito_songs.json` 追加一个 key：
 ```json
 "song_key": {
   "song_name": "《歌名》",
@@ -718,7 +719,8 @@ py tools/eval_retrieval.py rerank 0.2  # 用指定阈值试跑精排臂
   "keywords": ["歌名", "别名"]
 }
 ```
-热更新后自动注入 Prompt，无需改代码。
+`keywords` 会被 `get_song_mention(text)` 做不区分大小写的子串匹配；只收高区分度别名，避免把日常词也加进去。
+热更新后会先静态注入曲名清单；消息命中 `keywords` 时再额外注入对应歌曲记忆，无需改代码。
 
 ### 新增剧本台词 & type 字段
 在 `data/akito_scripts.json` 追加条目，每条需含 `type` 字段（`home`/`story`/`noise`），仅 `home`（中文 context，约 176 条）参与语义检索。

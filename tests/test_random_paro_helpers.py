@@ -6,9 +6,9 @@ import copy
 import json
 from pathlib import Path
 
-import pytest
 from nonebot.adapters import Event
 from nonebot.exception import FinishedException
+import pytest
 
 import nonebot_plugin_akito.features.random_paro as random_paro
 

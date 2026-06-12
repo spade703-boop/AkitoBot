@@ -79,6 +79,7 @@ force-sort-within-sections = true
 [tool.ruff.lint.per-file-ignores]
 "tests/test_time_awareness.py" = ["E402"]  # 导入依赖 conftest.py 的 mock 初始化
 "tests/*.py" = ["SIM117"]                   # 嵌套 with mock.patch 是可接受的测试写法
+"tests/test_random_paro_helpers.py" = ["N802", "N803"]  # 保留中文测试名与夹具名，避免无意义重命名
 "**/__init__.py" = ["E402", "F401", "I001"] # NoneBot 插件需在元数据后做副作用导入、按依赖顺序再导出，不参与自动排序
 "tools/*.py" = ["T201"]                     # CLI 工具允许 print
 

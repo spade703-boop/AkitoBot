@@ -27,6 +27,7 @@ from ..core import (
     get_relevant_examples,
     get_relevant_pjsk,
     get_safe_until,
+    get_song_mention,
     get_toya_anchor,
     get_user_memory,
     is_sleeping,
@@ -307,6 +308,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
                     break
             if relation_info:
                 break
+    song_info = get_song_mention(msg)
 
     cool_guy_filter = PROMPTS_DB.get("cool_guy_filter", "")
 
@@ -371,6 +373,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
     【场景】{scene_desc}
     【群聊上下文】\n{group_context}
     【人际资料】{relation_info}
+    {song_info}
     {script_examples}
     🎮【PJSK 世界观/黑话库】：
     {pjsk_block}

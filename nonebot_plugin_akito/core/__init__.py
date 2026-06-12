@@ -100,7 +100,8 @@ from .api import (
     expand_query_for_retrieval, extract_json_block, format_image_analysis_for_chat, rerank_documents, rescue_field,
 )
 from .context import (
-    get_random_examples, get_base_persona, reload_persona, get_song_memories, get_hybrid_relationship,
+    get_random_examples, get_base_persona, reload_persona, get_song_memories, get_song_mention,
+    get_hybrid_relationship,
     get_relevant_examples, get_relevant_pjsk,
 )
 from .time_awareness import (
@@ -139,7 +140,7 @@ __all__ = [
     "expand_query_for_retrieval", "extract_json_block", "format_image_analysis_for_chat", "rerank_documents",
     "rescue_field",
     # context
-    "get_random_examples", "get_base_persona", "reload_persona", "get_song_memories",
+    "get_random_examples", "get_base_persona", "reload_persona", "get_song_memories", "get_song_mention",
     "get_hybrid_relationship", "get_relevant_examples", "get_relevant_pjsk",
     # time_awareness
     "record_bot_response", "build_time_gap_prompt",

@@ -51,31 +51,63 @@ def reload_persona() -> str:
     return get_base_persona()
 
 
-def get_song_memories() -> str:
-    """将歌曲数据格式化为背景知识条目，供系统 Prompt 静态注入。
-
-    优先读取 description 字段（为新格式专门设计的简洁描述）；
-    若不存在则依次回退到 memory_trigger、story_core（兼容旧格式）。
-    """
+def _iter_song_entries() -> list[dict]:
+    """返回歌曲条目列表；数据缺失或结构异常时优雅降级为空列表。"""
     if not SONG_DATA:
-        return ""
+        return []
     song_iterator = SONG_DATA.values() if isinstance(SONG_DATA, dict) else SONG_DATA
-    lines = []
-    for entry in song_iterator:
-        song_name = entry.get("song_name", "")
-        if not song_name:
-            continue
-        summary = (
-            entry.get("description", "").strip()
-            or entry.get("memory_trigger", "").strip()
-            or entry.get("story_core", "").strip()
-        )
-        if summary and len(summary) > 120:
-            summary = summary[:120] + "……"
-        lines.append(f"- {song_name}：{summary}" if summary else f"- {song_name}")
-    if not lines:
+    return [entry for entry in song_iterator if isinstance(entry, dict)]
+
+
+def _get_song_summary(entry: dict) -> str:
+    """读取歌曲描述；优先 description，兼容旧字段回退。"""
+    return (
+        entry.get("description", "").strip()
+        or entry.get("memory_trigger", "").strip()
+        or entry.get("story_core", "").strip()
+    )
+
+
+def get_song_memories() -> str:
+    """返回静态歌曲清单；具体点名某首歌时再注入对应详细记忆。"""
+    song_names = []
+    for entry in _iter_song_entries():
+        song_name = entry.get("song_name", "").strip()
+        if song_name:
+            song_names.append(song_name)
+    if not song_names:
         return ""
-    return "🎵【你的歌曲记忆】（有人问起时自然回应，无需主动发挥）：\n" + "\n".join(lines)
+    return f"\n🎵【你会唱的歌】（被问到具体某首时会有详细记忆）：{'/'.join(song_names)}\n"
+
+
+def get_song_mention(text: str) -> str:
+    """命中歌曲关键词时，注入最多两首歌的完整记忆。"""
+    if not text:
+        return ""
+
+    text_lower = text.lower()
+    matched_lines = []
+    for entry in _iter_song_entries():
+        keywords = entry.get("keywords", [])
+        if not isinstance(keywords, list):
+            continue
+        for kw in keywords:
+            if not isinstance(kw, str) or not kw.strip():
+                continue
+            if kw.lower() not in text_lower:
+                continue
+            song_name = entry.get("song_name", "").strip()
+            if not song_name:
+                break
+            summary = _get_song_summary(entry)
+            matched_lines.append(f"- {song_name}：{summary}" if summary else f"- {song_name}")
+            break
+        if len(matched_lines) >= 2:
+            break
+
+    if not matched_lines:
+        return ""
+    return "\n🎵【歌曲话题】检测到在聊这些歌，回应时用上你的真实记忆：\n" + "\n".join(matched_lines) + "\n"
 
 
 async def get_hybrid_relationship(text: str) -> str:

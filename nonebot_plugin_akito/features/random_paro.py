@@ -18,7 +18,15 @@ from nonebot.log import logger
 from nonebot.params import CommandArg
 from PIL import Image, ImageDraw, ImageFont
 
-from ..core import ALLOWED_CHAT_GROUPS, IMAGE_BASE_PATH, SUPERUSER_QQ, TZ_CN, find_data_path, get_data_dir, load_json_file
+from ..core import (
+    ALLOWED_CHAT_GROUPS,
+    IMAGE_BASE_PATH,
+    SUPERUSER_QQ,
+    TZ_CN,
+    find_data_path,
+    get_data_dir,
+    load_json_file,
+)
 from .random_paro_render import render_random_paro_page
 
 DATA_FILE = "paro_pools.json"
