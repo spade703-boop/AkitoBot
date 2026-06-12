@@ -596,6 +596,18 @@ pytest tests/test_scheduled_helpers.py -q
 ### 修改允许的群号
 编辑 `.env` 中对应的群号列表（逗号分隔，`GROUP_IMAGE_PERMISSIONS` 为 JSON）→ 重启生效。
 
+### 生产环境部署形态（运维备忘）
+
+> 2026-06 实测记录，避免每次维护重新摸索环境。
+
+- bot 运行在 Docker 容器 **`mybot`** 内；宿主机仓库目录 `/akito_bot` 整体 bind-mount 为容器内 `/app`，容器默认工作目录就是仓库根。
+- **宿主机系统 Python 是 3.6（CentOS 自带），跑不动本项目任何代码**（会报误导性的 SyntaxError）。所有 `tools/` 脚本一律进容器跑，依赖 / `.env` / `data/` 在容器环境里全部现成：
+  ```bash
+  docker exec mybot python tools/<脚本>.py ...
+  ```
+- 代码是挂载的：宿主机 `git pull` 后容器内代码即同步；但**让运行中的 bot 加载新代码必须 `docker restart mybot`**——群内 `重载配置` 只热重载数据与检索索引，不重载 Python 代码。
+- 文档示例中的 `py xxx.py` 是 Windows 启动器写法，Linux 环境读作 `python`。
+
 ### 热更新 Prompt 和数据文件
 修改 `data/` 下的 JSON 文件后，在群内发送 `重载配置 assets`（更新 JSON 数据）或 `重载配置 persona`（更新人设文本），无需重启。`重载配置 assets` 会同步重建语义检索索引。
 

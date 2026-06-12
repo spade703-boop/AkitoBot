@@ -302,6 +302,16 @@ def run() -> None:
                     matched = expect_any and any(s in match_text(corpus, db[i]) for s in expect_any)
                     mark = "✔" if matched else " "
                     print(f"     {rank}. rr={rr:.3f} cos={cos:+.3f} {mark} {_fmt_entry(corpus, db[i])}")
+                # 调参关键信息：期望条目在全部召回里的最高精排分（即使低于阈值被丢弃也显示）
+                best_match_rr = max(
+                    (rr for (i, _), rr in ranked if any(s in match_text(corpus, db[i]) for s in expect_any)),
+                    default=None,
+                )
+                if best_match_rr is not None:
+                    dropped = "（低于阈值被丢弃）" if best_match_rr < threshold else ""
+                    print(f"     ↳ 期望条目全场最高分 rr={best_match_rr:.3f}{dropped}")
+                else:
+                    print(f"     ↳ 召回 {len(cand)} 条中无任何期望条目（语料缺内容或 expect_any 需校准）")
                 # 调参辅助：top-k 内命中/未命中条目的精排分分布
                 for (i, _), rr in ranked[:k]:
                     matched = expect_any and any(s in match_text(corpus, db[i]) for s in expect_any)
