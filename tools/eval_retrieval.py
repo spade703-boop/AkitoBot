@@ -8,6 +8,8 @@
   py tools/eval_retrieval.py compare 0.15
 
 前置条件：
+  - Python 3.9+（用跑 bot 的同一个解释器 / 虚拟环境即可，依赖完全相同；
+    Linux 下把示例里的 py 换成对应的 python3）
   - 在仓库根目录运行；.env 中配置 SILICONFLOW_API_KEY
   - data/content/ 已有语料 JSON 与 .npz 向量库（先跑 tools/build_embeddings.py all）
   - pip install numpy openai aiohttp python-dotenv
@@ -176,7 +178,8 @@ async def _rerank_async(api_key: str, query: str, docs: list[str]) -> list[float
         RERANK_URL, json=payload, headers=headers
     ) as resp:
         if resp.status != 200:
-            print(f"  ⚠️ rerank API HTTP {resp.status}: {(await resp.text())[:120]}")
+            error_text = await resp.text()
+            print(f"  ⚠️ rerank API HTTP {resp.status}: {error_text[:120]}")
             return None
         data = await resp.json()
     scores: list[float] = [0.0] * len(docs)
