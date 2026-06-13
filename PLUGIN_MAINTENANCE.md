@@ -433,10 +433,11 @@ Galgame 级导演骰子，由 `chat.py` 调用 `build_director_note()`。
 
 同人写作灵感关键词抽取器。从单一关键词池随机抽取 1-3 个意象/情境/关系张力短语。
 
-- `今日关键词` — 受 `ALLOWED_CHAT_GROUPS` 白名单控制，每日限 1 次，0 点自动刷新
+- `今日关键词` — 受 `ALLOWED_CHAT_GROUPS` 白名单控制，仅支持群聊；普通用户每人每日 1 次，群内同日不放回
 - 添加/删除指令 — 受 `SUPERUSER_QQ` 权限控制
-- 限频：每日 1 次，基于 `keyword_draws.json` 持久化记录，比较 `datetime.now(TZ_CN).date()` 自动跨天重置
-- 并发保护：`asyncio.Lock` 按 user_id 加锁
+- 限频：每日 1 次，基于 `keyword_draws.json` 持久化记录，比较 `datetime.now(TZ_CN).date()` 自动跨天失效
+- 群内唯一：普通用户成功抽取后会占用该群当天关键词池；当日池子耗尽则提示次日再来；超管抽取不占用词池
+- 并发保护：单个 `asyncio.Lock` 包住整次“读状态 → 过滤候选 → 抽取 → 写状态”，避免同群并发抽到同词
 - 模糊匹配：`_fuzzy_match()` 三级匹配（精确 → 前缀 → 包含），大小写不敏感；歧义时列出候选
 - PIL 渲染：`_render_keyword_result()` 卡片式输出（序号 + 关键词），`_render_pool_image()` 三列网格展示全池
 - 数据文件：`data/fanfic_keywords.json`（关键词池）、`data/keyword_draws.json`（每日抽取记录），已接入 `reload_assets()` 热重载

@@ -1,4 +1,4 @@
-"""今日关键词：六分类去重抽取每日关键词，渲染成图片，每日限 1 次。"""
+"""今日关键词：六分类去重抽取每日关键词，群内同日不放回。"""
 
 from __future__ import annotations
 
@@ -22,6 +22,7 @@ from ..core import ALLOWED_CHAT_GROUPS, SUPERUSER_QQ, TZ_CN, find_data_path, get
 DATA_FILE = "fanfic_keywords.json"
 DRAWS_FILE = "keyword_draws.json"
 DEFAULT_DATA: dict = {"categories": {}}
+DRAW_STATE_VERSION = 2
 
 KEYWORD_DATA: dict = load_json_file(DATA_FILE, DEFAULT_DATA)
 
@@ -44,18 +45,112 @@ def _save_pool():
     os.replace(tmp, path)
 
 
+def _today_str() -> str:
+    return datetime.now(TZ_CN).date().isoformat()
+
+
+def _safe_int(value: object, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _new_draws_state() -> dict:
+    return {
+        "schema_version": DRAW_STATE_VERSION,
+        "users": {},
+        "groups": {},
+    }
+
+
+def _normalize_keyword_items(raw: object) -> list[str]:
+    if not isinstance(raw, list):
+        return []
+
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for item in raw:
+        if not isinstance(item, str):
+            continue
+        text = item.strip()
+        if not text or text in seen:
+            continue
+        normalized.append(text)
+        seen.add(text)
+    return normalized
+
+
+def _normalize_user_draw_record(raw: object) -> dict | None:
+    if not isinstance(raw, dict):
+        return None
+
+    date_str = raw.get("date")
+    if not isinstance(date_str, str) or not date_str.strip():
+        return None
+
+    items = _normalize_keyword_items(raw.get("items"))
+    return {
+        "date": date_str,
+        "count": len(items),
+        "items": items,
+    }
+
+
+def _normalize_group_draw_record(raw: object, today_str: str) -> dict:
+    record = {"date": today_str, "drawn_items": []}
+    if not isinstance(raw, dict):
+        return record
+
+    if raw.get("date") != today_str:
+        return record
+
+    record["drawn_items"] = _normalize_keyword_items(raw.get("drawn_items"))
+    return record
+
+
+def _normalize_draws_state(raw: object, today_str: str) -> dict:
+    state = _new_draws_state()
+    if not isinstance(raw, dict):
+        return state
+
+    if "users" in raw or "groups" in raw:
+        raw_users = raw.get("users")
+        raw_groups = raw.get("groups")
+        state["schema_version"] = max(DRAW_STATE_VERSION, _safe_int(raw.get("schema_version"), DRAW_STATE_VERSION))
+    else:
+        raw_users = raw
+        raw_groups = {}
+
+    if isinstance(raw_users, dict):
+        state["users"] = {
+            str(user_id): normalized
+            for user_id, record in raw_users.items()
+            if (normalized := _normalize_user_draw_record(record)) is not None
+        }
+
+    if isinstance(raw_groups, dict):
+        state["groups"] = {
+            str(group_id): _normalize_group_draw_record(record, today_str)
+            for group_id, record in raw_groups.items()
+        }
+
+    return state
+
+
 def _load_draws() -> dict:
     path = find_data_path(DRAWS_FILE)
     if not path:
         path = get_data_dir() / DRAWS_FILE
     if not path.exists():
-        return {}
+        return _new_draws_state()
     try:
         with open(path, encoding="utf-8") as f:
-            return json.load(f)
+            raw = json.load(f)
     except Exception:
         logger.warning(f"读取 {DRAWS_FILE} 失败，已重置抽取记录")
-        return {}
+        return _new_draws_state()
+    return _normalize_draws_state(raw, _today_str())
 
 
 def _save_draws(data: dict):
@@ -64,8 +159,9 @@ def _save_draws(data: dict):
         path = get_data_dir() / DRAWS_FILE
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
+    normalized = _normalize_draws_state(data, _today_str())
     with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+        json.dump(normalized, f, ensure_ascii=False, indent=2)
     os.replace(tmp, path)
 
 
@@ -259,6 +355,47 @@ def _get_existing_keyword_draw_message(user_record: dict | None, today_str: str)
     return f"你今天已经领取过关键词了：{prev}，明天 0:00 刷新哦。"
 
 
+def _get_or_create_group_draw_record(draws_state: dict, group_id: str, today_str: str) -> dict:
+    groups = draws_state.setdefault("groups", {})
+    record = _normalize_group_draw_record(groups.get(group_id), today_str)
+    groups[group_id] = record
+    return record
+
+
+def _set_user_draw_record(draws_state: dict, user_id: str, today_str: str, items: list[str]) -> None:
+    draws_state.setdefault("users", {})[user_id] = {
+        "date": today_str,
+        "count": len(items),
+        "items": list(items),
+    }
+
+
+def _get_group_drawn_items(group_record: dict) -> set[str]:
+    return set(_normalize_keyword_items(group_record.get("drawn_items")))
+
+
+def _filter_categories_excluding_drawn_items(
+    categories: list[tuple[str, list]],
+    drawn_items: set[str],
+) -> list[tuple[str, list[str]]]:
+    result: list[tuple[str, list[str]]] = []
+    for cat_name, items in categories:
+        available_items = [item for item in items if item not in drawn_items]
+        if available_items:
+            result.append((cat_name, available_items))
+    return result
+
+
+def _record_group_drawn_items(group_record: dict, items: list[str]) -> None:
+    drawn_items = group_record.setdefault("drawn_items", [])
+    seen = set(drawn_items)
+    for item in items:
+        if item in seen:
+            continue
+        drawn_items.append(item)
+        seen.add(item)
+
+
 def _select_daily_keywords(
     categories: list[tuple[str, list]],
     count: int,
@@ -273,23 +410,41 @@ def _select_daily_keywords(
 
 # ==================== 今日关键词 ====================
 
-_DRAW_LOCKS: dict[str, asyncio.Lock] = {}
+_DRAW_LOCK = asyncio.Lock()
+
+
+def _resolve_group_draw_command(event: Event) -> tuple[str | None, str | None]:
+    group_id = getattr(event, "group_id", None)
+    if group_id is None:
+        return None, "该指令仅支持群聊使用。"
+    if int(group_id) not in ALLOWED_CHAT_GROUPS:
+        return None, None
+    return str(group_id), None
+
+
+def _event_display_name(event: Event) -> str:
+    sender = getattr(event, "sender", None)
+    if sender:
+        display_name = getattr(sender, "card", None) or getattr(sender, "nickname", None)
+        if isinstance(display_name, str) and display_name.strip():
+            return display_name
+    return f"用户{event.get_user_id()}"
 
 draw_cmd = on_command("今日关键词", priority=5, block=True)
 
 
 @draw_cmd.handle()
 async def _(event: Event):
-    if isinstance(event, GroupMessageEvent) and event.group_id not in ALLOWED_CHAT_GROUPS:
+    group_id, rejection = _resolve_group_draw_command(event)
+    if rejection:
+        await draw_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
+    if group_id is None:
         return
 
     user_id = event.get_user_id()
-    is_superuser = str(event.get_user_id()) == SUPERUSER_QQ
+    is_superuser = user_id == SUPERUSER_QQ
 
-    if user_id not in _DRAW_LOCKS:
-        _DRAW_LOCKS[user_id] = asyncio.Lock()
-
-    async with _DRAW_LOCKS[user_id]:
+    async with _DRAW_LOCK:
         cats = _get_non_empty_categories()
         if not cats:
             await draw_cmd.finish(
@@ -297,28 +452,39 @@ async def _(event: Event):
                 + "关键词池还是空的，先用 /添加关键词 添加一些吧。"
             )
 
-        today_str = datetime.now(TZ_CN).date().isoformat()
+        today_str = _today_str()
+        draws = _load_draws()
 
         # 普通用户每日限 1 次；超管不限制
         if not is_superuser:
-            draws = _load_draws()
-            existing_message = _get_existing_keyword_draw_message(draws.get(user_id), today_str)
+            existing_message = _get_existing_keyword_draw_message(draws.get("users", {}).get(user_id), today_str)
             if existing_message:
                 await draw_cmd.finish(MessageSegment.reply(event.message_id) + existing_message)
 
+        available_categories = cats
+        if not is_superuser:
+            group_record = _get_or_create_group_draw_record(draws, group_id, today_str)
+            drawn_items = _get_group_drawn_items(group_record)
+            available_categories = _filter_categories_excluding_drawn_items(cats, drawn_items)
+            if not available_categories:
+                await draw_cmd.finish(
+                    MessageSegment.reply(event.message_id)
+                    + "本群今天的关键词已经抽完了，明天 0:00 再来吧。"
+                )
+
         # 随机选 N 个不同分类，每个分类随机抽 1 个
         count = random.randint(1, 3)
-        selected = _select_daily_keywords(cats, count)
+        selected = _select_daily_keywords(available_categories, count)
 
         # 保存普通用户记录；超管不保存
         if not is_superuser:
-            draws = _load_draws()
-            draws[user_id] = {"date": today_str, "count": len(selected), "items": selected}
+            _set_user_draw_record(draws, user_id, today_str, selected)
+            _record_group_drawn_items(group_record, selected)
             _save_draws(draws)
 
         await asyncio.sleep(random.uniform(1.0, 2.5))
 
-        nickname = event.sender.card or event.sender.nickname or f"用户{user_id}"
+        nickname = _event_display_name(event)
         lines = [f"@{nickname} 抽到的今日关键词是："]
         for kw in selected:
             lines.append(f"- {kw}")
@@ -420,5 +586,5 @@ reset_cmd = on_command("重置关键词", priority=5, block=True)
 async def _(event: Event):
     if str(event.get_user_id()) != SUPERUSER_QQ:
         return
-    _save_draws({})
+    _save_draws(_new_draws_state())
     await reset_cmd.finish("已重置所有人的今日关键词抽取记录。")
