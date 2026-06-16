@@ -19,7 +19,12 @@ from nonebot.log import logger
 
 from . import np
 from .paths import iter_data_roots
-from .retrieval_assets import build_corpus_fingerprint, pjsk_retrieval_text, script_retrieval_text
+from .retrieval_assets import (
+    build_corpus_fingerprint,
+    pjsk_retrieval_text,
+    script_retrieval_entries,
+    script_retrieval_text,
+)
 
 # ── 语料注册表 ──────────────────────────────────────────────────────────────
 # db: 惰性取值函数（避免循环 import）；npz: .npz 文件名；doc_text: 条目 → 精排文本
@@ -33,6 +38,13 @@ def _script_doc_text(entry: dict) -> str:
 def _pjsk_doc_text(entry: dict) -> str:
     """PJSK 条目 → 精排文本：「category text」拼接（与 build_embeddings.py 一致）。"""
     return pjsk_retrieval_text(entry)
+
+
+def _live_retrieval_db(corpus: str, db: list[dict]) -> list[dict]:
+    """Mirror the exact row subset used during embedding build."""
+    if corpus == "scripts":
+        return script_retrieval_entries(db)
+    return db
 
 
 _registry: dict[str, dict[str, Any]] = {}
@@ -141,7 +153,8 @@ def _load_npz(corpus: str) -> _Index | None:
         return None
 
     doc_fn = cfg.get("doc_text")
-    live_fingerprint = build_corpus_fingerprint(corpus, db, doc_fn) if doc_fn else ""
+    live_db = _live_retrieval_db(corpus, db)
+    live_fingerprint = build_corpus_fingerprint(corpus, live_db, doc_fn) if doc_fn else ""
     if fingerprint and live_fingerprint and fingerprint != live_fingerprint:
         logger.warning(f"🔍 语料 [{corpus}] .npz fingerprint 已过期，标记不可用")
         return None

@@ -55,6 +55,7 @@ _HELPER_SPEC.loader.exec_module(_HELPER_MODULE)
 build_corpus_fingerprint = _HELPER_MODULE.build_corpus_fingerprint
 flatten_pjsk_knowledge = _HELPER_MODULE.flatten_pjsk_knowledge
 pjsk_retrieval_text = _HELPER_MODULE.pjsk_retrieval_text
+script_retrieval_items = _HELPER_MODULE.script_retrieval_items
 script_retrieval_text = _HELPER_MODULE.script_retrieval_text
 
 
@@ -64,7 +65,7 @@ def load_scripts():
         print(f"❌ 未找到 {SCRIPT_FILE}")
         sys.exit(1)
     data = json.loads(SCRIPT_FILE.read_text(encoding="utf-8-sig"))
-    items = [(i, e) for i, e in enumerate(data) if e.get("type") in ("home", "story")]
+    items = script_retrieval_items(data)
     full_len = len(data)
     print(f"📖 剧本: {full_len} 条 → home+story: {len(items)} 条（排除 noise）")
     return items, full_len

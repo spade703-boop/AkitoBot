@@ -96,6 +96,36 @@ def test_load_npz_success(dummy_vectors):
     assert result.count == 4
 
 
+def test_load_npz_scripts_fingerprint_ignores_noise_rows(dummy_vectors):
+    """scripts 的 fingerprint 校验应只看 home/story 子集，不能被 noise 干扰。"""
+    mean = dummy_vectors.mean(axis=0)
+    indices = np.arange(len(dummy_vectors), dtype="int32")
+    db = [
+        {"type": "home", "cn_key": "a"},
+        {"type": "noise", "cn_key": "skip-me"},
+        {"type": "story", "cn_key": "b"},
+        {"type": "home", "cn_key": "c"},
+    ]
+    count = np.int32(len(db))
+    subset = [db[0], db[2], db[3]]
+    fingerprint = retrieval.build_corpus_fingerprint("scripts", subset, retrieval._script_doc_text)
+
+    with mock.patch.object(retrieval, "_find_npz_path", return_value="fake.npz"):
+        with mock.patch.object(retrieval, "_ensure_registry"):
+            retrieval._registry["scripts"] = {"db": db, "npz": "fake.npz", "doc_text": retrieval._script_doc_text}
+            with mock.patch.object(np, "load") as mock_load:
+                mock_load.return_value = {
+                    "vectors": dummy_vectors,
+                    "mean": mean,
+                    "indices": indices,
+                    "count": count,
+                    "fingerprint": np.asarray(fingerprint),
+                }
+                result = retrieval._load_npz("scripts")
+    assert result is not None
+    assert result.fingerprint == fingerprint
+
+
 # ── 检索核心 ────────────────────────────────────────────────────────────────────
 
 

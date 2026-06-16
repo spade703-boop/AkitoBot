@@ -2,6 +2,7 @@
 
 This module centralizes:
 - corpus-specific retrieval text construction
+- script / PJSK retrieval pool selection
 - PJSK entry normalization / flattening
 - alias extraction for lightweight lexical matching
 - corpus fingerprint generation for stale-index detection
@@ -15,12 +16,30 @@ import re
 from typing import Any
 
 _PJSK_DRAFT_MARKERS = ("待补", "待核对", "待对应", "待确认")
+_SCRIPT_RETRIEVAL_TYPES = {"home", "story"}
 
 
 def script_retrieval_text(entry: dict) -> str:
     """Canonical retrieval text for script entries."""
     text = (entry.get("cn_key") or "").strip() or (entry.get("context") or "").strip()
     return text or "（空）"
+
+
+def script_retrieval_items(db: list[dict]) -> list[tuple[int, dict]]:
+    """Ordered script rows that participate in retrieval / embedding."""
+    items: list[tuple[int, dict]] = []
+    for i, entry in enumerate(db):
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("type") not in _SCRIPT_RETRIEVAL_TYPES:
+            continue
+        items.append((i, entry))
+    return items
+
+
+def script_retrieval_entries(db: list[dict]) -> list[dict]:
+    """Plain script retrieval pool with original order preserved."""
+    return [entry for _, entry in script_retrieval_items(db)]
 
 
 def _normalize_aliases(raw_aliases: Any) -> list[str]:
