@@ -51,9 +51,11 @@ from ..core import (
     get_toya_anchor,
     get_user_memory,
     grant_safety_pass,
+    parse_json_object,
     record_bot_message,
     record_bot_response,
     rescue_field,
+    rescue_tail_after_field,
     save_memory,
     smart_search,
     to_image_data,
@@ -258,10 +260,11 @@ def _build_final_system_prompt(
 def _parse_model_reply(raw_result: str, is_toya_context: bool) -> tuple[str, str]:
     """Parse model JSON-ish output into final dialogue text and inner thoughts."""
     result = ""
-    clean_json_str = extract_json_block(raw_result)
     inner_os = ""
     try:
-        response_data = json.loads(clean_json_str)
+        response_data = parse_json_object(raw_result)
+        if response_data is None:
+            raise json.JSONDecodeError("invalid json object", raw_result, 0)
         inner_os = response_data.get("inner_os", "") or response_data.get("Inner_os", "") or response_data.get("内心OS", "")
         if inner_os:
             logger.info(f"🎭【小彰内心OS】: {inner_os}")
@@ -309,16 +312,10 @@ def _parse_model_reply(raw_result: str, is_toya_context: bool) -> tuple[str, str
             result = rescued
             logger.info(f"🔧 正则救援成功，提取到回复内容: {result[:60]}")
         else:
-            inner_os_end = re.search(r'"inner_os"\s*:\s*"(?:[^"\\]|\\.)*"', raw_result)
-            if inner_os_end:
-                remainder = raw_result[inner_os_end.end():].strip()
-                remainder = re.sub(r'^,\s*"[^"]*"\s*[>:]\s*', "", remainder)
-                remainder = remainder.strip('"} \n')
-                if remainder:
-                    result = remainder
-                    logger.info(f"🔧 二次救援成功（key名幻觉），提取内容: {result[:60]}")
-                else:
-                    result = raw_result
+            remainder = rescue_tail_after_field(raw_result, "inner_os")
+            if remainder:
+                result = remainder
+                logger.info(f"🔧 二次救援成功（key名幻觉），提取内容: {result[:60]}")
             else:
                 result = raw_result
 

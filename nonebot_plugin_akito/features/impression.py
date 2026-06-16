@@ -20,7 +20,7 @@ from ..core import (
     RELATIONSHIP_DATA,
     TZ_CN,
     build_retrieval_context,
-    client,
+    call_deepseek_api,
     extract_json_block,
     get_base_persona,
     get_daily_activity,
@@ -33,8 +33,10 @@ from ..core import (
     get_user_memory,
     is_sleeping,
     load_prompt_template,
+    parse_json_object,
     record_bot_message,
     rescue_field,
+    rescue_tail_after_field,
 )
 
 # ================= 配置区域 =================
@@ -93,10 +95,11 @@ def _parse_impression_reply(raw_result: str) -> tuple[str, str]:
     """Parse impression model output into final reply and inner thoughts."""
     final_reply = ""
     inner_os = ""
-    clean_json_str = extract_json_block(raw_result)
 
     try:
-        response_data = json.loads(clean_json_str)
+        response_data = parse_json_object(raw_result)
+        if response_data is None:
+            raise json.JSONDecodeError("invalid json object", raw_result, 0)
         inner_os = response_data.get("inner_os", "")
         if inner_os:
             logger.info(f"📝【小彰评价OS】: {inner_os}")
@@ -107,8 +110,7 @@ def _parse_impression_reply(raw_result: str) -> tuple[str, str]:
         logger.warning(f"⚠️ 评价系统未输出标准JSON: {raw_result[:120]}")
         rescued = rescue_field(raw_result, "reply")
         if rescued is None:
-            match = re.search(r"reply\s*[：:]\s*(.+)", raw_result, re.DOTALL)
-            rescued = match.group(1) if match else None
+            rescued = rescue_tail_after_field(raw_result, "inner_os")
         if rescued is not None:
             final_reply = rescued.strip().strip('"')
             logger.info(f"🔧 评价救援成功: {final_reply[:60]}")
@@ -229,28 +231,24 @@ async def _(bot: Bot, event: GroupMessageEvent):
     【================ 强制输出格式 (JSON) ================】
     {{
       "inner_os": "在这里先回忆一下这50条记录，吐槽一下这个人的日常表现。",
-      "reply": "⚠️【强制开头】必须以"对{target_name}的印象是"起头，不得以任何其他词语开场。80字以内，纯对话文本，严禁夹带（括号动作描写）。语感随意慵懒、短句连贯，符合盐系男高中生口吻。"
+      "reply": "以指定句式开头的评价正文，80字以内，纯文本，不要括号动作。"
     }}
     """
 
     try:
-        response = await asyncio.wait_for(
-            client.chat.completions.create(
-                model=MODEL_NAME,
-                messages=[
+        raw_result = await call_deepseek_api(
+            [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"以下是群聊记录，其中【{target_name}】是你要评价的对象，[其他名字]是群里其他人。请严格基于【{target_name}】的实际发言内容来评价，不要把其他人说的话算在他头上。\n\n{history_text}"}
                 ],
-                temperature=1.1,
-                presence_penalty=0.4,
-                frequency_penalty=0.4,
-                max_tokens=2048,
-                stream=False,
-                extra_body={"thinking": {"type": "disabled"}},
-            ),
+            model_name=MODEL_NAME,
+            force_json=True,
+            temperature=1.1,
+            presence_penalty=0.4,
+            frequency_penalty=0.4,
+            max_tokens=2048,
             timeout=60.0,
         )
-        raw_result = response.choices[0].message.content
         final_reply, _inner_os = _parse_impression_reply(raw_result)
 
         save_my_response(group_id, str(bot.self_id), final_reply)
@@ -396,29 +394,25 @@ async def _(bot: Bot, event: GroupMessageEvent):
     """
 
     try:
-        response = await asyncio.wait_for(
-            client.chat.completions.create(
-                model=MODEL_NAME,
-                messages=[
+        raw_result = await call_deepseek_api(
+            [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_content}
                 ],
-                temperature=1.1,
-                presence_penalty=0.4,
-                frequency_penalty=0.6,
-                max_tokens=2048,
-                stream=False,
-                extra_body={"thinking": {"type": "disabled"}},
-            ),
+            model_name=MODEL_NAME,
+            force_json=True,
+            temperature=1.1,
+            presence_penalty=0.4,
+            frequency_penalty=0.6,
+            max_tokens=2048,
             timeout=10.0,
         )
-
-        raw_result = response.choices[0].message.content
         reply = ""
-        clean_json_str = extract_json_block(raw_result)
 
         try:
-            response_data = json.loads(clean_json_str)
+            response_data = parse_json_object(raw_result)
+            if response_data is None:
+                raise json.JSONDecodeError("invalid json object", raw_result, 0)
             inner_os = response_data.get("inner_os", "")
             if inner_os:
                 logger.info(f"💦【小彰潜水OS】: {inner_os}")
@@ -438,6 +432,8 @@ async def _(bot: Bot, event: GroupMessageEvent):
             if rescued_os:
                 logger.info(f"💦【小彰潜水OS（救援）】: {rescued_os[:80]}")
             rescued = rescue_field(raw_result, "reply")
+            if rescued is None:
+                rescued = rescue_tail_after_field(raw_result, "inner_os")
             if rescued is not None:
                 reply = rescued.strip()
                 logger.info(f"🔧 插嘴救援成功，reply={repr(reply[:40])}")

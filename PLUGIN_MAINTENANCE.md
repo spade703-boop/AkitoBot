@@ -225,7 +225,9 @@ AKITO_SAFE_UNTIL = time.time() + 10   # 无效！
 | `embed_text(text)` | BGE-M3 单条 embedding（SiliconFlow），返回 1024 维 float list；未配置 key / 失败返回 None，不抛异常 |
 | `rerank_documents(query, documents, top_n)` | bge-reranker-v2-m3 重排序（SiliconFlow，与 embed 同 key 门控），返回 `[(候选下标, 相关分)]` 按分降序；未配置 key / 失败返回 None，不抛异常 |
 | `extract_json_block(raw)` | 从 LLM 原始返回中提取最外层 `{...}` 片段；无匹配时原样返回（chat / impression 共用） |
-| `rescue_field(raw, *fields)` | 从残缺 JSON 中正则抠出第一个命中的字符串字段值；无匹配返回 None。可能返回空串，调用方需用 `is not None` 判断命中 |
+| `parse_json_object(raw)` | 提取 JSON 块并解析为 dict；失败返回 None（chat / impression 共用的完整 JSON 入口） |
+| `rescue_field(raw, *fields)` | 从残缺 JSON 中正则抠出第一个命中的字符串字段值；覆盖字段值截断到 EOF 的场景。无匹配返回 None，调用方需用 `is not None` 判断命中 |
+| `rescue_tail_after_field(raw, anchor_field="inner_os")` | 当 JSON 在已知锚点字段后损坏时，提取尾部残留正文；用于 key 名跑偏或 reply/dialogue 残段救援 |
 
 > `call_deepseek_api_agent` 专供 `chat.py` 的 ReAct 循环，其他调用方用 `call_deepseek_api`。
 
@@ -531,7 +533,7 @@ pytest -q
 pytest tests/test_chat_helpers.py -q
 pytest tests/test_commands_helpers.py -q
 pytest tests/test_reactions_helpers.py -q
-pytest tests/test_impression_helpers.py -q
+pytest tests/test_impression_helpers.py tests/test_impression_rescue_regression.py -q
 pytest tests/test_verify_helpers.py -q
 pytest tests/test_gallery_helpers.py -q
 pytest tests/test_random_paro_helpers.py -q
@@ -554,7 +556,7 @@ pytest tests/test_scheduled_helpers.py -q
 - `handlers/chat.py` → `pytest tests/test_chat_helpers.py -q`
 - `handlers/commands.py` → `pytest tests/test_commands_helpers.py -q`
 - `handlers/reactions.py` → `pytest tests/test_reactions_helpers.py -q`
-- `features/impression.py` → `pytest tests/test_impression_helpers.py -q`
+- `features/impression.py` → `pytest tests/test_impression_helpers.py tests/test_impression_rescue_regression.py -q`
 - `features/verify.py` → `pytest tests/test_verify_helpers.py -q`
 - `features/gallery.py` → `pytest tests/test_gallery_helpers.py -q`
 - `features/random_paro.py` → `pytest tests/test_random_paro_helpers.py -q`

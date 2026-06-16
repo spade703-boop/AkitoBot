@@ -240,7 +240,7 @@ pytest -q
 pytest tests/test_chat_helpers.py -q
 pytest tests/test_commands_helpers.py -q
 pytest tests/test_reactions_helpers.py -q
-pytest tests/test_impression_helpers.py -q
+pytest tests/test_impression_helpers.py tests/test_impression_rescue_regression.py -q
 pytest tests/test_verify_helpers.py -q
 pytest tests/test_gallery_helpers.py -q
 pytest tests/test_random_paro_helpers.py -q
@@ -256,7 +256,7 @@ pytest tests/test_scheduled_helpers.py -q
 - 改 `handlers/chat.py` → 先跑 `pytest tests/test_chat_helpers.py -q`
 - 改 `handlers/commands.py` → 先跑 `pytest tests/test_commands_helpers.py -q`
 - 改 `handlers/reactions.py` → 先跑 `pytest tests/test_reactions_helpers.py -q`
-- 改 `features/impression.py` → 先跑 `pytest tests/test_impression_helpers.py -q`
+- 改 `features/impression.py` → 先跑 `pytest tests/test_impression_helpers.py tests/test_impression_rescue_regression.py -q`
 - 改 `features/verify.py` → 先跑 `pytest tests/test_verify_helpers.py -q`
 - 改 `features/gallery.py` → 先跑 `pytest tests/test_gallery_helpers.py -q`
 - 改 `features/random_paro.py` → 先跑 `pytest tests/test_random_paro_helpers.py -q`

@@ -97,7 +97,8 @@ from .life_state import (
 from .api import (
     ImageAnalysis,
     call_deepseek_api, call_deepseek_api_agent, smart_search, describe_image, to_image_data, embed_text,
-    expand_query_for_retrieval, extract_json_block, format_image_analysis_for_chat, rerank_documents, rescue_field,
+    expand_query_for_retrieval, extract_json_block, format_image_analysis_for_chat, parse_json_object,
+    rerank_documents, rescue_field, rescue_tail_after_field,
 )
 from .context import (
     get_random_examples, get_base_persona, reload_persona, get_song_memories, get_song_mention,
@@ -137,8 +138,8 @@ __all__ = [
     # api
     "ImageAnalysis",
     "call_deepseek_api", "call_deepseek_api_agent", "smart_search", "describe_image", "to_image_data", "embed_text",
-    "expand_query_for_retrieval", "extract_json_block", "format_image_analysis_for_chat", "rerank_documents",
-    "rescue_field",
+    "expand_query_for_retrieval", "extract_json_block", "format_image_analysis_for_chat", "parse_json_object",
+    "rerank_documents", "rescue_field", "rescue_tail_after_field",
     # context
     "get_random_examples", "get_base_persona", "reload_persona", "get_song_memories", "get_song_mention",
     "get_hybrid_relationship", "get_relevant_examples", "get_relevant_pjsk",

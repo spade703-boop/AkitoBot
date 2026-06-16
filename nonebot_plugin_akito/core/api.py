@@ -29,6 +29,15 @@ def extract_json_block(raw: str) -> str:
     return match.group(0) if match else raw
 
 
+def parse_json_object(raw: str) -> dict[str, Any] | None:
+    """Extract and decode a JSON object from model output; return None on failure."""
+    try:
+        parsed = json.loads(extract_json_block(raw))
+    except json.JSONDecodeError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
 def rescue_field(raw: str, *fields: str) -> str | None:
     """从残缺 JSON 文本中正则抠出第一个命中的字符串字段值；无匹配返回 None。
 
@@ -39,7 +48,25 @@ def rescue_field(raw: str, *fields: str) -> str | None:
         return None
     names = "|".join(re.escape(f) for f in fields)
     m = re.search(r'"(?:' + names + r')"\s*:\s*"((?:[^"\\]|\\.)*)"', raw)
-    return m.group(1) if m else None
+    if m:
+        return m.group(1)
+    tail = re.search(r'"(?:' + names + r')"\s*:\s*"([\s\S]+?)\s*$', raw)
+    return tail.group(1) if tail else None
+
+
+def rescue_tail_after_field(raw: str, anchor_field: str = "inner_os") -> str | None:
+    """Rescue trailing content when JSON breaks after a known anchor field."""
+    anchor = re.search(
+        r'"' + re.escape(anchor_field) + r'"\s*:\s*"((?:[^"\\]|\\.)*)"',
+        raw,
+    )
+    if not anchor:
+        return None
+
+    remainder = raw[anchor.end():].strip()
+    remainder = re.sub(r'^,\s*"[^"]*"\s*[>:]\s*', "", remainder)
+    remainder = remainder.strip('"} \n\r\t')
+    return remainder or None
 
 # ── 查询扩散 Prompt（检索辅助，非人设，不改彰人语气） ──────────────────────────
 _EXPANSION_PROMPT = """你是检索关键词助手，服务于 Project Sekai 角色【东云彰人】（毒舌、嫌麻烦但讲义气的街头歌手）。
@@ -80,16 +107,26 @@ async def expand_query_for_retrieval(message: str) -> str | None:
         return None
 
 
-async def call_deepseek_api(messages: list, model_name: str = "deepseek-v4-flash", force_json: bool = False) -> str:
+async def call_deepseek_api(
+    messages: list,
+    model_name: str = "deepseek-v4-flash",
+    force_json: bool = False,
+    *,
+    temperature: float = 0.85,
+    presence_penalty: float = 0.7,
+    frequency_penalty: float = 0.8,
+    max_tokens: int = 2048,
+    timeout: float = 15.0,
+) -> str:
     """调用 DeepSeek 对话补全，带 15s 超时与降级文案；force_json=True 时强制 JSON 输出。"""
     try:
         kwargs = {
             "model": model_name,
             "messages": messages,
-            "temperature": 0.85,
-            "presence_penalty": 0.7,
-            "frequency_penalty": 0.8,
-            "max_tokens": 2048,
+            "temperature": temperature,
+            "presence_penalty": presence_penalty,
+            "frequency_penalty": frequency_penalty,
+            "max_tokens": max_tokens,
             "stream": False,
             "extra_body": {"thinking": {"type": "disabled"}},
         }
@@ -97,7 +134,7 @@ async def call_deepseek_api(messages: list, model_name: str = "deepseek-v4-flash
             kwargs["response_format"] = {"type": "json_object"}
         response = await asyncio.wait_for(
             client.chat.completions.create(**kwargs),
-            timeout=15.0,
+            timeout=timeout,
         )
         return response.choices[0].message.content
     except asyncio.TimeoutError:
