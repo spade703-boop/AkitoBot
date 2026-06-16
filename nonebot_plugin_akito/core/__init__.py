@@ -108,7 +108,7 @@ from .time_awareness import (
     record_bot_response, build_time_gap_prompt,
 )
 from .retrieval import (
-    retrieve, reload_indices,
+    RetrievalContext, RetrievalResult, build_retrieval_context, retrieve, retrieve_result, reload_indices,
 )
 
 # ── 统一公共导出面（显式声明，避免 import * 时泄漏内部名） ────────────────
@@ -145,5 +145,5 @@ __all__ = [
     # time_awareness
     "record_bot_response", "build_time_gap_prompt",
     # retrieval
-    "retrieve", "reload_indices",
+    "RetrievalContext", "RetrievalResult", "build_retrieval_context", "retrieve", "retrieve_result", "reload_indices",
 ]

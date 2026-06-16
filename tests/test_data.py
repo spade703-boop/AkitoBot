@@ -90,11 +90,9 @@ def test_init_pjsk_knowledge_flattens_entries():
 
         assert data.PJSK_INTRO == "前言"
         assert "术语" in data.PJSK_KNOWLEDGE_BASE
-        assert data.PJSK_ENTRIES == [
-            {"category": "术语", "text": "A"},
-            {"category": "术语", "text": "B"},
-            {"category": "角色", "text": "C"},
-        ]
+        assert [entry["category"] for entry in data.PJSK_ENTRIES] == ["术语", "术语", "角色"]
+        assert [entry["text"] for entry in data.PJSK_ENTRIES] == ["A", "B", "C"]
+        assert all(entry["status"] == "active" for entry in data.PJSK_ENTRIES)
     finally:
         data.PJSK_KNOWLEDGE_BASE, data.PJSK_INTRO = snapshot[0], snapshot[1]
         data.PJSK_ENTRIES.clear()

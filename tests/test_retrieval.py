@@ -189,22 +189,14 @@ async def test_get_relevant_examples_fallback_on_no_retrieval():
 
 @pytest.mark.asyncio
 async def test_get_relevant_pjsk_fallback_to_full_base():
-    """PJSK 检索不可用时回退到全量 PJSK_KNOWLEDGE_BASE。"""
+    """PJSK 检索不可用时回退到 intro-only，不再整库灌注。"""
     from nonebot_plugin_akito.core.context import get_relevant_pjsk
 
-    # mock 返回 None → 应回退到全量 base
-    # 注：patch 的是 data 模块的源变量——context 经 get_pjsk_knowledge_base() 在调用时实时读取，
-    # 这正是热重载安全路径（PROJECT_SPEC §11 模式 B 的 getter 访问惯例）
-    with mock.patch(
-        "nonebot_plugin_akito.core.context.retrieve",
-        return_value=None,
-    ):
-        with mock.patch(
-            "nonebot_plugin_akito.core.data.PJSK_KNOWLEDGE_BASE",
-            "MOCK_BASE",
-        ):
+    unavailable = retrieval.RetrievalResult(status="unavailable", ids=[], reason="index_unavailable", used_query="test query")
+    with mock.patch("nonebot_plugin_akito.core.context.retrieve_result", return_value=unavailable):
+        with mock.patch("nonebot_plugin_akito.core.data.PJSK_INTRO", "MOCK_INTRO"):
             result = await get_relevant_pjsk("test query")
-            assert result == "MOCK_BASE"
+            assert result == "MOCK_INTRO"
 
 
 @pytest.mark.asyncio
@@ -216,10 +208,8 @@ async def test_get_relevant_pjsk_intro_always_first():
     fake_intro = "【语境锁】这是前言"
     fake_ids = [0]
 
-    with mock.patch(
-        "nonebot_plugin_akito.core.context.retrieve",
-        return_value=fake_ids,
-    ):
+    hit = retrieval.RetrievalResult(status="hit", ids=fake_ids, used_query="测试", used_rerank=True)
+    with mock.patch("nonebot_plugin_akito.core.context.retrieve_result", return_value=hit):
         with mock.patch(
             "nonebot_plugin_akito.core.context.PJSK_ENTRIES",
             fake_entries,
@@ -334,10 +324,8 @@ async def test_get_relevant_examples_story_format():
         "dialogue": "再来一遍。",
     }
 
-    with mock.patch(
-        "nonebot_plugin_akito.core.context.retrieve",
-        return_value=[0, 1],
-    ):
+    hit = retrieval.RetrievalResult(status="hit", ids=[0, 1], used_query="test", used_rerank=True)
+    with mock.patch("nonebot_plugin_akito.core.context.retrieve_result", return_value=hit):
         with mock.patch(
             "nonebot_plugin_akito.core.context.SCRIPT_DB",
             [fake_story, fake_home],
@@ -365,10 +353,8 @@ async def test_get_relevant_examples_mixed_types():
         {"type": "home", "context": "收下礼物", "dialogue": "给我这个干嘛。"},
     ]
 
-    with mock.patch(
-        "nonebot_plugin_akito.core.context.retrieve",
-        return_value=[0, 1, 2],
-    ):
+    hit = retrieval.RetrievalResult(status="hit", ids=[0, 1, 2], used_query="test", used_rerank=True)
+    with mock.patch("nonebot_plugin_akito.core.context.retrieve_result", return_value=hit):
         with mock.patch(
             "nonebot_plugin_akito.core.context.SCRIPT_DB",
             fake_db,
@@ -494,19 +480,20 @@ def test_expand_empty_api_response_returns_none():
 
 @pytest.mark.asyncio
 async def test_get_relevant_examples_uses_expanded_query():
-    """扩散成功 → 用 blend query 调用 retrieve。"""
+    """扩散成功 → 用 blend query 调用 retrieve_result。"""
     from nonebot_plugin_akito.core.context import get_relevant_examples
 
     fake_db = [{"type": "home", "context": "ctx", "dialogue": "dl"}]
     captured_retrieval_query = []
 
-    async def fake_retrieve(corpus, query, num):
+    async def fake_retrieve_result(corpus, query, num, ctx=None):
         captured_retrieval_query.append(query)
-        return [0]
+        return retrieval.RetrievalResult(status="hit", ids=[0], used_query=query, used_rerank=True)
 
-    with mock.patch("nonebot_plugin_akito.core.context.retrieve", fake_retrieve):
+    fake_ctx = retrieval.RetrievalContext(original_query="打虾还是打龙", query="打虾还是打龙 刷高分 肝进度", expanded_query="刷高分 肝进度")
+    with mock.patch("nonebot_plugin_akito.core.context.retrieve_result", fake_retrieve_result):
         with mock.patch("nonebot_plugin_akito.core.context.SCRIPT_DB", fake_db):
-            with mock.patch("nonebot_plugin_akito.core.context.expand_query_for_retrieval", return_value="刷高分 肝进度"):
+            with mock.patch("nonebot_plugin_akito.core.context.build_retrieval_context", return_value=fake_ctx):
                 with mock.patch("nonebot_plugin_akito.core.context._QUERY_EXPANSION_ENABLED", True):
                     await get_relevant_examples("打虾还是打龙", num=1)
     assert len(captured_retrieval_query) == 1
@@ -523,13 +510,14 @@ async def test_get_relevant_examples_expansion_none_uses_original():
     fake_db = [{"type": "home", "context": "ctx", "dialogue": "dl"}]
     captured_query = []
 
-    async def fake_retrieve(corpus, query, num):
+    async def fake_retrieve_result(corpus, query, num, ctx=None):
         captured_query.append(query)
-        return [0]
+        return retrieval.RetrievalResult(status="hit", ids=[0], used_query=query, used_rerank=True)
 
-    with mock.patch("nonebot_plugin_akito.core.context.retrieve", fake_retrieve):
+    fake_ctx = retrieval.RetrievalContext(original_query="测试消息", query="测试消息", expanded_query=None)
+    with mock.patch("nonebot_plugin_akito.core.context.retrieve_result", fake_retrieve_result):
         with mock.patch("nonebot_plugin_akito.core.context.SCRIPT_DB", fake_db):
-            with mock.patch("nonebot_plugin_akito.core.context.expand_query_for_retrieval", return_value=None):
+            with mock.patch("nonebot_plugin_akito.core.context.build_retrieval_context", return_value=fake_ctx):
                 with mock.patch("nonebot_plugin_akito.core.context._QUERY_EXPANSION_ENABLED", True):
                     await get_relevant_examples("测试消息", num=1)
     assert captured_query[0] == "测试消息"
@@ -544,20 +532,17 @@ async def test_get_relevant_examples_expansion_disabled_skips():
     captured_query = []
     expand_called = []
 
-    async def fake_retrieve(corpus, query, num):
+    async def fake_retrieve_result(corpus, query, num, ctx=None):
         captured_query.append(query)
-        return [0]
+        return retrieval.RetrievalResult(status="hit", ids=[0], used_query=query, used_rerank=True)
 
-    async def fake_expand(msg):
-        expand_called.append(msg)
-        return "不应被调用"
-
-    with mock.patch("nonebot_plugin_akito.core.context.retrieve", fake_retrieve):
+    fake_ctx = retrieval.RetrievalContext(original_query="测试消息", query="测试消息", expanded_query=None)
+    with mock.patch("nonebot_plugin_akito.core.context.retrieve_result", fake_retrieve_result):
         with mock.patch("nonebot_plugin_akito.core.context.SCRIPT_DB", fake_db):
-            with mock.patch("nonebot_plugin_akito.core.context.expand_query_for_retrieval", fake_expand):
+            with mock.patch("nonebot_plugin_akito.core.context.build_retrieval_context", return_value=fake_ctx) as build_mock:
                 with mock.patch("nonebot_plugin_akito.core.context._QUERY_EXPANSION_ENABLED", False):
                     await get_relevant_examples("测试消息", num=1)
-    assert len(expand_called) == 0
+    assert build_mock.await_count == 1
     assert captured_query[0] == "测试消息"
 
 
@@ -567,23 +552,18 @@ async def test_get_relevant_examples_short_query_skip_expansion():
     from nonebot_plugin_akito.core.context import get_relevant_examples
 
     fake_db = [{"type": "home", "context": "ctx", "dialogue": "dl"}]
-    short_called = []
     captured_query = []
 
-    async def fake_retrieve(corpus, query, num):
+    async def fake_retrieve_result(corpus, query, num, ctx=None):
         captured_query.append(query)
-        return [0]
+        return retrieval.RetrievalResult(status="hit", ids=[0], used_query=query, used_rerank=True)
 
-    async def fake_expand(msg):
-        short_called.append(msg)
-        return "不应被调用"
-
-    with mock.patch("nonebot_plugin_akito.core.context.retrieve", fake_retrieve):
+    fake_ctx = retrieval.RetrievalContext(original_query="早", query="早", expanded_query=None)
+    with mock.patch("nonebot_plugin_akito.core.context.retrieve_result", fake_retrieve_result):
         with mock.patch("nonebot_plugin_akito.core.context.SCRIPT_DB", fake_db):
-            with mock.patch("nonebot_plugin_akito.core.context.expand_query_for_retrieval", fake_expand):
-                with mock.patch("nonebot_plugin_akito.core.context._QUERY_EXPANSION_ENABLED", True):
-                    await get_relevant_examples("早", num=1)
-    assert len(short_called) == 0
+            with mock.patch("nonebot_plugin_akito.core.context.build_retrieval_context", return_value=fake_ctx) as build_mock:
+                await get_relevant_examples("早", num=1)
+    assert build_mock.await_count == 1
     assert captured_query[0] == "早"
 
 
@@ -737,7 +717,8 @@ async def test_get_relevant_examples_empty_ids_falls_back_random():
     from nonebot_plugin_akito.core.context import get_relevant_examples
 
     fake_db = [{"type": "home", "context": "ctx", "dialogue": "dl"}]
-    with mock.patch("nonebot_plugin_akito.core.context.retrieve", return_value=[]):
+    no_hit = retrieval.RetrievalResult(status="no_hit", ids=[], used_query="毫无关联的消息", used_rerank=True)
+    with mock.patch("nonebot_plugin_akito.core.context.retrieve_result", return_value=no_hit):
         with mock.patch("nonebot_plugin_akito.core.context.SCRIPT_DB", fake_db):
             result = await get_relevant_examples("毫无关联的消息", num=1)
     assert "请严格模仿" in result
@@ -746,19 +727,20 @@ async def test_get_relevant_examples_empty_ids_falls_back_random():
 
 @pytest.mark.asyncio
 async def test_get_relevant_pjsk_uses_expanded_query():
-    """PJSK 检索同样走查询扩散：扩散成功 → 用 blend query 调用 retrieve。"""
+    """PJSK 检索同样走查询扩散：扩散成功 → 用 blend query 调用 retrieve_result。"""
     from nonebot_plugin_akito.core.context import get_relevant_pjsk
 
-    fake_entries = [{"category": "测试", "text": "条目1"}]
+    fake_entries = [{"category": "测试", "title": "测试-1", "text": "条目1", "prompt_text": "条目1", "aliases": []}]
     captured_query = []
 
-    async def fake_retrieve(corpus, query, num):
+    async def fake_retrieve_result(corpus, query, num, ctx=None):
         captured_query.append(query)
-        return [0]
+        return retrieval.RetrievalResult(status="hit", ids=[0], used_query=query, used_rerank=True)
 
-    with mock.patch("nonebot_plugin_akito.core.context.retrieve", fake_retrieve):
+    fake_ctx = retrieval.RetrievalContext(original_query="来个人开车", query="来个人开车 组队打歌 协力", expanded_query="组队打歌 协力")
+    with mock.patch("nonebot_plugin_akito.core.context.retrieve_result", fake_retrieve_result):
         with mock.patch("nonebot_plugin_akito.core.context.PJSK_ENTRIES", fake_entries):
-            with mock.patch("nonebot_plugin_akito.core.context.expand_query_for_retrieval", return_value="组队打歌 协力"):
+            with mock.patch("nonebot_plugin_akito.core.context.build_retrieval_context", return_value=fake_ctx):
                 with mock.patch("nonebot_plugin_akito.core.context._QUERY_EXPANSION_ENABLED", True):
                     await get_relevant_pjsk("来个人开车", num=1)
     assert len(captured_query) == 1
@@ -771,8 +753,9 @@ async def test_get_relevant_pjsk_empty_ids_intro_only():
     """retrieve 返回 [] 且条目库非空 → 仅注入前言，不再全量灌注。"""
     from nonebot_plugin_akito.core.context import get_relevant_pjsk
 
-    fake_entries = [{"category": "测试", "text": "条目1"}]
-    with mock.patch("nonebot_plugin_akito.core.context.retrieve", return_value=[]):
+    fake_entries = [{"category": "测试", "title": "测试-1", "text": "条目1", "prompt_text": "条目1", "aliases": []}]
+    no_hit = retrieval.RetrievalResult(status="no_hit", ids=[], used_query="毫无关联的消息", used_rerank=True)
+    with mock.patch("nonebot_plugin_akito.core.context.retrieve_result", return_value=no_hit):
         with mock.patch("nonebot_plugin_akito.core.context.PJSK_ENTRIES", fake_entries):
             with mock.patch("nonebot_plugin_akito.core.data.PJSK_INTRO", "【语境锁】前言"):
                 with mock.patch("nonebot_plugin_akito.core.data.PJSK_KNOWLEDGE_BASE", "FULL_BASE"):

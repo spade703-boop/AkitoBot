@@ -10,6 +10,7 @@ from nonebot.log import logger
 
 from .paths import find_data_path as _find_data_path
 from .paths import get_data_dir as _get_data_dir
+from .retrieval_assets import build_pjsk_prompt_text, flatten_pjsk_knowledge
 
 PJSK_KNOWLEDGE_BASE = ""
 PJSK_INTRO = ""
@@ -153,24 +154,21 @@ def init_pjsk_knowledge() -> None:
     if not data:
         return
     try:
-        text = data.get("introduction", "") + "\n\n"
-        for item in data.get("knowledge_list", []):
-            text += f"{item['category']}\n"
-            for entry in item.get("entries", []):
-                text += f"   {entry}\n"
-            text += "\n"
+        intro = str(data.get("introduction", "") or "").strip()
+        flat = flatten_pjsk_knowledge(data, include_drafts=False)
 
-        # 结构化导出供检索引擎使用
-        flat: list[dict] = []
-        for item in data.get("knowledge_list", []):
-            category = item.get("category", "")
-            for entry in item.get("entries", []):
-                flat.append({"category": category, "text": entry})
+        lines: list[str] = []
+        if intro:
+            lines.append(intro)
+        if flat:
+            lines.append("")
+            for entry in flat:
+                lines.append(build_pjsk_prompt_text(entry))
 
         # 全部解析成功后才更新，异常时保留旧数据；
         # PJSK_ENTRIES 是 list → 模式 A 原地更新，已持有引用的模块（context/retrieval）即时生效
-        PJSK_KNOWLEDGE_BASE = text.strip()
-        PJSK_INTRO = data.get("introduction", "")
+        PJSK_KNOWLEDGE_BASE = "\n".join(lines).strip()
+        PJSK_INTRO = intro
         PJSK_ENTRIES.clear()
         PJSK_ENTRIES.extend(flat)
     except Exception as e:

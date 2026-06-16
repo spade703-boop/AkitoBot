@@ -19,6 +19,7 @@ from ..core import (
     PROMPTS_DB,
     RELATIONSHIP_DATA,
     TZ_CN,
+    build_retrieval_context,
     client,
     extract_json_block,
     get_base_persona,
@@ -293,9 +294,13 @@ async def _(bot: Bot, event: GroupMessageEvent):
     current_user_name = event.sender.card or event.sender.nickname
 
     # 语义检索：相关剧本样本 + 相关 PJSK（与主聊天一致；get_relevant_examples 内含 query 扩散）
+    retrieval_ctx = await build_retrieval_context(
+        msg,
+        enable_expansion=bool(msg and len(msg.strip()) >= 3),
+    )
     script_examples, pjsk_block = await asyncio.gather(
-        get_relevant_examples(msg, 5),
-        get_relevant_pjsk(msg, 6),
+        get_relevant_examples(msg, 5, retrieval_ctx=retrieval_ctx),
+        get_relevant_pjsk(msg, 6, retrieval_ctx=retrieval_ctx),
     )
 
     # 本地关键词白名单扫描

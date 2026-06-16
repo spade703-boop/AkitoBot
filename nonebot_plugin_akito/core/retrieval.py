@@ -6,10 +6,12 @@
   mean    (1024 float32)     — 语料均值（query 与语料都减此值做中心化）
   indices (N int32)          — 行 → 源 DB 下标
   count   (int)              — 生成时的 DB 长度（用于校验）
+  fingerprint (str)          — 语料文本指纹（用于校验内容是否已变化）
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +19,7 @@ from nonebot.log import logger
 
 from . import np
 from .paths import iter_data_roots
+from .retrieval_assets import build_corpus_fingerprint, pjsk_retrieval_text, script_retrieval_text
 
 # ── 语料注册表 ──────────────────────────────────────────────────────────────
 # db: 惰性取值函数（避免循环 import）；npz: .npz 文件名；doc_text: 条目 → 精排文本
@@ -24,14 +27,12 @@ from .paths import iter_data_roots
 
 def _script_doc_text(entry: dict) -> str:
     """剧本条目 → 精排文本：cn_key 优先、缺失回退 context（与 build_embeddings.py 的 embed 文本一致）。"""
-    text = (entry.get("cn_key") or "").strip() or (entry.get("context") or "").strip()
-    return text or "（空）"
+    return script_retrieval_text(entry)
 
 
 def _pjsk_doc_text(entry: dict) -> str:
     """PJSK 条目 → 精排文本：「category text」拼接（与 build_embeddings.py 一致）。"""
-    text = f"{entry.get('category', '')} {entry.get('text', '')}".strip()
-    return text or "（空）"
+    return pjsk_retrieval_text(entry)
 
 
 _registry: dict[str, dict[str, Any]] = {}
@@ -51,17 +52,44 @@ def _ensure_registry() -> None:
 
 class _Index:
     """单个语料的中心化缓存。"""
-    __slots__ = ("centered", "norms", "mean", "indices", "count")
+    __slots__ = ("centered", "norms", "mean", "indices", "count", "fingerprint")
 
-    def __init__(self, vectors, mean, indices, count):
+    def __init__(self, vectors, mean, indices, count, fingerprint: str = ""):
         self.centered = vectors - mean  # (N, 1024) 中心化
         self.norms = (self.centered * self.centered).sum(axis=1) ** 0.5 + 1e-8  # 行范数
         self.mean = mean
         self.indices = indices
         self.count = count
+        self.fingerprint = fingerprint
 
 
 _INDICES: dict[str, _Index | None] = {}  # corpus → _Index | None（None = 不可用）
+
+
+@dataclass(slots=True)
+class RetrievalContext:
+    """Shared per-message retrieval context."""
+
+    original_query: str
+    query: str
+    expanded_query: str | None = None
+    embedding: list[float] | None = None
+
+
+@dataclass(slots=True)
+class RetrievalResult:
+    """Structured retrieval result."""
+
+    status: str
+    ids: list[int]
+    reason: str = ""
+    used_query: str = ""
+    used_rerank: bool = False
+    fell_back_to_cosine: bool = False
+
+    @property
+    def is_available(self) -> bool:
+        return self.status != "unavailable"
 
 
 # ── 加载 ────────────────────────────────────────────────────────────────────
@@ -96,6 +124,11 @@ def _load_npz(corpus: str) -> _Index | None:
         mean = data["mean"]
         indices = data["indices"]
         count = int(data["count"])
+        files = getattr(data, "files", None)
+        if files is not None:
+            fingerprint = str(data["fingerprint"]) if "fingerprint" in files else ""
+        else:
+            fingerprint = str(data.get("fingerprint", "")) if hasattr(data, "get") else ""
     except Exception as e:
         logger.warning(f"🔍 语料 [{corpus}] .npz 加载失败: {e}")
         return None
@@ -107,8 +140,14 @@ def _load_npz(corpus: str) -> _Index | None:
         )
         return None
 
+    doc_fn = cfg.get("doc_text")
+    live_fingerprint = build_corpus_fingerprint(corpus, db, doc_fn) if doc_fn else ""
+    if fingerprint and live_fingerprint and fingerprint != live_fingerprint:
+        logger.warning(f"🔍 语料 [{corpus}] .npz fingerprint 已过期，标记不可用")
+        return None
+
     logger.info(f"✅ 语料 [{corpus}] 加载完成: {count} 条, {vectors.shape[1]}d")
-    return _Index(vectors, mean, indices, count)
+    return _Index(vectors, mean, indices, count, fingerprint=fingerprint or live_fingerprint)
 
 
 def reload_indices() -> int:
@@ -181,6 +220,40 @@ async def _rerank_candidates(corpus: str, query: str, idx: _Index, rows: Any, to
         return None
 
 
+async def _ensure_query_embedding(ctx: RetrievalContext) -> list[float] | None:
+    """Fill shared query embedding once per message."""
+    if ctx.embedding is not None:
+        return ctx.embedding
+    from .api import embed_text
+
+    qv = await embed_text(ctx.query)
+    ctx.embedding = qv
+    return qv
+
+
+async def build_retrieval_context(
+    query: str,
+    *,
+    enable_expansion: bool = True,
+    expand_min_chars: int = 3,
+) -> RetrievalContext:
+    """Build a shared retrieval context for one user message."""
+    query = (query or "").strip()
+    ctx = RetrievalContext(original_query=query, query=query)
+    if not enable_expansion or len(query) < expand_min_chars:
+        return ctx
+    try:
+        from .api import expand_query_for_retrieval
+
+        expanded = await expand_query_for_retrieval(query)
+        if expanded:
+            ctx.expanded_query = expanded
+            ctx.query = f"{query} {expanded}"
+    except Exception as e:
+        logger.debug(f"🔍 build_retrieval_context 扩散失败，回退原 query: {e}")
+    return ctx
+
+
 # ── 检索 ────────────────────────────────────────────────────────────────────
 
 async def retrieve(corpus: str, query: str, top_k: int) -> list[int] | None:
@@ -190,21 +263,30 @@ async def retrieve(corpus: str, query: str, top_k: int) -> list[int] | None:
     [] = 检索正常但精排判定无任何相关条目；[id, ...] = 命中。
     精排失败时回退纯 cosine top-k（与旧行为一致）。
     """
-    if np is None:
+    result = await retrieve_result(corpus, query, top_k)
+    if result.status == "unavailable":
         return None
+    return result.ids
+
+
+async def retrieve_result(corpus: str, query: str, top_k: int, ctx: RetrievalContext | None = None) -> RetrievalResult:
+    """Structured retrieval API with shared context support."""
+    if np is None:
+        return RetrievalResult(status="unavailable", ids=[], reason="numpy_unavailable", used_query=query)
     _ensure_registry()
     if corpus not in _registry:
-        return None
+        return RetrievalResult(status="unavailable", ids=[], reason="unknown_corpus", used_query=query)
 
     idx = _INDICES.get(corpus)
     if idx is None:
-        return None
+        return RetrievalResult(status="unavailable", ids=[], reason="index_unavailable", used_query=query)
 
-    from .api import embed_text
-
-    qv = await embed_text(query)
+    shared_ctx = ctx or RetrievalContext(original_query=query, query=query)
+    if not shared_ctx.query:
+        shared_ctx.query = query
+    qv = await _ensure_query_embedding(shared_ctx)
     if qv is None:
-        return None
+        return RetrievalResult(status="unavailable", ids=[], reason="embed_unavailable", used_query=shared_ctx.query)
 
     try:
         qc = np.asarray(qv, dtype="float32") - idx.mean
@@ -214,9 +296,20 @@ async def retrieve(corpus: str, query: str, top_k: int) -> list[int] | None:
         cosine_ids = [int(idx.indices[i]) for i in top[:top_k]]
     except Exception as e:
         logger.warning(f"🔍 检索 [{corpus}] 失败，降级: {e}")
-        return None
+        return RetrievalResult(status="unavailable", ids=[], reason="cosine_failed", used_query=shared_ctx.query)
 
     if not _RERANK_ENABLED:
-        return cosine_ids
-    reranked = await _rerank_candidates(corpus, query, idx, top, top_k)
-    return cosine_ids if reranked is None else reranked
+        return RetrievalResult(status="hit", ids=cosine_ids, used_query=shared_ctx.query)
+    reranked = await _rerank_candidates(corpus, shared_ctx.query, idx, top, top_k)
+    if reranked is None:
+        return RetrievalResult(
+            status="hit",
+            ids=cosine_ids,
+            reason="rerank_unavailable",
+            used_query=shared_ctx.query,
+            used_rerank=True,
+            fell_back_to_cosine=True,
+        )
+    if not reranked:
+        return RetrievalResult(status="no_hit", ids=[], used_query=shared_ctx.query, used_rerank=True)
+    return RetrievalResult(status="hit", ids=reranked, used_query=shared_ctx.query, used_rerank=True)

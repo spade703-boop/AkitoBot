@@ -31,6 +31,7 @@ from ..core import (
     build_time_gap_prompt,
     call_deepseek_api,
     call_deepseek_api_agent,
+    build_retrieval_context,
     check_sleep_status,
     describe_image,
     extract_json_block,
@@ -519,10 +520,14 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage()):
             origin_sender=origin_sender,
         )
 
+        retrieval_ctx = await build_retrieval_context(
+            plain_text_content,
+            enable_expansion=bool(plain_text_content and len(plain_text_content.strip()) >= 3),
+        )
         relationship_context, script_examples, pjsk_block = await asyncio.gather(
             get_hybrid_relationship(plain_text_content),
-            get_relevant_examples(plain_text_content, 5),
-            get_relevant_pjsk(plain_text_content, 6),
+            get_relevant_examples(plain_text_content, 5, retrieval_ctx=retrieval_ctx),
+            get_relevant_pjsk(plain_text_content, 6, retrieval_ctx=retrieval_ctx),
         )
         song_context = get_song_memories() + get_song_mention(plain_text_content)
         group_id = getattr(event, 'group_id', None)

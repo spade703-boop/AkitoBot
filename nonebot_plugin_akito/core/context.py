@@ -4,7 +4,7 @@ import random
 
 from nonebot.log import logger
 
-from .api import expand_query_for_retrieval, smart_search
+from .api import smart_search
 from .data import (
     PJSK_ENTRIES,
     RELATIONSHIP_DATA,
@@ -14,7 +14,10 @@ from .data import (
     get_pjsk_knowledge_base,
     load_prompt_template,
 )
-from .retrieval import retrieve
+from .retrieval import RetrievalContext, build_retrieval_context, retrieve, retrieve_result
+
+# Backward-compatible re-export for tests/legacy patch points.
+expand_query_for_retrieval = None
 
 
 def get_random_examples(num: int = 5) -> str:
@@ -159,7 +162,7 @@ _RELEVANT_RATIO = 1  # 保留的随机条数（其余来自语义检索）
 _QUERY_EXPANSION_ENABLED = True
 
 
-async def get_relevant_examples(query: str, num: int = 5) -> str:
+async def get_relevant_examples(query: str, num: int = 5, retrieval_ctx: RetrievalContext | None = None) -> str:
     """语义检索剧本示例；检索不可用（None）或精排判定无相关命中（[]）时回退到随机抽取。
 
     检索前用 LLM 扩散 query（游戏黑话翻含义 + 潜台词/情绪），
@@ -167,21 +170,22 @@ async def get_relevant_examples(query: str, num: int = 5) -> str:
     story 条目（日文原作情境）用「原作·类似情境」格式标注前情与彰人台词，
     表头点明"体会语气/态度，用中文表达"。
     """
-    retrieval_query = query
-    if _QUERY_EXPANSION_ENABLED and query and len(query.strip()) >= 3:
-        expanded = await expand_query_for_retrieval(query)
-        if expanded:
-            retrieval_query = f"{query} {expanded}"
-            logger.debug(f"🔍 查询扩散: {query[:40]} → +{expanded[:60]}")
+    ctx = retrieval_ctx
+    if ctx is None and query and query.strip():
+        ctx = await build_retrieval_context(query, enable_expansion=_QUERY_EXPANSION_ENABLED)
+        if ctx.expanded_query:
+            logger.debug(f"🔍 查询扩散: {query[:40]} → +{ctx.expanded_query[:60]}")
 
-    ids = await retrieve("scripts", retrieval_query, num) if retrieval_query.strip() else None
-    if not ids:
-        # None=检索不可用；[]=精排判定全部不相关——均回退随机抽取（与旧兜底一致）
+    result = await retrieve_result("scripts", ctx.query, num, ctx=ctx) if ctx and ctx.query.strip() else None
+    if result is None or result.status != "hit":
+        # 不可用或无相关命中均回退随机抽取；只有 no_hit 不再注入随机混合样本头
         logger.debug(f"🔍 剧本检索无果，回退随机抽取 query={query[:40]}")
         return get_random_examples(num)
+    ids = result.ids
 
-    # 取 top-(num-1) 相关 + 1 随机
-    relevant_count = max(0, num - _RELEVANT_RATIO)
+    # 高置信命中时不再固定掺随机；只有纯 cosine 回退时保留少量随机兜底。
+    random_ratio = _RELEVANT_RATIO if result.fell_back_to_cosine else 0
+    relevant_count = max(0, num - random_ratio)
     relevant_ids = ids[:relevant_count]
     random_count = min(num - len(relevant_ids), len(SCRIPT_DB))
 
@@ -208,7 +212,9 @@ async def get_relevant_examples(query: str, num: int = 5) -> str:
         return get_random_examples(num)
 
     header = (
-        "\n\n# 参考剧本 (语义匹配 + 随机注入)\n"
+        "\n\n# 参考剧本 (语义匹配"
+        + (" + 随机注入" if random_ratio else "")
+        + ")\n"
         "## 以下为原作中类似情境下彰人的反应（日文原文），请体会其语气/态度，**用中文表达**\n"
     )
     lines = [header]
@@ -221,7 +227,7 @@ async def get_relevant_examples(query: str, num: int = 5) -> str:
     return "\n".join(lines)
 
 
-async def get_relevant_pjsk(query: str, num: int = 6) -> str:
+async def get_relevant_pjsk(query: str, num: int = 6, retrieval_ctx: RetrievalContext | None = None) -> str:
     """语义检索 PJSK 黑话，三态注入；PJSK_INTRO 永远在前。
 
     检索前与剧本检索一致做 query 扩散 blend（黑话同形词如"开车"需要扩散词
@@ -229,19 +235,38 @@ async def get_relevant_pjsk(query: str, num: int = 6) -> str:
     检索不可用（None）→ 全量 base 兜底；精排判定无相关命中（[]）→ 仅注入前言（降噪）；
     命中 → 前言 + 相关条目。
     """
-    retrieval_query = query or ""
-    if _QUERY_EXPANSION_ENABLED and query and len(query.strip()) >= 3:
-        expanded = await expand_query_for_retrieval(query)
-        if expanded:
-            retrieval_query = f"{query} {expanded}"
-            logger.debug(f"🔍 PJSK查询扩散: {query[:40]} → +{expanded[:60]}")
+    ctx = retrieval_ctx
+    if ctx is None and query and query.strip():
+        ctx = await build_retrieval_context(query, enable_expansion=_QUERY_EXPANSION_ENABLED)
+        if ctx.expanded_query:
+            logger.debug(f"🔍 PJSK查询扩散: {query[:40]} → +{ctx.expanded_query[:60]}")
 
-    ids = await retrieve("pjsk", retrieval_query, num) if retrieval_query.strip() else None
-    if ids is None or not PJSK_ENTRIES:
-        logger.debug(f"🔍 PJSK检索不可用，回退全量 base query={query[:40]}")
-        return get_pjsk_knowledge_base()
+    if not PJSK_ENTRIES:
+        return (get_pjsk_intro() or "").strip()
 
-    relevant = [PJSK_ENTRIES[i] for i in ids if 0 <= i < len(PJSK_ENTRIES)]
+    lexical_hits: list[int] = []
+    query_lower = (query or "").lower()
+    if query_lower:
+        for i, entry in enumerate(PJSK_ENTRIES):
+            aliases = entry.get("aliases", [])
+            if isinstance(aliases, list) and any(isinstance(alias, str) and alias.lower() in query_lower for alias in aliases):
+                lexical_hits.append(i)
+        if lexical_hits:
+            lexical_hits = lexical_hits[:num]
+
+    result = await retrieve_result("pjsk", ctx.query, num, ctx=ctx) if ctx and ctx.query.strip() else None
+    if result is None or result.status == "unavailable":
+        logger.debug(f"🔍 PJSK检索不可用，退到 intro-only query={query[:40]}")
+        return (get_pjsk_intro() or "").strip()
+
+    merged_ids: list[int] = []
+    for idx in lexical_hits + result.ids:
+        if idx not in merged_ids:
+            merged_ids.append(idx)
+        if len(merged_ids) >= num:
+            break
+
+    relevant = [PJSK_ENTRIES[i] for i in merged_ids if 0 <= i < len(PJSK_ENTRIES)]
     if not relevant:
         # 检索可用但精排判定无任何相关条目 → 刻意降噪：仅注入语境锁前言，不再全量灌注
         logger.debug(f"🔍 PJSK无相关命中，仅注入前言 query={query[:40]}")
@@ -254,5 +279,9 @@ async def get_relevant_pjsk(query: str, num: int = 6) -> str:
     intro = get_pjsk_intro() or ""
     text = intro + "\n\n"
     for item in relevant:
-        text += f"{item['category']}：{item['text']}\n"
+        aliases = item.get("aliases", [])
+        alias_text = f"（别名：{' / '.join(aliases)}）" if isinstance(aliases, list) and aliases else ""
+        title = item.get("title") or item.get("category") or "PJSK"
+        prompt_text = item.get("prompt_text") or item.get("text") or ""
+        text += f"{title}{alias_text}：{prompt_text}\n"
     return text.strip()
