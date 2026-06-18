@@ -116,3 +116,23 @@ def test_parse_model_reply_rescues_broken_json():
 
     assert result == "救援内容"
     assert inner_os == ""
+
+
+def test_search_miss_note_mentions_query_and_fallback_behavior():
+    note = chat._search_miss_note("东京天气")
+    assert "东京天气" in note
+    assert "没有在手机上搜到" in note
+
+
+def test_build_search_aside_with_hit_forces_in_character_restate():
+    # 命中结果：必须把原文塞进来，同时强制"用自己的语气复述、别照原文念"——不直出摘要
+    aside = chat._build_search_aside("世界计划 演唱会", "- 标题: 12月开演")
+    assert "12月开演" in aside
+    assert "东云彰人" in aside
+    assert "别照着原文念" in aside
+
+
+def test_build_search_aside_without_hit_falls_back_to_miss_note():
+    # 无结果：复用兜底注入，让模型凭记忆/常识回答
+    aside = chat._build_search_aside("不存在的东西", "")
+    assert aside.strip() == chat._search_miss_note("不存在的东西")

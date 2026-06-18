@@ -312,15 +312,19 @@ AKITO_SAFE_UNTIL = time.time() + 10   # 无效！
 14. 发送 & 记录    smart_finish 发送；record_bot_response 更新时间戳
 ```
 
-**ReAct Agent 循环（Step 6）**：
+**搜索调度 + ReAct Agent 循环（Step 6）**：
 
 ```
-有图片 ──────────────────────────────────────→ call_deepseek_api（直接生成）
-无图片 → call_deepseek_api_agent（带 AGENT_TOOLS）
+有图片 ──────────────────────────────────────────────────────→ call_deepseek_api（直接生成，不搜索）
+无图片 + 命中 info_keywords → 强制 smart_search → _build_search_aside 注入用户消息 → call_deepseek_api
+无图片 + 未命中关键词 → call_deepseek_api_agent（带 AGENT_TOOLS，LLM 自主决定）
            ├─ 返回 tool_calls → 执行 smart_search → 塞回 messages → call_deepseek_api
            ├─ 返回普通内容   → 直接使用 agent_message.content
            └─ 返回 None（超时）→ call_deepseek_api（降级兜底）
 ```
+
+> 两条搜索路径（关键词强制 / LLM 自主）都把搜索结果回灌进**人设系统提示**重新生成，
+> 由彰人用自己的语气复述，绝不直出原始摘要；搜索无结果时统一走 `_search_miss_note` 兜底。
 
 **JSON 解析 + 两层救援（Step 7）**：
 

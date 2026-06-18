@@ -147,6 +147,25 @@ def _build_image_director_instruction(character_label: str) -> str:
     return "🎬【导演指导】：请看一眼这张图并给出简短的评价。必须保持男高中生的疏离和一点嫌弃感，【严禁】一惊一乍或长篇大论！"
 
 
+def _search_miss_note(query: str) -> str:
+    """联网搜索无结果时的兜底注入：让小彰凭记忆/常识回答，否则烦躁地抱怨网络差。"""
+    return (
+        f'【系统提示】：由于网络不佳，你没有在手机上搜到关于"{query}"的情报。'
+        f'请尽量在你的【长期记忆】或【常识】里回忆一下这是什么。如果实在不知道，就烦躁地抱怨网络太差了。'
+    )
+
+
+def _build_search_aside(query: str, search_result: str) -> str:
+    """把搜索结果包成"系统旁白"注入用户消息，强制小彰用自己的语气复述、不直出原始摘要。"""
+    if search_result:
+        return (
+            f"\n\n🔍【系统旁白：你刚掏出手机搜了一下，结果如下】\n{search_result}\n"
+            f"请用你自己（东云彰人）的语气把上面的情报转告对方——别照着原文念，"
+            f"用你的话说、该吐槽就吐槽，但别把信息说错。"
+        )
+    return "\n\n" + _search_miss_note(query)
+
+
 def _fold_stale_history_into_time_gap_prompt(
     user_mem: dict,
     time_gap_awareness: str,
@@ -647,10 +666,21 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage()):
 
         messages_list.append({"role": "user", "content": tagged_user_msg_for_llm})
 
-        # --- 9. ReAct 智能体调用循环 ---（是否搜索由 LLM 通过 Function Calling 自主决定）
+        # --- 9. 搜索调度 + 智能体调用循环 ---
+        # 双轨触发：① 特定词汇命中 → 确定性强制联网；② 否则交由 LLM 通过 Function Calling 自主决定。
+        # 关键：两条路都把搜索结果回灌进【人设系统提示】里重新生成，由小彰用自己的语气复述，绝不直出原始摘要。
         search_result = ""
         raw_result = ""
-        if not has_image:
+        if not has_image and is_info_request:
+            # ① 关键词强制搜索：命中即查，不依赖模型"要不要搜"的自主判断
+            forced_query = plain_text_content.strip()
+            logger.info(f"🔑 关键词命中，强制触发联网搜索: [{forced_query}]")
+            search_result = await smart_search(forced_query)
+            messages_list[-1]["content"] += _build_search_aside(forced_query, search_result)
+            raw_result = await call_deepseek_api(messages_list, force_json=True)
+
+        elif not has_image:
+            # ② 无关键词：交给 LLM 自主判断是否需要联网（ReAct Function Calling）
             agent_message = await call_deepseek_api_agent(messages_list, tools=AGENT_TOOLS)
 
             if agent_message is not None and agent_message.tool_calls:
@@ -664,10 +694,7 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage()):
                 if query:
                     search_result = await smart_search(query)
                     if not search_result:
-                        search_result = (
-                            f'【系统提示】：由于网络不佳，你没有在手机上搜到关于"{query}"的情报。'
-                            f'请尽量在你的【长期记忆】或【常识】里回忆一下这是什么。如果实在不知道，就烦躁地抱怨网络太差了。'
-                        )
+                        search_result = _search_miss_note(query)
 
                 messages_list.append({
                     "role": "assistant",
