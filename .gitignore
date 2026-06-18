@@ -13,6 +13,11 @@ __pycache__/
 *.pyc
 *.pyo
 
+# Build / packaging artifacts (editable installs etc.)
+*.egg-info/
+build/
+dist/
+
 # Linter & type checker cache
 .mypy_cache/
 .ruff_cache/
