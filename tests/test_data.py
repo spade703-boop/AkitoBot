@@ -129,6 +129,8 @@ def test_reload_assets_updates_existing_containers_and_counts_hooks():
     fake_paro.reload_paro_data = lambda: hook_calls.append("paro")
     fake_keyword = types.ModuleType("nonebot_plugin_akito.features.random_keyword")
     fake_keyword.reload_keyword_data = lambda: hook_calls.append("keyword")
+    fake_gift = types.ModuleType("nonebot_plugin_akito.features.gift")
+    fake_gift.reload_gift_config = lambda: hook_calls.append("gift")
     fake_retrieval = types.ModuleType("nonebot_plugin_akito.core.retrieval")
     fake_retrieval.reload_indices = lambda: hook_calls.append("retrieval") or 2
 
@@ -143,13 +145,14 @@ def test_reload_assets_updates_existing_containers_and_counts_hooks():
                 {
                     "nonebot_plugin_akito.features.random_paro": fake_paro,
                     "nonebot_plugin_akito.features.random_keyword": fake_keyword,
+                    "nonebot_plugin_akito.features.gift": fake_gift,
                     "nonebot_plugin_akito.core.retrieval": fake_retrieval,
                 },
             ),
         ):
             count = data.reload_assets()
 
-        assert count == 13
+        assert count == 14
         assert data.DIRECTOR_DB == {"director": "new"}
         assert data.DAILY_ROUTINE == {"morning": [{"status": "练习中"}]}
         assert data.WL2_ROUTINE == {"night": ["沉默"]}
@@ -159,7 +162,7 @@ def test_reload_assets_updates_existing_containers_and_counts_hooks():
         assert data.SCRIPT_DB == [{"context": "ctx", "dialogue": "dlg"}]
         assert data.RELATIONSHIP_DATA == [{"keywords": ["冬弥"], "content": "搭档"}]
         assert data.SLEEP_DB == {"complaints": ["困"]}
-        assert hook_calls == ["paro", "keyword", "pjsk", "retrieval"]
+        assert hook_calls == ["paro", "keyword", "gift", "pjsk", "retrieval"]
     finally:
         data.DIRECTOR_DB.clear()
         data.DIRECTOR_DB.update(snapshot["DIRECTOR_DB"])

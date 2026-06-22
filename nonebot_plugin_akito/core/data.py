@@ -232,6 +232,13 @@ def reload_assets() -> int:
     except Exception as e:
         logger.debug(f"🔄 random_keyword 热重载跳过: {e}")
 
+    try:
+        from ..features.gift import reload_gift_config
+        reload_gift_config()
+        count += 1
+    except Exception as e:
+        logger.debug(f"🔄 gift 热重载跳过: {e}")
+
     init_pjsk_knowledge()
     count += 1
 

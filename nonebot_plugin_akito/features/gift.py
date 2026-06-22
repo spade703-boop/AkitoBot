@@ -2,8 +2,9 @@
 
 玩法闭环（完全自包含，不依赖其他模块）：
 - `签到`：每天 1 次领取积分（赚取入口）。
-- `送礼 @对方 [礼物名]`：每天 1 次，消耗积分，按权重抽随机事件（普通/暴击/回礼/失败/意外），
-  累积两个群友之间的「亲密度（同好羁绊）」。
+- `送礼 @对方`：每天 1 次，系统从「你当前积分买得起的礼物」里随机送一份给对方，按权重抽随机事件
+  （普通/暴击/回礼/失败/意外），累积两个群友之间的「亲密度（同好羁绊）」。
+  顶档「自己产的彰冬饭」一旦抽中，必定触发「惊喜升级」固定结算。
 - `我的积分` / `礼物列表` / `亲密度` / `亲密度排行` 查询；`重置送礼`（超管）清空本群数据。
 
 数据与套路对照 features/random_keyword.py：按群存储、每日按日期重置、原子读写、文件优先+缺省兜底配置。
@@ -12,6 +13,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 from datetime import datetime
 import json
 import os
@@ -50,78 +52,81 @@ DEFAULT_GIFT_CONFIG: dict = {
         {"name": "自己产的彰冬饭", "cost": 800, "intimacy": 300},
     ],
     "return_gift": "彰冬谷子",  # 回礼自动回赠的礼物
+    "special_gift": "自己产的彰冬饭",  # 抽中它必定触发「惊喜升级」固定结算
+    "special_intimacy": 300,  # 彰冬饭固定结算的羁绊值
     "sign_in": {"min": 30, "max": 80},
     "crit_multiplier": 2,
     "mishap_refund_ratio": 0.5,
     "mishap_damaged_bonus": 5,
-    "mishap_stolen_bonus": 10,
     "mishap_allergy_bonus": 5,
     # 主事件权重
     "event_weights": {"normal": 60, "crit": 15, "return": 10, "fail": 10, "mishap": 5},
     # 意外子事件权重
-    "mishap_weights": {"damaged": 1, "stolen": 1, "upgrade": 1, "allergy": 1},
-    # 播报文案（同人女互动口吻，每类多条随机选用）。占位符：
-    #   {a}{b}{c} → 真 @；{gift}{upgraded}{amount}{third_amount}{total}{cost}{refund}{name} → 文本
+    "mishap_weights": {"damaged": 1, "allergy": 1},
+    # 播报文案（平和同好口吻，每类多条随机选用）。占位符：
+    #   {a}{b} → 真 @；{gift}{return_gift}{amount}{total}{cost}{refund}{name} → 文本
     "copy": {
         "sign_in": [
-            "{a} 今天也来打卡啦～到账 {amount} 积分，攒着给彰冬囤谷！（当前 {total}）",
-            "{a} 签到成功，+{amount} 积分。为爱发电也是要本钱的（当前 {total}）",
-            "{a} 来报到～奖励 {amount} 积分，离下一本同人志又近了一步（当前 {total}）",
+            "{a} 签到完成，今天领到 {amount} 积分，攒着慢慢送礼吧（当前 {total}）。",
+            "{a} 来打卡了，+{amount} 积分到账（当前 {total}）。",
+            "{a} 今天的签到积分 +{amount}，离心仪的礼物又近了点（当前 {total}）。",
         ],
         "normal": [
-            "{a} 给 {b} 投喂了一份【{gift}】，同好羁绊 +{amount}，你俩处成搭子了属于是～",
-            "{a} 把【{gift}】塞给了 {b}，羁绊 +{amount}，又是一对因彰冬而结缘的姐妹",
-            "{a} 给 {b} 递了份【{gift}】，+{amount} 羁绊，安插，下次一起开车（指写文）",
+            "{a} 给 {b} 投喂了一份【{gift}】，同好羁绊 +{amount}。",
+            "{a} 送了 {b} 一份【{gift}】，两个人的羁绊 +{amount}。",
+            "{a} 把【{gift}】送给了 {b}，羁绊默默 +{amount}。",
         ],
         "crit": [
-            "{a} 甩出一份【{gift}】，{b} 当场磕到 awsl！羁绊暴击 ×2，+{amount}，这谁顶得住啊！",
-            "{a} 的【{gift}】直击 {b} 的 XP 红心，上头了上头了，羁绊翻倍 +{amount}！",
-            "{a} 一份【{gift}】正中 {b} 本命，狠狠心动，羁绊暴击 +{amount}！",
+            "{a} 送的【{gift}】正好戳中 {b}，有点上头，羁绊翻倍 +{amount}。",
+            "{a} 这份【{gift}】送到 {b} 心坎上了，羁绊翻倍 +{amount}。",
+            "{a} 送的【{gift}】很对 {b} 的胃口，羁绊直接翻倍 +{amount}。",
         ],
         "return": [
-            "{a} 送了【{gift}】，{b} 太上头反手回赠一份【{return_gift}】，双向奔赴 +{amount}，好嗑！",
-            "{a} 给 {b} 投喂【{gift}】，{b} 也不能白拿，回了份【{return_gift}】，礼尚往来 +{amount}",
+            "{a} 送了【{gift}】，{b} 也回赠了一份【{return_gift}】，礼尚往来，羁绊 +{amount}。",
+            "{a} 给 {b} 送了【{gift}】，{b} 顺手回了份【{return_gift}】，羁绊 +{amount}。",
         ],
         "fail": [
-            "{a} 兴冲冲送上【{gift}】，结果 {b}：「这张……不是我本命角度。」积分照扣，羁绊没动，下次记好 XP（+0）",
-            "{a} 的【{gift}】没能戳中 {b} 的点，尴尬收场，积分白花了，羁绊 +0",
-            "{a} 送出【{gift}】，{b} 礼貌围笑了一下……没磕到，羁绊纹丝不动（+0）",
+            "{a} 送了【{gift}】，{b} 没太感冒，羁绊原地踏步。",
+            "{a} 送的【{gift}】好像没戳中 {b}，这次羁绊没怎么动。",
+            "{a} 送出【{gift}】，{b} 反应平平，羁绊没变化。",
         ],
         "mishap_damaged": [
-            "{a} 寄的【{gift}】路上被压坏了，俩人一起心疼半天反倒处出感情，各 +5，退你一半积分（{refund}）。",
-            "{a} 的【{gift}】运输翻车……{b} 陪着一起骂快递，患难见真情，羁绊各 +5，返还 {refund} 积分。",
-        ],
-        "mishap_stolen": [
-            "{a} 的【{gift}】半路被 {c} 截胡了！{c} 白嫖一波好感 +{third_amount}，同担相爱相杀（不是）",
-            "{a} 给 {b} 的【{gift}】被路过的 {c} 顺走了，{c} 凭空磕到 +{third_amount}，离谱但很合理",
-        ],
-        "mishap_stolen_nobody": [
-            "{a} 的【{gift}】半路不翼而飞……可惜群里没别人接盘，这份好感凭空蒸发了，羁绊 +0。",
-        ],
-        "mishap_upgrade": [
-            "{a} 送的【{gift}】拆开竟是隐藏款，直接升级成【{upgraded}】！血赚，羁绊按高的 +{amount}！",
-            "{a} 的【{gift}】开出了隐藏奖励——【{upgraded}】到手，{b} 狂喜，羁绊 +{amount}！",
+            "{a} 寄的【{gift}】路上有点压坏了，两个人一起心疼了一下，反而更亲近，羁绊各 +5，返还 {refund} 积分。",
+            "{a} 的【{gift}】运输途中磕了一下，{b} 陪着一起惋惜，羁绊各 +5，退还 {refund} 积分。",
         ],
         "mishap_allergy": [
-            "{b} 一看【{gift}】这个 XP 有点雷到了……{a} 连忙道歉，羁绊 +5（慰问），退一半积分（{refund}）。",
-            "{b} 对【{gift}】过敏了（雷点踩中），{a} 急忙赔不是，羁绊 +5，返还 {refund} 积分。",
+            "{b} 对【{gift}】有点不太适应，{a} 连忙道了歉，羁绊 +5（算是慰问），返还 {refund} 积分。",
+            "{b} 看到【{gift}】有点踩雷，{a} 赶紧赔了不是，羁绊 +5，退还 {refund} 积分。",
+        ],
+        # 顶档「自己产的彰冬饭」专属固定文案
+        "special": [
+            "{a} 送的彰冬饭非常合 {b} 的胃口，羁绊 +{amount}。",
+            "{a} 送的彰冬饭正好是 {b} 最喜欢的那个派生，羁绊 +{amount}。",
         ],
     },
     # 边界/错误提示（纯文本，可含 {cost}{total}{name}）
     "errors": {
-        "private_only": "送礼系统只在群里玩哦～",
-        "already_signed": "今天已经签到过啦，明天再来攒积分～",
-        "already_gifted": "今天的礼已经送过啦，明天再来～",
-        "need_target": "要 @一位群友 并写上礼物名才行～比如：送礼 @某人 彰冬谷子",
-        "need_gift": "想送啥礼物呀？写上礼物名，看看「礼物列表」吧～",
-        "self_target": "给自己送礼就没意思啦，去 @个搭子吧～",
-        "bot_target": "这个不能送给我啦～留着送给你的本命同好吧。",
-        "gift_not_found": "没找到礼物【{name}】，瞅瞅「礼物列表」吧。",
-        "insufficient": "积分不够哦，【{name}】需要 {cost}，你只有 {total}，先去签到攒攒～",
+        "private_only": "送礼系统在群里才能玩哦。",
+        "already_signed": "今天已经签到过了，明天再来吧。",
+        "already_gifted": "今天的礼已经送过了，明天再来吧。",
+        "need_target": "要 @一位群友 才能送礼哦，比如：送礼 @某人。",
+        "self_target": "给自己送礼就没什么意思啦，去 @一个搭子吧。",
+        "bot_target": "这个就不用送给我啦，留着送给你的本命同好吧。",
+        "insufficient": "积分还不太够，最便宜的【{name}】也要 {cost}，你现在有 {total}，先去签到攒一攒吧。",
     },
 }
 
-GIFT_CONFIG: dict = load_json_file(CONFIG_FILE, DEFAULT_GIFT_CONFIG)
+def _load_config() -> dict:
+    """加载送礼配置；无文件 / 解析失败时回落到默认配置的深拷贝。
+
+    关键：必须深拷贝，否则无文件时 GIFT_CONFIG 与 DEFAULT_GIFT_CONFIG 会是同一对象，
+    reload 时的 clear() 会连默认配置一起清空。
+    """
+    loaded = load_json_file(CONFIG_FILE, None)
+    return loaded if isinstance(loaded, dict) else copy.deepcopy(DEFAULT_GIFT_CONFIG)
+
+
+GIFT_CONFIG: dict = _load_config()
 
 
 def _cfg(key: str, default=None):
@@ -152,7 +157,7 @@ def _error(key: str, **fmt) -> str:
 def reload_gift_config() -> None:
     """热重载礼物配置（原地 clear+update，保持已持有引用不失效）。"""
     GIFT_CONFIG.clear()
-    GIFT_CONFIG.update(load_json_file(CONFIG_FILE, DEFAULT_GIFT_CONFIG))
+    GIFT_CONFIG.update(_load_config())
     logger.info("🔄 送礼配置已热重载")
 
 
@@ -163,25 +168,20 @@ def _gift_list() -> list[dict]:
     return gifts if isinstance(gifts, list) else []
 
 
-def _find_gift(name: str) -> dict | None:
-    """精确匹配礼物名；找不到时退化为唯一子串匹配。"""
-    name = (name or "").strip()
-    if not name:
-        return None
-    for gift in _gift_list():
-        if gift.get("name") == name:
-            return gift
-    matches = [gift for gift in _gift_list() if name in gift.get("name", "")]
-    return matches[0] if len(matches) == 1 else None
+def _affordable_gifts(points: int) -> list[dict]:
+    """返回当前积分买得起的礼物（cost ≤ points）。"""
+    return [g for g in _gift_list() if int(g.get("cost", 0)) <= int(points)]
 
 
-def _next_gift(gift: dict) -> dict | None:
-    """返回高一档礼物；已是最高档则返回 None。"""
+def _pick_gift(points: int, rng=random) -> dict | None:
+    """从买得起的礼物里随机抽一份；都买不起返回 None。"""
+    pool = _affordable_gifts(points)
+    return rng.choice(pool) if pool else None
+
+
+def _cheapest_gift() -> dict | None:
     gifts = _gift_list()
-    for idx, cur in enumerate(gifts):
-        if cur.get("name") == gift.get("name"):
-            return gifts[idx + 1] if idx + 1 < len(gifts) else None
-    return None
+    return min(gifts, key=lambda g: int(g.get("cost", 0))) if gifts else None
 
 
 # ==================== 数据持久化 ====================
@@ -310,13 +310,12 @@ def _roll_mishap(rng=random) -> str:
     return _weighted_choice(_cfg("mishap_weights", {}), rng)
 
 
-def _pick_third_party(group: dict, exclude: set, rng=random) -> str | None:
-    candidates = [uid for uid in group.get("users", {}) if uid not in exclude]
-    return rng.choice(candidates) if candidates else None
+def _is_special_gift(gift: dict) -> bool:
+    return gift.get("name") == _cfg("special_gift", "自己产的彰冬饭")
 
 
-def _settle(group: dict, sender_id: str, target_id: str, gift: dict, main_event: str,
-            mishap: str | None, third_party_id: str | None) -> dict:
+def _settle(group: dict, sender_id: str, target_id: str, gift: dict,
+            main_event: str, mishap: str | None) -> dict:
     """按已抽定的事件结算（直接改 group：亲密度/积分），返回播报所需数据。
 
     本函数不含随机、不做 IO，便于单测。调用方需先扣除礼物消耗积分。
@@ -330,9 +329,6 @@ def _settle(group: dict, sender_id: str, target_id: str, gift: dict, main_event:
         "gift": gift.get("name", ""),
         "amount": base,
         "refund": 0,
-        "upgraded": None,
-        "third_party": None,
-        "third_amount": 0,
         "return_gift": None,
     }
 
@@ -346,23 +342,16 @@ def _settle(group: dict, sender_id: str, target_id: str, gift: dict, main_event:
         _add_intimacy(group, sender_id, target_id, base)
     elif main_event == "fail":
         out["amount"] = 0
+    elif main_event == "special":
+        # 自己产的彰冬饭：必定惊喜升级，固定结算
+        out["amount"] = int(_cfg("special_intimacy", base))
+        _add_intimacy(group, sender_id, target_id, out["amount"])
     elif main_event == "mishap":
         if mishap == "damaged":
             out["amount"] = int(_cfg("mishap_damaged_bonus", 5))
             _add_intimacy(group, sender_id, target_id, out["amount"])
             out["refund"] = int(cost * ratio)
             _add_points(group, sender_id, out["refund"])
-        elif mishap == "stolen":
-            out["amount"] = 0
-            if third_party_id:
-                out["third_party"] = third_party_id
-                out["third_amount"] = int(_cfg("mishap_stolen_bonus", 10))
-                _add_intimacy(group, sender_id, third_party_id, out["third_amount"])
-        elif mishap == "upgrade":
-            upgraded = _next_gift(gift) or gift
-            out["upgraded"] = upgraded.get("name", "")
-            out["amount"] = int(upgraded.get("intimacy", base))
-            _add_intimacy(group, sender_id, target_id, out["amount"])
         elif mishap == "allergy":
             out["amount"] = int(_cfg("mishap_allergy_bonus", 5))
             _add_intimacy(group, sender_id, target_id, out["amount"])
@@ -375,11 +364,11 @@ def _settle(group: dict, sender_id: str, target_id: str, gift: dict, main_event:
 # ==================== 消息组装 ====================
 
 _PLACEHOLDER_RE = re.compile(r"(\{[a-z_]+\})")
-_AT_KEYS = {"a", "b", "c"}
+_AT_KEYS = {"a", "b"}
 
 
 def _render_with_ats(template: str, ctx: dict):
-    """把模板渲染成消息：{a}{b}{c} → 真 @，其余占位符 → 文本。"""
+    """把模板渲染成消息：{a}{b} → 真 @，其余占位符 → 文本。"""
     rendered = None
     for part in _PLACEHOLDER_RE.split(template):
         if not part:
@@ -400,11 +389,9 @@ def _render_with_ats(template: str, ctx: dict):
 
 
 def _outcome_copy_key(out: dict) -> str:
-    if out["event"] != "mishap":
-        return out["event"]
-    if out["mishap"] == "stolen" and not out.get("third_party"):
-        return "mishap_stolen_nobody"
-    return f"mishap_{out['mishap']}"
+    if out["event"] == "mishap":
+        return f"mishap_{out['mishap']}"
+    return out["event"]  # normal / crit / return / fail / special
 
 
 def _build_broadcast(out: dict, sender_id: str, target_id: str, rng=random):
@@ -412,11 +399,8 @@ def _build_broadcast(out: dict, sender_id: str, target_id: str, rng=random):
     ctx = {
         "a": sender_id,
         "b": target_id,
-        "c": out.get("third_party"),
         "gift": out.get("gift", ""),
-        "upgraded": out.get("upgraded") or out.get("gift", ""),
         "amount": out.get("amount", 0),
-        "third_amount": out.get("third_amount", 0),
         "refund": out.get("refund", 0),
         "return_gift": out.get("return_gift") or "",
     }
@@ -508,25 +492,14 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
 
     sender_id = event.get_user_id()
     target_qq = _first_at_qq(getattr(event, "original_message", None))
-    gift_name = (args.extract_plain_text() if args else "").strip()
 
-    # 参数校验
-    if not target_qq:
+    # 参数校验：只需 @ 一位群友（不再输入礼物名）
+    if not target_qq or target_qq == "all":
         await gift_cmd.finish(MessageSegment.reply(event.message_id) + _error("need_target"))
-    if target_qq == "all":
-        await gift_cmd.finish(MessageSegment.reply(event.message_id) + _error("self_target"))
     if target_qq == sender_id:
         await gift_cmd.finish(MessageSegment.reply(event.message_id) + _error("self_target"))
     if target_qq == str(getattr(bot, "self_id", "")):
         await gift_cmd.finish(MessageSegment.reply(event.message_id) + _error("bot_target"))
-    if not gift_name:
-        await gift_cmd.finish(MessageSegment.reply(event.message_id) + _error("need_gift"))
-
-    gift = _find_gift(gift_name)
-    if not gift:
-        await gift_cmd.finish(
-            MessageSegment.reply(event.message_id) + _error("gift_not_found", name=gift_name)
-        )
 
     today = _today_str()
     async with _GIFT_LOCK:
@@ -540,24 +513,26 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
                 MessageSegment.reply(event.message_id) + _error("already_gifted")
             )
 
-        cost = int(gift.get("cost", 0))
-        if int(sender.get("points", 0)) < cost:
+        points = int(sender.get("points", 0))
+        gift = _pick_gift(points)
+        if gift is None:
+            cheapest = _cheapest_gift() or {"name": "", "cost": 0}
             await gift_cmd.finish(
                 MessageSegment.reply(event.message_id)
-                + _error("insufficient", name=gift["name"], cost=cost, total=int(sender.get("points", 0)))
+                + _error("insufficient", name=cheapest.get("name", ""), cost=int(cheapest.get("cost", 0)), total=points)
             )
 
         # 先扣消耗，再按事件结算（部分意外会返还）
-        sender["points"] = int(sender["points"]) - cost
+        sender["points"] = points - int(gift["cost"])
         sender["last_gift"] = today
 
-        main_event = _roll_main_event()
-        mishap = _roll_mishap() if main_event == "mishap" else None
-        third_party = None
-        if mishap == "stolen":
-            third_party = _pick_third_party(group, {sender_id, target_qq})
+        if _is_special_gift(gift):
+            main_event, mishap = "special", None
+        else:
+            main_event = _roll_main_event()
+            mishap = _roll_mishap() if main_event == "mishap" else None
 
-        out = _settle(group, sender_id, target_qq, gift, main_event, mishap, third_party)
+        out = _settle(group, sender_id, target_qq, gift, main_event, mishap)
         _save_data(data)
 
         broadcast = _build_broadcast(out, sender_id, target_qq)
@@ -604,7 +579,7 @@ async def _(event: Event):
     lines = ["🎁 彰冬礼物档位（稀有度递增）："]
     for gift in _gift_list():
         lines.append(f"· {gift['name']}　{gift['cost']} 积分　羁绊+{gift['intimacy']}")
-    lines.append("用法：送礼 @某人 礼物名")
+    lines.append("用法：送礼 @某人 —— 系统会从你买得起的礼物里随机送一份。")
     await list_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
 
 
