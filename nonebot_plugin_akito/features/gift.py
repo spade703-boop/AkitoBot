@@ -44,25 +44,24 @@ SCHEMA_VERSION = 1
 DEFAULT_GIFT_CONFIG: dict = {
     # 礼物按「心意/稀有度」递增：买来的 → 自己产的。消耗积分与基础亲密度同步递增。
     "gifts": [
-        {"name": "彰冬谷子", "cost": 30, "intimacy": 10},
-        {"name": "彰冬豆豆眼", "cost": 60, "intimacy": 20},
-        {"name": "彰冬无料", "cost": 120, "intimacy": 40},
-        {"name": "彰冬同人本", "cost": 250, "intimacy": 80},
-        {"name": "彰冬约稿点图", "cost": 450, "intimacy": 150},
-        {"name": "自己产的彰冬饭", "cost": 800, "intimacy": 300},
+        {"name": "彰冬无料", "cost": 50, "intimacy": 12},
+        {"name": "彰冬谷子", "cost": 100, "intimacy": 28},
+        {"name": "彰冬豆豆眼", "cost": 200, "intimacy": 60},
+        {"name": "彰冬同人本", "cost": 350, "intimacy": 115},
+        {"name": "彰冬约稿点图", "cost": 550, "intimacy": 200},
+        {"name": "自己产的彰冬饭", "cost": 800, "intimacy": 320},
     ],
     "return_gift": "彰冬谷子",  # 回礼自动回赠的礼物
     "special_gift": "自己产的彰冬饭",  # 抽中它必定触发「惊喜升级」固定结算
-    "special_intimacy": 300,  # 彰冬饭固定结算的羁绊值
-    "sign_in": {"min": 30, "max": 80},
+    "special_intimacy": 320,  # 彰冬饭固定结算的羁绊值（抽中必定惊喜升级）
+    "sign_in": {"min": 50, "max": 100},
     "crit_multiplier": 2,
     "mishap_refund_ratio": 0.5,
-    "mishap_damaged_bonus": 5,
-    "mishap_allergy_bonus": 5,
+    "mishap_damaged_bonus": 8,
     # 主事件权重
-    "event_weights": {"normal": 60, "crit": 15, "return": 10, "fail": 10, "mishap": 5},
-    # 意外子事件权重
-    "mishap_weights": {"damaged": 1, "allergy": 1},
+    "event_weights": {"normal": 60, "crit": 16, "return": 12, "fail": 7, "mishap": 5},
+    # 意外子事件权重（只剩快递翻车）
+    "mishap_weights": {"damaged": 1},
     # 播报文案（平和同好口吻，每类多条随机选用）。占位符：
     #   {a}{b} → 真 @；{gift}{return_gift}{amount}{total}{cost}{refund}{name} → 文本
     "copy": {
@@ -91,12 +90,8 @@ DEFAULT_GIFT_CONFIG: dict = {
             "{a} 送出【{gift}】，{b} 反应平平，羁绊没变化。",
         ],
         "mishap_damaged": [
-            "{a} 寄的【{gift}】路上有点压坏了，两个人一起心疼了一下，反而更亲近，羁绊各 +5，返还 {refund} 积分。",
-            "{a} 的【{gift}】运输途中磕了一下，{b} 陪着一起惋惜，羁绊各 +5，退还 {refund} 积分。",
-        ],
-        "mishap_allergy": [
-            "{b} 对【{gift}】有点不太适应，{a} 连忙道了歉，羁绊 +5（算是慰问），返还 {refund} 积分。",
-            "{b} 看到【{gift}】有点踩雷，{a} 赶紧赔了不是，羁绊 +5，退还 {refund} 积分。",
+            "{a} 寄的【{gift}】路上有点压坏了，两个人一起心疼了一下，反而更亲近，羁绊各 +{amount}，返还 {refund} 积分。",
+            "{a} 的【{gift}】运输途中磕了一下，{b} 陪着一起惋惜，羁绊各 +{amount}，退还 {refund} 积分。",
         ],
         # 顶档「自己产的彰冬饭」专属固定文案
         "special": [
@@ -107,11 +102,10 @@ DEFAULT_GIFT_CONFIG: dict = {
     # 边界/错误提示（纯文本，可含 {cost}{total}{name}）
     "errors": {
         "private_only": "送礼系统在群里才能玩哦。",
-        "already_signed": "今天已经签到过了，明天再来吧。",
         "already_gifted": "今天的礼已经送过了，明天再来吧。",
-        "need_target": "要 @一位群友 才能送礼哦，比如：送礼 @某人。",
-        "self_target": "给自己送礼就没什么意思啦，去 @一个搭子吧。",
-        "bot_target": "这个就不用送给我啦，留着送给你的本命同好吧。",
+        "need_target": "送礼要 @一位群友 哦，系统会随机送出一份礼物。比如：送礼 @某人。",
+        "self_target": "给自己送礼就没什么意思啦，去 @一个群友吧。",
+        "bot_target": "小彰拒绝了你的礼物。",
         "insufficient": "积分还不太够，最便宜的【{name}】也要 {cost}，你现在有 {total}，先去签到攒一攒吧。",
     },
 }
@@ -174,9 +168,15 @@ def _affordable_gifts(points: int) -> list[dict]:
 
 
 def _pick_gift(points: int, rng=random) -> dict | None:
-    """从买得起的礼物里随机抽一份；都买不起返回 None。"""
+    """从买得起的礼物里加权随机抽一份：越贵权重越大（按档位顺序 1..k）；都买不起返回 None。
+
+    依赖 gifts 配置按 cost 升序排列（买得起的恰为前 k 档，权重即其档位序号）。
+    """
     pool = _affordable_gifts(points)
-    return rng.choice(pool) if pool else None
+    if not pool:
+        return None
+    weights = list(range(1, len(pool) + 1))
+    return rng.choices(pool, weights=weights, k=1)[0]
 
 
 def _cheapest_gift() -> dict | None:
@@ -346,17 +346,12 @@ def _settle(group: dict, sender_id: str, target_id: str, gift: dict,
         # 自己产的彰冬饭：必定惊喜升级，固定结算
         out["amount"] = int(_cfg("special_intimacy", base))
         _add_intimacy(group, sender_id, target_id, out["amount"])
-    elif main_event == "mishap":
-        if mishap == "damaged":
-            out["amount"] = int(_cfg("mishap_damaged_bonus", 5))
-            _add_intimacy(group, sender_id, target_id, out["amount"])
-            out["refund"] = int(cost * ratio)
-            _add_points(group, sender_id, out["refund"])
-        elif mishap == "allergy":
-            out["amount"] = int(_cfg("mishap_allergy_bonus", 5))
-            _add_intimacy(group, sender_id, target_id, out["amount"])
-            out["refund"] = int(cost * ratio)
-            _add_points(group, sender_id, out["refund"])
+    elif main_event == "mishap" and mishap == "damaged":
+        # 意外只剩快递翻车（damaged）：羁绊小幅 + 返还一半积分
+        out["amount"] = int(_cfg("mishap_damaged_bonus", 8))
+        _add_intimacy(group, sender_id, target_id, out["amount"])
+        out["refund"] = int(cost * ratio)
+        _add_points(group, sender_id, out["refund"])
 
     return out
 
@@ -462,12 +457,10 @@ async def _(event: Event):
         user = _get_user(group, user_id, _display_name(event))
 
         if user.get("last_sign_in") == today:
-            await sign_cmd.finish(
-                MessageSegment.reply(event.message_id) + _error("already_signed")
-            )
+            return  # 重复签到静默：群里另有签到 bot 应答，避免双重刷屏
 
         sign_cfg = _cfg("sign_in", {})
-        amount = random.randint(int(sign_cfg.get("min", 30)), int(sign_cfg.get("max", 80)))
+        amount = random.randint(int(sign_cfg.get("min", 50)), int(sign_cfg.get("max", 100)))
         user["points"] = int(user.get("points", 0)) + amount
         user["last_sign_in"] = today
         _save_data(data)
@@ -579,7 +572,7 @@ async def _(event: Event):
     lines = ["🎁 彰冬礼物档位（稀有度递增）："]
     for gift in _gift_list():
         lines.append(f"· {gift['name']}　{gift['cost']} 积分　羁绊+{gift['intimacy']}")
-    lines.append("用法：送礼 @某人 —— 系统会从你买得起的礼物里随机送一份。")
+    lines.append("用法：送礼 @某人 —— 系统会从你买得起的礼物里随机送一份（越贵的越容易抽中）。")
     await list_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
 
 

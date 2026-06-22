@@ -1,0 +1,96 @@
+{
+  "gifts": [
+    {
+      "name": "彰冬无料",
+      "cost": 50,
+      "intimacy": 12
+    },
+    {
+      "name": "彰冬谷子",
+      "cost": 100,
+      "intimacy": 28
+    },
+    {
+      "name": "彰冬豆豆眼",
+      "cost": 200,
+      "intimacy": 60
+    },
+    {
+      "name": "彰冬同人本",
+      "cost": 350,
+      "intimacy": 115
+    },
+    {
+      "name": "彰冬约稿点图",
+      "cost": 550,
+      "intimacy": 200
+    },
+    {
+      "name": "自己产的彰冬饭",
+      "cost": 800,
+      "intimacy": 320
+    }
+  ],
+  "return_gift": "彰冬谷子",
+  "special_gift": "自己产的彰冬饭",
+  "special_intimacy": 320,
+  "sign_in": {
+    "min": 50,
+    "max": 100
+  },
+  "crit_multiplier": 2,
+  "mishap_refund_ratio": 0.5,
+  "mishap_damaged_bonus": 8,
+  "event_weights": {
+    "normal": 60,
+    "crit": 16,
+    "return": 12,
+    "fail": 7,
+    "mishap": 5
+  },
+  "mishap_weights": {
+    "damaged": 1
+  },
+  "copy": {
+    "sign_in": [
+      "{a} 签到完成，今天领到 {amount} 积分，攒着慢慢送礼吧（当前 {total}）。",
+      "{a} 来打卡了，+{amount} 积分到账（当前 {total}）。",
+      "{a} 今天的签到积分 +{amount}，离心仪的礼物又近了点（当前 {total}）。"
+    ],
+    "normal": [
+      "{a} 给 {b} 投喂了一份【{gift}】，同好羁绊 +{amount}。",
+      "{a} 送了 {b} 一份【{gift}】，两个人的羁绊 +{amount}。",
+      "{a} 把【{gift}】送给了 {b}，羁绊默默 +{amount}。"
+    ],
+    "crit": [
+      "{a} 送的【{gift}】正好戳中 {b}，有点上头，羁绊翻倍 +{amount}。",
+      "{a} 这份【{gift}】送到 {b} 心坎上了，羁绊翻倍 +{amount}。",
+      "{a} 送的【{gift}】很对 {b} 的胃口，羁绊直接翻倍 +{amount}。"
+    ],
+    "return": [
+      "{a} 送了【{gift}】，{b} 也回赠了一份【{return_gift}】，礼尚往来，羁绊 +{amount}。",
+      "{a} 给 {b} 送了【{gift}】，{b} 顺手回了份【{return_gift}】，羁绊 +{amount}。"
+    ],
+    "fail": [
+      "{a} 送了【{gift}】，{b} 没太感冒，羁绊原地踏步。",
+      "{a} 送的【{gift}】好像没戳中 {b}，这次羁绊没怎么动。",
+      "{a} 送出【{gift}】，{b} 反应平平，羁绊没变化。"
+    ],
+    "mishap_damaged": [
+      "{a} 寄的【{gift}】路上有点压坏了，两个人一起心疼了一下，反而更亲近，羁绊各 +{amount}，返还 {refund} 积分。",
+      "{a} 的【{gift}】运输途中磕了一下，{b} 陪着一起惋惜，羁绊各 +{amount}，退还 {refund} 积分。"
+    ],
+    "special": [
+      "{a} 送的彰冬饭非常合 {b} 的胃口，羁绊 +{amount}。",
+      "{a} 送的彰冬饭正好是 {b} 最喜欢的那个派生，羁绊 +{amount}。"
+    ]
+  },
+  "errors": {
+    "private_only": "送礼系统在群里才能玩哦。",
+    "already_gifted": "今天的礼已经送过了，明天再来吧。",
+    "need_target": "送礼要 @一位群友 哦，系统会随机送出一份礼物。比如：送礼 @某人。",
+    "self_target": "给自己送礼就没什么意思啦，去 @一个群友吧。",
+    "bot_target": "小彰拒绝了你的礼物。",
+    "insufficient": "积分还不太够，最便宜的【{name}】也要 {cost}，你现在有 {total}，先去签到攒一攒吧。"
+  }
+}

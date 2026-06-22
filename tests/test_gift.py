@@ -1,4 +1,7 @@
-"""测试 gift.py 的送礼系统：纯逻辑函数 + 指令行为。"""
+"""测试 gift.py 的送礼系统：纯逻辑函数 + 指令行为。
+
+数值断言一律从配置读（`_gift_list()` / `_cfg(...)`），调数值不会让测试变脆。
+"""
 
 from __future__ import annotations
 
@@ -18,6 +21,14 @@ def _at(qq):
 
 def _bot():
     return Bot(self_id="114514")
+
+
+def _g0() -> dict:
+    return gift._gift_list()[0]  # 最低档
+
+
+def _top() -> dict:
+    return gift._gift_list()[-1]  # 顶档（自己产的彰冬饭）
 
 
 def _patch_runtime(monkeypatch, *, today: str = "2026-06-22", store: dict | None = None):
@@ -40,23 +51,46 @@ def _patch_runtime(monkeypatch, *, today: str = "2026-06-22", store: dict | None
 
 def test_affordable_gifts_filters_by_points():
     assert gift._affordable_gifts(0) == []
-    assert [g["name"] for g in gift._affordable_gifts(30)] == ["彰冬谷子"]
-    assert len(gift._affordable_gifts(1000)) == len(gift._gift_list())
+    first = _g0()
+    assert [g["name"] for g in gift._affordable_gifts(first["cost"])] == [first["name"]]
+    assert len(gift._affordable_gifts(10**9)) == len(gift._gift_list())
 
 
 def test_pick_gift_returns_none_when_broke():
     assert gift._pick_gift(0) is None
-    assert gift._pick_gift(30)["name"] == "彰冬谷子"  # 只有谷子买得起
+    first = _g0()
+    assert gift._pick_gift(first["cost"])["name"] == first["name"]  # 只买得起最低档
+
+
+def test_pick_gift_weighted_prefers_pricier():
+    """买得起的礼按档位序号加权（越贵权重越大），且候选只含买得起的。"""
+
+    class _RNG:
+        def __init__(self):
+            self.seen = None
+
+        def choices(self, population, weights=None, k=1):
+            self.seen = (population, weights)
+            return [population[-1]]
+
+    rng = _RNG()
+    # 用一个能买得起前几档（但买不起顶档）的积分
+    budget = gift._gift_list()[2]["cost"]
+    picked = gift._pick_gift(budget, rng=rng)
+
+    affordable = [g["name"] for g in gift._affordable_gifts(budget)]
+    assert [g["name"] for g in rng.seen[0]] == affordable
+    assert rng.seen[1] == list(range(1, len(affordable) + 1))  # 权重按档位递增
+    assert picked["name"] == affordable[-1]  # 末位（由桩 rng 决定）
 
 
 def test_cheapest_gift():
-    assert gift._cheapest_gift()["name"] == "彰冬谷子"
+    assert gift._cheapest_gift()["name"] == _g0()["name"]
 
 
 def test_is_special_gift():
-    top = gift._gift_list()[-1]
-    assert gift._is_special_gift(top) is True
-    assert gift._is_special_gift(gift._gift_list()[0]) is False
+    assert gift._is_special_gift(_top()) is True
+    assert gift._is_special_gift(_g0()) is False
 
 
 # ==================== 纯逻辑：亲密度 ====================
@@ -90,37 +124,36 @@ def test_roll_main_event_uses_config_weights(monkeypatch):
     assert gift._roll_main_event() == "crit"
 
 
-def test_roll_mishap_only_damaged_or_allergy(monkeypatch):
-    # 配置里意外子事件只剩 damaged / allergy
-    assert set(gift._cfg("mishap_weights")) == {"damaged", "allergy"}
+def test_roll_mishap_only_damaged():
+    # 意外子事件只剩快递翻车
+    assert set(gift._cfg("mishap_weights")) == {"damaged"}
+    assert gift._roll_mishap() == "damaged"
 
 
 # ==================== 纯逻辑：结算 _settle ====================
 
-def _g0():
-    return gift._gift_list()[0]  # 彰冬谷子 cost30 base10
-
-
 def test_settle_normal_adds_base_intimacy():
     group = gift._new_group()
+    base = _g0()["intimacy"]
     out = gift._settle(group, "A", "B", _g0(), "normal", None)
-    assert out["amount"] == 10
-    assert gift._get_intimacy(group, "A", "B") == 10
+    assert out["amount"] == base
+    assert gift._get_intimacy(group, "A", "B") == base
 
 
 def test_settle_crit_doubles():
     group = gift._new_group()
+    expected = _g0()["intimacy"] * gift._cfg("crit_multiplier")
     out = gift._settle(group, "A", "B", _g0(), "crit", None)
-    assert out["amount"] == 20
-    assert gift._get_intimacy(group, "A", "B") == 20
+    assert out["amount"] == expected
+    assert gift._get_intimacy(group, "A", "B") == expected
 
 
 def test_settle_return_sets_return_gift():
     group = gift._new_group()
     out = gift._settle(group, "A", "B", _g0(), "return", None)
-    assert out["amount"] == 10
-    assert out["return_gift"] == "彰冬谷子"
-    assert gift._get_intimacy(group, "A", "B") == 10
+    assert out["amount"] == _g0()["intimacy"]
+    assert out["return_gift"] == gift._cfg("return_gift")
+    assert gift._get_intimacy(group, "A", "B") == _g0()["intimacy"]
 
 
 def test_settle_fail_no_intimacy():
@@ -132,27 +165,21 @@ def test_settle_fail_no_intimacy():
 
 def test_settle_special_meal_uses_special_intimacy():
     group = gift._new_group()
-    top = gift._gift_list()[-1]  # 自己产的彰冬饭
-    out = gift._settle(group, "A", "B", top, "special", None)
+    out = gift._settle(group, "A", "B", _top(), "special", None)
     assert out["amount"] == gift._cfg("special_intimacy")
     assert gift._get_intimacy(group, "A", "B") == gift._cfg("special_intimacy")
 
 
 def test_settle_mishap_damaged_refunds_half():
     group = gift._new_group()
-    out = gift._settle(group, "A", "B", _g0(), "mishap", "damaged")
-    assert out["amount"] == 5
-    assert out["refund"] == 15  # 30 * 0.5
-    assert gift._get_intimacy(group, "A", "B") == 5
-    assert gift._get_user(group, "A")["points"] == 15  # 返还入账
-
-
-def test_settle_mishap_allergy_refunds_half():
-    group = gift._new_group()
-    out = gift._settle(group, "A", "B", _g0(), "mishap", "allergy")
-    assert out["amount"] == 5
-    assert out["refund"] == 15
-    assert gift._get_user(group, "A")["points"] == 15
+    g0 = _g0()
+    bonus = gift._cfg("mishap_damaged_bonus")
+    refund = int(g0["cost"] * gift._cfg("mishap_refund_ratio"))
+    out = gift._settle(group, "A", "B", g0, "mishap", "damaged")
+    assert out["amount"] == bonus
+    assert out["refund"] == refund
+    assert gift._get_intimacy(group, "A", "B") == bonus
+    assert gift._get_user(group, "A")["points"] == refund  # 返还入账
 
 
 # ==================== 纯逻辑：文案组装 ====================
@@ -161,7 +188,6 @@ def test_outcome_copy_key_mapping():
     assert gift._outcome_copy_key({"event": "normal", "mishap": None}) == "normal"
     assert gift._outcome_copy_key({"event": "special", "mishap": None}) == "special"
     assert gift._outcome_copy_key({"event": "mishap", "mishap": "damaged"}) == "mishap_damaged"
-    assert gift._outcome_copy_key({"event": "mishap", "mishap": "allergy"}) == "mishap_allergy"
 
 
 def test_render_with_ats_builds_at_and_text():
@@ -191,18 +217,20 @@ async def test_sign_cmd_rejects_private_chat(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_sign_cmd_grants_points_then_blocks_same_day(monkeypatch):
+async def test_sign_cmd_grants_then_silent_on_repeat(monkeypatch):
     state = _patch_runtime(monkeypatch)
-    monkeypatch.setattr(gift.random, "randint", lambda _a, _b: 50)
+    monkeypatch.setattr(gift.random, "randint", lambda _a, _b: 70)
 
+    # 首次签到：正常应答 + 入账
     with pytest.raises(FinishedException) as first:
         await gift.sign_cmd.handlers[0](Event(group_id=1001, user_id="10001"))
-    assert "50" in str(first.value.result)
-    assert state["groups"]["1001"]["users"]["10001"]["points"] == 50
+    assert "70" in str(first.value.result)
+    assert state["groups"]["1001"]["users"]["10001"]["points"] == 70
 
-    with pytest.raises(FinishedException) as second:
-        await gift.sign_cmd.handlers[0](Event(group_id=1001, user_id="10001"))
-    assert "今天已经签到过" in str(second.value.result)
+    # 当天重复签到：静默（不抛 finish、不改积分）
+    result = await gift.sign_cmd.handlers[0](Event(group_id=1001, user_id="10001"))
+    assert result is None
+    assert state["groups"]["1001"]["users"]["10001"]["points"] == 70
 
 
 # ==================== 指令：送礼 ====================
@@ -228,7 +256,7 @@ async def test_gift_cmd_rejects_self_and_bot(monkeypatch):
     bot_event = Event(group_id=1001, user_id="10001", original_message=[_at("114514")])
     with pytest.raises(FinishedException) as bot_exc:
         await gift.gift_cmd.handlers[0](_bot(), bot_event, Message(""))
-    assert "送给我" in str(bot_exc.value.result)
+    assert "拒绝" in str(bot_exc.value.result)
 
 
 @pytest.mark.asyncio
@@ -244,9 +272,9 @@ async def test_gift_cmd_rejects_insufficient_points(monkeypatch):
 async def test_gift_cmd_happy_path_deducts_and_adds_intimacy(monkeypatch):
     state = _patch_runtime(
         monkeypatch,
-        store={"groups": {"1001": {"users": {"10001": {"points": 100}}, "intimacy": {}}}},
+        store={"groups": {"1001": {"users": {"10001": {"points": 100000}}, "intimacy": {}}}},
     )
-    g0 = gift._gift_list()[0]  # 彰冬谷子 30/10
+    g0 = _g0()
     monkeypatch.setattr(gift, "_pick_gift", lambda _points, rng=gift.random: g0)
     monkeypatch.setattr(gift, "_roll_main_event", lambda: "normal")
 
@@ -255,19 +283,19 @@ async def test_gift_cmd_happy_path_deducts_and_adds_intimacy(monkeypatch):
         await gift.gift_cmd.handlers[0](_bot(), event, Message(""))
 
     result = str(exc.value.result)
-    assert "彰冬谷子" in result
+    assert g0["name"] in result
     assert "[at:10001]" in result and "[at:10002]" in result
-    assert state["groups"]["1001"]["users"]["10001"]["points"] == 70  # 100 - 30
-    assert state["groups"]["1001"]["intimacy"]["10001|||10002"] == 10
+    assert state["groups"]["1001"]["users"]["10001"]["points"] == 100000 - g0["cost"]
+    assert state["groups"]["1001"]["intimacy"]["10001|||10002"] == g0["intimacy"]
 
 
 @pytest.mark.asyncio
 async def test_gift_cmd_special_meal_always_special(monkeypatch):
     state = _patch_runtime(
         monkeypatch,
-        store={"groups": {"1001": {"users": {"10001": {"points": 1000}}, "intimacy": {}}}},
+        store={"groups": {"1001": {"users": {"10001": {"points": 100000}}, "intimacy": {}}}},
     )
-    top = gift._gift_list()[-1]  # 自己产的彰冬饭 800/300
+    top = _top()
     monkeypatch.setattr(gift, "_pick_gift", lambda _points, rng=gift.random: top)
     # 即便 roll 出别的事件，special 礼物也应强制走 special 分支
     monkeypatch.setattr(gift, "_roll_main_event", lambda: "fail")
@@ -278,7 +306,7 @@ async def test_gift_cmd_special_meal_always_special(monkeypatch):
 
     result = str(exc.value.result)
     assert "彰冬饭" in result
-    assert state["groups"]["1001"]["users"]["10001"]["points"] == 200  # 1000 - 800
+    assert state["groups"]["1001"]["users"]["10001"]["points"] == 100000 - top["cost"]
     assert state["groups"]["1001"]["intimacy"]["10001|||10002"] == gift._cfg("special_intimacy")
 
 
@@ -286,10 +314,10 @@ async def test_gift_cmd_special_meal_always_special(monkeypatch):
 async def test_gift_cmd_blocks_second_gift_same_day(monkeypatch):
     state = _patch_runtime(
         monkeypatch,
-        store={"groups": {"1001": {"users": {"10001": {"points": 100, "last_gift": "2026-06-22"}}, "intimacy": {}}}},
+        store={"groups": {"1001": {"users": {"10001": {"points": 100000, "last_gift": "2026-06-22"}}, "intimacy": {}}}},
     )
     event = Event(group_id=1001, user_id="10001", original_message=[_at("10002")])
     with pytest.raises(FinishedException) as exc:
         await gift.gift_cmd.handlers[0](_bot(), event, Message(""))
     assert "今天的礼已经送过" in str(exc.value.result)
-    assert state["groups"]["1001"]["users"]["10001"]["points"] == 100  # 未扣分
+    assert state["groups"]["1001"]["users"]["10001"]["points"] == 100000  # 未扣分
