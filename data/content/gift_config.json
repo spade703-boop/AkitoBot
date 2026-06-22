@@ -51,6 +51,32 @@
   "mishap_weights": {
     "damaged": 1
   },
+  "bond_levels": [
+    {
+      "min": 0,
+      "name": "初识"
+    },
+    {
+      "min": 100,
+      "name": "相熟"
+    },
+    {
+      "min": 400,
+      "name": "要好"
+    },
+    {
+      "min": 1000,
+      "name": "挚友"
+    },
+    {
+      "min": 2500,
+      "name": "知己"
+    },
+    {
+      "min": 6000,
+      "name": "莫逆之交"
+    }
+  ],
   "copy": {
     "sign_in": [
       "{a} 签到完成，今天领到 {amount} 积分，攒着慢慢送礼吧（当前 {total}）。",

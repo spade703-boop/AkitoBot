@@ -62,6 +62,15 @@ DEFAULT_GIFT_CONFIG: dict = {
     "event_weights": {"normal": 60, "crit": 16, "return": 12, "fail": 7, "mishap": 5},
     # 意外子事件权重（只剩快递翻车）
     "mishap_weights": {"damaged": 1},
+    # 羁绊等级：累计羁绊值 → 称号，门槛按礼物羁绊值校准（纯展示层，可热重载）
+    "bond_levels": [
+        {"min": 0, "name": "初识"},
+        {"min": 100, "name": "相熟"},
+        {"min": 400, "name": "要好"},
+        {"min": 1000, "name": "挚友"},
+        {"min": 2500, "name": "知己"},
+        {"min": 6000, "name": "莫逆之交"},
+    ],
     # 播报文案（平和同好口吻，每类多条随机选用）。占位符：
     #   {a}{b} → 真 @；{gift}{return_gift}{amount}{total}{cost}{refund}{name} → 文本
     "copy": {
@@ -195,7 +204,7 @@ def _new_data() -> dict:
 
 
 def _new_group() -> dict:
-    return {"users": {}, "intimacy": {}}
+    return {"users": {}, "intimacy": {}, "counts": {}}
 
 
 def _normalize_data(raw: object) -> dict:
@@ -209,9 +218,11 @@ def _normalize_data(raw: object) -> dict:
                 continue
             users = group.get("users") if isinstance(group.get("users"), dict) else {}
             intimacy = group.get("intimacy") if isinstance(group.get("intimacy"), dict) else {}
+            counts = group.get("counts") if isinstance(group.get("counts"), dict) else {}
             data["groups"][str(gid)] = {
                 "users": {str(uid): rec for uid, rec in users.items() if isinstance(rec, dict)},
                 "intimacy": {str(k): int(v) for k, v in intimacy.items() if isinstance(v, (int, float))},
+                "counts": {str(k): int(v) for k, v in counts.items() if isinstance(v, (int, float))},
             }
     return data
 
@@ -250,6 +261,7 @@ def _get_group(data: dict, group_id) -> dict:
         groups[str(group_id)] = group
     group.setdefault("users", {})
     group.setdefault("intimacy", {})
+    group.setdefault("counts", {})
     return group
 
 
@@ -290,6 +302,75 @@ def _add_points(group: dict, user_id, amount: int) -> int:
     user = _get_user(group, user_id)
     user["points"] = int(user.get("points", 0)) + int(amount)
     return user["points"]
+
+
+# ==================== 羁绊等级 / 送礼次数 ====================
+
+def _count_key(frm, to) -> str:
+    """有向送礼次数 key：送礼方 → 收礼方。"""
+    return f"{frm}>{to}"
+
+
+def _bump_count(group: dict, frm, to) -> int:
+    counts = group.setdefault("counts", {})
+    key = _count_key(frm, to)
+    counts[key] = int(counts.get(key, 0)) + 1
+    return counts[key]
+
+
+def _get_count(group: dict, frm, to) -> int:
+    return int(group.get("counts", {}).get(_count_key(frm, to), 0))
+
+
+def _bond_levels() -> list[dict]:
+    levels = _cfg("bond_levels", [])
+    return levels if isinstance(levels, list) and levels else DEFAULT_GIFT_CONFIG["bond_levels"]
+
+
+def _bond_level(value: int) -> dict:
+    """累计羁绊值 → 当前等级信息。
+
+    返回 {idx, name, cur_min, next_name, next_min, to_next}；满级时 next_* 为 None、to_next 为 0。
+    """
+    levels = _bond_levels()
+    value = int(value)
+    idx = 0
+    for i, lv in enumerate(levels):
+        if value >= int(lv.get("min", 0)):
+            idx = i
+        else:
+            break
+    cur = levels[idx]
+    nxt = levels[idx + 1] if idx + 1 < len(levels) else None
+    return {
+        "idx": idx,
+        "name": str(cur.get("name", "")),
+        "cur_min": int(cur.get("min", 0)),
+        "next_name": str(nxt.get("name", "")) if nxt else None,
+        "next_min": int(nxt.get("min", 0)) if nxt else None,
+        "to_next": max(0, int(nxt.get("min", 0)) - value) if nxt else 0,
+    }
+
+
+def _bond_card(group: dict, me: str, other: str):
+    """组装「我和 ta」的羁绊文字卡片（含真 @、等级、进度、分方向次数）。"""
+    value = _get_intimacy(group, me, other)
+    lv = _bond_level(value)
+    sent = _get_count(group, me, other)
+    recv = _get_count(group, other, me)
+
+    lines = [f"· 等级：{lv['name']}（Lv{lv['idx'] + 1}）"]
+    if lv["next_name"]:
+        lines.append(f"· 羁绊值 {value}，距「{lv['next_name']}」还差 {lv['to_next']}")
+    else:
+        lines.append(f"· 羁绊值 {value}，已达顶级「{lv['name']}」(Lv{lv['idx'] + 1})")
+    if sent or recv:
+        lines.append(f"· 你送出 {sent} 次，ta 回送 {recv} 次（共 {sent + recv} 次往来）")
+    else:
+        lines.append("· 你们还没互送过礼，快去 送礼 @ta 吧～")
+
+    head = MessageSegment.at(me) + " 和 " + MessageSegment.at(other) + " 的同好羁绊"
+    return head + "\n" + "\n".join(lines)
 
 
 # ==================== 随机事件 ====================
@@ -528,6 +609,7 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
             mishap = _roll_mishap() if main_event == "mishap" else None
 
         out = _settle(group, sender_id, target_qq, gift, main_event, mishap)
+        _bump_count(group, sender_id, target_qq)  # 记一次有向送礼（无论事件结果）
         _save_data(data)
 
         broadcast = _build_broadcast(out, sender_id, target_qq)
@@ -580,7 +662,7 @@ async def _(event: Event):
 
 # ==================== 指令：亲密度 ====================
 
-intimacy_cmd = on_command("亲密度", priority=5, block=True)
+intimacy_cmd = on_command("亲密度", aliases={"羁绊"}, priority=5, block=True)
 
 
 @intimacy_cmd.handle()
@@ -597,11 +679,8 @@ async def _(event: Event):
     target_qq = _first_at_qq(getattr(event, "original_message", None))
 
     if target_qq and target_qq not in ("all", user_id):
-        value = _get_intimacy(group, user_id, target_qq)
         await intimacy_cmd.finish(
-            MessageSegment.reply(event.message_id)
-            + MessageSegment.at(user_id) + " 和 " + MessageSegment.at(target_qq)
-            + f" 的同好羁绊：{value}"
+            MessageSegment.reply(event.message_id) + _bond_card(group, user_id, target_qq)
         )
 
     # 不带 @：列出自己羁绊最高的几位
@@ -612,7 +691,7 @@ async def _(event: Event):
         )
     lines = ["你的同好羁绊 Top："]
     for other_id, value in partners:
-        lines.append(f"· {_name_of(group, other_id)}：{value}")
+        lines.append(f"· {_name_of(group, other_id)}：{value}（{_bond_level(value)['name']}）")
     await intimacy_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
 
 
@@ -637,7 +716,7 @@ def _name_of(group: dict, user_id: str) -> str:
 
 # ==================== 指令：亲密度排行 ====================
 
-rank_cmd = on_command("亲密度排行", priority=5, block=True)
+rank_cmd = on_command("亲密度排行", aliases={"羁绊排行"}, priority=5, block=True)
 
 
 @rank_cmd.handle()
@@ -657,7 +736,7 @@ async def _(event: Event):
     lines = ["💞 本群同好羁绊排行："]
     for idx, (key, value) in enumerate(pairs, 1):
         a, b = key.split("|||")
-        lines.append(f"{idx}. {_name_of(group, a)} × {_name_of(group, b)}：{value}")
+        lines.append(f"{idx}. {_name_of(group, a)} × {_name_of(group, b)}：{value}（{_bond_level(value)['name']}）")
     await rank_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
 
 

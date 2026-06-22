@@ -113,6 +113,73 @@ def test_top_partners_sorted_desc():
     assert gift._top_partners(group, "A") == [("C", 10), ("B", 5)]
 
 
+# ==================== 羁绊等级 / 送礼次数 ====================
+
+def test_bond_level_brackets():
+    # 每级最低门槛恰好进入该级
+    assert gift._bond_level(0)["name"] == "初识"
+    assert gift._bond_level(99)["name"] == "初识"
+    assert gift._bond_level(100)["name"] == "相熟"
+    assert gift._bond_level(399)["name"] == "相熟"
+    assert gift._bond_level(400)["name"] == "要好"
+    assert gift._bond_level(1000)["name"] == "挚友"
+    assert gift._bond_level(2500)["name"] == "知己"
+    assert gift._bond_level(6000)["name"] == "莫逆之交"
+    assert gift._bond_level(999999)["name"] == "莫逆之交"
+
+
+def test_bond_level_progress_and_maxed():
+    mid = gift._bond_level(620)
+    assert mid["name"] == "要好"
+    assert mid["next_name"] == "挚友"
+    assert mid["to_next"] == 1000 - 620
+    assert mid["idx"] == 2  # Lv3
+    top = gift._bond_level(7000)
+    assert top["name"] == "莫逆之交"
+    assert top["next_name"] is None
+    assert top["to_next"] == 0
+
+
+def test_count_directed_bump_and_get():
+    group = gift._new_group()
+    assert gift._get_count(group, "A", "B") == 0
+    assert gift._bump_count(group, "A", "B") == 1
+    gift._bump_count(group, "A", "B")
+    gift._bump_count(group, "B", "A")
+    assert gift._get_count(group, "A", "B") == 2  # 有向：A→B
+    assert gift._get_count(group, "B", "A") == 1  # 有向：B→A
+
+
+def test_normalize_data_preserves_counts():
+    raw = {"groups": {"1001": {"users": {}, "intimacy": {"a|||b": 50}, "counts": {"a>b": 3, "b>a": 1}}}}
+    norm = gift._normalize_data(raw)
+    assert norm["groups"]["1001"]["counts"] == {"a>b": 3, "b>a": 1}
+    # 旧数据无 counts → 容错为空（不报错）
+    old = gift._normalize_data({"groups": {"1001": {"intimacy": {"a|||b": 5}}}})
+    assert old["groups"]["1001"]["counts"] == {}
+
+
+def test_bond_card_shows_level_and_directed_counts():
+    group = gift._new_group()
+    gift._add_intimacy(group, "10001", "10002", 620)
+    gift._bump_count(group, "10001", "10002")
+    gift._bump_count(group, "10001", "10002")
+    gift._bump_count(group, "10002", "10001")
+    card = str(gift._bond_card(group, "10001", "10002"))
+    assert "要好" in card
+    assert "距「挚友」还差" in card
+    assert "你送出 2 次" in card
+    assert "ta 回送 1 次" in card
+    assert "[at:10001]" in card and "[at:10002]" in card
+
+
+def test_bond_card_no_gifts_yet():
+    group = gift._new_group()
+    card = str(gift._bond_card(group, "10001", "10002"))
+    assert "初识" in card
+    assert "还没互送过礼" in card
+
+
 # ==================== 纯逻辑：随机抽取 ====================
 
 def test_weighted_choice_respects_zero_weights():
@@ -287,6 +354,7 @@ async def test_gift_cmd_happy_path_deducts_and_adds_intimacy(monkeypatch):
     assert "[at:10001]" in result and "[at:10002]" in result
     assert state["groups"]["1001"]["users"]["10001"]["points"] == 100000 - g0["cost"]
     assert state["groups"]["1001"]["intimacy"]["10001|||10002"] == g0["intimacy"]
+    assert state["groups"]["1001"]["counts"]["10001>10002"] == 1  # 有向送礼次数 +1
 
 
 @pytest.mark.asyncio
