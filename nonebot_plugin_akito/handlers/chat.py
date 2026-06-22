@@ -743,6 +743,9 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage()):
 
         # --- 11. OOC 暴力拦截 ---
         result = result.replace("绘名姐", "绘名").replace("老姐", "绘名").replace("杏姐", "杏").replace("心羽酱", "心羽")
+        # 姐弟关系兜底：回收「我的/我家(笨蛋/小…)绘名」这类占有式/肉麻称呼，去掉黏着的所有格；
+        # 不带「我的/我家」的「笨蛋绘名」等正常姐弟拌嘴保持不动。
+        result = re.sub(r"我(?:的|家)[笨蛋傻蠢可爱小宝贝亲的]{0,3}绘名", "绘名", result)
         result = result.replace("啊喂", "啊").replace("吗喂", "吗")
         result = re.sub(r'[\(（](战术掩饰|语感参考|动作参考)[^)）]*?[:：]?\s*', '(', result)
 
