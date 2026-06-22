@@ -32,6 +32,7 @@ from ..core import (
     TZ_CN,
     find_data_path,
     get_data_dir,
+    is_sleeping,
     load_json_file,
 )
 
@@ -111,6 +112,7 @@ DEFAULT_GIFT_CONFIG: dict = {
     # 边界/错误提示（纯文本，可含 {cost}{total}{name}）
     "errors": {
         "private_only": "送礼系统在群里才能玩哦。",
+        "sleeping": "💤 这会儿小彰睡着了，等 6 点天亮以后再来吧……",
         "already_gifted": "今天的礼已经送过了，明天再来吧。",
         "need_target": "送礼要 @一位群友 哦，系统会随机送出一份礼物。比如：送礼 @某人。",
         "self_target": "给自己送礼就没什么意思啦，去 @一个群友吧。",
@@ -532,6 +534,8 @@ async def _(event: Event):
 
     user_id = event.get_user_id()
     is_superuser = user_id == SUPERUSER_QQ  # 超管不限次（测试用）
+    if is_sleeping() and not is_superuser:  # 0–6 点睡眠拦截（超管除外）
+        await sign_cmd.finish(MessageSegment.reply(event.message_id) + _error("sleeping"))
     today = _today_str()
     async with _GIFT_LOCK:
         data = _load_data()
@@ -567,6 +571,8 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
 
     sender_id = event.get_user_id()
     is_superuser = sender_id == SUPERUSER_QQ  # 超管不限次（测试用）
+    if is_sleeping() and not is_superuser:  # 0–6 点睡眠拦截（超管除外）
+        await gift_cmd.finish(MessageSegment.reply(event.message_id) + _error("sleeping"))
     target_qq = _first_at_qq(getattr(event, "original_message", None))
 
     # 参数校验：只需 @ 一位群友（不再输入礼物名）

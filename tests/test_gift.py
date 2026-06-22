@@ -34,6 +34,7 @@ def _top() -> dict:
 def _patch_runtime(monkeypatch, *, today: str = "2026-06-22", store: dict | None = None):
     state = gift._normalize_data(store or {})
     monkeypatch.setattr(gift, "_today_str", lambda: today)
+    monkeypatch.setattr(gift, "is_sleeping", lambda: False)  # 默认非睡眠时段（防真实 0–6 点跑测试误拦）
 
     def _load():
         return deepcopy(state)
@@ -421,3 +422,45 @@ async def test_gift_cmd_superuser_ignores_daily_limit(monkeypatch):
         await gift.gift_cmd.handlers[0](_bot(), event, Message(""))
     assert g0["name"] in str(exc.value.result)
     assert state["groups"]["1001"]["users"][su]["points"] == 100000 - g0["cost"]
+
+
+# ==================== 睡眠拦截（0–6 点） ====================
+
+@pytest.mark.asyncio
+async def test_sign_cmd_blocked_during_sleep(monkeypatch):
+    state = _patch_runtime(monkeypatch)
+    monkeypatch.setattr(gift, "is_sleeping", lambda: True)
+    with pytest.raises(FinishedException) as exc:
+        await gift.sign_cmd.handlers[0](Event(group_id=1001, user_id="10001"))
+    assert "睡" in str(exc.value.result)
+    # 睡眠时段不入账、不写库
+    assert state["groups"].get("1001", {}).get("users", {}).get("10001", {}).get("points", 0) == 0
+
+
+@pytest.mark.asyncio
+async def test_gift_cmd_blocked_during_sleep(monkeypatch):
+    state = _patch_runtime(
+        monkeypatch,
+        store={"groups": {"1001": {"users": {"10001": {"points": 100000}}, "intimacy": {}}}},
+    )
+    monkeypatch.setattr(gift, "is_sleeping", lambda: True)
+    event = Event(group_id=1001, user_id="10001", original_message=[_at("10002")])
+    with pytest.raises(FinishedException) as exc:
+        await gift.gift_cmd.handlers[0](_bot(), event, Message(""))
+    assert "睡" in str(exc.value.result)
+    # 不扣分、不计数
+    assert state["groups"]["1001"]["users"]["10001"]["points"] == 100000
+    assert state["groups"]["1001"].get("counts", {}) == {}
+
+
+@pytest.mark.asyncio
+async def test_superuser_bypasses_sleep(monkeypatch):
+    su = gift.SUPERUSER_QQ
+    state = _patch_runtime(monkeypatch)
+    monkeypatch.setattr(gift, "is_sleeping", lambda: True)
+    monkeypatch.setattr(gift.random, "randint", lambda _a, _b: 60)
+    # 超管深夜仍可签到（不被睡眠拦截）
+    with pytest.raises(FinishedException) as exc:
+        await gift.sign_cmd.handlers[0](Event(group_id=1001, user_id=su))
+    assert "60" in str(exc.value.result)
+    assert state["groups"]["1001"]["users"][su]["points"] == 60
