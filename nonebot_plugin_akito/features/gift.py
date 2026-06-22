@@ -52,11 +52,11 @@ DEFAULT_GIFT_CONFIG: dict = {
         {"name": "彰冬豆豆眼", "cost": 200, "intimacy": 60},
         {"name": "彰冬同人本", "cost": 350, "intimacy": 115},
         {"name": "彰冬约稿点图", "cost": 550, "intimacy": 200},
-        {"name": "自己产的彰冬饭", "cost": 800, "intimacy": 320},
+        {"name": "自己产的彰冬饭", "cost": 819, "intimacy": 520},
     ],
     "return_gift": "彰冬谷子",  # 回礼自动回赠的礼物
     "special_gift": "自己产的彰冬饭",  # 抽中它必定触发「惊喜升级」固定结算
-    "special_intimacy": 320,  # 彰冬饭固定结算的羁绊值（抽中必定惊喜升级）
+    "special_intimacy": 520,  # 彰冬饭固定结算的羁绊值（抽中必定惊喜升级，压过暴击上限 400）
     "sign_in": {"min": 50, "max": 100},
     "crit_multiplier": 2,
     # 主事件权重（意外 5→10，让花样有机会出现）

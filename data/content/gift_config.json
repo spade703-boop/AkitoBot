@@ -27,13 +27,13 @@
     },
     {
       "name": "自己产的彰冬饭",
-      "cost": 800,
-      "intimacy": 320
+      "cost": 819,
+      "intimacy": 520
     }
   ],
   "return_gift": "彰冬谷子",
   "special_gift": "自己产的彰冬饭",
-  "special_intimacy": 320,
+  "special_intimacy": 520,
   "sign_in": {
     "min": 50,
     "max": 100
