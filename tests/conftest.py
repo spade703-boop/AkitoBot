@@ -81,6 +81,10 @@ class FakeMessageSegment(str):
     def image(cls, _data):
         return cls("[image]")
 
+    @classmethod
+    def at(cls, user_id):
+        return cls(f"[at:{user_id}]")
+
 
 class FakeEvent:
     def __init__(
