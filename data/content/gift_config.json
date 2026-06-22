@@ -119,6 +119,24 @@
       "name": "莫逆之交"
     }
   ],
+  "steal": {
+    "daily_limit": 2,
+    "victim_daily_limit": 3,
+    "min_target_points": 50,
+    "ratio": 0.1,
+    "cap": 40,
+    "protect_minutes": 60,
+    "caught_penalty": 15,
+    "reversal_amount": 10,
+    "bond_flat": 20,
+    "bond_ratio": 0.1,
+    "weights": {
+      "success": 5,
+      "caught": 3,
+      "whiff": 2,
+      "reversal": 1
+    }
+  },
   "copy": {
     "sign_in": [
       "{a} 签到完成，今天领到 {amount} 积分，攒着慢慢送礼吧（当前 {total}）。",
@@ -183,6 +201,22 @@
     "special": [
       "{a} 送的彰冬饭非常合 {b} 的胃口，羁绊 +{amount}。",
       "{a} 送的彰冬饭正好是 {b} 最喜欢的那个派生，羁绊 +{amount}。"
+    ],
+    "steal_success": [
+      "{a} 瞅准空子，顺走了 {b} {amount} 积分，溜了溜了～（羁绊 -{bond}）",
+      "{a} 趁 {b} 不注意摸走了 {amount} 积分，得手！（羁绊 -{bond}）"
+    ],
+    "steal_caught": [
+      "{a} 刚把手伸向 {b} 的钱包就被逮个正着，赔了 {amount} 积分赔罪（羁绊 -{bond}）",
+      "{a} 偷 {b} 失了风，当场社死，倒贴 {amount} 积分息事宁人（羁绊 -{bond}）"
+    ],
+    "steal_whiff": [
+      "{a} 摸了半天 {b} 的口袋，扑了个空，啥也没捞着（羁绊 -{bond}）",
+      "{a} 想顺 {b} 一笔，结果对方兜比脸还干净，无功而返（羁绊 -{bond}）"
+    ],
+    "steal_reversal": [
+      "{a} 偷鸡不成蚀把米，反被 {b} 顺走了 {amount} 积分，笑死（羁绊 -{bond}）",
+      "{a} 想偷 {b}，反倒被将一军，倒搭 {amount} 积分（羁绊 -{bond}）"
     ]
   },
   "errors": {
@@ -192,6 +226,12 @@
     "need_target": "送礼要 @一位群友 哦，系统会随机送出一份礼物。比如：送礼 @某人。",
     "self_target": "给自己送礼就没什么意思啦，去 @一个群友吧。",
     "bot_target": "小彰拒绝了你的礼物。",
-    "insufficient": "积分还不太够，最便宜的【{name}】也要 {cost}，你现在有 {total}，先去签到攒一攒吧。"
+    "insufficient": "积分还不太够，最便宜的【{name}】也要 {cost}，你现在有 {total}，先去签到攒一攒吧。",
+    "steal_need_target": "偷要 @一个目标 才行，比如：偷 @某人。",
+    "steal_self": "偷自己？图啥呀。",
+    "steal_bot": "偷到小彰头上来了，胆子不小——不给。",
+    "steal_limit": "你今天的手气用完了，明天再来当大盗吧。",
+    "steal_protected": "现在偷不了 ta（刚签到受保护，或今天被偷太多次了），换个目标吧。",
+    "steal_too_poor": "对方兜里比脸还干净（不足 {min} 积分），没什么好偷的。"
   }
 }

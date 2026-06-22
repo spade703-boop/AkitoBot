@@ -5,6 +5,7 @@
 - `送礼 @对方`：每天 1 次，系统从「你当前积分买得起的礼物」里随机送一份给对方，按权重抽随机事件
   （普通/暴击/回礼/失败/意外），累积两个群友之间的「亲密度（同好羁绊）」。
   顶档「自己产的彰冬饭」一旦抽中，必定触发「惊喜升级」固定结算。
+- `偷 @对方`：每天 2 次，小概率顺走对方少量积分（强保护 + 偷必掉羁绊，偷越亲近掉越多）。
 - `我的积分` / `礼物列表` / `亲密度` / `亲密度排行` 查询；`重置送礼`（超管）清空本群数据。
 
 数据与套路对照 features/random_keyword.py：按群存储、每日按日期重置、原子读写、文件优先+缺省兜底配置。
@@ -19,6 +20,7 @@ import json
 import os
 import random
 import re
+import time
 
 from nonebot import on_command
 from nonebot.adapters import Bot, Event, Message
@@ -80,6 +82,20 @@ DEFAULT_GIFT_CONFIG: dict = {
         {"min": 2500, "name": "知己"},
         {"min": 6000, "name": "莫逆之交"},
     ],
+    # 偷积分：对抗玩法（轻量·强保护·掉羁绊），每项可配可热重载
+    "steal": {
+        "daily_limit": 2,          # 每人每天偷几次
+        "victim_daily_limit": 3,   # 每人每天最多被偷几次（护受害者）
+        "min_target_points": 50,   # 对方低于此分免疫（不踩穷人）
+        "ratio": 0.1,              # 得手时拿走对方余额比例
+        "cap": 40,                 # 得手封顶
+        "protect_minutes": 60,     # 签到后保护期（分钟）
+        "caught_penalty": 15,      # 被抓时倒赔对方
+        "reversal_amount": 10,     # 反被顺走的额度
+        "bond_flat": 20,           # 偷一次的羁绊基础代价
+        "bond_ratio": 0.1,         # 额外按当前羁绊比例扣（偷越亲近掉越多）
+        "weights": {"success": 5, "caught": 3, "whiff": 2, "reversal": 1},
+    },
     # 播报文案（平和同好口吻，每类多条随机选用）。占位符：
     #   {a}{b} → 真 @；{gift}{return_gift}{amount}{total}{cost}{refund}{name} → 文本
     "copy": {
@@ -148,6 +164,23 @@ DEFAULT_GIFT_CONFIG: dict = {
             "{a} 送的彰冬饭非常合 {b} 的胃口，羁绊 +{amount}。",
             "{a} 送的彰冬饭正好是 {b} 最喜欢的那个派生，羁绊 +{amount}。",
         ],
+        # 偷：四种结果（{amount} 积分、{bond} 掉的羁绊）
+        "steal_success": [
+            "{a} 瞅准空子，顺走了 {b} {amount} 积分，溜了溜了～（羁绊 -{bond}）",
+            "{a} 趁 {b} 不注意摸走了 {amount} 积分，得手！（羁绊 -{bond}）",
+        ],
+        "steal_caught": [
+            "{a} 刚把手伸向 {b} 的钱包就被逮个正着，赔了 {amount} 积分赔罪（羁绊 -{bond}）",
+            "{a} 偷 {b} 失了风，当场社死，倒贴 {amount} 积分息事宁人（羁绊 -{bond}）",
+        ],
+        "steal_whiff": [
+            "{a} 摸了半天 {b} 的口袋，扑了个空，啥也没捞着（羁绊 -{bond}）",
+            "{a} 想顺 {b} 一笔，结果对方兜比脸还干净，无功而返（羁绊 -{bond}）",
+        ],
+        "steal_reversal": [
+            "{a} 偷鸡不成蚀把米，反被 {b} 顺走了 {amount} 积分，笑死（羁绊 -{bond}）",
+            "{a} 想偷 {b}，反倒被将一军，倒搭 {amount} 积分（羁绊 -{bond}）",
+        ],
     },
     # 边界/错误提示（纯文本，可含 {cost}{total}{name}）
     "errors": {
@@ -158,6 +191,12 @@ DEFAULT_GIFT_CONFIG: dict = {
         "self_target": "给自己送礼就没什么意思啦，去 @一个群友吧。",
         "bot_target": "小彰拒绝了你的礼物。",
         "insufficient": "积分还不太够，最便宜的【{name}】也要 {cost}，你现在有 {total}，先去签到攒一攒吧。",
+        "steal_need_target": "偷要 @一个目标 才行，比如：偷 @某人。",
+        "steal_self": "偷自己？图啥呀。",
+        "steal_bot": "偷到小彰头上来了，胆子不小——不给。",
+        "steal_limit": "你今天的手气用完了，明天再来当大盗吧。",
+        "steal_protected": "现在偷不了 ta（刚签到受保护，或今天被偷太多次了），换个目标吧。",
+        "steal_too_poor": "对方兜里比脸还干净（不足 {min} 积分），没什么好偷的。",
     },
 }
 
@@ -317,6 +356,11 @@ def _get_user(group: dict, user_id, display_name: str = "") -> dict:
     user.setdefault("last_sign_in", "")
     user.setdefault("last_gift", "")
     user.setdefault("display_name", "")
+    user.setdefault("steal_date", "")        # 贼：上次偷的日期
+    user.setdefault("steal_used", 0)         # 贼：今日已偷次数
+    user.setdefault("robbed_date", "")       # 受害者：上次被偷日期
+    user.setdefault("robbed_count", 0)       # 受害者：今日被偷次数
+    user.setdefault("protect_until", 0)      # 受害者：签到保护期截止 epoch
     if display_name:
         user["display_name"] = display_name
     return user
@@ -491,6 +535,52 @@ def _settle(group: dict, sender_id: str, target_id: str, gift: dict,
     return out
 
 
+# ==================== 偷积分 ====================
+
+def _steal_cfg() -> dict:
+    c = _cfg("steal", {})
+    return c if isinstance(c, dict) and c else DEFAULT_GIFT_CONFIG["steal"]
+
+
+def _steal_outcome(rng=random) -> str:
+    return _weighted_choice(_steal_cfg().get("weights", {}), rng)
+
+
+def _settle_steal(group: dict, thief_id: str, victim_id: str, outcome: str) -> dict:
+    """按已抽定的偷窃结果结算（改 group：积分/羁绊），返回播报数据。
+
+    不含随机/IO，便于单测。每次偷都付羁绊代价（封底 0，偷越亲近掉越多）。
+    """
+    cfg = _steal_cfg()
+    thief = _get_user(group, thief_id)
+    victim = _get_user(group, victim_id)
+    bond = _get_intimacy(group, thief_id, victim_id)
+    drop = min(int(int(cfg.get("bond_flat", 20)) + float(cfg.get("bond_ratio", 0.1)) * bond), bond)
+    out = {"outcome": outcome, "amount": 0, "bond": drop}
+
+    if outcome == "success":
+        vp = int(victim.get("points", 0))
+        amt = min(int(vp * float(cfg.get("ratio", 0.1))), int(cfg.get("cap", 40)), vp)
+        victim["points"] = vp - amt
+        thief["points"] = int(thief.get("points", 0)) + amt
+        out["amount"] = amt
+    elif outcome == "caught":
+        pen = min(int(cfg.get("caught_penalty", 15)), int(thief.get("points", 0)))
+        thief["points"] = int(thief.get("points", 0)) - pen
+        victim["points"] = int(victim.get("points", 0)) + pen
+        out["amount"] = pen
+    elif outcome == "reversal":
+        amt = min(int(cfg.get("reversal_amount", 10)), int(thief.get("points", 0)))
+        thief["points"] = int(thief.get("points", 0)) - amt
+        victim["points"] = int(victim.get("points", 0)) + amt
+        out["amount"] = amt
+    # whiff：积分不动
+
+    if drop:
+        _add_intimacy(group, thief_id, victim_id, -drop)
+    return out
+
+
 # ==================== 消息组装 ====================
 
 _PLACEHOLDER_RE = re.compile(r"(\{[a-z_]+\})")
@@ -601,6 +691,7 @@ async def _(event: Event):
         amount = random.randint(int(sign_cfg.get("min", 50)), int(sign_cfg.get("max", 100)))
         user["points"] = int(user.get("points", 0)) + amount
         user["last_sign_in"] = today
+        user["protect_until"] = time.time() + int(_steal_cfg().get("protect_minutes", 60)) * 60
         _save_data(data)
 
         template = random.choice(_copy("sign_in"))
@@ -672,6 +763,72 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
 
         broadcast = _build_broadcast(out, sender_id, target_qq)
         await gift_cmd.finish(MessageSegment.reply(event.message_id) + broadcast)
+
+
+# ==================== 指令：偷 ====================
+
+steal_cmd = on_command("偷", aliases={"偷积分"}, priority=5, block=True)
+
+
+@steal_cmd.handle()
+async def _(bot: Bot, event: Event):
+    group_id, rejection = _resolve_group(event)
+    if rejection:
+        await steal_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
+    if group_id is None:
+        return
+
+    thief_id = event.get_user_id()
+    is_superuser = thief_id == SUPERUSER_QQ  # 超管不限、跳过保护与睡眠（测试用）
+    if is_sleeping() and not is_superuser:
+        await steal_cmd.finish(MessageSegment.reply(event.message_id) + _error("sleeping"))
+    target_qq = _first_at_qq(getattr(event, "original_message", None))
+
+    if not target_qq or target_qq == "all":
+        await steal_cmd.finish(MessageSegment.reply(event.message_id) + _error("steal_need_target"))
+    if target_qq == thief_id:
+        await steal_cmd.finish(MessageSegment.reply(event.message_id) + _error("steal_self"))
+    if target_qq == str(getattr(bot, "self_id", "")):
+        await steal_cmd.finish(MessageSegment.reply(event.message_id) + _error("steal_bot"))
+
+    cfg = _steal_cfg()
+    today = _today_str()
+    async with _GIFT_LOCK:
+        data = _load_data()
+        group = _get_group(data, group_id)
+        thief = _get_user(group, thief_id, _display_name(event))
+        victim = _get_user(group, target_qq)
+
+        if not is_superuser:
+            if thief.get("steal_date") != today:
+                thief["steal_date"], thief["steal_used"] = today, 0
+            if int(thief.get("steal_used", 0)) >= int(cfg.get("daily_limit", 2)):
+                await steal_cmd.finish(MessageSegment.reply(event.message_id) + _error("steal_limit"))
+            if int(victim.get("points", 0)) < int(cfg.get("min_target_points", 50)):
+                await steal_cmd.finish(
+                    MessageSegment.reply(event.message_id)
+                    + _error("steal_too_poor", min=int(cfg.get("min_target_points", 50)))
+                )
+            if time.time() < float(victim.get("protect_until", 0)):
+                await steal_cmd.finish(MessageSegment.reply(event.message_id) + _error("steal_protected"))
+            if victim.get("robbed_date") != today:
+                victim["robbed_date"], victim["robbed_count"] = today, 0
+            if int(victim.get("robbed_count", 0)) >= int(cfg.get("victim_daily_limit", 3)):
+                await steal_cmd.finish(MessageSegment.reply(event.message_id) + _error("steal_protected"))
+
+        outcome = _steal_outcome()
+        out = _settle_steal(group, thief_id, target_qq, outcome)
+
+        if not is_superuser:
+            thief["steal_date"], thief["steal_used"] = today, int(thief.get("steal_used", 0)) + 1
+            victim["robbed_date"], victim["robbed_count"] = today, int(victim.get("robbed_count", 0)) + 1
+        _save_data(data)
+
+        template = random.choice(_copy(f"steal_{outcome}"))
+        msg = _render_with_ats(template, {
+            "a": thief_id, "b": target_qq, "amount": out["amount"], "bond": out["bond"],
+        })
+        await steal_cmd.finish(MessageSegment.reply(event.message_id) + msg)
 
 
 # ==================== 指令：我的积分 ====================

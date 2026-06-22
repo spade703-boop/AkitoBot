@@ -507,3 +507,209 @@ async def test_superuser_bypasses_sleep(monkeypatch):
         await gift.sign_cmd.handlers[0](Event(group_id=1001, user_id=su))
     assert "60" in str(exc.value.result)
     assert state["groups"]["1001"]["users"][su]["points"] == 60
+
+
+# ==================== 偷积分 ====================
+
+def _steal_group(thief_pts=0, victim_pts=200, bond=0):
+    group = gift._new_group()
+    gift._get_user(group, "T")["points"] = thief_pts
+    gift._get_user(group, "V")["points"] = victim_pts
+    if bond:
+        gift._add_intimacy(group, "T", "V", bond)
+    return group
+
+
+def test_steal_outcome_in_weights():
+    keys = set(gift._steal_cfg()["weights"])
+    assert keys == {"success", "caught", "whiff", "reversal"}
+    assert gift._steal_outcome() in keys
+
+
+def test_settle_steal_success_capped_and_moves_points():
+    cfg = gift._steal_cfg()
+    group = _steal_group(thief_pts=0, victim_pts=1000)
+    out = gift._settle_steal(group, "T", "V", "success")
+    amt = min(int(1000 * cfg["ratio"]), cfg["cap"], 1000)
+    assert out["amount"] == amt == cfg["cap"]  # 封顶生效
+    assert gift._get_user(group, "T")["points"] == amt
+    assert gift._get_user(group, "V")["points"] == 1000 - amt
+
+
+def test_settle_steal_caught_pays_victim():
+    cfg = gift._steal_cfg()
+    group = _steal_group(thief_pts=100, victim_pts=200)
+    out = gift._settle_steal(group, "T", "V", "caught")
+    assert out["amount"] == cfg["caught_penalty"]
+    assert gift._get_user(group, "T")["points"] == 100 - cfg["caught_penalty"]
+    assert gift._get_user(group, "V")["points"] == 200 + cfg["caught_penalty"]
+
+
+def test_settle_steal_reversal_pays_victim():
+    cfg = gift._steal_cfg()
+    group = _steal_group(thief_pts=100, victim_pts=200)
+    out = gift._settle_steal(group, "T", "V", "reversal")
+    assert out["amount"] == cfg["reversal_amount"]
+    assert gift._get_user(group, "T")["points"] == 100 - cfg["reversal_amount"]
+    assert gift._get_user(group, "V")["points"] == 200 + cfg["reversal_amount"]
+
+
+def test_settle_steal_whiff_keeps_points():
+    group = _steal_group(thief_pts=100, victim_pts=200)
+    out = gift._settle_steal(group, "T", "V", "whiff")
+    assert out["amount"] == 0
+    assert gift._get_user(group, "T")["points"] == 100
+    assert gift._get_user(group, "V")["points"] == 200
+
+
+def test_settle_steal_bond_cost_scales_and_floors():
+    cfg = gift._steal_cfg()
+    # 高羁绊：掉得多（偷越亲近掉越狠）
+    group = _steal_group(bond=1000)
+    out = gift._settle_steal(group, "T", "V", "whiff")
+    assert out["bond"] == int(cfg["bond_flat"] + cfg["bond_ratio"] * 1000)
+    assert gift._get_intimacy(group, "T", "V") == 1000 - out["bond"]
+    # 低羁绊：封底 0，不为负
+    group2 = _steal_group(bond=5)
+    out2 = gift._settle_steal(group2, "T", "V", "whiff")
+    assert out2["bond"] == 5  # drop 被夹到当前羁绊
+    assert gift._get_intimacy(group2, "T", "V") == 0
+
+
+@pytest.mark.asyncio
+async def test_steal_cmd_success_moves_points_and_counts(monkeypatch):
+    state = _patch_runtime(
+        monkeypatch,
+        store={"groups": {"1001": {"users": {
+            "10001": {"points": 0}, "10002": {"points": 1000},
+        }, "intimacy": {}}}},
+    )
+    monkeypatch.setattr(gift, "_steal_outcome", lambda rng=gift.random: "success")
+    monkeypatch.setattr(gift.time, "time", lambda: 0.0)
+    event = Event(group_id=1001, user_id="10001", original_message=[_at("10002")])
+    with pytest.raises(FinishedException) as exc:
+        await gift.steal_cmd.handlers[0](_bot(), event)
+    cap = gift._steal_cfg()["cap"]
+    assert "[at:10001]" in str(exc.value.result)
+    assert state["groups"]["1001"]["users"]["10001"]["points"] == cap
+    assert state["groups"]["1001"]["users"]["10002"]["points"] == 1000 - cap
+    assert state["groups"]["1001"]["users"]["10001"]["steal_used"] == 1
+    assert state["groups"]["1001"]["users"]["10002"]["robbed_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_steal_cmd_rejects_self_bot_no_target(monkeypatch):
+    _patch_runtime(monkeypatch, store={"groups": {"1001": {"users": {"10001": {"points": 100}}, "intimacy": {}}}})
+    with pytest.raises(FinishedException) as e1:
+        await gift.steal_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="10001", original_message=[]))
+    assert "@一个目标" in str(e1.value.result)
+    with pytest.raises(FinishedException) as e2:
+        await gift.steal_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="10001", original_message=[_at("10001")]))
+    assert "偷自己" in str(e2.value.result)
+    with pytest.raises(FinishedException) as e3:
+        await gift.steal_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="10001", original_message=[_at("114514")]))
+    assert "小彰" in str(e3.value.result)
+
+
+@pytest.mark.asyncio
+async def test_steal_cmd_blocks_too_poor(monkeypatch):
+    _patch_runtime(
+        monkeypatch,
+        store={"groups": {"1001": {"users": {"10001": {"points": 100}, "10002": {"points": 10}}, "intimacy": {}}}},
+    )
+    monkeypatch.setattr(gift.time, "time", lambda: 0.0)
+    event = Event(group_id=1001, user_id="10001", original_message=[_at("10002")])
+    with pytest.raises(FinishedException) as exc:
+        await gift.steal_cmd.handlers[0](_bot(), event)
+    assert "没什么好偷" in str(exc.value.result)
+
+
+@pytest.mark.asyncio
+async def test_steal_cmd_daily_limit_blocks(monkeypatch):
+    limit = gift._steal_cfg()["daily_limit"]
+    _patch_runtime(
+        monkeypatch,
+        store={"groups": {"1001": {"users": {
+            "10001": {"points": 100, "steal_date": "2026-06-22", "steal_used": limit},
+            "10002": {"points": 500},
+        }, "intimacy": {}}}},
+    )
+    monkeypatch.setattr(gift.time, "time", lambda: 0.0)
+    event = Event(group_id=1001, user_id="10001", original_message=[_at("10002")])
+    with pytest.raises(FinishedException) as exc:
+        await gift.steal_cmd.handlers[0](_bot(), event)
+    assert "手气用完" in str(exc.value.result)
+
+
+@pytest.mark.asyncio
+async def test_steal_cmd_blocked_by_signin_protection(monkeypatch):
+    _patch_runtime(
+        monkeypatch,
+        store={"groups": {"1001": {"users": {
+            "10001": {"points": 100}, "10002": {"points": 500, "protect_until": 9999.0},
+        }, "intimacy": {}}}},
+    )
+    monkeypatch.setattr(gift.time, "time", lambda: 1000.0)  # < protect_until → 受保护
+    event = Event(group_id=1001, user_id="10001", original_message=[_at("10002")])
+    with pytest.raises(FinishedException) as exc:
+        await gift.steal_cmd.handlers[0](_bot(), event)
+    assert "偷不了" in str(exc.value.result)
+
+
+@pytest.mark.asyncio
+async def test_steal_cmd_victim_daily_limit_blocks(monkeypatch):
+    vlimit = gift._steal_cfg()["victim_daily_limit"]
+    _patch_runtime(
+        monkeypatch,
+        store={"groups": {"1001": {"users": {
+            "10001": {"points": 100},
+            "10002": {"points": 500, "robbed_date": "2026-06-22", "robbed_count": vlimit},
+        }, "intimacy": {}}}},
+    )
+    monkeypatch.setattr(gift.time, "time", lambda: 0.0)
+    event = Event(group_id=1001, user_id="10001", original_message=[_at("10002")])
+    with pytest.raises(FinishedException) as exc:
+        await gift.steal_cmd.handlers[0](_bot(), event)
+    assert "偷不了" in str(exc.value.result)
+
+
+@pytest.mark.asyncio
+async def test_steal_cmd_superuser_bypasses_all(monkeypatch):
+    su = gift.SUPERUSER_QQ
+    state = _patch_runtime(
+        monkeypatch,
+        store={"groups": {"1001": {"users": {
+            su: {"points": 0, "steal_date": "2026-06-22", "steal_used": 99},
+            "10002": {"points": 1000, "protect_until": 9e9, "robbed_date": "2026-06-22", "robbed_count": 99},
+        }, "intimacy": {}}}},
+    )
+    monkeypatch.setattr(gift, "_steal_outcome", lambda rng=gift.random: "success")
+    monkeypatch.setattr(gift.time, "time", lambda: 0.0)
+    event = Event(group_id=1001, user_id=su, original_message=[_at("10002")])
+    with pytest.raises(FinishedException):
+        await gift.steal_cmd.handlers[0](_bot(), event)
+    assert state["groups"]["1001"]["users"][su]["points"] == gift._steal_cfg()["cap"]  # 照偷不误
+
+
+@pytest.mark.asyncio
+async def test_steal_cmd_blocked_during_sleep(monkeypatch):
+    _patch_runtime(
+        monkeypatch,
+        store={"groups": {"1001": {"users": {"10001": {"points": 100}, "10002": {"points": 500}}, "intimacy": {}}}},
+    )
+    monkeypatch.setattr(gift, "is_sleeping", lambda: True)
+    event = Event(group_id=1001, user_id="10001", original_message=[_at("10002")])
+    with pytest.raises(FinishedException) as exc:
+        await gift.steal_cmd.handlers[0](_bot(), event)
+    assert "睡" in str(exc.value.result)
+
+
+@pytest.mark.asyncio
+async def test_sign_cmd_sets_protect_until(monkeypatch):
+    state = _patch_runtime(monkeypatch)
+    monkeypatch.setattr(gift.random, "randint", lambda _a, _b: 60)
+    monkeypatch.setattr(gift.time, "time", lambda: 1000.0)
+    with pytest.raises(FinishedException):
+        await gift.sign_cmd.handlers[0](Event(group_id=1001, user_id="10001"))
+    pm = gift._steal_cfg()["protect_minutes"]
+    assert state["groups"]["1001"]["users"]["10001"]["protect_until"] == 1000.0 + pm * 60
