@@ -321,3 +321,35 @@ async def test_gift_cmd_blocks_second_gift_same_day(monkeypatch):
         await gift.gift_cmd.handlers[0](_bot(), event, Message(""))
     assert "今天的礼已经送过" in str(exc.value.result)
     assert state["groups"]["1001"]["users"]["10001"]["points"] == 100000  # 未扣分
+
+
+# ==================== 超管不限次（测试用） ====================
+
+@pytest.mark.asyncio
+async def test_sign_cmd_superuser_unlimited(monkeypatch):
+    su = gift.SUPERUSER_QQ
+    state = _patch_runtime(monkeypatch)
+    monkeypatch.setattr(gift.random, "randint", lambda _a, _b: 60)
+    # 超管同一天连签两次都正常入账（不被限制、不静默）
+    for _ in range(2):
+        with pytest.raises(FinishedException):
+            await gift.sign_cmd.handlers[0](Event(group_id=1001, user_id=su))
+    assert state["groups"]["1001"]["users"][su]["points"] == 120
+
+
+@pytest.mark.asyncio
+async def test_gift_cmd_superuser_ignores_daily_limit(monkeypatch):
+    su = gift.SUPERUSER_QQ
+    state = _patch_runtime(
+        monkeypatch,
+        store={"groups": {"1001": {"users": {su: {"points": 100000, "last_gift": "2026-06-22"}}, "intimacy": {}}}},
+    )
+    g0 = _g0()
+    monkeypatch.setattr(gift, "_pick_gift", lambda _p, rng=gift.random: g0)
+    monkeypatch.setattr(gift, "_roll_main_event", lambda: "normal")
+    # last_gift==today，普通用户会被「今天已送过」拦下；超管照送
+    event = Event(group_id=1001, user_id=su, original_message=[_at("10002")])
+    with pytest.raises(FinishedException) as exc:
+        await gift.gift_cmd.handlers[0](_bot(), event, Message(""))
+    assert g0["name"] in str(exc.value.result)
+    assert state["groups"]["1001"]["users"][su]["points"] == 100000 - g0["cost"]

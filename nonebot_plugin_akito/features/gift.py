@@ -450,13 +450,14 @@ async def _(event: Event):
         return
 
     user_id = event.get_user_id()
+    is_superuser = user_id == SUPERUSER_QQ  # 超管不限次（测试用）
     today = _today_str()
     async with _GIFT_LOCK:
         data = _load_data()
         group = _get_group(data, group_id)
         user = _get_user(group, user_id, _display_name(event))
 
-        if user.get("last_sign_in") == today:
+        if not is_superuser and user.get("last_sign_in") == today:
             return  # 重复签到静默：群里另有签到 bot 应答，避免双重刷屏
 
         sign_cfg = _cfg("sign_in", {})
@@ -484,6 +485,7 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
         return
 
     sender_id = event.get_user_id()
+    is_superuser = sender_id == SUPERUSER_QQ  # 超管不限次（测试用）
     target_qq = _first_at_qq(getattr(event, "original_message", None))
 
     # 参数校验：只需 @ 一位群友（不再输入礼物名）
@@ -501,7 +503,7 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
         sender = _get_user(group, sender_id, _display_name(event))
         _get_user(group, target_qq)  # 确保被送者入册（用于排行/亲密度查询）
 
-        if sender.get("last_gift") == today:
+        if not is_superuser and sender.get("last_gift") == today:
             await gift_cmd.finish(
                 MessageSegment.reply(event.message_id) + _error("already_gifted")
             )
