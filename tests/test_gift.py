@@ -192,10 +192,13 @@ def test_roll_main_event_uses_config_weights(monkeypatch):
     assert gift._roll_main_event() == "crit"
 
 
-def test_roll_mishap_only_damaged():
-    # 意外子事件只剩快递翻车
-    assert set(gift._cfg("mishap_weights")) == {"damaged"}
-    assert gift._roll_mishap() == "damaged"
+def test_roll_mishap_returns_table_key():
+    keys = set(gift._mishaps())
+    assert keys == {
+        "damaged", "freebie", "rare", "handwritten", "praised",
+        "overboard", "delayed", "dupe", "lost",
+    }
+    assert gift._roll_mishap() in keys
 
 
 # ==================== 纯逻辑：结算 _settle ====================
@@ -241,13 +244,52 @@ def test_settle_special_meal_uses_special_intimacy():
 def test_settle_mishap_damaged_refunds_half():
     group = gift._new_group()
     g0 = _g0()
-    bonus = gift._cfg("mishap_damaged_bonus")
-    refund = int(g0["cost"] * gift._cfg("mishap_refund_ratio"))
+    spec = gift._mishap_spec("damaged")
+    refund = int(g0["cost"] * spec["refund_ratio"])
     out = gift._settle(group, "A", "B", g0, "mishap", "damaged")
-    assert out["amount"] == bonus
+    assert out["amount"] == spec["intimacy"]
     assert out["refund"] == refund
-    assert gift._get_intimacy(group, "A", "B") == bonus
+    assert gift._get_intimacy(group, "A", "B") == spec["intimacy"]
     assert gift._get_user(group, "A")["points"] == refund  # 返还入账
+
+
+def test_settle_mishap_freebie_intimacy_no_refund():
+    group = gift._new_group()
+    g0 = _g0()
+    spec = gift._mishap_spec("freebie")
+    out = gift._settle(group, "A", "B", g0, "mishap", "freebie")
+    assert out["amount"] == spec["intimacy"]
+    assert out["refund"] == 0  # 不退款
+    assert gift._get_intimacy(group, "A", "B") == spec["intimacy"]
+    assert gift._get_user(group, "A")["points"] == 0
+
+
+def test_settle_mishap_lost_full_refund_no_intimacy():
+    group = gift._new_group()
+    g0 = _g0()
+    out = gift._settle(group, "A", "B", g0, "mishap", "lost")
+    assert out["amount"] == 0  # 不涨羁绊
+    assert out["refund"] == g0["cost"]  # 全额返还
+    assert gift._get_intimacy(group, "A", "B") == 0
+    assert gift._get_user(group, "A")["points"] == g0["cost"]
+
+
+def test_settle_mishap_dupe_partial_refund():
+    group = gift._new_group()
+    g0 = _g0()
+    spec = gift._mishap_spec("dupe")
+    out = gift._settle(group, "A", "B", g0, "mishap", "dupe")
+    assert out["amount"] == spec["intimacy"]
+    assert out["refund"] == int(g0["cost"] * spec["refund_ratio"])
+
+
+def test_every_mishap_has_copy_and_renders():
+    """每个意外都有对应文案、且能正常渲染（含 @），防漏配 copy。"""
+    g0 = _g0()
+    for key in gift._mishaps():
+        out = gift._settle(gift._new_group(), "1", "2", g0, "mishap", key)
+        msg = str(gift._build_broadcast(out, "1", "2"))
+        assert "[at:1]" in msg and msg.strip()
 
 
 # ==================== 纯逻辑：文案组装 ====================
@@ -256,6 +298,7 @@ def test_outcome_copy_key_mapping():
     assert gift._outcome_copy_key({"event": "normal", "mishap": None}) == "normal"
     assert gift._outcome_copy_key({"event": "special", "mishap": None}) == "special"
     assert gift._outcome_copy_key({"event": "mishap", "mishap": "damaged"}) == "mishap_damaged"
+    assert gift._outcome_copy_key({"event": "mishap", "mishap": "lost"}) == "mishap_lost"
 
 
 def test_render_with_ats_builds_at_and_text():

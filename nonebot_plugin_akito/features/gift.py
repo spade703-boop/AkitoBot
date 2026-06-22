@@ -57,12 +57,20 @@ DEFAULT_GIFT_CONFIG: dict = {
     "special_intimacy": 320,  # 彰冬饭固定结算的羁绊值（抽中必定惊喜升级）
     "sign_in": {"min": 50, "max": 100},
     "crit_multiplier": 2,
-    "mishap_refund_ratio": 0.5,
-    "mishap_damaged_bonus": 8,
-    # 主事件权重
-    "event_weights": {"normal": 60, "crit": 16, "return": 12, "fail": 7, "mishap": 5},
-    # 意外子事件权重（只剩快递翻车）
-    "mishap_weights": {"damaged": 1},
+    # 主事件权重（意外 5→10，让花样有机会出现）
+    "event_weights": {"normal": 55, "crit": 16, "return": 12, "fail": 7, "mishap": 10},
+    # 意外子事件表：每项 羁绊加成 / 返还积分比例 / 抽取权重（可增删调，热重载）
+    "mishaps": {
+        "damaged":     {"intimacy": 8,  "refund_ratio": 0.5, "weight": 3},  # 快递翻车
+        "freebie":     {"intimacy": 28, "refund_ratio": 0.0, "weight": 2},  # 商家加赠
+        "rare":        {"intimacy": 24, "refund_ratio": 0.0, "weight": 2},  # 买到稀有
+        "handwritten": {"intimacy": 20, "refund_ratio": 0.0, "weight": 2},  # 附了手写卡
+        "praised":     {"intimacy": 22, "refund_ratio": 0.0, "weight": 2},  # 被同好夸甜
+        "overboard":   {"intimacy": 30, "refund_ratio": 0.0, "weight": 1},  # 一时上头加码
+        "delayed":     {"intimacy": 12, "refund_ratio": 0.0, "weight": 2},  # 慢递迟到
+        "dupe":        {"intimacy": 6,  "refund_ratio": 0.3, "weight": 2},  # 撞款了
+        "lost":        {"intimacy": 0,  "refund_ratio": 1.0, "weight": 1},  # 寄丢了
+    },
     # 羁绊等级：累计羁绊值 → 称号，门槛按礼物羁绊值校准（纯展示层，可热重载）
     "bond_levels": [
         {"min": 0, "name": "初识"},
@@ -102,6 +110,38 @@ DEFAULT_GIFT_CONFIG: dict = {
         "mishap_damaged": [
             "{a} 寄的【{gift}】路上有点压坏了，两个人一起心疼了一下，反而更亲近，羁绊各 +{amount}，返还 {refund} 积分。",
             "{a} 的【{gift}】运输途中磕了一下，{b} 陪着一起惋惜，羁绊各 +{amount}，退还 {refund} 积分。",
+        ],
+        "mishap_freebie": [
+            "{a} 送 {b} 的【{gift}】，卖家居然多塞了份赠品小卡，意外加料，羁绊 +{amount}。",
+            "{a} 给 {b} 的【{gift}】里附了点小周边，{b} 拆开惊喜了一下，羁绊 +{amount}。",
+        ],
+        "mishap_rare": [
+            "{a} 送 {b} 的这份【{gift}】正好是早绝版的稀有款，可遇不可求，羁绊 +{amount}。",
+            "{a} 给 {b} 淘来的【{gift}】是限定稀有版，运气爆棚，羁绊 +{amount}。",
+        ],
+        "mishap_handwritten": [
+            "{a} 随【{gift}】夹了张手写小卡，{b} 看完心头一暖，羁绊 +{amount}。",
+            "{a} 在【{gift}】里塞了句手写留言，{b} 反复看了好几遍，羁绊 +{amount}。",
+        ],
+        "mishap_praised": [
+            "{a} 送 {b} 的【{gift}】被群里同好刷屏夸「这对好甜」，公开撒糖加成，羁绊 +{amount}。",
+            "{a} 这份送给 {b} 的【{gift}】当众撒了把糖，同好们齐刷「磕到了」，羁绊 +{amount}。",
+        ],
+        "mishap_overboard": [
+            "{a} 一时上头，给【{gift}】又默默加了码，{b} 哭笑不得地收下，羁绊 +{amount}。",
+            "{a} 送【{gift}】送上了头，硬是多添了点，{b} 拗不过只好收下，羁绊 +{amount}。",
+        ],
+        "mishap_delayed": [
+            "{a} 送 {b} 的【{gift}】物流慢了半拍，但心意照样送到，羁绊 +{amount}。",
+            "{a} 的【{gift}】在路上磨蹭了几天才到，{b} 还是乐呵呵收下，羁绊 +{amount}。",
+        ],
+        "mishap_dupe": [
+            "{a} 送的【{gift}】，{b} 居然早就有同款了，两个人笑作一团，羁绊 +{amount}，返还 {refund} 积分。",
+            "{a} 送来【{gift}】，{b} 翻出自己那份同款，俩人乐了半天，羁绊 +{amount}，退还 {refund} 积分。",
+        ],
+        "mishap_lost": [
+            "{a} 寄给 {b} 的【{gift}】半路寄丢了，心意还在，积分全额退回 {refund}。",
+            "{a} 的【{gift}】在物流里弄丢了，{b} 说心意领了就好，积分如数退还 {refund}。",
         ],
         # 顶档「自己产的彰冬饭」专属固定文案
         "special": [
@@ -389,8 +429,18 @@ def _roll_main_event(rng=random) -> str:
     return _weighted_choice(_cfg("event_weights", {}), rng)
 
 
+def _mishaps() -> dict:
+    m = _cfg("mishaps", {})
+    return m if isinstance(m, dict) and m else DEFAULT_GIFT_CONFIG["mishaps"]
+
+
+def _mishap_spec(key: str) -> dict:
+    return _mishaps().get(key) or DEFAULT_GIFT_CONFIG["mishaps"].get(key, {})
+
+
 def _roll_mishap(rng=random) -> str:
-    return _weighted_choice(_cfg("mishap_weights", {}), rng)
+    weights = {k: int(v.get("weight", 0)) for k, v in _mishaps().items()}
+    return _weighted_choice(weights, rng)
 
 
 def _is_special_gift(gift: dict) -> bool:
@@ -405,7 +455,6 @@ def _settle(group: dict, sender_id: str, target_id: str, gift: dict,
     """
     base = int(gift.get("intimacy", 0))
     cost = int(gift.get("cost", 0))
-    ratio = float(_cfg("mishap_refund_ratio", 0.5))
     out: dict = {
         "event": main_event,
         "mishap": mishap if main_event == "mishap" else None,
@@ -429,12 +478,15 @@ def _settle(group: dict, sender_id: str, target_id: str, gift: dict,
         # 自己产的彰冬饭：必定惊喜升级，固定结算
         out["amount"] = int(_cfg("special_intimacy", base))
         _add_intimacy(group, sender_id, target_id, out["amount"])
-    elif main_event == "mishap" and mishap == "damaged":
-        # 意外只剩快递翻车（damaged）：羁绊小幅 + 返还一半积分
-        out["amount"] = int(_cfg("mishap_damaged_bonus", 8))
-        _add_intimacy(group, sender_id, target_id, out["amount"])
-        out["refund"] = int(cost * ratio)
-        _add_points(group, sender_id, out["refund"])
+    elif main_event == "mishap":
+        # 意外：按 mishaps 配置表结算（羁绊加成 + 按比例返还积分）
+        spec = _mishap_spec(mishap)
+        out["amount"] = int(spec.get("intimacy", 0))
+        if out["amount"]:
+            _add_intimacy(group, sender_id, target_id, out["amount"])
+        out["refund"] = int(cost * float(spec.get("refund_ratio", 0)))
+        if out["refund"]:
+            _add_points(group, sender_id, out["refund"])
 
     return out
 

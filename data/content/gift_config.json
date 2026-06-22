@@ -39,17 +39,59 @@
     "max": 100
   },
   "crit_multiplier": 2,
-  "mishap_refund_ratio": 0.5,
-  "mishap_damaged_bonus": 8,
   "event_weights": {
-    "normal": 60,
+    "normal": 55,
     "crit": 16,
     "return": 12,
     "fail": 7,
-    "mishap": 5
+    "mishap": 10
   },
-  "mishap_weights": {
-    "damaged": 1
+  "mishaps": {
+    "damaged": {
+      "intimacy": 8,
+      "refund_ratio": 0.5,
+      "weight": 3
+    },
+    "freebie": {
+      "intimacy": 28,
+      "refund_ratio": 0.0,
+      "weight": 2
+    },
+    "rare": {
+      "intimacy": 24,
+      "refund_ratio": 0.0,
+      "weight": 2
+    },
+    "handwritten": {
+      "intimacy": 20,
+      "refund_ratio": 0.0,
+      "weight": 2
+    },
+    "praised": {
+      "intimacy": 22,
+      "refund_ratio": 0.0,
+      "weight": 2
+    },
+    "overboard": {
+      "intimacy": 30,
+      "refund_ratio": 0.0,
+      "weight": 1
+    },
+    "delayed": {
+      "intimacy": 12,
+      "refund_ratio": 0.0,
+      "weight": 2
+    },
+    "dupe": {
+      "intimacy": 6,
+      "refund_ratio": 0.3,
+      "weight": 2
+    },
+    "lost": {
+      "intimacy": 0,
+      "refund_ratio": 1.0,
+      "weight": 1
+    }
   },
   "bond_levels": [
     {
@@ -105,6 +147,38 @@
     "mishap_damaged": [
       "{a} 寄的【{gift}】路上有点压坏了，两个人一起心疼了一下，反而更亲近，羁绊各 +{amount}，返还 {refund} 积分。",
       "{a} 的【{gift}】运输途中磕了一下，{b} 陪着一起惋惜，羁绊各 +{amount}，退还 {refund} 积分。"
+    ],
+    "mishap_freebie": [
+      "{a} 送 {b} 的【{gift}】，卖家居然多塞了份赠品小卡，意外加料，羁绊 +{amount}。",
+      "{a} 给 {b} 的【{gift}】里附了点小周边，{b} 拆开惊喜了一下，羁绊 +{amount}。"
+    ],
+    "mishap_rare": [
+      "{a} 送 {b} 的这份【{gift}】正好是早绝版的稀有款，可遇不可求，羁绊 +{amount}。",
+      "{a} 给 {b} 淘来的【{gift}】是限定稀有版，运气爆棚，羁绊 +{amount}。"
+    ],
+    "mishap_handwritten": [
+      "{a} 随【{gift}】夹了张手写小卡，{b} 看完心头一暖，羁绊 +{amount}。",
+      "{a} 在【{gift}】里塞了句手写留言，{b} 反复看了好几遍，羁绊 +{amount}。"
+    ],
+    "mishap_praised": [
+      "{a} 送 {b} 的【{gift}】被群里同好刷屏夸「这对好甜」，公开撒糖加成，羁绊 +{amount}。",
+      "{a} 这份送给 {b} 的【{gift}】当众撒了把糖，同好们齐刷「磕到了」，羁绊 +{amount}。"
+    ],
+    "mishap_overboard": [
+      "{a} 一时上头，给【{gift}】又默默加了码，{b} 哭笑不得地收下，羁绊 +{amount}。",
+      "{a} 送【{gift}】送上了头，硬是多添了点，{b} 拗不过只好收下，羁绊 +{amount}。"
+    ],
+    "mishap_delayed": [
+      "{a} 送 {b} 的【{gift}】物流慢了半拍，但心意照样送到，羁绊 +{amount}。",
+      "{a} 的【{gift}】在路上磨蹭了几天才到，{b} 还是乐呵呵收下，羁绊 +{amount}。"
+    ],
+    "mishap_dupe": [
+      "{a} 送的【{gift}】，{b} 居然早就有同款了，两个人笑作一团，羁绊 +{amount}，返还 {refund} 积分。",
+      "{a} 送来【{gift}】，{b} 翻出自己那份同款，俩人乐了半天，羁绊 +{amount}，退还 {refund} 积分。"
+    ],
+    "mishap_lost": [
+      "{a} 寄给 {b} 的【{gift}】半路寄丢了，心意还在，积分全额退回 {refund}。",
+      "{a} 的【{gift}】在物流里弄丢了，{b} 说心意领了就好，积分如数退还 {refund}。"
     ],
     "special": [
       "{a} 送的彰冬饭非常合 {b} 的胃口，羁绊 +{amount}。",
