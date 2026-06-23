@@ -23,6 +23,20 @@ def _bot():
     return Bot(self_id="114514")
 
 
+async def _no_delay():
+    return None
+
+
+class _FixedRNG:
+    """randint 恒返回定值，用于负羁绊随机扣除的确定性测试。"""
+
+    def __init__(self, val):
+        self.val = val
+
+    def randint(self, _a, _b):
+        return self.val
+
+
 def _g0() -> dict:
     return gift._gift_list()[0]  # 最低档
 
@@ -35,6 +49,7 @@ def _patch_runtime(monkeypatch, *, today: str = "2026-06-22", store: dict | None
     state = gift._normalize_data(store or {})
     monkeypatch.setattr(gift, "_today_str", lambda: today)
     monkeypatch.setattr(gift, "is_sleeping", lambda: False)  # 默认非睡眠时段（防真实 0–6 点跑测试误拦）
+    monkeypatch.setattr(gift, "_sign_in_delay", _no_delay)   # 签到延迟空操作（防测试真睡 3–5s）
 
     def _load():
         return deepcopy(state)
@@ -134,11 +149,24 @@ def test_bond_level_progress_and_maxed():
     assert mid["name"] == "要好"
     assert mid["next_name"] == "挚友"
     assert mid["to_next"] == 1000 - 620
-    assert mid["idx"] == 2  # Lv3
+    assert mid["level"] == 3  # 初识=Lv1 锚定（不受负档前置影响）
     top = gift._bond_level(7000)
     assert top["name"] == "莫逆之交"
+    assert top["level"] == 6
     assert top["next_name"] is None
     assert top["to_next"] == 0
+
+
+def test_bond_level_negative_tiers():
+    assert gift._bond_level(0)["name"] == "初识"
+    assert gift._bond_level(0)["level"] == 1
+    assert gift._bond_level(-1)["name"] == "有过节"
+    assert gift._bond_level(-50)["name"] == "有过节"
+    assert gift._bond_level(-51)["name"] == "结了梁子"
+    assert gift._bond_level(-300)["name"] == "结了梁子"
+    assert gift._bond_level(-301)["name"] == "宿敌"
+    assert gift._bond_level(-99999)["name"] == "宿敌"  # 兜底到最低档
+    assert gift._bond_level(-10)["level"] <= 0  # 负档不挂 Lv
 
 
 def test_count_directed_bump_and_get():
@@ -562,18 +590,36 @@ def test_settle_steal_whiff_keeps_points():
     assert gift._get_user(group, "V")["points"] == 200
 
 
-def test_settle_steal_bond_cost_scales_and_floors():
+def test_settle_steal_bond_positive_scales():
     cfg = gift._steal_cfg()
-    # 高羁绊：掉得多（偷越亲近掉越狠）
     group = _steal_group(bond=1000)
     out = gift._settle_steal(group, "T", "V", "whiff")
     assert out["bond"] == int(cfg["bond_flat"] + cfg["bond_ratio"] * 1000)
     assert gift._get_intimacy(group, "T", "V") == 1000 - out["bond"]
-    # 低羁绊：封底 0，不为负
-    group2 = _steal_group(bond=5)
-    out2 = gift._settle_steal(group2, "T", "V", "whiff")
-    assert out2["bond"] == 5  # drop 被夹到当前羁绊
-    assert gift._get_intimacy(group2, "T", "V") == 0
+
+
+def test_settle_steal_bond_crosses_into_negative():
+    cfg = gift._steal_cfg()
+    group = _steal_group(bond=5)  # 低正羁绊一步跨负（不再封底 0）
+    out = gift._settle_steal(group, "T", "V", "whiff")
+    drop = int(cfg["bond_flat"] + cfg["bond_ratio"] * 5)
+    assert out["bond"] == drop
+    assert gift._get_intimacy(group, "T", "V") == 5 - drop < 0
+
+
+def test_settle_steal_bond_negative_uses_random():
+    group = _steal_group(bond=-100)  # 羁绊≤0 改随机区间扣（注入定值 rng）
+    out = gift._settle_steal(group, "T", "V", "whiff", rng=_FixedRNG(20))
+    assert out["bond"] == 20
+    assert gift._get_intimacy(group, "T", "V") == -120
+
+
+def test_settle_steal_bond_floor():
+    floor = gift._steal_cfg()["bond_floor"]
+    group = _steal_group(bond=floor + 5)  # 接近下限
+    out = gift._settle_steal(group, "T", "V", "whiff", rng=_FixedRNG(30))
+    assert gift._get_intimacy(group, "T", "V") == floor  # 封底，不再下探
+    assert out["bond"] == 5  # 实际只掉到下限的幅度
 
 
 @pytest.mark.asyncio

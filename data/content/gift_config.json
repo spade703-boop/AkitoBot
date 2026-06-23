@@ -38,6 +38,10 @@
     "min": 50,
     "max": 100
   },
+  "sign_delay_sec": {
+    "min": 3,
+    "max": 5
+  },
   "crit_multiplier": 2,
   "event_weights": {
     "normal": 55,
@@ -95,6 +99,18 @@
   },
   "bond_levels": [
     {
+      "min": -1000,
+      "name": "宿敌"
+    },
+    {
+      "min": -300,
+      "name": "结了梁子"
+    },
+    {
+      "min": -50,
+      "name": "有过节"
+    },
+    {
       "min": 0,
       "name": "初识"
     },
@@ -130,6 +146,9 @@
     "reversal_amount": 10,
     "bond_flat": 20,
     "bond_ratio": 0.1,
+    "bond_neg_min": 10,
+    "bond_neg_max": 30,
+    "bond_floor": -1000,
     "weights": {
       "success": 5,
       "caught": 3,

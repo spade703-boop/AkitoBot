@@ -58,6 +58,7 @@ DEFAULT_GIFT_CONFIG: dict = {
     "special_gift": "自己产的彰冬饭",  # 抽中它必定触发「惊喜升级」固定结算
     "special_intimacy": 520,  # 彰冬饭固定结算的羁绊值（抽中必定惊喜升级，压过暴击上限 400）
     "sign_in": {"min": 50, "max": 100},
+    "sign_delay_sec": {"min": 3, "max": 5},  # 签到回复随机延迟，错开另一个签到 bot
     "crit_multiplier": 2,
     # 主事件权重（意外 5→10，让花样有机会出现）
     "event_weights": {"normal": 55, "crit": 16, "return": 12, "fail": 7, "mishap": 10},
@@ -75,6 +76,9 @@ DEFAULT_GIFT_CONFIG: dict = {
     },
     # 羁绊等级：累计羁绊值 → 称号，门槛按礼物羁绊值校准（纯展示层，可热重载）
     "bond_levels": [
+        {"min": -1000, "name": "宿敌"},
+        {"min": -300, "name": "结了梁子"},
+        {"min": -50, "name": "有过节"},
         {"min": 0, "name": "初识"},
         {"min": 100, "name": "相熟"},
         {"min": 400, "name": "要好"},
@@ -92,8 +96,11 @@ DEFAULT_GIFT_CONFIG: dict = {
         "protect_minutes": 60,     # 签到后保护期（分钟）
         "caught_penalty": 15,      # 被抓时倒赔对方
         "reversal_amount": 10,     # 反被顺走的额度
-        "bond_flat": 20,           # 偷一次的羁绊基础代价
+        "bond_flat": 20,           # 偷一次的羁绊基础代价（羁绊>0 时按比例）
         "bond_ratio": 0.1,         # 额外按当前羁绊比例扣（偷越亲近掉越多）
+        "bond_neg_min": 10,        # 羁绊≤0 时改随机扣：下限
+        "bond_neg_max": 30,        # 羁绊≤0 时改随机扣：上限
+        "bond_floor": -1000,       # 羁绊下限（结怨封底）
         "weights": {"success": 5, "caught": 3, "whiff": 2, "reversal": 1},
     },
     # 播报文案（平和同好口吻，每类多条随机选用）。占位符：
@@ -416,7 +423,8 @@ def _bond_levels() -> list[dict]:
 def _bond_level(value: int) -> dict:
     """累计羁绊值 → 当前等级信息。
 
-    返回 {idx, name, cur_min, next_name, next_min, to_next}；满级时 next_* 为 None、to_next 为 0。
+    返回 {idx, level, name, cur_min, next_name, next_min, to_next}；满级时 next_* 为 None。
+    level 以 min==0 档为 Lv1 锚点（负档 level ≤ 0，展示时不挂 Lv）。
     """
     levels = _bond_levels()
     value = int(value)
@@ -426,10 +434,12 @@ def _bond_level(value: int) -> dict:
             idx = i
         else:
             break
+    zero_i = next((i for i, lv in enumerate(levels) if int(lv.get("min", 0)) == 0), 0)
     cur = levels[idx]
     nxt = levels[idx + 1] if idx + 1 < len(levels) else None
     return {
         "idx": idx,
+        "level": idx - zero_i + 1,
         "name": str(cur.get("name", "")),
         "cur_min": int(cur.get("min", 0)),
         "next_name": str(nxt.get("name", "")) if nxt else None,
@@ -445,11 +455,12 @@ def _bond_card(group: dict, me: str, other: str):
     sent = _get_count(group, me, other)
     recv = _get_count(group, other, me)
 
-    lines = [f"· 等级：{lv['name']}（Lv{lv['idx'] + 1}）"]
+    tier = f"{lv['name']}（Lv{lv['level']}）" if lv["level"] >= 1 else lv["name"]
+    lines = [f"· 等级：{tier}"]
     if lv["next_name"]:
         lines.append(f"· 羁绊值 {value}，距「{lv['next_name']}」还差 {lv['to_next']}")
     else:
-        lines.append(f"· 羁绊值 {value}，已达顶级「{lv['name']}」(Lv{lv['idx'] + 1})")
+        lines.append(f"· 羁绊值 {value}，已达顶级「{lv['name']}」(Lv{lv['level']})")
     if sent or recv:
         lines.append(f"· 你送出 {sent} 次，ta 回送 {recv} 次（共 {sent + recv} 次往来）")
     else:
@@ -546,17 +557,21 @@ def _steal_outcome(rng=random) -> str:
     return _weighted_choice(_steal_cfg().get("weights", {}), rng)
 
 
-def _settle_steal(group: dict, thief_id: str, victim_id: str, outcome: str) -> dict:
-    """按已抽定的偷窃结果结算（改 group：积分/羁绊），返回播报数据。
+def _settle_steal(group: dict, thief_id: str, victim_id: str, outcome: str, rng=random) -> dict:
+    """按已抽定的偷窃结果结算（改 group：积分/羁绊），返回播报数据。不做 IO，便于单测。
 
-    不含随机/IO，便于单测。每次偷都付羁绊代价（封底 0，偷越亲近掉越多）。
+    每次偷都付羁绊代价：羁绊>0 按比例扣（去封底、可跨负）；羁绊≤0 改随机区间扣；统一封底 bond_floor。
     """
     cfg = _steal_cfg()
     thief = _get_user(group, thief_id)
     victim = _get_user(group, victim_id)
     bond = _get_intimacy(group, thief_id, victim_id)
-    drop = min(int(int(cfg.get("bond_flat", 20)) + float(cfg.get("bond_ratio", 0.1)) * bond), bond)
-    out = {"outcome": outcome, "amount": 0, "bond": drop}
+    if bond > 0:
+        drop = int(int(cfg.get("bond_flat", 20)) + float(cfg.get("bond_ratio", 0.1)) * bond)
+    else:
+        drop = rng.randint(int(cfg.get("bond_neg_min", 10)), int(cfg.get("bond_neg_max", 30)))
+    new_bond = max(int(cfg.get("bond_floor", -1000)), bond - drop)
+    out = {"outcome": outcome, "amount": 0, "bond": bond - new_bond}
 
     if outcome == "success":
         vp = int(victim.get("points", 0))
@@ -576,8 +591,7 @@ def _settle_steal(group: dict, thief_id: str, victim_id: str, outcome: str) -> d
         out["amount"] = amt
     # whiff：积分不动
 
-    if drop:
-        _add_intimacy(group, thief_id, victim_id, -drop)
+    _add_intimacy(group, thief_id, victim_id, new_bond - bond)
     return out
 
 
@@ -661,6 +675,12 @@ def _first_at_qq(original_message) -> str | None:
 _GIFT_LOCK = asyncio.Lock()
 
 
+async def _sign_in_delay() -> None:
+    """签到回复前的随机延迟，错开群里另一个签到 bot 的消息。"""
+    d = _cfg("sign_delay_sec", {})
+    await asyncio.sleep(random.uniform(float(d.get("min", 3)), float(d.get("max", 5))))
+
+
 # ==================== 指令：签到 ====================
 
 sign_cmd = on_command("签到", priority=5, block=True)
@@ -693,10 +713,13 @@ async def _(event: Event):
         user["last_sign_in"] = today
         user["protect_until"] = time.time() + int(_steal_cfg().get("protect_minutes", 60)) * 60
         _save_data(data)
+        total = int(user["points"])
 
-        template = random.choice(_copy("sign_in"))
-        msg = _render_with_ats(template, {"a": user_id, "amount": amount, "total": user["points"]})
-        await sign_cmd.finish(MessageSegment.reply(event.message_id) + msg)
+    # 出锁后再延迟 3–5s 发送（不占锁），错开另一个签到 bot 的消息
+    await _sign_in_delay()
+    template = random.choice(_copy("sign_in"))
+    msg = _render_with_ats(template, {"a": user_id, "amount": amount, "total": total})
+    await sign_cmd.finish(MessageSegment.reply(event.message_id) + msg)
 
 
 # ==================== 指令：送礼 ====================
