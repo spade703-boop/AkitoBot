@@ -909,7 +909,7 @@ intimacy_cmd = on_command("我的羁绊", priority=5, block=True)
 
 
 @intimacy_cmd.handle()
-async def _(event: Event):
+async def _(bot: Bot, event: Event):
     group_id, rejection = _resolve_group(event)
     if rejection:
         await intimacy_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
@@ -922,18 +922,29 @@ async def _(event: Event):
     target_qq = _first_at_qq(getattr(event, "original_message", None))
 
     if target_qq and target_qq not in ("all", user_id):
+        # 尝试获取对方群名片（bot API → card → nickname → 兜底 QQ）
+        target_name = _name_of(group, target_qq)
+        if target_name.startswith("用户"):
+            try:
+                member_info = await bot.get_group_member_info(
+                    group_id=int(group_id), user_id=int(target_qq)
+                )
+                target_name = member_info.get("card") or member_info.get("nickname") or target_qq
+            except Exception:
+                target_name = target_qq
+
         if GIFT_USE_HTML_RENDER:
             left = {"qq": user_id, "name": _display_name(event)}
-            right = {"qq": target_qq, "name": _name_of(group, target_qq)}
+            right = {"qq": target_qq, "name": target_name}
             intimacy = _get_intimacy(group, user_id, target_qq)
             try:
-                data = build_bond_page_data(left, right, intimacy, levels=_bond_levels())
-                img_bytes = await render_bond_page("bond.html", data)
+                page_data = build_bond_page_data(left, right, intimacy, levels=_bond_levels())
+                img_bytes = await render_bond_page("bond.html", page_data)
                 await intimacy_cmd.finish(
                     MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes)
                 )
-            except Exception:
-                logger.warning("bond render failed, falling back to text")
+            except Exception as e:
+                logger.warning(f"bond render failed ({e}), falling back to text")
                 await intimacy_cmd.finish(
                     MessageSegment.reply(event.message_id) + _bond_card(group, user_id, target_qq)
                 )
