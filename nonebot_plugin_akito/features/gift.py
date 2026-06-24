@@ -937,14 +937,17 @@ async def _(bot: Bot, event: Event):
             left = {"qq": user_id, "name": _display_name(event)}
             right = {"qq": target_qq, "name": target_name}
             intimacy = _get_intimacy(group, user_id, target_qq)
+            img_bytes = None
             try:
                 page_data = build_bond_page_data(left, right, intimacy, levels=_bond_levels())
                 img_bytes = await render_bond_page("bond.html", page_data)
+            except Exception as e:
+                logger.warning(f"bond render failed ({e}), falling back to text")
+            if img_bytes is not None:
                 await intimacy_cmd.finish(
                     MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes)
                 )
-            except Exception as e:
-                logger.warning(f"bond render failed ({e}), falling back to text")
+            else:
                 await intimacy_cmd.finish(
                     MessageSegment.reply(event.message_id) + _bond_card(group, user_id, target_qq)
                 )
@@ -1013,15 +1016,18 @@ async def _(event: Event):
                 "right": {"qq": b, "name": _name_of(group, b)},
                 "intimacy": int(value),
             })
+        img_bytes = None
         try:
-            data = build_bond_rank_page_data(entries, levels=_bond_levels())
-            img_bytes = await render_bond_page("bond_rank.html", data)
+            rank_data = build_bond_rank_page_data(entries, levels=_bond_levels())
+            img_bytes = await render_bond_page("bond_rank.html", rank_data)
+        except Exception:
+            logger.warning("bond rank render failed, falling back to text")
+        if img_bytes is not None:
             await rank_cmd.finish(
                 MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes)
             )
-        except Exception:
-            logger.warning("bond rank render failed, falling back to text")
-            lines = ["💞 本群同好羁绊排行："]
+        else:
+            lines = ["\U0001f49e 本群同好羁绊排行："]
             for idx, (key, value) in enumerate(pairs, 1):
                 a, b = key.split("|||")
                 lines.append(f"{idx}. {_name_of(group, a)} × {_name_of(group, b)}：{value}（{_bond_level(value)['name']}）")
