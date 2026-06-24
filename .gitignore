@@ -6,7 +6,10 @@
 docs/FEATURE_LOGIC.md
 
 # Data (images, memories, DB)
-/data
+/data/*
+!/data/content/
+/data/content/*
+!/data/content/gift_config.json
 
 # Python
 __pycache__/

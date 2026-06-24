@@ -1,0 +1,199 @@
+"""Level logic + data builders for the bond (羁绊) pages.
+
+``build_bond_page_data`` / ``build_bond_rank_page_data`` turn raw intimacy
+data into the dicts that bond.html / bond_rank.html expect.
+
+The ``levels`` parameter drives all level computation. It accepts the same
+format as gift_config.json → bond_levels: a list of ``{"min": int, "name": str}``
+sorted from low to high. This module does NOT import gift.py; callers pass
+their level table explicitly so the config stays single-source.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime
+
+FOOTER_BRAND = "AkitoBot · 羁绊系统"
+
+
+def _now_text() -> str:
+    return datetime.now().strftime("%Y-%m-%d %H:%M")
+
+
+def qq_avatar_uri(qq: str | int) -> str:
+    """QQ 头像直链。html_to_pic 会在渲染时联网拉取。"""
+    return f"https://q.qlogo.cn/g?b=qq&nk={qq}&s=640"
+
+
+def level_info(intimacy: int, levels: list[dict]) -> dict:
+    """根据亲密度 + 等级表算出当前等级、下一级、到下一级的距离与进度百分比。
+
+    levels: [{"min": int, "name": str}, ...] 从低到高排列。
+    level_no：以 min==0 的档位为 Lv1 锚点；负档 level_no ≤ 0 不显示 Lv。
+    """
+    intimacy = max(-999_999_999, int(intimacy))
+    if not levels:
+        return {
+            "level_no": 1,
+            "level_name": "初识",
+            "next_level_name": "",
+            "next_need": 0,
+            "progress_pct": 100,
+            "is_max": True,
+        }
+
+    # 找到当前所在等级
+    idx = 0
+    for i, lv in enumerate(levels):
+        if intimacy >= int(lv.get("min", 0)):
+            idx = i
+        else:
+            break
+
+    # 以 min==0 为 Lv1 锚点
+    zero_i = next((i for i, lv in enumerate(levels) if int(lv.get("min", 0)) == 0), 0)
+    level_no = idx - zero_i + 1
+
+    cur = levels[idx]
+    cur_min = int(cur.get("min", 0))
+    name = str(cur.get("name", ""))
+    is_max = idx >= len(levels) - 1
+
+    if is_max:
+        return {
+            "level_no": max(level_no, 0),  # 万一满级还在负档，不显示负数 Lv
+            "level_name": name,
+            "next_level_name": "",
+            "next_need": 0,
+            "progress_pct": 100,
+            "is_max": True,
+        }
+
+    nxt = levels[idx + 1]
+    nxt_min = int(nxt.get("min", 0))
+    span = max(1, nxt_min - cur_min)
+    pct = round((intimacy - cur_min) / span * 100)
+    return {
+        "level_no": level_no,
+        "level_name": name,
+        "next_level_name": str(nxt.get("name", "")),
+        "next_need": max(0, nxt_min - intimacy),
+        "progress_pct": max(0, min(100, pct)),
+        "is_max": False,
+    }
+
+
+def _person(p: dict) -> dict:
+    """规整一个人的字段：补全 avatar（默认 QQ 头像）与首字占位。"""
+    qq = str(p.get("qq", ""))
+    name = (p.get("name") or "").strip()
+    avatar = p.get("avatar")
+    if avatar is None and qq != "":
+        avatar = qq_avatar_uri(qq)
+    return {
+        "qq": qq,
+        "name": name or f"用户{qq}",
+        "avatar": avatar,
+        "initial": (name[:1] if name else "?"),
+    }
+
+
+def build_bond_page_data(
+    left: dict,
+    right: dict,
+    intimacy: int,
+    levels: list[dict] | None = None,
+    *,
+    title: str = "羁绊档案",
+    eyebrow_tail: str = "BOND PROFILE",
+    footer_left: str | None = None,
+    footer_right: str = FOOTER_BRAND,
+) -> dict:
+    """单张羁绊详情页的数据。
+
+    left / right: {"qq": "123456", "name": "星川", "avatar": 可选}
+    intimacy: 两人当前亲密度
+    levels: 等级阈值表 [{"min": int, "name": str}, ...]，不传则用内置默认
+    """
+    if levels is None:
+        levels = _default_levels()
+    info = level_info(intimacy, levels)
+    return {
+        "page_width": 680,
+        "title": title,
+        "eyebrow_tail": eyebrow_tail,
+        "left": _person(left),
+        "right": _person(right),
+        "intimacy": int(intimacy),
+        "footer_left": footer_left or _now_text(),
+        "footer_right": footer_right,
+        **info,
+    }
+
+
+def build_bond_rank_page_data(
+    entries: list[dict],
+    levels: list[dict] | None = None,
+    *,
+    title: str = "羁绊排行榜",
+    eyebrow_tail: str = "BOND RANKING",
+    pill: str | None = None,
+    limit: int | None = None,
+    footer_left: str | None = None,
+    footer_right: str = FOOTER_BRAND,
+) -> dict:
+    """羁绊排行榜的数据。
+
+    entries: [{"left": {...}, "right": {...}, "intimacy": 6820}, ...]
+    会自动按亲密度从高到低排序并编名次。
+    levels: 等级阈值表，不传则用内置默认
+    """
+    if levels is None:
+        levels = _default_levels()
+
+    ranked = sorted(entries, key=lambda e: int(e.get("intimacy", 0)), reverse=True)
+    if limit is not None:
+        ranked = ranked[:limit]
+
+    rows = []
+    for i, e in enumerate(ranked, start=1):
+        info = level_info(e.get("intimacy", 0), levels)
+        rows.append(
+            {
+                "rank": i,
+                "left": _person(e["left"]),
+                "right": _person(e["right"]),
+                "intimacy": int(e.get("intimacy", 0)),
+                "level_name": info["level_name"],
+                "progress_pct": info["progress_pct"],
+                "is_max": info["is_max"],
+            }
+        )
+
+    if pill is None:
+        pill = f"本群亲密度 TOP {len(rows)}" if rows else "本群亲密度"
+
+    return {
+        "page_width": 680,
+        "title": title,
+        "eyebrow_tail": eyebrow_tail,
+        "pill": pill,
+        "rows": rows,
+        "footer_left": footer_left or _now_text(),
+        "footer_right": footer_right,
+    }
+
+
+def _default_levels() -> list[dict]:
+    """内置默认等级表（当调用方未传入 levels 时使用）。"""
+    return [
+        {"min": -1000, "name": "宿敌"},
+        {"min": -300, "name": "结了梁子"},
+        {"min": -50, "name": "有过节"},
+        {"min": 0, "name": "初识"},
+        {"min": 100, "name": "相熟"},
+        {"min": 400, "name": "要好"},
+        {"min": 1000, "name": "挚友"},
+        {"min": 2500, "name": "知己"},
+        {"min": 6000, "name": "莫逆之交"},
+    ]

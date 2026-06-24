@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=680, initial-scale=1">
+<title>{{ title }}</title>
+<style>
+  :root{
+    --ak:#FF7722; --ak-l:#FFA050; --ak-d:#C9540E;
+    --to:#0077DD; --to-l:#4DA6F5; --to-d:#005CAE;
+    --gold:#FFD98A; --txt:#FFFFFF; --muted:rgba(255,255,255,.55);
+    --surface:rgba(255,255,255,.045); --line:rgba(255,255,255,.09);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;}
+  body{
+    font-family:"PingFang SC","Microsoft YaHei","Noto Sans SC","Hiragino Sans GB",sans-serif;
+    color:var(--txt);
+    background:
+      radial-gradient(900px 520px at 10% -10%, rgba(255,119,34,.20), transparent 60%),
+      radial-gradient(950px 700px at 94% 110%, rgba(0,119,221,.22), transparent 60%),
+      linear-gradient(162deg,#1b1622 0%,#121722 58%,#0f141d 100%);
+    -webkit-font-smoothing:antialiased;
+  }
+  .page{width:680px;margin:0 auto;padding:30px 34px 26px;}
+
+  .eyebrow{display:flex;align-items:center;gap:9px;font-size:12px;letter-spacing:.18em;
+    color:var(--muted);font-weight:600;}
+  .eyebrow .dot{width:7px;height:7px;border-radius:50%;
+    background:linear-gradient(135deg,var(--ak),var(--to));}
+  .eyebrow b{color:rgba(255,255,255,.82);font-weight:700;}
+  .title-row{display:flex;align-items:flex-end;justify-content:space-between;margin-top:10px;}
+  h1{margin:0;font-size:30px;font-weight:800;letter-spacing:.04em;}
+  .pill{font-size:13px;color:rgba(255,255,255,.72);background:var(--surface);
+    border:1px solid var(--line);padding:6px 14px;border-radius:999px;}
+  .rule{height:1px;background:linear-gradient(90deg,
+      rgba(255,119,34,.45),rgba(255,255,255,.06) 50%,rgba(0,119,221,.45));
+    margin:16px 0 18px;}
+
+  .row{display:flex;align-items:center;gap:14px;padding:12px 16px;margin-bottom:11px;
+    background:var(--surface);border:1px solid var(--line);border-radius:16px;position:relative;}
+  .row.top{background:rgba(255,255,255,.06);}
+  .row.r1{border-color:rgba(255,200,90,.4);}
+  .row.r2{border-color:rgba(200,212,228,.34);}
+  .row.r3{border-color:rgba(220,150,90,.36);}
+  .accent{position:absolute;left:0;top:14px;bottom:14px;width:4px;border-radius:0 4px 4px 0;}
+  .r1 .accent{background:linear-gradient(#FFE08A,#E8A23C);}
+  .r2 .accent{background:linear-gradient(#E8EEF5,#A9B6C6);}
+  .r3 .accent{background:linear-gradient(#F0B782,#C6814A);}
+
+  .rank{width:34px;height:34px;border-radius:50%;flex:0 0 34px;display:flex;
+    align-items:center;justify-content:center;font-size:16px;font-weight:800;color:#4a2c08;
+    margin-left:4px;}
+  .rank.g{background:linear-gradient(145deg,#FFE08A,#E8A23C);}
+  .rank.s{background:linear-gradient(145deg,#EAF0F7,#A9B6C6);color:#33414f;}
+  .rank.b{background:linear-gradient(145deg,#F0B782,#C6814A);color:#4a2a12;}
+  .rank.n{background:rgba(255,255,255,.08);color:var(--muted);font-size:15px;
+    border:1px solid rgba(255,255,255,.12);}
+
+  .avatars{display:flex;align-items:center;position:relative;flex:0 0 auto;}
+  .mini{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;
+    justify-content:center;font-size:18px;font-weight:800;color:#fff;overflow:hidden;
+    box-shadow:0 4px 12px rgba(0,0,0,.4);}
+  .mini img{width:100%;height:100%;object-fit:cover;border-radius:50%;}
+  .mini.left{background:linear-gradient(145deg,var(--ak-l),var(--ak-d));
+    box-shadow:0 0 0 2.5px rgba(255,119,34,.85),0 4px 12px rgba(0,0,0,.4);}
+  .mini.right{background:linear-gradient(145deg,var(--to-l),var(--to-d));
+    margin-left:-12px;box-shadow:0 0 0 2.5px rgba(0,119,221,.85),0 4px 12px rgba(0,0,0,.4);}
+  .avatars .h{position:absolute;left:50%;top:-3px;transform:translateX(-50%);
+    width:18px;height:18px;}
+
+  .mid{flex:1 1 auto;min-width:0;}
+  .pair{display:flex;align-items:center;gap:8px;font-size:18px;font-weight:800;}
+  .pair .a{color:var(--ak-l);} .pair .b{color:var(--to-l);}
+  .pair .x{width:15px;height:15px;opacity:.95;}
+  .sub{display:flex;align-items:center;gap:10px;margin-top:7px;}
+  .tag{font-size:11.5px;font-weight:700;color:var(--gold);background:rgba(255,210,130,.14);
+    border:1px solid rgba(255,210,130,.3);padding:2px 9px;border-radius:999px;
+    letter-spacing:.04em;white-space:nowrap;}
+  .tag.max{color:#ffd0e0;background:rgba(255,90,140,.18);border-color:rgba(255,120,160,.4);}
+  .sliver{flex:1 1 auto;max-width:200px;height:6px;background:rgba(0,0,0,.3);
+    border-radius:999px;overflow:hidden;}
+  .sliver .f{height:100%;background:linear-gradient(90deg,var(--ak),var(--to));border-radius:999px;}
+
+  .val{flex:0 0 auto;text-align:right;}
+  .val .lbl{font-size:11px;color:var(--muted);letter-spacing:.05em;}
+  .val .n{display:flex;align-items:center;justify-content:flex-end;gap:6px;
+    font-size:24px;font-weight:800;color:var(--gold);margin-top:1px;}
+  .val.dim .n{color:#fff;}
+  .val .n svg{width:15px;height:15px;}
+
+  .footer{display:flex;justify-content:space-between;align-items:center;
+    margin-top:16px;font-size:12px;color:rgba(255,255,255,.4);letter-spacing:.03em;}
+  .footer .brand{display:flex;align-items:center;gap:7px;}
+  .footer .brand .dot{width:6px;height:6px;border-radius:50%;
+    background:linear-gradient(135deg,var(--ak),var(--to));}
+</style>
+</head>
+<body>
+  <div class="page">
+    <div class="eyebrow"><span class="dot"></span><b>AKITOBOT</b> · {{ eyebrow_tail }}</div>
+    <div class="title-row">
+      <h1>{{ title }}</h1>
+      {% if pill %}<span class="pill">{{ pill }}</span>{% endif %}
+    </div>
+    <div class="rule"></div>
+
+    {% for row in rows %}
+    {% set top3 = row.rank <= 3 %}
+    <div class="row{% if top3 %} top r{{ row.rank }}{% endif %}">
+      {% if top3 %}<div class="accent"></div>{% endif %}
+      <div class="rank {{ 'g' if row.rank == 1 else 's' if row.rank == 2 else 'b' if row.rank == 3 else 'n' }}">{{ row.rank }}</div>
+      <div class="avatars">
+        <div class="mini left">{% if row.left.avatar %}<img src="{{ row.left.avatar }}" alt="">{% else %}{{ row.left.initial }}{% endif %}</div>
+        <div class="mini right">{% if row.right.avatar %}<img src="{{ row.right.avatar }}" alt="">{% else %}{{ row.right.initial }}{% endif %}</div>
+        <svg class="h" viewBox="0 0 24 24" aria-hidden="true"><path fill="#ff6f91" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+      </div>
+      <div class="mid">
+        <div class="pair"><span class="a">{{ row.left.name }}</span>
+          <svg class="x" viewBox="0 0 24 24" aria-hidden="true"><path fill="#ff7e9e" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+          <span class="b">{{ row.right.name }}</span></div>
+        <div class="sub"><span class="tag{% if row.is_max %} max{% endif %}">{{ row.level_name }}{% if row.is_max %} · MAX{% endif %}</span>
+          <div class="sliver"><div class="f" style="width:{{ 100 if row.is_max else row.progress_pct }}%"></div></div></div>
+      </div>
+      <div class="val{% if not top3 %} dim{% endif %}"><div class="lbl">亲密度</div>
+        <div class="n"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#ff6f91" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>{{ "{:,}".format(row.intimacy) }}</div></div>
+    </div>
+    {% endfor %}
+
+    <div class="footer">
+      <span>{{ footer_left }}</span>
+      <span class="brand"><span class="dot"></span>{{ footer_right }}</span>
+    </div>
+  </div>
+</body>
+</html>

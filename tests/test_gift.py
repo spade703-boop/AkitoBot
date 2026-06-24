@@ -378,9 +378,8 @@ async def test_sign_cmd_grants_then_silent_on_repeat(monkeypatch):
 async def test_gift_cmd_requires_at_target(monkeypatch):
     _patch_runtime(monkeypatch)
     event = Event(group_id=1001, user_id="10001", original_message=[])
-    with pytest.raises(FinishedException) as exc:
-        await gift.gift_cmd.handlers[0](_bot(), event, Message(""))
-    assert "要 @一位群友" in str(exc.value.result)
+    result = await gift.gift_cmd.handlers[0](_bot(), event, Message(""))
+    assert result is None  # 无 @ 目标时静默忽略
 
 
 @pytest.mark.asyncio
@@ -388,14 +387,12 @@ async def test_gift_cmd_rejects_self_and_bot(monkeypatch):
     _patch_runtime(monkeypatch)
 
     self_event = Event(group_id=1001, user_id="10001", original_message=[_at("10001")])
-    with pytest.raises(FinishedException) as self_exc:
-        await gift.gift_cmd.handlers[0](_bot(), self_event, Message(""))
-    assert "给自己送礼" in str(self_exc.value.result)
+    self_result = await gift.gift_cmd.handlers[0](_bot(), self_event, Message(""))
+    assert self_result is None  # @自己时静默忽略
 
     bot_event = Event(group_id=1001, user_id="10001", original_message=[_at("114514")])
-    with pytest.raises(FinishedException) as bot_exc:
-        await gift.gift_cmd.handlers[0](_bot(), bot_event, Message(""))
-    assert "拒绝" in str(bot_exc.value.result)
+    bot_result = await gift.gift_cmd.handlers[0](_bot(), bot_event, Message(""))
+    assert bot_result is None  # @bot 时静默忽略
 
 
 @pytest.mark.asyncio
@@ -646,15 +643,12 @@ async def test_steal_cmd_success_moves_points_and_counts(monkeypatch):
 @pytest.mark.asyncio
 async def test_steal_cmd_rejects_self_bot_no_target(monkeypatch):
     _patch_runtime(monkeypatch, store={"groups": {"1001": {"users": {"10001": {"points": 100}}, "intimacy": {}}}})
-    with pytest.raises(FinishedException) as e1:
-        await gift.steal_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="10001", original_message=[]))
-    assert "@一个目标" in str(e1.value.result)
-    with pytest.raises(FinishedException) as e2:
-        await gift.steal_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="10001", original_message=[_at("10001")]))
-    assert "偷自己" in str(e2.value.result)
-    with pytest.raises(FinishedException) as e3:
-        await gift.steal_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="10001", original_message=[_at("114514")]))
-    assert "小彰" in str(e3.value.result)
+    r1 = await gift.steal_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="10001", original_message=[]))
+    assert r1 is None  # 无 @ 目标时静默忽略
+    r2 = await gift.steal_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="10001", original_message=[_at("10001")]))
+    assert r2 is None  # @自己时静默忽略
+    r3 = await gift.steal_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="10001", original_message=[_at("114514")]))
+    assert r3 is None  # @bot 时静默忽略
 
 
 @pytest.mark.asyncio

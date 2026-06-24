@@ -37,6 +37,10 @@ from ..core import (
     is_sleeping,
     load_json_file,
 )
+from .bond_pages import build_bond_page_data, build_bond_rank_page_data
+from .bond_render import render_bond_page
+
+GIFT_USE_HTML_RENDER = os.environ.get("GIFT_USE_HTML_RENDER", "1").strip() not in {"0", "false", "False"}
 
 CONFIG_FILE = "gift_config.json"
 DATA_FILE = "gift_data.json"
@@ -51,7 +55,7 @@ DEFAULT_GIFT_CONFIG: dict = {
         {"name": "彰冬谷子", "cost": 100, "intimacy": 28},
         {"name": "彰冬豆豆眼", "cost": 200, "intimacy": 60},
         {"name": "彰冬同人本", "cost": 350, "intimacy": 115},
-        {"name": "彰冬约稿点图", "cost": 550, "intimacy": 200},
+        {"name": "彰冬约稿点图", "cost": 525, "intimacy": 200},
         {"name": "自己产的彰冬饭", "cost": 819, "intimacy": 520},
     ],
     "return_gift": "彰冬谷子",  # 回礼自动回赠的礼物
@@ -741,13 +745,13 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
         await gift_cmd.finish(MessageSegment.reply(event.message_id) + _error("sleeping"))
     target_qq = _first_at_qq(getattr(event, "original_message", None))
 
-    # 参数校验：只需 @ 一位群友（不再输入礼物名）
+    # 没有 @ 有效对象时静默忽略（避免"偷什么"之类误触发）
     if not target_qq or target_qq == "all":
-        await gift_cmd.finish(MessageSegment.reply(event.message_id) + _error("need_target"))
+        return
     if target_qq == sender_id:
-        await gift_cmd.finish(MessageSegment.reply(event.message_id) + _error("self_target"))
+        return
     if target_qq == str(getattr(bot, "self_id", "")):
-        await gift_cmd.finish(MessageSegment.reply(event.message_id) + _error("bot_target"))
+        return
 
     today = _today_str()
     async with _GIFT_LOCK:
@@ -807,12 +811,13 @@ async def _(bot: Bot, event: Event):
         await steal_cmd.finish(MessageSegment.reply(event.message_id) + _error("sleeping"))
     target_qq = _first_at_qq(getattr(event, "original_message", None))
 
+    # 没有 @ 有效对象时静默忽略（避免"偷什么"之类误触发）
     if not target_qq or target_qq == "all":
-        await steal_cmd.finish(MessageSegment.reply(event.message_id) + _error("steal_need_target"))
+        return
     if target_qq == thief_id:
-        await steal_cmd.finish(MessageSegment.reply(event.message_id) + _error("steal_self"))
+        return
     if target_qq == str(getattr(bot, "self_id", "")):
-        await steal_cmd.finish(MessageSegment.reply(event.message_id) + _error("steal_bot"))
+        return
 
     cfg = _steal_cfg()
     today = _today_str()
@@ -856,7 +861,7 @@ async def _(bot: Bot, event: Event):
 
 # ==================== 指令：我的积分 ====================
 
-points_cmd = on_command("我的积分", aliases={"积分"}, priority=5, block=True)
+points_cmd = on_command("我的积分", priority=5, block=True)
 
 
 @points_cmd.handle()
@@ -900,7 +905,7 @@ async def _(event: Event):
 
 # ==================== 指令：亲密度 ====================
 
-intimacy_cmd = on_command("亲密度", aliases={"羁绊"}, priority=5, block=True)
+intimacy_cmd = on_command("我的羁绊", priority=5, block=True)
 
 
 @intimacy_cmd.handle()
@@ -917,9 +922,25 @@ async def _(event: Event):
     target_qq = _first_at_qq(getattr(event, "original_message", None))
 
     if target_qq and target_qq not in ("all", user_id):
-        await intimacy_cmd.finish(
-            MessageSegment.reply(event.message_id) + _bond_card(group, user_id, target_qq)
-        )
+        if GIFT_USE_HTML_RENDER:
+            left = {"qq": user_id, "name": _display_name(event)}
+            right = {"qq": target_qq, "name": _name_of(group, target_qq)}
+            intimacy = _get_intimacy(group, user_id, target_qq)
+            try:
+                data = build_bond_page_data(left, right, intimacy, levels=_bond_levels())
+                img_bytes = await render_bond_page("bond.html", data)
+                await intimacy_cmd.finish(
+                    MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes)
+                )
+            except Exception:
+                logger.warning("bond render failed, falling back to text")
+                await intimacy_cmd.finish(
+                    MessageSegment.reply(event.message_id) + _bond_card(group, user_id, target_qq)
+                )
+        else:
+            await intimacy_cmd.finish(
+                MessageSegment.reply(event.message_id) + _bond_card(group, user_id, target_qq)
+            )
 
     # 不带 @：列出自己羁绊最高的几位
     partners = _top_partners(group, user_id, limit=5)
@@ -971,11 +992,34 @@ async def _(event: Event):
     if not pairs:
         await rank_cmd.finish(MessageSegment.reply(event.message_id) + "本群还没有羁绊数据，快去送礼吧～")
 
-    lines = ["💞 本群同好羁绊排行："]
-    for idx, (key, value) in enumerate(pairs, 1):
-        a, b = key.split("|||")
-        lines.append(f"{idx}. {_name_of(group, a)} × {_name_of(group, b)}：{value}（{_bond_level(value)['name']}）")
-    await rank_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
+    if GIFT_USE_HTML_RENDER:
+        entries: list[dict] = []
+        for key, value in pairs:
+            a, b = key.split("|||")
+            entries.append({
+                "left": {"qq": a, "name": _name_of(group, a)},
+                "right": {"qq": b, "name": _name_of(group, b)},
+                "intimacy": int(value),
+            })
+        try:
+            data = build_bond_rank_page_data(entries, levels=_bond_levels())
+            img_bytes = await render_bond_page("bond_rank.html", data)
+            await rank_cmd.finish(
+                MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes)
+            )
+        except Exception:
+            logger.warning("bond rank render failed, falling back to text")
+            lines = ["💞 本群同好羁绊排行："]
+            for idx, (key, value) in enumerate(pairs, 1):
+                a, b = key.split("|||")
+                lines.append(f"{idx}. {_name_of(group, a)} × {_name_of(group, b)}：{value}（{_bond_level(value)['name']}）")
+            await rank_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
+    else:
+        lines = ["💞 本群同好羁绊排行："]
+        for idx, (key, value) in enumerate(pairs, 1):
+            a, b = key.split("|||")
+            lines.append(f"{idx}. {_name_of(group, a)} × {_name_of(group, b)}：{value}（{_bond_level(value)['name']}）")
+        await rank_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
 
 
 # ==================== 指令：重置送礼（超管） ====================
