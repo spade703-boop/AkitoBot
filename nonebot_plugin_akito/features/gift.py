@@ -952,6 +952,7 @@ async def _(bot: Bot, event: Event):
             await intimacy_cmd.finish(
                 MessageSegment.reply(event.message_id) + _bond_card(group, user_id, target_qq)
             )
+        return  # @某人分支结束，不继续往下走
 
     # 不带 @：列出自己羁绊最高的几位
     partners = _top_partners(group, user_id, limit=5)
