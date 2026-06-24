@@ -889,7 +889,7 @@ async def _(event: Event):
 
 # ==================== 指令：礼物列表 ====================
 
-list_cmd = on_command("礼物列表", aliases={"送礼帮助"}, priority=5, block=True)
+list_cmd = on_command("礼物列表", priority=5, block=True)
 
 
 @list_cmd.handle()
@@ -1038,3 +1038,30 @@ async def _(event: Event):
     data.setdefault("groups", {})[str(group_id)] = _new_group()
     _save_data(data)
     await reset_cmd.finish(MessageSegment.reply(event.message_id) + "已清空本群的送礼/积分/羁绊数据。")
+
+
+# ==================== 指令：送礼功能帮助 ====================
+
+help_cmd = on_command("送礼功能帮助", aliases={"送礼帮助", "送礼说明"}, priority=5, block=True)
+
+
+@help_cmd.handle()
+async def _(event: Event):
+    msg = (
+        "🎁 彰冬送礼系统\n"
+        "━━━━━━━━━━━━━━\n"
+        "· 签到 — 每天领一次积分（50~100）\n"
+        "· 送礼 @某人 — 每天一次，随机送礼物给对方，累积羁绊值\n"
+        "· 偷 @某人 — 每天两次，冒险顺走对方积分（会掉羁绊）\n"
+        "· 我的积分 — 查看当前积分和今日状态\n"
+        "· 礼物列表 — 查看全部礼物档位和花费\n"
+        "· 我的羁绊 @某人 — 查看你与 ta 的羁绊详情图\n"
+        "· 亲密度排行 — 查看本群羁绊排行榜\n"
+        "\n"
+        "💡 礼物越贵羁绊加得越多；送礼有概率暴击/回礼/意外事件。\n"
+        "💡 偷人需谨慎：偷越亲近的人掉羁绊越多，还可能被反杀。"
+    )
+    if isinstance(event, GroupMessageEvent):
+        await help_cmd.finish(MessageSegment.reply(event.message_id) + msg)
+    else:
+        await help_cmd.finish(msg)

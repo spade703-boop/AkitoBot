@@ -133,32 +133,32 @@ def test_top_partners_sorted_desc():
 
 def test_bond_level_brackets():
     # 每级最低门槛恰好进入该级
-    assert gift._bond_level(0)["name"] == "初识"
-    assert gift._bond_level(99)["name"] == "初识"
-    assert gift._bond_level(100)["name"] == "相熟"
-    assert gift._bond_level(399)["name"] == "相熟"
-    assert gift._bond_level(400)["name"] == "要好"
-    assert gift._bond_level(1000)["name"] == "挚友"
-    assert gift._bond_level(2500)["name"] == "知己"
-    assert gift._bond_level(6000)["name"] == "莫逆之交"
-    assert gift._bond_level(999999)["name"] == "莫逆之交"
+    assert gift._bond_level(0)["name"] == "Hot Dogs"
+    assert gift._bond_level(99)["name"] == "Hot Dogs"
+    assert gift._bond_level(100)["name"] == "大麦克风"
+    assert gift._bond_level(399)["name"] == "大麦克风"
+    assert gift._bond_level(400)["name"] == "能信赖的搭档"
+    assert gift._bond_level(1000)["name"] == "云与柳的大头贴"
+    assert gift._bond_level(2500)["name"] == "想与你并肩而行"
+    assert gift._bond_level(6000)["name"] == "从今往后直到永远"
+    assert gift._bond_level(999999)["name"] == "从今往后直到永远"
 
 
 def test_bond_level_progress_and_maxed():
     mid = gift._bond_level(620)
-    assert mid["name"] == "要好"
-    assert mid["next_name"] == "挚友"
+    assert mid["name"] == "能信赖的搭档"
+    assert mid["next_name"] == "云与柳的大头贴"
     assert mid["to_next"] == 1000 - 620
-    assert mid["level"] == 3  # 初识=Lv1 锚定（不受负档前置影响）
+    assert mid["level"] == 3  # Hot Dogs=Lv1 锚定（不受负档前置影响）
     top = gift._bond_level(7000)
-    assert top["name"] == "莫逆之交"
+    assert top["name"] == "从今往后直到永远"
     assert top["level"] == 6
     assert top["next_name"] is None
     assert top["to_next"] == 0
 
 
 def test_bond_level_negative_tiers():
-    assert gift._bond_level(0)["name"] == "初识"
+    assert gift._bond_level(0)["name"] == "Hot Dogs"
     assert gift._bond_level(0)["level"] == 1
     assert gift._bond_level(-1)["name"] == "有过节"
     assert gift._bond_level(-50)["name"] == "有过节"
@@ -195,8 +195,8 @@ def test_bond_card_shows_level_and_directed_counts():
     gift._bump_count(group, "10001", "10002")
     gift._bump_count(group, "10002", "10001")
     card = str(gift._bond_card(group, "10001", "10002"))
-    assert "要好" in card
-    assert "距「挚友」还差" in card
+    assert "能信赖的搭档" in card
+    assert "距「云与柳的大头贴」还差" in card
     assert "你送出 2 次" in card
     assert "ta 回送 1 次" in card
     assert "[at:10001]" in card and "[at:10002]" in card
@@ -205,7 +205,7 @@ def test_bond_card_shows_level_and_directed_counts():
 def test_bond_card_no_gifts_yet():
     group = gift._new_group()
     card = str(gift._bond_card(group, "10001", "10002"))
-    assert "初识" in card
+    assert "Hot Dogs" in card
     assert "还没互送过礼" in card
 
 
