@@ -190,10 +190,69 @@ def _default_levels() -> list[dict]:
         {"min": -1000, "name": "宿敌"},
         {"min": -300, "name": "结了梁子"},
         {"min": -50, "name": "有过节"},
-        {"min": 0, "name": "初识"},
-        {"min": 100, "name": "相熟"},
-        {"min": 400, "name": "要好"},
-        {"min": 1000, "name": "挚友"},
-        {"min": 2500, "name": "知己"},
-        {"min": 6000, "name": "莫逆之交"},
+        {"min": 0, "name": "Hot Dogs"},
+        {"min": 100, "name": "大麦克风"},
+        {"min": 400, "name": "能信赖的搭档"},
+        {"min": 1000, "name": "云与柳的大头贴"},
+        {"min": 2500, "name": "想与你并肩而行"},
+        {"min": 6000, "name": "从今往后直到永远"},
     ]
+
+
+def build_my_bonds_page_data(
+    owner: dict,
+    partners: list[dict],
+    levels: list[dict] | None = None,
+    *,
+    title: str = "我的羁绊",
+    eyebrow_tail: str = "MY BONDS",
+    pill: str | None = None,
+    limit: int | None = 10,
+    footer_left: str | None = None,
+    footer_right: str = FOOTER_BRAND,
+) -> dict:
+    """单个用户的羁绊总览页数据。
+
+    owner:    {"qq": "...", "name": "...", "avatar": 可选}  查询者本人
+    partners: [{"qq": "...", "name": "...", "avatar": 可选, "intimacy": int}, ...]
+              ta 的所有羁绊伙伴（如 gift.py 的 _top_partners 取出后补名字）。
+    会按亲密度从高到低排序；stats 统计「全部」伙伴，列表只展示前 limit 位。
+    is_neg（亲密度<0）在模板里走冷色/红色 + 裂痕心。
+    """
+    if levels is None:
+        levels = _default_levels()
+
+    ordered = sorted(partners, key=lambda p: int(p.get("intimacy", 0)), reverse=True)
+
+    count = len(ordered)
+    total = sum(int(p.get("intimacy", 0)) for p in ordered)
+    top_level = level_info(int(ordered[0].get("intimacy", 0)), levels)["level_name"] if ordered else "—"
+
+    shown = ordered[:limit] if limit is not None else ordered
+    rows = []
+    for i, p in enumerate(shown, start=1):
+        intim = int(p.get("intimacy", 0))
+        info = level_info(intim, levels)
+        rows.append(
+            {
+                "rank": i,
+                "partner": _person(p),
+                "intimacy": intim,
+                "level_name": info["level_name"],
+                "progress_pct": info["progress_pct"],
+                "is_max": info["is_max"],
+                "is_neg": intim < 0,
+            }
+        )
+
+    return {
+        "page_width": 680,
+        "title": title,
+        "eyebrow_tail": eyebrow_tail,
+        "pill": pill,
+        "owner": _person(owner),
+        "stats": {"count": count, "total": total, "top_level": top_level},
+        "rows": rows,
+        "footer_left": footer_left or _now_text(),
+        "footer_right": footer_right,
+    }

@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=680, initial-scale=1">
+<title>{{ title }}</title>
+<style>
+  :root{
+    --ak:#FF7722; --ak-l:#FFA050; --ak-d:#C9540E;
+    --to:#0077DD; --to-l:#4DA6F5; --to-d:#005CAE;
+    --gold:#FFD98A; --txt:#FFFFFF; --muted:rgba(255,255,255,.55);
+    --neg:#FF8A8A; --surface:rgba(255,255,255,.045); --line:rgba(255,255,255,.09);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;}
+  body{
+    font-family:"PingFang SC","Microsoft YaHei","Noto Sans SC","Hiragino Sans GB",sans-serif;
+    color:var(--txt);
+    background:
+      radial-gradient(900px 520px at 10% -10%, rgba(255,119,34,.20), transparent 60%),
+      radial-gradient(950px 700px at 94% 110%, rgba(0,119,221,.22), transparent 60%),
+      linear-gradient(162deg,#1b1622 0%,#121722 58%,#0f141d 100%);
+    -webkit-font-smoothing:antialiased;
+  }
+  .page{width:680px;margin:0 auto;padding:30px 34px 26px;}
+
+  .eyebrow{display:flex;align-items:center;gap:9px;font-size:12px;letter-spacing:.18em;
+    color:var(--muted);font-weight:600;}
+  .eyebrow .dot{width:7px;height:7px;border-radius:50%;
+    background:linear-gradient(135deg,var(--ak),var(--to));}
+  .eyebrow b{color:rgba(255,255,255,.82);font-weight:700;}
+  .title-row{display:flex;align-items:flex-end;justify-content:space-between;margin-top:10px;}
+  h1{margin:0;font-size:30px;font-weight:800;letter-spacing:.04em;}
+  .pill{font-size:13px;color:rgba(255,255,255,.72);background:var(--surface);
+    border:1px solid var(--line);padding:6px 14px;border-radius:999px;}
+  .rule{height:1px;background:linear-gradient(90deg,
+      rgba(255,119,34,.45),rgba(255,255,255,.06) 50%,rgba(0,119,221,.45));
+    margin:16px 0 20px;}
+
+  /* ---- owner header ---- */
+  .owner{display:flex;align-items:center;gap:18px;padding:4px 6px 18px;}
+  .owner-ava{width:88px;height:88px;border-radius:50%;padding:4px;flex:0 0 auto;
+    background:linear-gradient(135deg,var(--ak),var(--to));
+    box-shadow:0 10px 24px rgba(0,0,0,.4);}
+  .owner-ava .inner{width:100%;height:100%;border-radius:50%;overflow:hidden;
+    display:flex;align-items:center;justify-content:center;font-size:34px;font-weight:800;
+    background:linear-gradient(145deg,#2c2942,#1b2030);color:#fff;}
+  .owner-ava .inner img{width:100%;height:100%;object-fit:cover;}
+  .owner-meta{min-width:0;}
+  .owner-name{font-size:24px;font-weight:800;letter-spacing:.02em;}
+  .chips{display:flex;gap:8px;margin-top:11px;flex-wrap:wrap;}
+  .chip{font-size:12.5px;color:rgba(255,255,255,.78);background:var(--surface);
+    border:1px solid var(--line);padding:5px 12px;border-radius:999px;}
+  .chip b{color:var(--gold);font-weight:800;}
+
+  /* ---- bond list ---- */
+  .list{display:flex;flex-direction:column;gap:10px;}
+  .brow{display:flex;align-items:center;gap:13px;padding:11px 15px;
+    background:var(--surface);border:1px solid var(--line);border-radius:15px;}
+  .brow.lead{background:rgba(255,150,90,.10);border-color:rgba(255,160,90,.32);}
+  .brow.neg.lead{background:var(--surface);border-color:var(--line);}
+
+  .idx{width:22px;flex:0 0 22px;text-align:center;font-size:15px;font-weight:800;
+    color:rgba(255,255,255,.4);}
+  .pava{width:46px;height:46px;border-radius:50%;padding:2.5px;flex:0 0 auto;}
+  .pava.pos{background:linear-gradient(145deg,#FFC861,#ff7e9e);}
+  .pava.neg{background:linear-gradient(145deg,#8893a6,#d65668);}
+  .pava .inner{width:100%;height:100%;border-radius:50%;overflow:hidden;
+    display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;
+    background:linear-gradient(145deg,#2c2942,#1b2030);color:#fff;}
+  .pava .inner img{width:100%;height:100%;object-fit:cover;}
+
+  .pmid{flex:1 1 auto;min-width:0;}
+  .pname{display:flex;align-items:center;gap:7px;font-size:17px;font-weight:800;}
+  .pname .ic{width:15px;height:15px;flex:0 0 auto;}
+  .lead-badge{font-size:10.5px;font-weight:800;color:#ffdca0;letter-spacing:.06em;
+    background:rgba(255,180,90,.2);border:1px solid rgba(255,190,100,.45);
+    padding:1px 7px;border-radius:999px;}
+  .psub{display:flex;align-items:center;gap:10px;margin-top:6px;}
+  .tag{font-size:11.5px;font-weight:700;color:var(--gold);background:rgba(255,210,130,.14);
+    border:1px solid rgba(255,210,130,.3);padding:2px 9px;border-radius:999px;
+    letter-spacing:.04em;white-space:nowrap;}
+  .tag.neg{color:var(--neg);background:rgba(255,90,90,.15);border-color:rgba(255,110,110,.4);}
+  .sliver{flex:1 1 auto;max-width:190px;height:6px;background:rgba(0,0,0,.3);
+    border-radius:999px;overflow:hidden;}
+  .sliver .f{height:100%;border-radius:999px;
+    background:linear-gradient(90deg,#FF7722,#ff9e5e);}
+  .sliver.neg .f{background:linear-gradient(90deg,#8893a6,#ff7a86);}
+
+  .pval{flex:0 0 auto;text-align:right;}
+  .pval .lbl{font-size:11px;color:var(--muted);letter-spacing:.05em;}
+  .pval .n{font-size:23px;font-weight:800;color:var(--gold);margin-top:1px;}
+  .pval.neg .n{color:var(--neg);}
+
+  .footer{display:flex;justify-content:space-between;align-items:center;
+    margin-top:18px;font-size:12px;color:rgba(255,255,255,.4);letter-spacing:.03em;}
+  .footer .brand{display:flex;align-items:center;gap:7px;}
+  .footer .brand .dot{width:6px;height:6px;border-radius:50%;
+    background:linear-gradient(135deg,var(--ak),var(--to));}
+</style>
+</head>
+<body>
+{% set HEART = "M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" %}
+  <div class="page">
+    <div class="eyebrow"><span class="dot"></span><b>AKITOBOT</b> · {{ eyebrow_tail }}</div>
+    <div class="title-row">
+      <h1>{{ title }}</h1>
+      {% if pill %}<span class="pill">{{ pill }}</span>{% endif %}
+    </div>
+    <div class="rule"></div>
+
+    <div class="owner">
+      <div class="owner-ava"><div class="inner">{% if owner.avatar %}<img src="{{ owner.avatar }}" alt="">{% else %}{{ owner.initial }}{% endif %}</div></div>
+      <div class="owner-meta">
+        <div class="owner-name">{{ owner.name }}</div>
+        <div class="chips">
+          <span class="chip">羁绊 <b>{{ stats.count }}</b> 段</span>
+          <span class="chip">最深 <b>{{ stats.top_level }}</b></span>
+          <span class="chip">总亲密度 <b>{{ "{:,}".format(stats.total) }}</b></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="list">
+      {% for row in rows %}
+      <div class="brow{% if loop.first %} lead{% endif %}{% if row.is_neg %} neg{% endif %}">
+        <div class="idx">{{ row.rank }}</div>
+        <div class="pava {{ 'neg' if row.is_neg else 'pos' }}"><div class="inner">{% if row.partner.avatar %}<img src="{{ row.partner.avatar }}" alt="">{% else %}{{ row.partner.initial }}{% endif %}</div></div>
+        <div class="pmid">
+          <div class="pname">
+            <span>{{ row.partner.name }}</span>
+            {% if row.is_neg %}
+            <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path fill="#e0667a" d="{{ HEART }}"/><path d="M12 5.2 l-1.5 3.9 l2.3 2.3 l-1.9 2.8 l1.1 3.1" fill="none" stroke="#161b25" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"/></svg>
+            {% else %}
+            <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path fill="#ff7e9e" d="{{ HEART }}"/></svg>
+            {% endif %}
+            {% if loop.first and not row.is_neg %}<span class="lead-badge">最亲密</span>{% endif %}
+          </div>
+          <div class="psub">
+            <span class="tag{% if row.is_neg %} neg{% endif %}">{{ row.level_name }}</span>
+            <div class="sliver{% if row.is_neg %} neg{% endif %}"><div class="f" style="width:{{ 100 if row.is_max else row.progress_pct }}%"></div></div>
+          </div>
+        </div>
+        <div class="pval{% if row.is_neg %} neg{% endif %}">
+          <div class="lbl">亲密度</div>
+          <div class="n">{{ "{:,}".format(row.intimacy) }}</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="footer">
+      <span>{{ footer_left }}</span>
+      <span class="brand"><span class="dot"></span>{{ footer_right }}</span>
+    </div>
+  </div>
+</body>
+</html>

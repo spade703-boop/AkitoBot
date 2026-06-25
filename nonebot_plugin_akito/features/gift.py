@@ -37,7 +37,7 @@ from ..core import (
     is_sleeping,
     load_json_file,
 )
-from .bond_pages import build_bond_page_data, build_bond_rank_page_data
+from .bond_pages import build_bond_page_data, build_bond_rank_page_data, build_my_bonds_page_data
 from .bond_render import render_bond_page
 
 GIFT_USE_HTML_RENDER = os.environ.get("GIFT_USE_HTML_RENDER", "1").strip() not in {"0", "false", "False"}
@@ -967,16 +967,39 @@ async def _(bot: Bot, event: Event):
             )
         return  # @某人分支结束，不继续往下走
 
-    # 不带 @：列出自己羁绊最高的几位
-    partners = _top_partners(group, user_id, limit=5)
+    # 不带 @：列出自己所有羁绊
+    partners = _top_partners(group, user_id, limit=999)
     if not partners:
         await intimacy_cmd.finish(
             MessageSegment.reply(event.message_id) + "你还没有和谁建立羁绊呢，快去送礼吧～"
         )
-    lines = ["你的同好羁绊 Top："]
-    for other_id, value in partners:
-        lines.append(f"· {_name_of(group, other_id)}：{value}（{_bond_level(value)['name']}）")
-    await intimacy_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
+
+    if GIFT_USE_HTML_RENDER:
+        partner_dicts: list[dict] = []
+        for other_id, value in partners:
+            name = _name_of(group, other_id)
+            partner_dicts.append({"qq": other_id, "name": name, "intimacy": value})
+        owner = {"qq": user_id, "name": _display_name(event)}
+        img_bytes = None
+        try:
+            page_data = build_my_bonds_page_data(owner, partner_dicts, levels=_bond_levels())
+            img_bytes = await render_bond_page("my_bonds.html", page_data)
+        except Exception as e:
+            logger.warning(f"my bonds render failed ({e}), falling back to text")
+        if img_bytes is not None:
+            await intimacy_cmd.finish(
+                MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes)
+            )
+        else:
+            lines = ["你的同好羁绊 Top："]
+            for other_id, value in partners[:5]:
+                lines.append(f"· {_name_of(group, other_id)}：{value}（{_bond_level(value)['name']}）")
+            await intimacy_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
+    else:
+        lines = ["你的同好羁绊 Top："]
+        for other_id, value in partners[:5]:
+            lines.append(f"· {_name_of(group, other_id)}：{value}（{_bond_level(value)['name']}）")
+        await intimacy_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
 
 
 def _top_partners(group: dict, user_id: str, limit: int = 5) -> list[tuple[str, int]]:
