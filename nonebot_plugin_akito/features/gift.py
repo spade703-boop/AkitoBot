@@ -54,13 +54,16 @@ DEFAULT_GIFT_CONFIG: dict = {
         {"name": "彰冬无料", "cost": 50, "intimacy": 12},
         {"name": "彰冬谷子", "cost": 100, "intimacy": 28},
         {"name": "彰冬豆豆眼", "cost": 200, "intimacy": 60},
+        {"name": "彰冬亚克力立牌", "cost": 270, "intimacy": 85},
         {"name": "彰冬同人本", "cost": 350, "intimacy": 115},
+        {"name": "彰冬画集", "cost": 450, "intimacy": 155},
         {"name": "彰冬约稿点图", "cost": 525, "intimacy": 200},
-        {"name": "自己产的彰冬饭", "cost": 819, "intimacy": 520},
+        {"name": "彰冬手办", "cost": 648, "intimacy": 255},
+        # special=true 必定惊喜升级（不暴击不失败，固定取自身 intimacy）；copy 指定专属文案
+        {"name": "自己产的彰冬饭", "cost": 819, "intimacy": 520, "special": True, "copy": "special_meal"},
+        {"name": "彰冬婚礼邀请函", "cost": 1112, "intimacy": 1314, "special": True, "copy": "special_wedding"},
     ],
     "return_gift": "彰冬谷子",  # 回礼自动回赠的礼物
-    "special_gift": "自己产的彰冬饭",  # 抽中它必定触发「惊喜升级」固定结算
-    "special_intimacy": 520,  # 彰冬饭固定结算的羁绊值（抽中必定惊喜升级，压过暴击上限 400）
     "sign_in": {"min": 50, "max": 100},
     "sign_delay_sec": {"min": 3, "max": 5},  # 签到回复随机延迟，错开另一个签到 bot
     "crit_multiplier": 2,
@@ -83,12 +86,12 @@ DEFAULT_GIFT_CONFIG: dict = {
         {"min": -1000, "name": "宿敌"},
         {"min": -300, "name": "结了梁子"},
         {"min": -50, "name": "有过节"},
-        {"min": 0, "name": "初识"},
-        {"min": 100, "name": "相熟"},
-        {"min": 400, "name": "要好"},
-        {"min": 1000, "name": "挚友"},
-        {"min": 2500, "name": "知己"},
-        {"min": 6000, "name": "莫逆之交"},
+        {"min": 0, "name": "Hot Dogs"},
+        {"min": 100, "name": "大麦克风"},
+        {"min": 400, "name": "能信赖的搭档"},
+        {"min": 1000, "name": "云与柳的大头贴"},
+        {"min": 2500, "name": "想与你并肩而行"},
+        {"min": 6000, "name": "从今往后直到永远"},
     ],
     # 偷积分：对抗玩法（轻量·强保护·掉羁绊），每项可配可热重载
     "steal": {
@@ -170,10 +173,14 @@ DEFAULT_GIFT_CONFIG: dict = {
             "{a} 寄给 {b} 的【{gift}】半路寄丢了，心意还在，积分全额退回 {refund}。",
             "{a} 的【{gift}】在物流里弄丢了，{b} 说心意领了就好，积分如数退还 {refund}。",
         ],
-        # 顶档「自己产的彰冬饭」专属固定文案
-        "special": [
+        # 保证礼专属文案（必定惊喜升级）
+        "special_meal": [
             "{a} 送的彰冬饭非常合 {b} 的胃口，羁绊 +{amount}。",
             "{a} 送的彰冬饭正好是 {b} 最喜欢的那个派生，羁绊 +{amount}。",
+        ],
+        "special_wedding": [
+            "{a} 郑重地把【彰冬婚礼邀请函】递到 {b} 手里，邀请 {b} 去参加这对橙蓝给子的婚礼，羁绊 +{amount}（一生一世）。",
+            "{a} 向 {b} 递出【彰冬婚礼邀请函】，要把这段同好情谊焊成一辈子，羁绊 +{amount}。",
         ],
         # 偷：四种结果（{amount} 积分、{bond} 掉的羁绊）
         "steal_success": [
@@ -503,7 +510,7 @@ def _roll_mishap(rng=random) -> str:
 
 
 def _is_special_gift(gift: dict) -> bool:
-    return gift.get("name") == _cfg("special_gift", "自己产的彰冬饭")
+    return bool(gift.get("special"))
 
 
 def _settle(group: dict, sender_id: str, target_id: str, gift: dict,
@@ -534,8 +541,9 @@ def _settle(group: dict, sender_id: str, target_id: str, gift: dict,
     elif main_event == "fail":
         out["amount"] = 0
     elif main_event == "special":
-        # 自己产的彰冬饭：必定惊喜升级，固定结算
-        out["amount"] = int(_cfg("special_intimacy", base))
+        # 保证礼：必定惊喜升级，固定取礼物自身 intimacy；copy 走礼物专属文案
+        out["amount"] = int(gift.get("intimacy", base))
+        out["copy"] = gift.get("copy", "special")
         _add_intimacy(group, sender_id, target_id, out["amount"])
     elif main_event == "mishap":
         # 意外：按 mishaps 配置表结算（羁绊加成 + 按比例返还积分）
@@ -629,7 +637,9 @@ def _render_with_ats(template: str, ctx: dict):
 def _outcome_copy_key(out: dict) -> str:
     if out["event"] == "mishap":
         return f"mishap_{out['mishap']}"
-    return out["event"]  # normal / crit / return / fail / special
+    if out["event"] == "special":
+        return out.get("copy") or "special"
+    return out["event"]  # normal / crit / return / fail
 
 
 def _build_broadcast(out: dict, sender_id: str, target_id: str, rng=random):

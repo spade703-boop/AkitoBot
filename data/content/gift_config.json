@@ -16,9 +16,19 @@
       "intimacy": 60
     },
     {
+      "name": "彰冬亚克力立牌",
+      "cost": 270,
+      "intimacy": 85
+    },
+    {
       "name": "彰冬同人本",
       "cost": 350,
       "intimacy": 115
+    },
+    {
+      "name": "彰冬画集",
+      "cost": 450,
+      "intimacy": 155
     },
     {
       "name": "彰冬约稿点图",
@@ -26,14 +36,26 @@
       "intimacy": 200
     },
     {
+      "name": "彰冬手办",
+      "cost": 648,
+      "intimacy": 255
+    },
+    {
       "name": "自己产的彰冬饭",
       "cost": 819,
-      "intimacy": 520
+      "intimacy": 520,
+      "special": true,
+      "copy": "special_meal"
+    },
+    {
+      "name": "彰冬婚礼邀请函",
+      "cost": 1112,
+      "intimacy": 1314,
+      "special": true,
+      "copy": "special_wedding"
     }
   ],
   "return_gift": "彰冬谷子",
-  "special_gift": "自己产的彰冬饭",
-  "special_intimacy": 520,
   "sign_in": {
     "min": 50,
     "max": 100
@@ -217,9 +239,13 @@
       "{a} 寄给 {b} 的【{gift}】半路寄丢了，心意还在，积分全额退回 {refund}。",
       "{a} 的【{gift}】在物流里弄丢了，{b} 说心意领了就好，积分如数退还 {refund}。"
     ],
-    "special": [
+    "special_meal": [
       "{a} 送的彰冬饭非常合 {b} 的胃口，羁绊 +{amount}。",
       "{a} 送的彰冬饭正好是 {b} 最喜欢的那个派生，羁绊 +{amount}。"
+    ],
+    "special_wedding": [
+      "{a} 郑重地把【彰冬婚礼邀请函】递到 {b} 手里，邀请 {b} 去参加这对橙蓝给子的婚礼，羁绊 +{amount}（一生一世）。",
+      "{a} 向 {b} 递出【彰冬婚礼邀请函】，要把这段同好情谊焊成一辈子，羁绊 +{amount}。"
     ],
     "steal_success": [
       "{a} 瞅准空子，顺走了 {b} {amount} 积分，溜了溜了～（羁绊 -{bond}）",

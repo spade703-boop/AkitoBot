@@ -42,7 +42,7 @@ def _g0() -> dict:
 
 
 def _top() -> dict:
-    return gift._gift_list()[-1]  # 顶档（自己产的彰冬饭）
+    return gift._gift_list()[-1]  # 顶档（彰冬婚礼邀请函）
 
 
 def _patch_runtime(monkeypatch, *, today: str = "2026-06-22", store: dict | None = None):
@@ -105,7 +105,8 @@ def test_cheapest_gift():
 
 
 def test_is_special_gift():
-    assert gift._is_special_gift(_top()) is True
+    assert gift._is_special_gift(_top()) is True            # 彰冬婚礼邀请函
+    assert gift._is_special_gift(gift._gift_list()[-2]) is True  # 自己产的彰冬饭
     assert gift._is_special_gift(_g0()) is False
 
 
@@ -262,11 +263,15 @@ def test_settle_fail_no_intimacy():
     assert gift._get_intimacy(group, "A", "B") == 0
 
 
-def test_settle_special_meal_uses_special_intimacy():
-    group = gift._new_group()
-    out = gift._settle(group, "A", "B", _top(), "special", None)
-    assert out["amount"] == gift._cfg("special_intimacy")
-    assert gift._get_intimacy(group, "A", "B") == gift._cfg("special_intimacy")
+def test_settle_special_uses_gift_own_intimacy():
+    specials = [g for g in gift._gift_list() if g.get("special")]
+    assert len(specials) >= 2  # 彰冬饭 + 婚礼邀请函
+    for g in specials:
+        group = gift._new_group()
+        out = gift._settle(group, "A", "B", g, "special", None)
+        assert out["amount"] == g["intimacy"]                         # 取礼物自身好感度
+        assert gift._get_intimacy(group, "A", "B") == g["intimacy"]
+        assert out["copy"] == g["copy"]                               # 走礼物专属文案
 
 
 def test_settle_mishap_damaged_refunds_half():
@@ -324,7 +329,8 @@ def test_every_mishap_has_copy_and_renders():
 
 def test_outcome_copy_key_mapping():
     assert gift._outcome_copy_key({"event": "normal", "mishap": None}) == "normal"
-    assert gift._outcome_copy_key({"event": "special", "mishap": None}) == "special"
+    assert gift._outcome_copy_key({"event": "special", "mishap": None}) == "special"  # 无 copy 兜底
+    assert gift._outcome_copy_key({"event": "special", "copy": "special_wedding"}) == "special_wedding"
     assert gift._outcome_copy_key({"event": "mishap", "mishap": "damaged"}) == "mishap_damaged"
     assert gift._outcome_copy_key({"event": "mishap", "mishap": "lost"}) == "mishap_lost"
 
@@ -427,7 +433,7 @@ async def test_gift_cmd_happy_path_deducts_and_adds_intimacy(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_gift_cmd_special_meal_always_special(monkeypatch):
+async def test_gift_cmd_special_gift_always_special(monkeypatch):
     state = _patch_runtime(
         monkeypatch,
         store={"groups": {"1001": {"users": {"10001": {"points": 100000}}, "intimacy": {}}}},
@@ -442,9 +448,9 @@ async def test_gift_cmd_special_meal_always_special(monkeypatch):
         await gift.gift_cmd.handlers[0](_bot(), event, Message(""))
 
     result = str(exc.value.result)
-    assert "彰冬饭" in result
+    assert "婚礼" in result  # 顶档现为婚礼邀请函，走 special_wedding 文案
     assert state["groups"]["1001"]["users"]["10001"]["points"] == 100000 - top["cost"]
-    assert state["groups"]["1001"]["intimacy"]["10001|||10002"] == gift._cfg("special_intimacy")
+    assert state["groups"]["1001"]["intimacy"]["10001|||10002"] == top["intimacy"]
 
 
 @pytest.mark.asyncio
