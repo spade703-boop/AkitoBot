@@ -1,0 +1,76 @@
+{
+  "fortune": {
+    "signin_exp_base": 50,
+    "lucky_pity_days": 5,
+    "lucky_pity_boost": 30,
+    "daji_after_daxiong_boost": 20,
+    "lucky_keys": ["daji", "ji"],
+    "daji_key": "daji",
+    "daxiong_key": "daxiong",
+    "levels": [
+      {"key": "daji", "name": "大吉", "weight": 5, "exp_mult": 3.0, "combat_factor": 1.10},
+      {"key": "ji", "name": "吉", "weight": 25, "exp_mult": 2.0, "combat_factor": 1.05},
+      {"key": "ping", "name": "中平", "weight": 45, "exp_mult": 1.0, "combat_factor": 1.00},
+      {"key": "xiaoxiong", "name": "小凶", "weight": 20, "exp_mult": 0.5, "combat_factor": 0.97},
+      {"key": "daxiong", "name": "大凶", "weight": 5, "exp_mult": 0.0, "combat_factor": 0.90}
+    ]
+  },
+  "stamina": {"max": 100, "cost_per_hunt": 20},
+  "level_curve": {"base": 100},
+  "power": {"base_power": 10, "power_per_level": 5},
+  "combat": {
+    "factor_min": 0.8,
+    "factor_max": 1.2,
+    "fortune_affects_hunt": true,
+    "lose_exp_ratio": 0.2,
+    "crush_margin": 1.5,
+    "weak_margin": 0.8,
+    "no_event_weight": 60,
+    "events": {
+      "slip": {"weight": 25, "power_mult": 0.75},
+      "insight": {"weight": 25, "exp_mult": 1.5},
+      "desperate": {"weight": 35, "power_mult": 1.6}
+    }
+  },
+  "monsters": [
+    {"name": "史莱姆", "level": 1, "power_req": 10, "exp": 50, "points": 20, "weight": 50},
+    {"name": "哥布林", "level": 3, "power_req": 30, "exp": 120, "points": 50, "weight": 30},
+    {"name": "座狼", "level": 5, "power_req": 55, "exp": 200, "points": 90, "weight": 15},
+    {"name": "食人魔", "level": 8, "power_req": 90, "exp": 320, "points": 150, "weight": 5}
+  ],
+  "copy": {
+    "signin_fortune": [
+      "🎴 今日运势：{fortune}（签到经验 ×{mult}，+{exp}）。",
+      "🎴 抽到了「{fortune}」，签到经验 ×{mult}（+{exp}）。"
+    ],
+    "signin_fortune_zero": [
+      "🎴 今日运势：{fortune}……签到经验颗粒无收，明天会更好。"
+    ],
+    "fortune_query": [
+      "{a} 今日运势：{fortune}。"
+    ],
+    "hunt_encounter": [
+      "{a} 整装出门探索，撞上了 Lv{mlevel} 的【{monster}】！",
+      "{a} 在野外遭遇了 Lv{mlevel} 的【{monster}】，拔刀迎战！"
+    ],
+    "hunt_win": [
+      "鏖战之后击败了【{monster}】，经验 +{exp}、积分 +{points}（精力 -{cost}，剩 {stamina}）。",
+      "一套连招放倒【{monster}】，经验 +{exp}、积分 +{points}（精力 -{cost}，剩 {stamina}）。"
+    ],
+    "hunt_lose": [
+      "可惜不敌【{monster}】，狼狈撤退，只摸到一点经验 +{exp}（精力 -{cost}，剩 {stamina}）。"
+    ],
+    "levelup": [
+      "⬆️ 升级了！Lv{level} → Lv{newlevel}，战力 {power} → {newpower}！"
+    ],
+    "event_slip": ["💢 脚底一滑，这一下没使上全力……"],
+    "event_insight": ["🎯 看破了【{monster}】的破绽，经验大涨！"],
+    "event_desperate": ["🔥 被逼到绝境，反而爆发出惊人的战力！"]
+  },
+  "errors": {
+    "private_only": "冒险要在群里玩哦。",
+    "sleeping": "💤 这会儿小彰睡着了，等 6 点天亮以后再来探险吧……",
+    "no_stamina": "精力不够啦（需要 {cost}，当前 {stamina}），精力每天 0 点回满，先去歇歇。",
+    "need_signin": "今天还没签到，先「签到」抽个运势再来冒险吧～"
+  }
+}

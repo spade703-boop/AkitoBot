@@ -9,6 +9,7 @@ if os.environ.get("AKITO_SKIP_PLUGIN_LOAD") != "1":
     from . import random_paro
     from . import random_keyword
     from . import gift
+    from . import rpg
     try:
         from . import director
     except ImportError:
