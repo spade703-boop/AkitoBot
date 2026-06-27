@@ -64,12 +64,12 @@ DEFAULT_RPG_CONFIG: dict = {
     ],
     # ---- 播报文案。占位符：{a} → 真 @；其余 {monster}{mlevel}{exp}{points}{cost}{stamina}{fortune}{mult}{level}{newlevel}{power}{newpower} → 文本 ----
     "copy": {
-        "signin_fortune": [
-            "🎴 今日运势：{fortune}（签到经验 ×{mult}，+{exp}）。",
-            "🎴 抽到了「{fortune}」，签到经验 ×{mult}（+{exp}）。",
+        "signin_exp": [
+            "🗡️ 签到完成，今日探索经验 +{exp}。",
+            "🗡️ 打卡了，探索经验 +{exp} 到账。",
         ],
-        "signin_fortune_zero": [
-            "🎴 今日运势：{fortune}……签到经验颗粒无收，明天会更好。",
+        "signin_exp_zero": [
+            "🗡️ 今天状态不佳，探索经验颗粒无收，明天会更好。",
         ],
         "fortune_query": [
             "{a} 今日运势：{fortune}。",

@@ -61,10 +61,6 @@ def _roll_fortune(user: dict, rng=random) -> str:
     return _weighted_choice(weights, rng)
 
 
-def _fmt_mult(mult: float) -> str:
-    return str(int(mult)) if float(mult).is_integer() else str(mult)
-
-
 def _line(copy_key: str, **ctx) -> str:
     """随机取一条文案并安全格式化（缺占位符不抛错），用于签到追加行（纯文本）。"""
     pool = _copy(copy_key)
@@ -76,30 +72,33 @@ def _line(copy_key: str, **ctx) -> str:
 
 
 def on_signin(group: dict, user_id: str, rng=random) -> str:
-    """签到钩子：抽当日运势、按运势系数发签到经验，返回追加播报行（当天已抽过则返回空串）。"""
+    """签到钩子：静默掷当日运势（隐藏值，供打野/运势指令），按运势系数发签到经验。
+
+    返回的追加播报行**只报经验、不外显运势**（运势播报交给群里另一个签到 bot）；当天已掷过则返回空串。
+    """
     user = _ensure_player(group, user_id)
     today = _today_str()
     if user.get("fortune_date") == today:
-        return ""  # 当天已抽过（超管重复签到等）：不重复发放、不重复播报
+        return ""  # 当天已掷过（超管重复签到等）：不重复发放、不重复播报
 
     key = _roll_fortune(user, rng)
     lv = _fortune_by_key(key)
     lucky = set(_cfg("fortune", {}).get("lucky_keys", []))
 
-    # 更新连签保底计数与「最近运势」
+    # 更新连签保底计数与「最近运势」（均为隐藏值，不外显）
     user["no_lucky_streak"] = 0 if key in lucky else int(user.get("no_lucky_streak", 0)) + 1
     user["last_fortune"] = key
     user["fortune"] = key
     user["fortune_date"] = today
 
+    # 经验仍受运势隐藏加成（exp_mult），但播报只报经验数、不点名运势
     mult = float(lv.get("exp_mult", 1.0))
     exp_gain = int(int(_cfg("fortune", {}).get("signin_exp_base", 50)) * mult)
     user["exp"] = int(user.get("exp", 0)) + exp_gain
 
-    name = lv.get("name", "")
     if exp_gain <= 0:
-        return _line("signin_fortune_zero", fortune=name)
-    return _line("signin_fortune", fortune=name, mult=_fmt_mult(mult), exp=exp_gain)
+        return _line("signin_exp_zero")
+    return _line("signin_exp", exp=exp_gain)
 
 
 # 注册到共享签到钩子表：gift 的「签到」会在结算时回调本函数。

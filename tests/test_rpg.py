@@ -112,7 +112,8 @@ def test_on_signin_grants_fortune_and_exp(monkeypatch):
     assert user["exp"] == base * 3                       # 大吉 exp_mult=3
     assert user["fortune"] == "daji" and user["fortune_date"] == "2026-06-22"
     assert user["no_lucky_streak"] == 0                  # 大吉属「吉以上」→ 清零
-    assert "大吉" in line
+    assert str(base * 3) in line                         # 签到行只报经验数
+    assert "大吉" not in line                             # 不外显运势
 
 
 def test_on_signin_idempotent_same_day(monkeypatch):
@@ -132,7 +133,7 @@ def test_on_signin_daxiong_zero_exp_and_streak(monkeypatch):
     line = fortune.on_signin(group, "u1")
     assert group["users"]["u1"]["exp"] == 0              # 大凶 exp_mult=0
     assert group["users"]["u1"]["no_lucky_streak"] == 1  # 非「吉以上」→ 累加
-    assert "大凶" in line
+    assert "大凶" not in line                             # 不外显运势
 
 
 # ==================== 纯逻辑：打野结算 ====================
