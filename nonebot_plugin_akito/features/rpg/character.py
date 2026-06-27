@@ -43,6 +43,7 @@ async def _(event: Event):
         f"· 精力：{int(user.get('stamina', 0))}/{_stamina_max()}（每日 0 点回满）",
         f"· 今日运势：{fortune}",
         f"· 积分：{int(user.get('points', 0))}",
+        f"· 背包：{sum(int(v) for v in (user.get('inventory') or {}).values())} 件道具",
     ]
     await status_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
 
@@ -57,10 +58,12 @@ async def _(event: Event):
     msg = (
         "🗺️ 冒险系统\n"
         "━━━━━━━━━━━━━━\n"
-        "· 签到 — 领积分 + 抽今日运势（运势决定签到经验系数）\n"
-        "· 打野 / 打野怪 — 消耗精力挑战野怪，获取经验与积分\n"
-        "· 我的角色 / 状态 — 查看等级、战力、精力、运势\n"
+        "· 签到 — 领积分与探索经验\n"
+        "· 打野 / 打野怪 — 消耗精力挑战野怪，获取经验、积分与掉落\n"
+        "· 我的角色 / 状态 — 查看等级、战力、精力、积分、背包\n"
         "· 运势 — 查看今日运势\n"
+        "· 背包 — 查看道具；使用 [道具] — 使用消耗品\n"
+        "· 商店 — 查看在售；购买 [道具] [数量] — 用积分购买\n"
         "\n"
         "💡 精力每天 0 点回满；经验涨级提升战力，去挑战更强的野怪吧！"
     )

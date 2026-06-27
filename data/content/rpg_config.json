@@ -33,10 +33,22 @@
     }
   },
   "monsters": [
-    {"name": "史莱姆", "level": 1, "power_req": 10, "exp": 50, "points": 20, "weight": 50},
-    {"name": "哥布林", "level": 3, "power_req": 30, "exp": 120, "points": 50, "weight": 30},
-    {"name": "座狼", "level": 5, "power_req": 55, "exp": 200, "points": 90, "weight": 15},
-    {"name": "食人魔", "level": 8, "power_req": 90, "exp": 320, "points": 150, "weight": 5}
+    {"name": "史莱姆", "level": 1, "power_req": 10, "exp": 50, "points": 20, "weight": 50,
+     "drops": [{"item": "精力药水", "chance": 0.08}]},
+    {"name": "哥布林", "level": 3, "power_req": 30, "exp": 120, "points": 50, "weight": 30,
+     "drops": [{"item": "精力药水", "chance": 0.15}]},
+    {"name": "座狼", "level": 5, "power_req": 55, "exp": 200, "points": 90, "weight": 15,
+     "drops": [{"item": "精力药水", "chance": 0.20}, {"item": "双倍经验卡", "chance": 0.05}]},
+    {"name": "食人魔", "level": 8, "power_req": 90, "exp": 320, "points": 150, "weight": 5,
+     "drops": [{"item": "双倍经验卡", "chance": 0.10}, {"item": "转运石", "chance": 0.05}]}
+  ],
+  "items": [
+    {"name": "精力药水", "desc": "立即恢复 50 点精力", "price": 80, "daily_buy_limit": 3,
+     "effect": {"type": "stamina", "amount": 50}},
+    {"name": "双倍经验卡", "desc": "下次打野经验翻倍", "price": 150, "daily_buy_limit": 1,
+     "effect": {"type": "exp_buff", "uses": 1, "mult": 2}},
+    {"name": "转运石", "desc": "重掷今日气运（暗中影响打野，需已签到）", "price": 120, "daily_buy_limit": 1,
+     "effect": {"type": "reroll_fortune"}}
   ],
   "copy": {
     "signin_exp": [
@@ -65,12 +77,27 @@
     ],
     "event_slip": ["💢 脚底一滑，这一下没使上全力……"],
     "event_insight": ["🎯 看破了【{monster}】的破绽，经验大涨！"],
-    "event_desperate": ["🔥 被逼到绝境，反而爆发出惊人的战力！"]
+    "event_desperate": ["🔥 被逼到绝境，反而爆发出惊人的战力！"],
+    "hunt_exp_buffed": ["✨ 双倍经验卡生效，这次经验翻倍！"],
+    "hunt_loot": ["📦 战利品掉落：{loot}。"],
+    "use_stamina": ["🧪 用了【{name}】，恢复 {amount} 点精力（当前 {stamina}/{max}）。"],
+    "use_exp_buff": ["📖 用了【{name}】，下次打野经验 ×{mult} 已就绪。"],
+    "use_reroll_fortune": ["🎲 用了【{name}】，今日气运重新流转（结果暗中生效）。"],
+    "buy_ok": ["🛒 购入【{name}】×{qty}，花费 {cost} 积分（余 {total}）。"]
   },
   "errors": {
     "private_only": "冒险要在群里玩哦。",
     "sleeping": "💤 这会儿小彰睡着了，等 6 点天亮以后再来探险吧……",
     "no_stamina": "精力不够啦（需要 {cost}，当前 {stamina}），精力每天 0 点回满，先去歇歇。",
-    "need_signin": "今天还没签到，先「签到」抽个运势再来冒险吧～"
+    "need_signin": "今天还没签到，先「签到」再来冒险吧～",
+    "bag_empty": "🎒 背包空空如也，去打野或商店淘点东西吧～",
+    "use_need_name": "要用哪个道具？比如：使用 精力药水。",
+    "item_unknown": "没有「{name}」这个道具哦。",
+    "item_none": "你背包里没有【{name}】。",
+    "stamina_full": "精力已经是满的，留着【{name}】下次用吧。",
+    "shop_unknown": "商店没在卖「{name}」，发送「商店」看看货架。",
+    "buy_bad_qty": "数量不对，例：购买 精力药水 2。",
+    "buy_limit": "【{name}】今天买够啦（每日上限 {limit}）。",
+    "buy_poor": "积分不够，【{name}】×{qty} 要 {cost}，你只有 {total}。"
   }
 }

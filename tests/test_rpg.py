@@ -8,18 +8,20 @@ from __future__ import annotations
 
 from copy import deepcopy
 
-from nonebot.adapters import Bot, Event
+from nonebot.adapters import Bot, Event, Message
 from nonebot.exception import FinishedException
 import pytest
 
 from nonebot_plugin_akito.core import game_store
 
-# 导入子包即触发命令注册与签到钩子注册（rpg/__init__ 内 from . import character, fortune, hunt）
+# 导入子包即触发命令注册与签到钩子注册（rpg/__init__ 内 from . import character, fortune, hunt, inventory, shop）
 import nonebot_plugin_akito.features.rpg.character as character
 import nonebot_plugin_akito.features.rpg.config as rpg_config
 import nonebot_plugin_akito.features.rpg.fortune as fortune
 import nonebot_plugin_akito.features.rpg.hunt as hunt
+import nonebot_plugin_akito.features.rpg.inventory as inventory
 import nonebot_plugin_akito.features.rpg.player as player
+import nonebot_plugin_akito.features.rpg.shop as shop
 
 
 def _bot():
@@ -295,3 +297,202 @@ async def test_status_cmd_renders_panel(monkeypatch):
     assert "战力" in result
     assert "大吉" in result          # 今日运势
     assert "250" in result           # 积分（与送礼共享）
+
+
+# ==================== 背包 / 道具：纯逻辑 ====================
+
+def test_inventory_add_remove_count():
+    user: dict = {}
+    assert inventory._item_count(user, "精力药水") == 0
+    assert inventory._add_item(user, "精力药水", 2) == 2
+    inventory._add_item(user, "精力药水")
+    assert inventory._item_count(user, "精力药水") == 3
+    assert inventory._remove_item(user, "精力药水", 2) is True
+    assert inventory._item_count(user, "精力药水") == 1
+    assert inventory._remove_item(user, "精力药水", 5) is False  # 不足不改动
+    assert inventory._item_count(user, "精力药水") == 1
+    inventory._remove_item(user, "精力药水", 1)
+    assert "精力药水" not in user["inventory"]                   # 扣空移除
+
+
+class _SeqRandom:
+    """random() 依次返回给定值，用于掉落概率的确定性测试。"""
+
+    def __init__(self, vals):
+        self.vals = list(vals)
+
+    def random(self):
+        return self.vals.pop(0)
+
+
+def test_roll_drops_respects_chance():
+    monster = {"drops": [{"item": "精力药水", "chance": 0.5}, {"item": "转运石", "chance": 0.5}]}
+    assert inventory._roll_drops(monster, _SeqRandom([0.1, 0.9])) == ["精力药水"]  # 仅第一个命中
+    assert inventory._roll_drops(monster, _SeqRandom([0.9, 0.1])) == ["转运石"]
+    assert inventory._roll_drops({"drops": []}, _SeqRandom([])) == []
+
+
+def test_apply_item_effect_stamina_and_full_guard():
+    potion = inventory._item_by_name("精力药水")
+    amount = int(potion["effect"]["amount"])
+    user = {"stamina": 10, "stamina_date": "2026-06-22"}
+    ok, _msg = inventory._apply_item_effect(user, potion, "2026-06-22")
+    assert ok and user["stamina"] == min(player._stamina_max(), 10 + amount)
+    full = {"stamina": player._stamina_max(), "stamina_date": "2026-06-22"}
+    ok2, msg2 = inventory._apply_item_effect(full, potion, "2026-06-22")
+    assert ok2 is False and "满" in msg2  # 满精力拒绝、不消耗
+
+
+def test_apply_item_effect_exp_buff():
+    card = inventory._item_by_name("双倍经验卡")
+    user: dict = {}
+    ok, _msg = inventory._apply_item_effect(user, card, "2026-06-22")
+    assert ok
+    assert user["exp_buff_uses"] == int(card["effect"]["uses"])
+    assert user["exp_buff_mult"] == int(card["effect"]["mult"])
+
+
+def test_apply_item_effect_reroll_needs_signin(monkeypatch):
+    stone = inventory._item_by_name("转运石")
+    ok, msg = inventory._apply_item_effect({"fortune_date": ""}, stone, "2026-06-22")
+    assert ok is False and "签到" in msg                       # 未签到拒绝
+    monkeypatch.setattr(inventory, "_roll_fortune", lambda u, rng: "ji")
+    user = {"fortune_date": "2026-06-22", "fortune": "daxiong"}
+    ok2, _ = inventory._apply_item_effect(user, stone, "2026-06-22")
+    assert ok2 and user["fortune"] == "ji"                     # 重掷今日运势
+
+
+# ==================== 背包 / 商店 / 使用 / 购买：指令 ====================
+
+def _patch_io(monkeypatch, mod, *, today="2026-06-22", store=None):
+    """给 inventory/shop 模块打桩 IO/时间/睡眠（同 _patch_hunt 思路）。"""
+    state = game_store._normalize_data(store or {})
+    monkeypatch.setattr(mod, "_today_str", lambda: today)
+    monkeypatch.setattr(mod, "is_sleeping", lambda: False)
+    monkeypatch.setattr(mod, "_load_data", lambda: deepcopy(state))
+
+    def _save(data):
+        state.clear()
+        state.update(deepcopy(game_store._normalize_data(data)))
+
+    monkeypatch.setattr(mod, "_save_data", _save)
+    return state
+
+
+@pytest.mark.asyncio
+async def test_bag_cmd_empty_and_filled(monkeypatch):
+    _patch_io(monkeypatch, inventory, store={"groups": {"1001": {"users": {"u1": {}}}}})
+    with pytest.raises(FinishedException) as exc:
+        await inventory.bag_cmd.handlers[0](Event(group_id=1001, user_id="u1"))
+    assert "空空" in str(exc.value.result)
+
+    _patch_io(monkeypatch, inventory, store={"groups": {"1001": {"users": {
+        "u1": {"inventory": {"精力药水": 2}}}}}})
+    with pytest.raises(FinishedException) as exc2:
+        await inventory.bag_cmd.handlers[0](Event(group_id=1001, user_id="u1"))
+    r = str(exc2.value.result)
+    assert "精力药水" in r and "×2" in r
+
+
+@pytest.mark.asyncio
+async def test_use_cmd_consumes_and_applies(monkeypatch):
+    state = _patch_io(monkeypatch, inventory, store={"groups": {"1001": {"users": {
+        "u1": {"inventory": {"双倍经验卡": 1}}}}}})
+    with pytest.raises(FinishedException) as exc:
+        await inventory.use_cmd.handlers[0](Event(group_id=1001, user_id="u1"), Message("双倍经验卡"))
+    assert "双倍" in str(exc.value.result)
+    user = state["groups"]["1001"]["users"]["u1"]
+    assert user.get("exp_buff_uses", 0) == 1
+    assert "双倍经验卡" not in user.get("inventory", {})         # 已消耗
+
+
+@pytest.mark.asyncio
+async def test_use_cmd_not_owned(monkeypatch):
+    _patch_io(monkeypatch, inventory, store={"groups": {"1001": {"users": {"u1": {}}}}})
+    with pytest.raises(FinishedException) as exc:
+        await inventory.use_cmd.handlers[0](Event(group_id=1001, user_id="u1"), Message("精力药水"))
+    assert "没有" in str(exc.value.result)
+
+
+@pytest.mark.asyncio
+async def test_shop_cmd_lists_items(monkeypatch):
+    _patch_io(monkeypatch, shop, store={"groups": {"1001": {"users": {"u1": {}}}}})
+    with pytest.raises(FinishedException) as exc:
+        await shop.shop_cmd.handlers[0](Event(group_id=1001, user_id="u1"))
+    r = str(exc.value.result)
+    assert "商店" in r and "精力药水" in r and "积分" in r
+
+
+@pytest.mark.asyncio
+async def test_buy_cmd_deducts_points_and_adds_item(monkeypatch):
+    potion = inventory._item_by_name("精力药水")
+    state = _patch_io(monkeypatch, shop, store={"groups": {"1001": {"users": {"u1": {"points": 1000}}}}})
+    with pytest.raises(FinishedException):
+        await shop.buy_cmd.handlers[0](Event(group_id=1001, user_id="u1"), Message("精力药水 2"))
+    user = state["groups"]["1001"]["users"]["u1"]
+    cost = int(potion["price"]) * 2
+    assert user["points"] == 1000 - cost
+    assert user["inventory"]["精力药水"] == 2
+    assert user["buy_counts"]["精力药水"] == 2
+
+
+@pytest.mark.asyncio
+async def test_buy_cmd_insufficient_points(monkeypatch):
+    _patch_io(monkeypatch, shop, store={"groups": {"1001": {"users": {"u1": {"points": 10}}}}})
+    with pytest.raises(FinishedException) as exc:
+        await shop.buy_cmd.handlers[0](Event(group_id=1001, user_id="u1"), Message("精力药水"))
+    assert "积分不够" in str(exc.value.result)
+
+
+@pytest.mark.asyncio
+async def test_buy_cmd_daily_limit(monkeypatch):
+    card = inventory._item_by_name("双倍经验卡")
+    limit = int(card["daily_buy_limit"])
+    _patch_io(monkeypatch, shop, store={"groups": {"1001": {"users": {
+        "u1": {"points": 100000, "buy_date": "2026-06-22", "buy_counts": {"双倍经验卡": limit}}}}}})
+    with pytest.raises(FinishedException) as exc:
+        await shop.buy_cmd.handlers[0](Event(group_id=1001, user_id="u1"), Message("双倍经验卡"))
+    assert "买够" in str(exc.value.result)
+
+
+@pytest.mark.asyncio
+async def test_buy_cmd_unknown_item(monkeypatch):
+    _patch_io(monkeypatch, shop, store={"groups": {"1001": {"users": {"u1": {"points": 100000}}}}})
+    with pytest.raises(FinishedException) as exc:
+        await shop.buy_cmd.handlers[0](Event(group_id=1001, user_id="u1"), Message("不存在的道具"))
+    assert "没在卖" in str(exc.value.result)
+
+
+# ==================== 打野：双倍经验卡 / 掉落 联动 ====================
+
+@pytest.mark.asyncio
+async def test_hunt_consumes_exp_buff_and_doubles(monkeypatch):
+    state = _patch_hunt(monkeypatch, store={"groups": {"1001": {"users": {
+        "u1": {"exp": 0, "stamina": 100, "stamina_date": "2026-06-22",
+               "exp_buff_uses": 1, "exp_buff_mult": 2}}}}})
+    monkeypatch.setattr(hunt, "_pick_monster", lambda rng=hunt.random: _slime())
+    monkeypatch.setattr(hunt, "_roll_hunt_event", lambda margin, rng=hunt.random: "")
+    monkeypatch.setattr(hunt.random, "uniform", lambda _a, _b: 1.0)
+    monkeypatch.setattr(hunt, "_roll_drops", lambda monster, rng=hunt.random: [])
+    with pytest.raises(FinishedException) as exc:
+        await hunt.hunt_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="u1"))
+    user = state["groups"]["1001"]["users"]["u1"]
+    assert user["exp"] == 50 * 2          # 史莱姆 50 经验 ×2
+    assert user["exp_buff_uses"] == 0     # buff 已消耗
+    assert "翻倍" in str(exc.value.result)
+
+
+@pytest.mark.asyncio
+async def test_hunt_loot_drops_into_inventory(monkeypatch):
+    state = _patch_hunt(monkeypatch, store={"groups": {"1001": {"users": {
+        "u1": {"exp": 0, "stamina": 100, "stamina_date": "2026-06-22"}}}}})
+    monkeypatch.setattr(hunt, "_pick_monster", lambda rng=hunt.random: _slime())
+    monkeypatch.setattr(hunt, "_roll_hunt_event", lambda margin, rng=hunt.random: "")
+    monkeypatch.setattr(hunt.random, "uniform", lambda _a, _b: 1.0)
+    monkeypatch.setattr(hunt, "_roll_drops", lambda monster, rng=hunt.random: ["精力药水"])
+    with pytest.raises(FinishedException) as exc:
+        await hunt.hunt_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="u1"))
+    user = state["groups"]["1001"]["users"]["u1"]
+    assert user["inventory"]["精力药水"] == 1
+    r = str(exc.value.result)
+    assert "掉落" in r and "精力药水" in r

@@ -20,6 +20,7 @@ def _ensure_player(group: dict, user_id, display_name: str = "") -> dict:
     user.setdefault("fortune_date", "")       # 今日运势抽取日期
     user.setdefault("last_fortune", "")       # 最近一次运势 key（大凶→大吉修正用）
     user.setdefault("no_lucky_streak", 0)     # 连续未出「吉以上」天数（保底用）
+    user.setdefault("inventory", {})          # 背包：{道具名: 数量}
     return user
 
 

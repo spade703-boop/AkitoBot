@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 import random
 
 from nonebot import on_command
@@ -24,8 +25,9 @@ from ...core.game_store import (
     _today_str,
     _weighted_choice,
 )
-from .config import _cfg, _copy, _error
+from .config import _cfg, _copy, _error, _line
 from .fortune import _fortune_by_key
+from .inventory import _add_item, _roll_drops
 from .player import (
     _combat_power,
     _ensure_player,
@@ -127,6 +129,12 @@ def _build_hunt_broadcast(out: dict, user_id: str, cost: int, stamina_left: int,
         "monster": m.get("name", ""), "exp": out["exp_gain"], "points": out["points_gain"],
         "cost": cost, "stamina": stamina_left,
     }))
+    if out.get("exp_buffed"):
+        lines.append(_line("hunt_exp_buffed"))
+    drops = out.get("drops") or []
+    if drops:
+        summary = "、".join(f"{n} ×{c}" for n, c in Counter(drops).items())
+        lines.append(_line("hunt_loot", loot=summary))
     if new_level > old_level:
         lines.append(_render_with_ats(random.choice(_copy("levelup")), {
             "level": old_level, "newlevel": new_level,
@@ -184,9 +192,23 @@ async def _(bot: Bot, event: Event):
         old_exp = int(user.get("exp", 0))
         out = resolve_hunt(cp, monster, power_factor=power_factor,
                            fortune_factor=fortune_factor, event=event_key)
+
+        # 双倍经验卡：有 buff 次数则本次经验按倍率放大并消耗 1 次
+        if int(user.get("exp_buff_uses", 0)) > 0:
+            out["exp_gain"] = int(out["exp_gain"]) * int(user.get("exp_buff_mult", 2))
+            out["exp_buffed"] = True
+            user["exp_buff_uses"] = int(user["exp_buff_uses"]) - 1
+
         user["exp"] = old_exp + out["exp_gain"]
         if out["points_gain"]:
             _add_points(group, user_id, out["points_gain"])
+
+        # 战利品：胜利时按野怪 drops 概率掉真道具进背包
+        if out["win"]:
+            drops = _roll_drops(monster)
+            for d in drops:
+                _add_item(user, d, 1)
+            out["drops"] = drops
 
         old_level = _level_of(old_exp)
         new_level = _level_of(user["exp"])
