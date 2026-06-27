@@ -39,8 +39,10 @@ DEFAULT_RPG_CONFIG: dict = {
     "stamina": {"max": 100, "cost_per_hunt": 20},
     # ---- 等级曲线：升到 L 级累计需 base*(L-1)*L/2 经验（每级增量 +base）----
     "level_curve": {"base": 100},
-    # ---- 战力派生：base_power + 等级 * power_per_level（+装备，留待装备阶段）----
+    # ---- 战力派生：base_power + 等级 * power_per_level + 已穿戴装备 power ----
     "power": {"base_power": 10, "power_per_level": 5},
+    # ---- 装备槽位（面板展示顺序；穿戴态 user["equipped"] = {slot: 装备名}）----
+    "equipment_slots": ["武器", "防具", "饰品"],
     # ---- 战斗判定 ----
     "combat": {
         "factor_min": 0.8,                   # 有效战力随机系数下限
@@ -63,11 +65,13 @@ DEFAULT_RPG_CONFIG: dict = {
         {"name": "哥布林", "level": 3, "power_req": 30, "exp": 120, "points": 50,  "weight": 30,
          "drops": [{"item": "精力药水", "chance": 0.15}]},
         {"name": "座狼",   "level": 5, "power_req": 55, "exp": 200, "points": 90,  "weight": 15,
-         "drops": [{"item": "精力药水", "chance": 0.20}, {"item": "双倍经验卡", "chance": 0.05}]},
+         "drops": [{"item": "精力药水", "chance": 0.20}, {"item": "双倍经验卡", "chance": 0.05},
+                   {"item": "铁甲", "chance": 0.04}]},
         {"name": "食人魔", "level": 8, "power_req": 90, "exp": 320, "points": 150, "weight": 5,
-         "drops": [{"item": "双倍经验卡", "chance": 0.10}, {"item": "转运石", "chance": 0.05}]},
+         "drops": [{"item": "双倍经验卡", "chance": 0.10}, {"item": "转运石", "chance": 0.05},
+                   {"item": "幸运护符", "chance": 0.03}]},
     ],
-    # ---- 道具：消耗品（本期均接现有系统）。effect.type: stamina / exp_buff / reroll_fortune ----
+    # ---- 道具：消耗品 effect.type: stamina/exp_buff/reroll_fortune；装备 kind="equipment"+slot+power ----
     "items": [
         {"name": "精力药水", "desc": "立即恢复 50 点精力", "price": 80, "daily_buy_limit": 3,
          "effect": {"type": "stamina", "amount": 50}},
@@ -75,6 +79,10 @@ DEFAULT_RPG_CONFIG: dict = {
          "effect": {"type": "exp_buff", "uses": 1, "mult": 2}},
         {"name": "转运石", "desc": "重掷今日气运（暗中影响打野，需已签到）", "price": 120, "daily_buy_limit": 1,
          "effect": {"type": "reroll_fortune"}},
+        {"name": "铁剑",   "kind": "equipment", "slot": "武器", "power": 10, "desc": "战力 +10", "price": 300},
+        {"name": "精钢剑", "kind": "equipment", "slot": "武器", "power": 22, "desc": "战力 +22", "price": 900},
+        {"name": "铁甲",   "kind": "equipment", "slot": "防具", "power": 8,  "desc": "战力 +8",  "price": 260},
+        {"name": "幸运护符", "kind": "equipment", "slot": "饰品", "power": 6, "desc": "战力 +6（仅掉落）", "price": 0},
     ],
     # ---- 播报文案。占位符：{a} → 真 @；其余 {monster}{mlevel}{exp}{points}{cost}{stamina}{fortune}{mult}{level}{newlevel}{power}{newpower} → 文本 ----
     "copy": {
@@ -111,6 +119,8 @@ DEFAULT_RPG_CONFIG: dict = {
         "use_exp_buff": ["📖 用了【{name}】，下次打野经验 ×{mult} 已就绪。"],
         "use_reroll_fortune": ["🎲 用了【{name}】，今日气运重新流转（结果暗中生效）。"],
         "buy_ok": ["🛒 购入【{name}】×{qty}，花费 {cost} 积分（余 {total}）。"],
+        "equip_ok": ["🛡️ 装备【{name}】（{slot}，战力 +{power}），当前战力 {cp}。"],
+        "unequip_ok": ["卸下了【{name}】（{slot}），当前战力 {cp}。"],
     },
     "errors": {
         "private_only": "冒险要在群里玩哦。",
@@ -126,6 +136,11 @@ DEFAULT_RPG_CONFIG: dict = {
         "buy_bad_qty": "数量不对，例：购买 精力药水 2。",
         "buy_limit": "【{name}】今天买够啦（每日上限 {limit}）。",
         "buy_poor": "积分不够，【{name}】×{qty} 要 {cost}，你只有 {total}。",
+        "equip_need_name": "要装备哪件？比如：装备 铁剑。",
+        "unequip_need_name": "要卸下哪个部位/装备？比如：卸下 武器 或 卸下 铁剑。",
+        "not_equipment": "【{name}】不是装备，装备不了。",
+        "not_equipped": "你没有穿戴「{name}」。",
+        "use_is_equipment": "【{name}】是装备，用「装备 {name}」穿上，别当消耗品用。",
     },
 }
 

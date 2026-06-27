@@ -169,6 +169,8 @@ async def _(event: Event, args: Message = CommandArg()):
     item = _item_by_name(name)
     if not item:
         await use_cmd.finish(MessageSegment.reply(event.message_id) + _error("item_unknown", name=name))
+    if item.get("kind") == "equipment":
+        await use_cmd.finish(MessageSegment.reply(event.message_id) + _error("use_is_equipment", name=name))
 
     today = _today_str()
     async with LOCK:

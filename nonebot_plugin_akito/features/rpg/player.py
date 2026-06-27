@@ -21,6 +21,7 @@ def _ensure_player(group: dict, user_id, display_name: str = "") -> dict:
     user.setdefault("last_fortune", "")       # 最近一次运势 key（大凶→大吉修正用）
     user.setdefault("no_lucky_streak", 0)     # 连续未出「吉以上」天数（保底用）
     user.setdefault("inventory", {})          # 背包：{道具名: 数量}
+    user.setdefault("equipped", {})           # 穿戴：{部位: 装备名}
     return user
 
 
@@ -84,9 +85,23 @@ def _power_for_level(level: int) -> int:
     return int(p.get("base_power", 10)) + int(level) * int(p.get("power_per_level", 5))
 
 
+def _equip_slots() -> list[str]:
+    slots = _cfg("equipment_slots", [])
+    return slots if isinstance(slots, list) and slots else ["武器", "防具", "饰品"]
+
+
+def _equipped_power(user: dict) -> int:
+    """已穿戴装备的战力加成之和（直接读 config items 查 power，不依赖 inventory 模块、避免循环导入）。"""
+    equipped = user.get("equipped") or {}
+    if not equipped:
+        return 0
+    by_name = {it.get("name"): it for it in _cfg("items", []) if isinstance(it, dict)}
+    return sum(int(by_name.get(n, {}).get("power", 0)) for n in equipped.values())
+
+
 def _combat_power(user: dict) -> int:
-    """战力：由经验推等级，再由等级推战力（后续叠加装备加成）。"""
-    return _power_for_level(_level_of(int(user.get("exp", 0))))
+    """战力：等级派生 + 已穿戴装备加成。"""
+    return _power_for_level(_level_of(int(user.get("exp", 0)))) + _equipped_power(user)
 
 
 # ==================== 群上下文校验（与 gift 同范式，用 rpg 文案） ====================

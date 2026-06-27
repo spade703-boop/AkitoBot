@@ -10,7 +10,16 @@ from ...core import ALLOWED_CHAT_GROUPS, is_sleeping
 from ...core.game_store import _display_name, _get_group, _load_data, _today_str
 from .config import _error
 from .fortune import _fortune_by_key
-from .player import _combat_power, _ensure_player, _level_progress, _refill_stamina, _resolve_group, _stamina_max
+from .inventory import _item_by_name
+from .player import (
+    _combat_power,
+    _ensure_player,
+    _equip_slots,
+    _level_progress,
+    _refill_stamina,
+    _resolve_group,
+    _stamina_max,
+)
 
 status_cmd = on_command("我的角色", aliases={"角色", "状态", "角色面板"}, priority=5, block=True)
 
@@ -36,10 +45,21 @@ async def _(event: Event):
     cp = _combat_power(user)
     fortune = _fortune_by_key(user.get("fortune", "")).get("name", "—") if user.get("fortune_date") == today else "未签到"
 
+    equipped = user.get("equipped") or {}
+    equip_parts = []
+    for slot in _equip_slots():
+        worn = equipped.get(slot)
+        if worn:
+            it = _item_by_name(worn)
+            equip_parts.append(f"{slot} {worn}(+{int(it.get('power', 0)) if it else 0})")
+        else:
+            equip_parts.append(f"{slot} —")
+
     lines = [
         f"🗡️ 角色面板 · {_display_name(event)}",
         f"· 等级：Lv{prog['level']}（经验 {prog['into']}/{prog['span']}，距升级 {prog['to_next']}）",
         f"· 战力：{cp}",
+        f"· 装备：{' / '.join(equip_parts)}",
         f"· 精力：{int(user.get('stamina', 0))}/{_stamina_max()}（每日 0 点回满）",
         f"· 今日运势：{fortune}",
         f"· 积分：{int(user.get('points', 0))}",
@@ -64,6 +84,7 @@ async def _(event: Event):
         "· 运势 — 查看今日运势\n"
         "· 背包 — 查看道具；使用 [道具] — 使用消耗品\n"
         "· 商店 — 查看在售；购买 [道具] [数量] — 用积分购买\n"
+        "· 装备 [装备] / 卸下 [部位] — 穿脱装备，加战力\n"
         "\n"
         "💡 精力每天 0 点回满；经验涨级提升战力，去挑战更强的野怪吧！"
     )

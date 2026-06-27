@@ -17,6 +17,7 @@ from nonebot_plugin_akito.core import game_store
 # 导入子包即触发命令注册与签到钩子注册（rpg/__init__ 内 from . import character, fortune, hunt, inventory, shop）
 import nonebot_plugin_akito.features.rpg.character as character
 import nonebot_plugin_akito.features.rpg.config as rpg_config
+import nonebot_plugin_akito.features.rpg.equipment as equipment
 import nonebot_plugin_akito.features.rpg.fortune as fortune
 import nonebot_plugin_akito.features.rpg.hunt as hunt
 import nonebot_plugin_akito.features.rpg.inventory as inventory
@@ -365,10 +366,15 @@ def test_apply_item_effect_reroll_needs_signin(monkeypatch):
 # ==================== 背包 / 商店 / 使用 / 购买：指令 ====================
 
 def _patch_io(monkeypatch, mod, *, today="2026-06-22", store=None):
-    """给 inventory/shop 模块打桩 IO/时间/睡眠（同 _patch_hunt 思路）。"""
+    """给 inventory/shop/equipment 模块打桩 IO/时间/睡眠（同 _patch_hunt 思路）。
+
+    _today_str / is_sleeping 仅当模块导入了才打桩（equipment 不依赖这俩）。
+    """
     state = game_store._normalize_data(store or {})
-    monkeypatch.setattr(mod, "_today_str", lambda: today)
-    monkeypatch.setattr(mod, "is_sleeping", lambda: False)
+    if hasattr(mod, "_today_str"):
+        monkeypatch.setattr(mod, "_today_str", lambda: today)
+    if hasattr(mod, "is_sleeping"):
+        monkeypatch.setattr(mod, "is_sleeping", lambda: False)
     monkeypatch.setattr(mod, "_load_data", lambda: deepcopy(state))
 
     def _save(data):
@@ -496,3 +502,95 @@ async def test_hunt_loot_drops_into_inventory(monkeypatch):
     assert user["inventory"]["精力药水"] == 1
     r = str(exc.value.result)
     assert "掉落" in r and "精力药水" in r
+
+
+# ==================== 装备：纯逻辑 ====================
+
+def test_is_equipment():
+    assert equipment._is_equipment(inventory._item_by_name("铁剑")) is True
+    assert equipment._is_equipment(inventory._item_by_name("精力药水")) is False
+    assert equipment._is_equipment(None) is False
+
+
+def test_equip_moves_from_bag_and_boosts_power():
+    sword = inventory._item_by_name("铁剑")
+    user = {"exp": 0, "inventory": {"铁剑": 1}}
+    base_cp = player._combat_power(user)               # 未装备
+    ok, _msg = equipment._equip(user, "铁剑")
+    assert ok
+    assert user["equipped"]["武器"] == "铁剑"
+    assert "铁剑" not in user.get("inventory", {})       # 移出背包
+    assert player._combat_power(user) == base_cp + int(sword["power"])
+
+
+def test_equip_swaps_same_slot_and_returns_old():
+    user = {"exp": 0, "inventory": {"铁剑": 1, "精钢剑": 1}}
+    equipment._equip(user, "铁剑")
+    ok, _ = equipment._equip(user, "精钢剑")            # 同槽换装
+    assert ok
+    assert user["equipped"]["武器"] == "精钢剑"
+    assert user["inventory"].get("铁剑") == 1            # 旧装备退回背包
+    assert "精钢剑" not in user["inventory"]
+
+
+def test_equip_rejects_non_equipment_and_unowned():
+    user = {"inventory": {}}
+    ok, msg = equipment._equip(user, "精力药水")
+    assert ok is False and "不是装备" in msg            # 消耗品不能装备
+    ok2, msg2 = equipment._equip(user, "铁剑")
+    assert ok2 is False and "没有" in msg2              # 未拥有
+
+
+def test_unequip_by_slot_and_by_name():
+    user = {"exp": 0, "inventory": {"铁剑": 1}}
+    equipment._equip(user, "铁剑")
+    ok, _ = equipment._unequip(user, "武器")            # 按部位
+    assert ok and user["inventory"]["铁剑"] == 1 and "武器" not in user["equipped"]
+    equipment._equip(user, "铁剑")
+    ok2, _ = equipment._unequip(user, "铁剑")           # 按装备名
+    assert ok2 and user["inventory"]["铁剑"] == 1
+
+
+def test_unequip_nothing_equipped():
+    ok, msg = equipment._unequip({"equipped": {}}, "武器")
+    assert ok is False and "没有穿戴" in msg
+
+
+def test_equipped_power_sums_slots():
+    sword = inventory._item_by_name("铁剑")
+    armor = inventory._item_by_name("铁甲")
+    user = {"equipped": {"武器": "铁剑", "防具": "铁甲"}}
+    assert player._equipped_power(user) == int(sword["power"]) + int(armor["power"])
+    assert player._equipped_power({"equipped": {}}) == 0
+
+
+# ==================== 装备：指令 ====================
+
+@pytest.mark.asyncio
+async def test_equip_cmd_happy(monkeypatch):
+    state = _patch_io(monkeypatch, equipment, store={"groups": {"1001": {"users": {
+        "u1": {"exp": 0, "inventory": {"铁剑": 1}}}}}})
+    with pytest.raises(FinishedException) as exc:
+        await equipment.equip_cmd.handlers[0](Event(group_id=1001, user_id="u1"), Message("铁剑"))
+    assert "装备" in str(exc.value.result)
+    assert state["groups"]["1001"]["users"]["u1"]["equipped"]["武器"] == "铁剑"
+
+
+@pytest.mark.asyncio
+async def test_unequip_cmd_happy(monkeypatch):
+    state = _patch_io(monkeypatch, equipment, store={"groups": {"1001": {"users": {
+        "u1": {"exp": 0, "inventory": {}, "equipped": {"武器": "铁剑"}}}}}})
+    with pytest.raises(FinishedException) as exc:
+        await equipment.unequip_cmd.handlers[0](Event(group_id=1001, user_id="u1"), Message("武器"))
+    assert "卸下" in str(exc.value.result)
+    user = state["groups"]["1001"]["users"]["u1"]
+    assert user["inventory"]["铁剑"] == 1 and "武器" not in user.get("equipped", {})
+
+
+@pytest.mark.asyncio
+async def test_use_cmd_rejects_equipment(monkeypatch):
+    _patch_io(monkeypatch, inventory, store={"groups": {"1001": {"users": {
+        "u1": {"inventory": {"铁剑": 1}}}}}})
+    with pytest.raises(FinishedException) as exc:
+        await inventory.use_cmd.handlers[0](Event(group_id=1001, user_id="u1"), Message("铁剑"))
+    assert "装备" in str(exc.value.result)              # 提示用「装备」指令
