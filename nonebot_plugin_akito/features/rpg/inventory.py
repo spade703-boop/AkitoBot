@@ -1,7 +1,7 @@
-"""背包与道具：查看背包、使用消耗品（效果接现有系统），并向打野提供掉落写入。
+"""背包与道具（精简版）：查看背包、使用消耗品（经验向），并向打怪提供掉落写入。
 
-道具按**名称**入背包（`user["inventory"] = {道具名: 数量}`，已被 game_store 的 normalize 原样保留）。
-消耗品效果集中在 `_apply_item_effect` 分发；纯逻辑（掉落/效果）拆出便于单测，指令 handler 只管加载/扣除/落库。
+道具按名称入背包（`user["inventory"] = {道具名: 数量}`，已被 game_store 的 normalize 原样保留）。
+消耗品只剩经验向：双倍经验卡（下次打怪经验×2）、经验书（即得经验）。纯逻辑（掉落/效果）拆出便于单测。
 """
 
 from __future__ import annotations
@@ -14,17 +14,9 @@ from nonebot.adapters.onebot.v11 import MessageSegment
 from nonebot.params import CommandArg
 
 from ...core import is_sleeping
-from ...core.game_store import (
-    LOCK,
-    _display_name,
-    _get_group,
-    _load_data,
-    _save_data,
-    _today_str,
-)
+from ...core.game_store import LOCK, _display_name, _get_group, _load_data, _save_data
 from .config import _cfg, _error, _line
-from .fortune import _roll_fortune
-from .player import _ensure_player, _refill_stamina, _resolve_group, _stamina_max
+from .player import _ensure_player, _resolve_group
 
 # ==================== 道具定义 ====================
 
@@ -76,45 +68,31 @@ def _remove_item(user: dict, name: str, n: int = 1) -> bool:
 
 # ==================== 掉落（纯函数，便于单测） ====================
 
-def _roll_drops(monster: dict, rng=random) -> list[str]:
-    """按野怪 drops 概率掷出掉落道具名列表（可空）。"""
+def _roll_drops(monster: dict, rng=random, mult: float = 1.0) -> list[str]:
+    """按野怪 drops 概率（× mult，受胜负/运势影响）掷出掉落道具名列表（可空）。"""
     out: list[str] = []
     for d in monster.get("drops", []) or []:
         name = d.get("item")
-        if name and rng.random() < float(d.get("chance", 0)):
+        if name and rng.random() < float(d.get("chance", 0)) * float(mult):
             out.append(name)
     return out
 
 
 # ==================== 道具效果分发 ====================
 
-def _apply_item_effect(user: dict, item: dict, today: str, rng=random) -> tuple[bool, str]:
-    """应用消耗品效果，返回 (是否消耗成功, 播报文案)。失败时不改动可消耗状态。"""
+def _apply_item_effect(user: dict, item: dict) -> tuple[bool, str]:
+    """应用消耗品效果，返回 (是否消耗成功, 文案)。"""
     eff = item.get("effect", {}) if isinstance(item.get("effect"), dict) else {}
     etype = eff.get("type")
     name = item.get("name", "")
-
-    if etype == "stamina":
-        _refill_stamina(user, today)
-        mx = _stamina_max()
-        cur = int(user.get("stamina", 0))
-        if cur >= mx:
-            return False, _error("stamina_full", name=name)
-        user["stamina"] = min(mx, cur + int(eff.get("amount", 0)))
-        return True, _line("use_stamina", name=name, amount=user["stamina"] - cur,
-                           stamina=user["stamina"], max=mx)
-
     if etype == "exp_buff":
         user["exp_buff_uses"] = int(user.get("exp_buff_uses", 0)) + int(eff.get("uses", 1))
         user["exp_buff_mult"] = int(eff.get("mult", 2))
         return True, _line("use_exp_buff", name=name, mult=user["exp_buff_mult"])
-
-    if etype == "reroll_fortune":
-        if user.get("fortune_date") != today:
-            return False, _error("need_signin")
-        user["fortune"] = _roll_fortune(user, rng)  # 重掷隐藏运势（不外显结果）
-        return True, _line("use_reroll_fortune", name=name)
-
+    if etype == "exp_grant":
+        amount = int(eff.get("amount", 0))
+        user["exp"] = int(user.get("exp", 0)) + amount
+        return True, _line("use_exp_grant", name=name, amount=amount)
     return False, _error("item_unknown", name=name)
 
 
@@ -169,10 +147,7 @@ async def _(event: Event, args: Message = CommandArg()):
     item = _item_by_name(name)
     if not item:
         await use_cmd.finish(MessageSegment.reply(event.message_id) + _error("item_unknown", name=name))
-    if item.get("kind") == "equipment":
-        await use_cmd.finish(MessageSegment.reply(event.message_id) + _error("use_is_equipment", name=name))
 
-    today = _today_str()
     async with LOCK:
         data = _load_data()
         group = _get_group(data, group_id)
@@ -180,7 +155,7 @@ async def _(event: Event, args: Message = CommandArg()):
         if _item_count(user, name) <= 0:
             result = _error("item_none", name=name)
         else:
-            ok, result = _apply_item_effect(user, item, today)
+            ok, result = _apply_item_effect(user, item)
             if ok:
                 _remove_item(user, name, 1)
                 _save_data(data)

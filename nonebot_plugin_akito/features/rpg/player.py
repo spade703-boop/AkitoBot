@@ -1,48 +1,37 @@
-"""RPG 玩家模型：在共享用户记录上补齐 rpg 字段，并提供经验/等级/战力派生与精力日常重置。
+"""RPG 玩家模型（精简版）：经验→等级派生 + 今日装备（每日一套、一次性、战力随等级涨）。
 
-经验是唯一落库的成长值；**等级与战力都从经验实时派生**（不落库，避免不一致）。
+对外只暴露「等级」；战力是今日装备的隐藏值，由 _combat_power 给打怪用。
 所有读写都作用在 core.game_store 加载出来的同一个 group/user dict 上，与 gift 共享存储与锁。
 """
 
 from __future__ import annotations
+
+import random
 
 from ...core.game_store import get_user, resolve_group_id
 from .config import _cfg, _error
 
 
 def _ensure_player(group: dict, user_id, display_name: str = "") -> dict:
-    """在通用用户记录（points/display_name）上补齐 rpg 专属字段。"""
+    """在通用用户记录（points/display_name）上补齐 rpg 字段。"""
     user = get_user(group, user_id, display_name)
-    user.setdefault("exp", 0)                 # 累计经验（唯一成长落库值）
-    user.setdefault("stamina", _stamina_max())  # 当前精力
-    user.setdefault("stamina_date", "")       # 上次精力回满日期
-    user.setdefault("fortune", "")            # 今日运势 key
-    user.setdefault("fortune_date", "")       # 今日运势抽取日期
-    user.setdefault("last_fortune", "")       # 最近一次运势 key（大凶→大吉修正用）
-    user.setdefault("no_lucky_streak", 0)     # 连续未出「吉以上」天数（保底用）
+    user.setdefault("exp", 0)                 # 累计经验 → 等级
     user.setdefault("inventory", {})          # 背包：{道具名: 数量}
-    user.setdefault("equipped", {})           # 穿戴：{部位: 装备名}
+    # 今日装备（签到发放、打怪损坏、次日重发）
+    user.setdefault("equip_date", "")         # 发放日期
+    user.setdefault("equip_level", 0)         # 发放时的等级（决定战力）
+    user.setdefault("equip_roll", 0)          # 发放时的随机浮动
+    user.setdefault("equip_forge", 0)         # 今日已强化次数
+    user.setdefault("equip_used", False)      # 是否已被打怪消耗（损坏）
+    # 隐藏运势（签到暗掷，供打怪）
+    user.setdefault("fortune", "")
+    user.setdefault("fortune_date", "")
+    user.setdefault("last_fortune", "")
+    user.setdefault("no_lucky_streak", 0)
     return user
 
 
-# ==================== 精力 ====================
-
-def _stamina_max() -> int:
-    return int(_cfg("stamina", {}).get("max", 100))
-
-
-def _stamina_cost() -> int:
-    return int(_cfg("stamina", {}).get("cost_per_hunt", 20))
-
-
-def _refill_stamina(user: dict, today: str) -> None:
-    """每日懒回满：跨天则把精力重置为上限（仿 gift 的 steal_date 重置范式）。"""
-    if user.get("stamina_date") != today:
-        user["stamina"] = _stamina_max()
-        user["stamina_date"] = today
-
-
-# ==================== 经验 / 等级 / 战力（全部从 exp 派生） ====================
+# ==================== 经验 / 等级 ====================
 
 def _level_base() -> int:
     return int(_cfg("level_curve", {}).get("base", 100))
@@ -65,7 +54,7 @@ def _level_of(exp) -> int:
 
 
 def _level_progress(exp) -> dict:
-    """返回面板所需进度信息：{level, exp, into, span, to_next}。"""
+    """面板进度：{level, exp, into, span, to_next}。"""
     base = _level_base()
     exp = max(0, int(exp))
     level = _level_of(exp)
@@ -74,34 +63,56 @@ def _level_progress(exp) -> dict:
     return {
         "level": level,
         "exp": exp,
-        "into": exp - cur_floor,          # 当前等级内已积累
-        "span": next_floor - cur_floor,   # 当前等级跨度（= base*level）
-        "to_next": next_floor - exp,      # 距升级还差
+        "into": exp - cur_floor,
+        "span": next_floor - cur_floor,
+        "to_next": next_floor - exp,
     }
 
 
-def _power_for_level(level: int) -> int:
-    p = _cfg("power", {})
-    return int(p.get("base_power", 10)) + int(level) * int(p.get("power_per_level", 5))
+# ==================== 今日装备（战力为隐藏值） ====================
+
+def _grant_equip(user: dict, today: str, rng=random) -> None:
+    """签到发放今日装备：等级取当前等级，随机浮动一次，重置损坏/强化。"""
+    ecfg = _cfg("equip", {})
+    user["equip_date"] = today
+    user["equip_level"] = _level_of(int(user.get("exp", 0)))
+    user["equip_roll"] = rng.randint(0, int(ecfg.get("var", 6)))
+    user["equip_used"] = False
+    user["equip_forge"] = 0
 
 
-def _equip_slots() -> list[str]:
-    slots = _cfg("equipment_slots", [])
-    return slots if isinstance(slots, list) and slots else ["武器", "防具", "饰品"]
-
-
-def _equipped_power(user: dict) -> int:
-    """已穿戴装备的战力加成之和（直接读 config items 查 power，不依赖 inventory 模块、避免循环导入）。"""
-    equipped = user.get("equipped") or {}
-    if not equipped:
-        return 0
-    by_name = {it.get("name"): it for it in _cfg("items", []) if isinstance(it, dict)}
-    return sum(int(by_name.get(n, {}).get("power", 0)) for n in equipped.values())
+def _equip_power(user: dict) -> int:
+    """今日装备战力（隐藏）：base + 等级*per + 随机浮动 + 强化次数*step。"""
+    ecfg = _cfg("equip", {})
+    fcfg = _cfg("forge", {})
+    level = int(user.get("equip_level", _level_of(int(user.get("exp", 0)))))
+    power = int(ecfg.get("base", 10)) + level * int(ecfg.get("per_level", 5)) + int(user.get("equip_roll", 0))
+    power += int(user.get("equip_forge", 0)) * int(fcfg.get("step", 4))
+    return power
 
 
 def _combat_power(user: dict) -> int:
-    """战力：等级派生 + 已穿戴装备加成。"""
-    return _power_for_level(_level_of(int(user.get("exp", 0)))) + _equipped_power(user)
+    """打怪用战力 = 今日装备战力（隐藏值）。"""
+    return _equip_power(user)
+
+
+def _equip_intact(user: dict, today: str) -> bool:
+    """今日装备是否可用（今天发的且未损坏）。"""
+    return user.get("equip_date") == today and not user.get("equip_used")
+
+
+def _consume_equip(user: dict) -> None:
+    user["equip_used"] = True
+
+
+def _equip_status(user: dict, today: str) -> str:
+    """面板用：未签到 / 已就绪(已强化×N) / 已损坏。"""
+    if user.get("equip_date") != today:
+        return "未签到"
+    if user.get("equip_used"):
+        return "已损坏"
+    forge = int(user.get("equip_forge", 0))
+    return f"已就绪（已强化 ×{forge}）" if forge else "已就绪"
 
 
 # ==================== 群上下文校验（与 gift 同范式，用 rpg 文案） ====================
