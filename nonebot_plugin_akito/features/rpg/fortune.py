@@ -1,7 +1,7 @@
 """隐藏运势 + 签到钩子。
 
 运势是隐藏值：签到时暗掷（不外显），仅在打怪时影响胜负（combat_factor）与掉落（drop_factor）。
-签到钩子 on_signin：暗掷运势 + 发固定经验 + 发今日装备；通过 game_store 钩子表被 gift 的签到回调（gift.py 不动）。
+签到钩子 on_signin：暗掷运势 + 发经验（基础 + 连签递增）+ 发今日装备；通过 game_store 钩子表被 gift 的签到回调（gift.py 不动）。
 """
 
 from __future__ import annotations

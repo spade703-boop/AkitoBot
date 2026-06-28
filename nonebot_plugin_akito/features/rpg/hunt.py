@@ -293,7 +293,7 @@ async def _(bot: Bot, event: Event):
         group = _get_group(data, group_id)
         user = _ensure_player(group, user_id, _display_name(event))
 
-        # 闸门：今日装备未损坏（替代精力做每日一次限制）
+        # 闸门：今日装备未损坏（= 今天签到过且还没打 → 实现每日一次）
         if user.get("equip_date") != today:
             await hunt_cmd.finish(MessageSegment.reply(event.message_id) + _error("need_equip"))
         if user.get("equip_used") and not is_superuser:

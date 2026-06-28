@@ -18,7 +18,7 @@ CONFIG_FILE = "rpg_config.json"
 # ==================== 默认配置（可被 data/content/rpg_config.json 覆盖） ====================
 
 DEFAULT_RPG_CONFIG: dict = {
-    # ---- 签到：固定经验（积分由 gift 的签到发放）----
+    # ---- 签到：基础经验（积分由 gift 的签到发放；连签额外经验见下方 signin_streak）----
     "signin": {"exp": 50},
     # ---- 连续签到：连签递增额外经验 bonus = min(streak*per_day, cap)，断签重置 ----
     "signin_streak": {"per_day": 10, "cap": 100},
