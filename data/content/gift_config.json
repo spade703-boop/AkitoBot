@@ -3,42 +3,42 @@
     {
       "name": "彰冬无料",
       "cost": 50,
-      "intimacy": 18
+      "intimacy": 12
     },
     {
       "name": "彰冬谷子",
       "cost": 100,
-      "intimacy": 42
+      "intimacy": 28
     },
     {
       "name": "彰冬豆豆眼",
       "cost": 200,
-      "intimacy": 90
+      "intimacy": 60
     },
     {
       "name": "彰冬亚克力立牌",
       "cost": 270,
-      "intimacy": 130
+      "intimacy": 85
     },
     {
       "name": "彰冬同人本",
       "cost": 350,
-      "intimacy": 175
+      "intimacy": 115
     },
     {
       "name": "彰冬画集",
       "cost": 450,
-      "intimacy": 235
+      "intimacy": 155
     },
     {
       "name": "彰冬约稿点图",
       "cost": 525,
-      "intimacy": 300
+      "intimacy": 200
     },
     {
       "name": "彰冬手办",
       "cost": 648,
-      "intimacy": 385
+      "intimacy": 255
     },
     {
       "name": "自己产的彰冬饭",
@@ -55,7 +55,38 @@
       "copy": "special_wedding"
     }
   ],
-  "return_gift": "彰冬谷子",
+  "return_gifts": {
+    "guzi": {
+      "name": "彰冬谷子",
+      "bonus": 6,
+      "refund_ratio": 0.0,
+      "weight": 6
+    },
+    "card": {
+      "name": "彰冬手绘小卡",
+      "bonus": 14,
+      "refund_ratio": 0.0,
+      "weight": 4
+    },
+    "doujin": {
+      "name": "彰冬同人本",
+      "bonus": 24,
+      "refund_ratio": 0.15,
+      "weight": 3
+    },
+    "rareguzi": {
+      "name": "彰冬稀有谷子",
+      "bonus": 32,
+      "refund_ratio": 0.0,
+      "weight": 2
+    },
+    "jouhan": {
+      "name": "彰冬场贩限定本子",
+      "bonus": 52,
+      "refund_ratio": 0.25,
+      "weight": 1
+    }
+  },
   "sign_in": {
     "min": 50,
     "max": 100
@@ -65,6 +96,7 @@
     "max": 5
   },
   "crit_multiplier": 2,
+  "fail_refund_ratio": 0.3,
   "event_weights": {
     "normal": 55,
     "crit": 16,
@@ -74,47 +106,56 @@
   },
   "mishaps": {
     "damaged": {
-      "intimacy": 12,
+      "intimacy": 8,
+      "ratio": 0.3,
       "refund_ratio": 0.5,
       "weight": 3
     },
     "freebie": {
-      "intimacy": 42,
+      "intimacy": 28,
+      "ratio": 1.0,
       "refund_ratio": 0.0,
       "weight": 2
     },
     "rare": {
-      "intimacy": 36,
+      "intimacy": 24,
+      "ratio": 0.9,
       "refund_ratio": 0.0,
       "weight": 2
     },
     "handwritten": {
-      "intimacy": 30,
+      "intimacy": 20,
+      "ratio": 0.8,
       "refund_ratio": 0.0,
       "weight": 2
     },
     "praised": {
-      "intimacy": 33,
+      "intimacy": 22,
+      "ratio": 0.85,
       "refund_ratio": 0.0,
       "weight": 2
     },
     "overboard": {
-      "intimacy": 45,
+      "intimacy": 30,
+      "ratio": 1.1,
       "refund_ratio": 0.0,
       "weight": 1
     },
     "delayed": {
-      "intimacy": 18,
+      "intimacy": 12,
+      "ratio": 0.5,
       "refund_ratio": 0.0,
       "weight": 2
     },
     "dupe": {
-      "intimacy": 9,
+      "intimacy": 6,
+      "ratio": 0.25,
       "refund_ratio": 0.3,
       "weight": 2
     },
     "lost": {
       "intimacy": 0,
+      "ratio": 0.0,
       "refund_ratio": 1.0,
       "weight": 1
     }
@@ -137,23 +178,23 @@
       "name": "Hot Dogs"
     },
     {
-      "min": 250,
+      "min": 100,
       "name": "大麦克风"
     },
     {
-      "min": 1000,
+      "min": 400,
       "name": "能信赖的搭档"
     },
     {
-      "min": 2500,
+      "min": 1000,
       "name": "云与柳的大头贴"
     },
     {
-      "min": 6000,
+      "min": 2500,
       "name": "想与你并肩而行"
     },
     {
-      "min": 15000,
+      "min": 6000,
       "name": "从今往后直到永远"
     }
   ],
@@ -198,10 +239,30 @@
       "{a} 送了【{gift}】，{b} 也回赠了一份【{return_gift}】，礼尚往来，羁绊 +{amount}。",
       "{a} 给 {b} 送了【{gift}】，{b} 顺手回了份【{return_gift}】，羁绊 +{amount}。"
     ],
+    "return_guzi": [
+      "{a} 送了【{gift}】，{b} 也回赠了一份【{return_gift}】，礼尚往来，羁绊 +{amount}。",
+      "{a} 给 {b} 送了【{gift}】，{b} 顺手回了份【{return_gift}】，羁绊 +{amount}。"
+    ],
+    "return_card": [
+      "{a} 送了【{gift}】，{b} 回赠了一张【{return_gift}】，还在角落悄悄画了只小彰冬，羁绊 +{amount}。",
+      "{a} 的【{gift}】送到，{b} 翻出珍藏的【{return_gift}】回赠，心意加倍，羁绊 +{amount}。"
+    ],
+    "return_doujin": [
+      "{a} 送了【{gift}】，{b} 回赠了一本【{return_gift}】，还退了 {refund} 积分当回礼茶水费，羁绊 +{amount}。",
+      "{a} 给 {b} 送【{gift}】，{b} 大方回赠一本【{return_gift}】，顺带塞回 {refund} 积分，羁绊 +{amount}。"
+    ],
+    "return_rareguzi": [
+      "{a} 送了【{gift}】，{b} 翻出压箱底的【{return_gift}】回赠，可遇不可求，羁绊 +{amount}。",
+      "{a} 的【{gift}】刚到，{b} 就回赠了一份绝版【{return_gift}】，{a} 乐开了花，羁绊 +{amount}。"
+    ],
+    "return_jouhan": [
+      "{a} 送了【{gift}】，{b} 竟回赠珍藏的【{return_gift}】！还附 {refund} 积分大红包，全场同好齐刷「这什么神仙礼尚往来」，羁绊 +{amount}。",
+      "{a} 给 {b} 送【{gift}】，{b} 大手一挥回赠一本【{return_gift}】外加 {refund} 积分，把 {a} 砸得当场愣住，羁绊 +{amount}。"
+    ],
     "fail": [
-      "{a} 送了【{gift}】，{b} 没太感冒，羁绊原地踏步。",
-      "{a} 送的【{gift}】好像没戳中 {b}，这次羁绊没怎么动。",
-      "{a} 送出【{gift}】，{b} 反应平平，羁绊没变化。"
+      "{a} 送的【{gift}】没太对上 {b} 的眼缘，{b} 不好意思收下，退回 {refund} 积分，羁绊没变化。",
+      "{a} 送出【{gift}】，{b} 反应平平、心意没太传到，退还 {refund} 积分，羁绊原地踏步。",
+      "{a} 送的【{gift}】好像没戳中 {b}，{b} 客气地退回 {refund} 积分，这次羁绊没怎么动。"
     ],
     "mishap_damaged": [
       "{a} 寄的【{gift}】路上有点压坏了，两个人一起心疼了一下，反而更亲近，羁绊各 +{amount}，返还 {refund} 积分。",

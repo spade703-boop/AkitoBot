@@ -133,25 +133,25 @@ def test_top_partners_sorted_desc():
 # ==================== 羁绊等级 / 送礼次数 ====================
 
 def test_bond_level_brackets():
-    # 每级最低门槛恰好进入该级（正向门槛已拉长：0/250/1000/2500/6000/15000）
+    # 每级最低门槛恰好进入该级
     assert gift._bond_level(0)["name"] == "Hot Dogs"
-    assert gift._bond_level(249)["name"] == "Hot Dogs"
-    assert gift._bond_level(250)["name"] == "大麦克风"
-    assert gift._bond_level(999)["name"] == "大麦克风"
-    assert gift._bond_level(1000)["name"] == "能信赖的搭档"
-    assert gift._bond_level(2500)["name"] == "云与柳的大头贴"
-    assert gift._bond_level(6000)["name"] == "想与你并肩而行"
-    assert gift._bond_level(15000)["name"] == "从今往后直到永远"
+    assert gift._bond_level(99)["name"] == "Hot Dogs"
+    assert gift._bond_level(100)["name"] == "大麦克风"
+    assert gift._bond_level(399)["name"] == "大麦克风"
+    assert gift._bond_level(400)["name"] == "能信赖的搭档"
+    assert gift._bond_level(1000)["name"] == "云与柳的大头贴"
+    assert gift._bond_level(2500)["name"] == "想与你并肩而行"
+    assert gift._bond_level(6000)["name"] == "从今往后直到永远"
     assert gift._bond_level(999999)["name"] == "从今往后直到永远"
 
 
 def test_bond_level_progress_and_maxed():
-    mid = gift._bond_level(1200)
+    mid = gift._bond_level(620)
     assert mid["name"] == "能信赖的搭档"
     assert mid["next_name"] == "云与柳的大头贴"
-    assert mid["to_next"] == 2500 - 1200
+    assert mid["to_next"] == 1000 - 620
     assert mid["level"] == 3  # Hot Dogs=Lv1 锚定（不受负档前置影响）
-    top = gift._bond_level(16000)
+    top = gift._bond_level(7000)
     assert top["name"] == "从今往后直到永远"
     assert top["level"] == 6
     assert top["next_name"] is None
@@ -191,7 +191,7 @@ def test_normalize_data_preserves_counts():
 
 def test_bond_card_shows_level_and_directed_counts():
     group = gift._new_group()
-    gift._add_intimacy(group, "10001", "10002", 1200)
+    gift._add_intimacy(group, "10001", "10002", 620)
     gift._bump_count(group, "10001", "10002")
     gift._bump_count(group, "10001", "10002")
     gift._bump_count(group, "10002", "10001")
@@ -230,6 +230,12 @@ def test_roll_mishap_returns_table_key():
     assert gift._roll_mishap() in keys
 
 
+def test_roll_return_gift_returns_table_key():
+    keys = set(gift._return_gifts())
+    assert keys == {"guzi", "card", "doujin", "rareguzi", "jouhan"}
+    assert gift._roll_return_gift() in keys
+
+
 # ==================== 纯逻辑：结算 _settle ====================
 
 def test_settle_normal_adds_base_intimacy():
@@ -248,19 +254,46 @@ def test_settle_crit_doubles():
     assert gift._get_intimacy(group, "A", "B") == expected
 
 
-def test_settle_return_sets_return_gift():
+def test_settle_return_no_refund_tier_adds_bonus():
+    """回礼无退分档：羁绊 = base + bonus，return_gift 取该档名，不退分。"""
     group = gift._new_group()
-    out = gift._settle(group, "A", "B", _g0(), "return", None)
-    assert out["amount"] == _g0()["intimacy"]
-    assert out["return_gift"] == gift._cfg("return_gift")
-    assert gift._get_intimacy(group, "A", "B") == _g0()["intimacy"]
+    g0 = _g0()
+    spec = gift._return_spec("guzi")
+    out = gift._settle(group, "A", "B", g0, "return", None, "guzi")
+    assert out["return_gift"] == spec["name"]
+    assert out["return_key"] == "guzi"
+    assert out["amount"] == g0["intimacy"] + spec["bonus"]
+    assert out["refund"] == 0
+    assert gift._get_intimacy(group, "A", "B") == g0["intimacy"] + spec["bonus"]
+    assert gift._get_user(group, "A")["points"] == 0
 
 
-def test_settle_fail_no_intimacy():
+def test_settle_return_refund_tier_credits_points():
+    """回礼退分档：退还 int(cost*ratio) 入送礼方账，羁绊 = base + bonus。"""
     group = gift._new_group()
-    out = gift._settle(group, "A", "B", _g0(), "fail", None)
+    g = gift._gift_list()[-3]  # 彰冬手办（最贵的非特殊礼，确保退分>0）
+    spec = gift._return_spec("doujin")
+    refund = int(g["cost"] * spec["refund_ratio"])
+    assert refund > 0
+    out = gift._settle(group, "A", "B", g, "return", None, "doujin")
+    assert out["return_gift"] == spec["name"]
+    assert out["amount"] == g["intimacy"] + spec["bonus"]
+    assert out["refund"] == refund
+    assert gift._get_intimacy(group, "A", "B") == g["intimacy"] + spec["bonus"]
+    assert gift._get_user(group, "A")["points"] == refund
+
+
+def test_settle_fail_refunds_consolation():
+    """失败：0 羁绊不变，但按 cost 比例退还安慰积分入送礼方账。"""
+    group = gift._new_group()
+    g = gift._gift_list()[-3]  # 彰冬手办（贵礼，退分明显 >0）
+    refund = int(g["cost"] * float(gift._cfg("fail_refund_ratio")))
+    assert refund > 0
+    out = gift._settle(group, "A", "B", g, "fail", None)
     assert out["amount"] == 0
-    assert gift._get_intimacy(group, "A", "B") == 0
+    assert gift._get_intimacy(group, "A", "B") == 0          # 仍不涨羁绊
+    assert out["refund"] == refund
+    assert gift._get_user(group, "A")["points"] == refund    # 退分入账
 
 
 def test_settle_special_uses_gift_own_intimacy():
@@ -316,6 +349,23 @@ def test_settle_mishap_dupe_partial_refund():
     assert out["refund"] == int(g0["cost"] * spec["refund_ratio"])
 
 
+def test_settle_mishap_scales_with_base():
+    """意外羁绊取 max(保底, ratio×base)：贵礼按档放大、便宜礼吃保底（手感不变）。"""
+    g_big = gift._gift_list()[-3]  # 手办 base 255
+    base = g_big["intimacy"]
+    # freebie ratio=1.0 → 缩放 255 > 保底 28 → 取缩放
+    spec_f = gift._mishap_spec("freebie")
+    out = gift._settle(gift._new_group(), "A", "B", g_big, "mishap", "freebie")
+    assert out["amount"] == max(int(spec_f["intimacy"]), int(float(spec_f["ratio"]) * base)) == base
+    # overboard ratio=1.1 → 缩放 280 > 保底 → 取缩放
+    spec_o = gift._mishap_spec("overboard")
+    out2 = gift._settle(gift._new_group(), "A", "B", g_big, "mishap", "overboard")
+    assert out2["amount"] == int(float(spec_o["ratio"]) * base)
+    # 便宜礼（无料 base 12）：缩放 < 保底 → 仍取保底，旧手感不变
+    out3 = gift._settle(gift._new_group(), "A", "B", _g0(), "mishap", "freebie")
+    assert out3["amount"] == int(spec_f["intimacy"])
+
+
 def test_every_mishap_has_copy_and_renders():
     """每个意外都有对应文案、且能正常渲染（含 @），防漏配 copy。"""
     g0 = _g0()
@@ -323,6 +373,16 @@ def test_every_mishap_has_copy_and_renders():
         out = gift._settle(gift._new_group(), "1", "2", g0, "mishap", key)
         msg = str(gift._build_broadcast(out, "1", "2"))
         assert "[at:1]" in msg and msg.strip()
+
+
+def test_every_return_gift_has_copy_and_renders():
+    """每个回赠档都有对应文案、且能正常渲染（含 @、回赠物名），防漏配 copy。"""
+    g0 = _g0()
+    for key in gift._return_gifts():
+        out = gift._settle(gift._new_group(), "1", "2", g0, "return", None, key)
+        msg = str(gift._build_broadcast(out, "1", "2"))
+        assert "[at:1]" in msg and msg.strip()
+        assert out["return_gift"] in msg  # 回赠物名出现在文案里
 
 
 # ==================== 纯逻辑：文案组装 ====================
@@ -333,6 +393,8 @@ def test_outcome_copy_key_mapping():
     assert gift._outcome_copy_key({"event": "special", "copy": "special_wedding"}) == "special_wedding"
     assert gift._outcome_copy_key({"event": "mishap", "mishap": "damaged"}) == "mishap_damaged"
     assert gift._outcome_copy_key({"event": "mishap", "mishap": "lost"}) == "mishap_lost"
+    assert gift._outcome_copy_key({"event": "return", "return_key": "doujin"}) == "return_doujin"
+    assert gift._outcome_copy_key({"event": "return", "return_key": None}) == "return"  # 缺 key 兜底
 
 
 def test_render_with_ats_builds_at_and_text():
@@ -430,6 +492,32 @@ async def test_gift_cmd_happy_path_deducts_and_adds_intimacy(monkeypatch):
     assert state["groups"]["1001"]["users"]["10001"]["points"] == 100000 - g0["cost"]
     assert state["groups"]["1001"]["intimacy"]["10001|||10002"] == g0["intimacy"]
     assert state["groups"]["1001"]["counts"]["10001>10002"] == 1  # 有向送礼次数 +1
+
+
+@pytest.mark.asyncio
+async def test_gift_cmd_return_path_credits_refund(monkeypatch):
+    """回礼路径：先扣 cost 再退 refund、羁绊=base+bonus、文案含回赠物名。"""
+    state = _patch_runtime(
+        monkeypatch,
+        store={"groups": {"1001": {"users": {"10001": {"points": 100000}}, "intimacy": {}}}},
+    )
+    g0 = _g0()
+    monkeypatch.setattr(gift, "_pick_gift", lambda _points, rng=gift.random: g0)
+    monkeypatch.setattr(gift, "_roll_main_event", lambda: "return")
+    monkeypatch.setattr(gift, "_roll_return_gift", lambda rng=gift.random: "doujin")
+    spec = gift._return_spec("doujin")
+    refund = int(g0["cost"] * spec["refund_ratio"])
+
+    event = Event(group_id=1001, user_id="10001", original_message=[_at("10002")])
+    with pytest.raises(FinishedException) as exc:
+        await gift.gift_cmd.handlers[0](_bot(), event, Message(""))
+
+    result = str(exc.value.result)
+    assert spec["name"] in result  # 文案含回赠物名
+    assert "[at:10001]" in result and "[at:10002]" in result
+    assert state["groups"]["1001"]["users"]["10001"]["points"] == 100000 - g0["cost"] + refund
+    assert state["groups"]["1001"]["intimacy"]["10001|||10002"] == g0["intimacy"] + spec["bonus"]
+    assert state["groups"]["1001"]["counts"]["10001>10002"] == 1
 
 
 @pytest.mark.asyncio
