@@ -63,7 +63,15 @@ DEFAULT_GIFT_CONFIG: dict = {
         {"name": "自己产的彰冬饭", "cost": 819, "intimacy": 520, "special": True, "copy": "special_meal"},
         {"name": "彰冬婚礼邀请函", "cost": 1112, "intimacy": 1314, "special": True, "copy": "special_wedding"},
     ],
-    "return_gift": "彰冬谷子",  # 回礼自动回赠的礼物
+    # 回礼回赠物：键控加权表（仿 mishaps）。name 回赠物 / bonus 在 base 之上额外加的羁绊 /
+    #   refund_ratio 按所送礼物 cost 退还比例 / weight 稀有度。可增删调、热重载。
+    "return_gifts": {
+        "guzi":     {"name": "彰冬谷子",         "bonus": 6,  "refund_ratio": 0.0,  "weight": 6},
+        "card":     {"name": "彰冬手绘小卡",     "bonus": 14, "refund_ratio": 0.0,  "weight": 4},
+        "doujin":   {"name": "彰冬同人本",       "bonus": 24, "refund_ratio": 0.15, "weight": 3},
+        "rareguzi": {"name": "彰冬稀有谷子",     "bonus": 32, "refund_ratio": 0.0,  "weight": 2},
+        "jouhan":   {"name": "彰冬场贩限定本子", "bonus": 52, "refund_ratio": 0.25, "weight": 1},  # 稀有大奖
+    },
     "sign_in": {"min": 50, "max": 100},
     "sign_delay_sec": {"min": 3, "max": 5},  # 签到回复随机延迟，错开另一个签到 bot
     "crit_multiplier": 2,
@@ -131,6 +139,27 @@ DEFAULT_GIFT_CONFIG: dict = {
         "return": [
             "{a} 送了【{gift}】，{b} 也回赠了一份【{return_gift}】，礼尚往来，羁绊 +{amount}。",
             "{a} 给 {b} 送了【{gift}】，{b} 顺手回了份【{return_gift}】，羁绊 +{amount}。",
+        ],
+        # 回礼分档专属文案（{return_gift} 回赠物 / {refund} 退还积分，仅退分档 doujin·jouhan 写 refund）
+        "return_guzi": [
+            "{a} 送了【{gift}】，{b} 也回赠了一份【{return_gift}】，礼尚往来，羁绊 +{amount}。",
+            "{a} 给 {b} 送了【{gift}】，{b} 顺手回了份【{return_gift}】，羁绊 +{amount}。",
+        ],
+        "return_card": [
+            "{a} 送了【{gift}】，{b} 回赠了一张【{return_gift}】，还在角落悄悄画了只小彰冬，羁绊 +{amount}。",
+            "{a} 的【{gift}】送到，{b} 翻出珍藏的【{return_gift}】回赠，心意加倍，羁绊 +{amount}。",
+        ],
+        "return_doujin": [
+            "{a} 送了【{gift}】，{b} 回赠了一本【{return_gift}】，还退了 {refund} 积分当回礼茶水费，羁绊 +{amount}。",
+            "{a} 给 {b} 送【{gift}】，{b} 大方回赠一本【{return_gift}】，顺带塞回 {refund} 积分，羁绊 +{amount}。",
+        ],
+        "return_rareguzi": [
+            "{a} 送了【{gift}】，{b} 翻出压箱底的【{return_gift}】回赠，可遇不可求，羁绊 +{amount}。",
+            "{a} 的【{gift}】刚到，{b} 就回赠了一份绝版【{return_gift}】，{a} 乐开了花，羁绊 +{amount}。",
+        ],
+        "return_jouhan": [
+            "{a} 送了【{gift}】，{b} 竟回赠珍藏的【{return_gift}】！还附 {refund} 积分大红包，全场同好齐刷「这什么神仙礼尚往来」，羁绊 +{amount}。",
+            "{a} 给 {b} 送【{gift}】，{b} 大手一挥回赠一本【{return_gift}】外加 {refund} 积分，把 {a} 砸得当场愣住，羁绊 +{amount}。",
         ],
         "fail": [
             "{a} 送了【{gift}】，{b} 没太感冒，羁绊原地踏步。",
@@ -509,12 +538,26 @@ def _roll_mishap(rng=random) -> str:
     return _weighted_choice(weights, rng)
 
 
+def _return_gifts() -> dict:
+    r = _cfg("return_gifts", {})
+    return r if isinstance(r, dict) and r else DEFAULT_GIFT_CONFIG["return_gifts"]
+
+
+def _return_spec(key: str) -> dict:
+    return _return_gifts().get(key) or DEFAULT_GIFT_CONFIG["return_gifts"].get(key, {})
+
+
+def _roll_return_gift(rng=random) -> str:
+    weights = {k: int(v.get("weight", 0)) for k, v in _return_gifts().items()}
+    return _weighted_choice(weights, rng)
+
+
 def _is_special_gift(gift: dict) -> bool:
     return bool(gift.get("special"))
 
 
 def _settle(group: dict, sender_id: str, target_id: str, gift: dict,
-            main_event: str, mishap: str | None) -> dict:
+            main_event: str, mishap: str | None, return_key: str | None = None) -> dict:
     """按已抽定的事件结算（直接改 group：亲密度/积分），返回播报所需数据。
 
     本函数不含随机、不做 IO，便于单测。调用方需先扣除礼物消耗积分。
@@ -528,6 +571,7 @@ def _settle(group: dict, sender_id: str, target_id: str, gift: dict,
         "amount": base,
         "refund": 0,
         "return_gift": None,
+        "return_key": None,
     }
 
     if main_event == "normal":
@@ -536,8 +580,17 @@ def _settle(group: dict, sender_id: str, target_id: str, gift: dict,
         out["amount"] = base * int(_cfg("crit_multiplier", 2))
         _add_intimacy(group, sender_id, target_id, out["amount"])
     elif main_event == "return":
-        out["return_gift"] = _cfg("return_gift", _gift_list()[0]["name"] if _gift_list() else "")
-        _add_intimacy(group, sender_id, target_id, base)
+        # 回礼：对方回赠一份（加权抽定的）回赠物，礼尚往来——在 base 之上额外加成，稀有档还退部分积分
+        if return_key is None:
+            return_key = next(iter(_return_gifts()), "")  # 防御：未 roll 时落到首档
+        spec = _return_spec(return_key)
+        out["return_key"] = return_key
+        out["return_gift"] = str(spec.get("name", ""))
+        out["amount"] = base + int(spec.get("bonus", 0))
+        out["refund"] = int(cost * float(spec.get("refund_ratio", 0)))
+        _add_intimacy(group, sender_id, target_id, out["amount"])
+        if out["refund"]:
+            _add_points(group, sender_id, out["refund"])
     elif main_event == "fail":
         out["amount"] = 0
     elif main_event == "special":
@@ -639,7 +692,10 @@ def _outcome_copy_key(out: dict) -> str:
         return f"mishap_{out['mishap']}"
     if out["event"] == "special":
         return out.get("copy") or "special"
-    return out["event"]  # normal / crit / return / fail
+    if out["event"] == "return":
+        key = out.get("return_key")
+        return f"return_{key}" if key else "return"
+    return out["event"]  # normal / crit / fail
 
 
 def _build_broadcast(out: dict, sender_id: str, target_id: str, rng=random):
@@ -789,12 +845,13 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
         sender["last_gift"] = today
 
         if _is_special_gift(gift):
-            main_event, mishap = "special", None
+            main_event, mishap, return_key = "special", None, None
         else:
             main_event = _roll_main_event()
             mishap = _roll_mishap() if main_event == "mishap" else None
+            return_key = _roll_return_gift() if main_event == "return" else None
 
-        out = _settle(group, sender_id, target_qq, gift, main_event, mishap)
+        out = _settle(group, sender_id, target_qq, gift, main_event, mishap, return_key)
         _bump_count(group, sender_id, target_qq)  # 记一次有向送礼（无论事件结果）
         _save_data(data)
 
