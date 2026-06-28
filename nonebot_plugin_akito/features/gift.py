@@ -75,19 +75,21 @@ DEFAULT_GIFT_CONFIG: dict = {
     "sign_in": {"min": 50, "max": 100},
     "sign_delay_sec": {"min": 3, "max": 5},  # 签到回复随机延迟，错开另一个签到 bot
     "crit_multiplier": 2,
+    "fail_refund_ratio": 0.3,  # 失败时按礼物 cost 比例退还的安慰积分（贵礼自动退得多；仍 0 羁绊）
     # 主事件权重（意外 5→10，让花样有机会出现）
     "event_weights": {"normal": 55, "crit": 16, "return": 12, "fail": 7, "mishap": 10},
-    # 意外子事件表：每项 羁绊加成 / 返还积分比例 / 抽取权重（可增删调，热重载）
+    # 意外子事件表：羁绊取 max(intimacy 保底, ratio×base 缩放)——便宜礼吃保底、贵礼按档放大；
+    #   refund_ratio 按 cost 退还比例；weight 抽取权重（可增删调，热重载）
     "mishaps": {
-        "damaged":     {"intimacy": 8,  "refund_ratio": 0.5, "weight": 3},  # 快递翻车
-        "freebie":     {"intimacy": 28, "refund_ratio": 0.0, "weight": 2},  # 商家加赠
-        "rare":        {"intimacy": 24, "refund_ratio": 0.0, "weight": 2},  # 买到稀有
-        "handwritten": {"intimacy": 20, "refund_ratio": 0.0, "weight": 2},  # 附了手写卡
-        "praised":     {"intimacy": 22, "refund_ratio": 0.0, "weight": 2},  # 被同好夸甜
-        "overboard":   {"intimacy": 30, "refund_ratio": 0.0, "weight": 1},  # 一时上头加码
-        "delayed":     {"intimacy": 12, "refund_ratio": 0.0, "weight": 2},  # 慢递迟到
-        "dupe":        {"intimacy": 6,  "refund_ratio": 0.3, "weight": 2},  # 撞款了
-        "lost":        {"intimacy": 0,  "refund_ratio": 1.0, "weight": 1},  # 寄丢了
+        "damaged":     {"intimacy": 8,  "ratio": 0.3,  "refund_ratio": 0.5, "weight": 3},  # 快递翻车
+        "freebie":     {"intimacy": 28, "ratio": 1.0,  "refund_ratio": 0.0, "weight": 2},  # 商家加赠
+        "rare":        {"intimacy": 24, "ratio": 0.9,  "refund_ratio": 0.0, "weight": 2},  # 买到稀有
+        "handwritten": {"intimacy": 20, "ratio": 0.8,  "refund_ratio": 0.0, "weight": 2},  # 附了手写卡
+        "praised":     {"intimacy": 22, "ratio": 0.85, "refund_ratio": 0.0, "weight": 2},  # 被同好夸甜
+        "overboard":   {"intimacy": 30, "ratio": 1.1,  "refund_ratio": 0.0, "weight": 1},  # 一时上头加码
+        "delayed":     {"intimacy": 12, "ratio": 0.5,  "refund_ratio": 0.0, "weight": 2},  # 慢递迟到
+        "dupe":        {"intimacy": 6,  "ratio": 0.25, "refund_ratio": 0.3, "weight": 2},  # 撞款了
+        "lost":        {"intimacy": 0,  "ratio": 0.0,  "refund_ratio": 1.0, "weight": 1},  # 寄丢了
     },
     # 羁绊等级：累计羁绊值 → 称号，门槛按礼物羁绊值校准（纯展示层，可热重载）
     "bond_levels": [
@@ -162,9 +164,9 @@ DEFAULT_GIFT_CONFIG: dict = {
             "{a} 给 {b} 送【{gift}】，{b} 大手一挥回赠一本【{return_gift}】外加 {refund} 积分，把 {a} 砸得当场愣住，羁绊 +{amount}。",
         ],
         "fail": [
-            "{a} 送了【{gift}】，{b} 没太感冒，羁绊原地踏步。",
-            "{a} 送的【{gift}】好像没戳中 {b}，这次羁绊没怎么动。",
-            "{a} 送出【{gift}】，{b} 反应平平，羁绊没变化。",
+            "{a} 送的【{gift}】没太对上 {b} 的眼缘，{b} 不好意思收下，退回 {refund} 积分，羁绊没变化。",
+            "{a} 送出【{gift}】，{b} 反应平平、心意没太传到，退还 {refund} 积分，羁绊原地踏步。",
+            "{a} 送的【{gift}】好像没戳中 {b}，{b} 客气地退回 {refund} 积分，这次羁绊没怎么动。",
         ],
         "mishap_damaged": [
             "{a} 寄的【{gift}】路上有点压坏了，两个人一起心疼了一下，反而更亲近，羁绊各 +{amount}，返还 {refund} 积分。",
@@ -592,7 +594,10 @@ def _settle(group: dict, sender_id: str, target_id: str, gift: dict,
         if out["refund"]:
             _add_points(group, sender_id, out["refund"])
     elif main_event == "fail":
-        out["amount"] = 0
+        out["amount"] = 0  # 核心惩罚不变：没拉近关系
+        out["refund"] = int(cost * float(_cfg("fail_refund_ratio", 0)))  # 安慰退分（按 cost 比例，贵礼退得多）
+        if out["refund"]:
+            _add_points(group, sender_id, out["refund"])
     elif main_event == "special":
         # 保证礼：必定惊喜升级，固定取礼物自身 intimacy；copy 走礼物专属文案
         out["amount"] = int(gift.get("intimacy", base))
@@ -601,7 +606,8 @@ def _settle(group: dict, sender_id: str, target_id: str, gift: dict,
     elif main_event == "mishap":
         # 意外：按 mishaps 配置表结算（羁绊加成 + 按比例返还积分）
         spec = _mishap_spec(mishap)
-        out["amount"] = int(spec.get("intimacy", 0))
+        # 羁绊取「保底」与「ratio×base 缩放」的较大者：便宜礼吃保底、贵礼按档放大
+        out["amount"] = max(int(spec.get("intimacy", 0)), int(float(spec.get("ratio", 0)) * base))
         if out["amount"]:
             _add_intimacy(group, sender_id, target_id, out["amount"])
         out["refund"] = int(cost * float(spec.get("refund_ratio", 0)))

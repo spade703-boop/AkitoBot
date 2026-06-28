@@ -283,11 +283,17 @@ def test_settle_return_refund_tier_credits_points():
     assert gift._get_user(group, "A")["points"] == refund
 
 
-def test_settle_fail_no_intimacy():
+def test_settle_fail_refunds_consolation():
+    """失败：0 羁绊不变，但按 cost 比例退还安慰积分入送礼方账。"""
     group = gift._new_group()
-    out = gift._settle(group, "A", "B", _g0(), "fail", None)
+    g = gift._gift_list()[-3]  # 彰冬手办（贵礼，退分明显 >0）
+    refund = int(g["cost"] * float(gift._cfg("fail_refund_ratio")))
+    assert refund > 0
+    out = gift._settle(group, "A", "B", g, "fail", None)
     assert out["amount"] == 0
-    assert gift._get_intimacy(group, "A", "B") == 0
+    assert gift._get_intimacy(group, "A", "B") == 0          # 仍不涨羁绊
+    assert out["refund"] == refund
+    assert gift._get_user(group, "A")["points"] == refund    # 退分入账
 
 
 def test_settle_special_uses_gift_own_intimacy():
@@ -341,6 +347,23 @@ def test_settle_mishap_dupe_partial_refund():
     out = gift._settle(group, "A", "B", g0, "mishap", "dupe")
     assert out["amount"] == spec["intimacy"]
     assert out["refund"] == int(g0["cost"] * spec["refund_ratio"])
+
+
+def test_settle_mishap_scales_with_base():
+    """意外羁绊取 max(保底, ratio×base)：贵礼按档放大、便宜礼吃保底（手感不变）。"""
+    g_big = gift._gift_list()[-3]  # 手办 base 255
+    base = g_big["intimacy"]
+    # freebie ratio=1.0 → 缩放 255 > 保底 28 → 取缩放
+    spec_f = gift._mishap_spec("freebie")
+    out = gift._settle(gift._new_group(), "A", "B", g_big, "mishap", "freebie")
+    assert out["amount"] == max(int(spec_f["intimacy"]), int(float(spec_f["ratio"]) * base)) == base
+    # overboard ratio=1.1 → 缩放 280 > 保底 → 取缩放
+    spec_o = gift._mishap_spec("overboard")
+    out2 = gift._settle(gift._new_group(), "A", "B", g_big, "mishap", "overboard")
+    assert out2["amount"] == int(float(spec_o["ratio"]) * base)
+    # 便宜礼（无料 base 12）：缩放 < 保底 → 仍取保底，旧手感不变
+    out3 = gift._settle(gift._new_group(), "A", "B", _g0(), "mishap", "freebie")
+    assert out3["amount"] == int(spec_f["intimacy"])
 
 
 def test_every_mishap_has_copy_and_renders():
