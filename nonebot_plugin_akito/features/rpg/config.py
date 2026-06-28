@@ -20,6 +20,8 @@ CONFIG_FILE = "rpg_config.json"
 DEFAULT_RPG_CONFIG: dict = {
     # ---- 签到：固定经验（积分由 gift 的签到发放）----
     "signin": {"exp": 50},
+    # ---- 连续签到：连签递增额外经验 bonus = min(streak*per_day, cap)，断签重置 ----
+    "signin_streak": {"per_day": 10, "cap": 100},
     # ---- 等级曲线：升到 L 级累计需 base*(L-1)*L/2 经验 ----
     "level_curve": {"base": 100},
     # ---- 今日装备：战力 = base + 等级*per_level + rand(0,var) + 强化次数*forge.step（战力为隐藏值，不外显）----
@@ -55,6 +57,8 @@ DEFAULT_RPG_CONFIG: dict = {
             "insight":   {"weight": 25, "exp_mult": 1.5},     # 弱点看破：胜则经验 ×1.5
             "desperate": {"weight": 35, "power_mult": 1.6},   # 绝境爆发：有效战力 ×1.6 可翻盘
         },
+        # ---- 精英怪：遭遇时小概率升级，更难打（power_req×）但胜则更肥（经验/掉落×）。藏着不外显，撞上才知道 ----
+        "elite": {"chance": 0.12, "power_mult": 1.6, "exp_mult": 1.8, "drop_mult": 2.0},
     },
     # ---- 打怪奖励：经验按等级（胜/负不同），掉落系数，少量积分（串起送礼经济）----
     "challenge": {
@@ -68,6 +72,22 @@ DEFAULT_RPG_CONFIG: dict = {
         "base_success": 0.35, "per_level": 0.12,   # Lv1=35%，每升一级 +12%
         "min_success": 0.10, "max_success": 0.95,   # 封底（含负档硬拉）/ 封顶
         "exp_bonus_per_level": 0.05, "exp_bonus_max": 0.50,  # 组队经验加成：每级 +5%，封顶 +50%
+    },
+    # ---- 称号：累计经验→等级→称号（纯派生、零存储，仿羁绊取档）。显示在「我的角色」与排行榜 ----
+    "titles": [
+        {"min_level": 1,  "name": "见习冒险者"},
+        {"min_level": 3,  "name": "萌新猎人"},
+        {"min_level": 6,  "name": "熟练打野人"},
+        {"min_level": 10, "name": "老练讨伐者"},
+        {"min_level": 15, "name": "区域强者"},
+        {"min_level": 20, "name": "传说猎手"},
+        {"min_level": 30, "name": "殿堂级冒险家"},
+    ],
+    # ---- 今日增益：按日期决定、全群一致、不预告；仅生效时打怪播报补一行（藏着不外显）----
+    "daily_buffs": {
+        "plain": {"name": "平日",       "weight": 6, "exp_mult": 1.0, "drop_mult": 1.0},
+        "drop":  {"name": "掉落翻倍日", "weight": 2, "exp_mult": 1.0, "drop_mult": 2.0},
+        "exp":   {"name": "经验涌动日", "weight": 2, "exp_mult": 1.5, "drop_mult": 1.0},
     },
     # ---- 野怪：power_req 作难度；今日装备战力随等级涨，自然匹配。drops 为掉落表 ----
     "monsters": [
@@ -105,6 +125,16 @@ DEFAULT_RPG_CONFIG: dict = {
         "team_lose": ["🤝 {a} 拉上 {b} 并肩死磕【{monster}】，可惜对手太猛，惜败而归……"],
         "team_member": ["· {name}：经验 +{exp}、积分 +{points}{loot}{levelup}"],
         "team_fail": ["{a} 想拉 {b_name} 组队，却没能拉动，只好自己上……"],
+        # 精英怪遭遇（{a}=真@；{monster}=文本）
+        "hunt_encounter_elite": [
+            "{a} 迎面撞上气势汹汹的 精英·{monster}！",
+            "{a} 提刀出门，竟遇上了 精英·{monster}！",
+        ],
+        # 连签 / 今日增益（{streak}{bonus}{buff} 为文本）
+        "signin_streak": ["🔥 连签 {streak} 天，额外经验 +{bonus}！"],
+        "daily_buff": ["✨ 今日「{buff}」加持，收获更丰！"],
+        # 排行榜
+        "rank_title": ["🏆 本群冒险者排行（等级榜）："],
     },
     "errors": {
         "private_only": "冒险要在群里玩哦。",
@@ -122,6 +152,7 @@ DEFAULT_RPG_CONFIG: dict = {
         "team_need_target": "组队要 @一位群友 哦，比如：组队 @某人。",
         "team_self": "自己跟自己组队？还是 @ 个群友吧。",
         "team_bot": "小彰不下场打怪啦，去 @ 个群友组队吧。",
+        "rank_empty": "本群还没人开始冒险，先「签到」领装备再「打怪」吧～",
     },
 }
 

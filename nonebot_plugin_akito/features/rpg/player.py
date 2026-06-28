@@ -28,6 +28,11 @@ def _ensure_player(group: dict, user_id, display_name: str = "") -> dict:
     user.setdefault("fortune_date", "")
     user.setdefault("last_fortune", "")
     user.setdefault("no_lucky_streak", 0)
+    # 战绩（喂排行榜/面板）与连续签到
+    user.setdefault("hunt_total", 0)          # 累计打怪次数
+    user.setdefault("hunt_wins", 0)           # 累计胜场
+    user.setdefault("signin_streak", 0)       # 当前连签天数
+    user.setdefault("signin_last_date", "")   # 上次签到日期（算连签）
     return user
 
 
@@ -67,6 +72,22 @@ def _level_progress(exp) -> dict:
         "span": next_floor - cur_floor,
         "to_next": next_floor - exp,
     }
+
+
+# ==================== 称号（按等级派生，零存储） ====================
+
+def _title_of(level: int) -> str:
+    """等级 → 称号：取 min_level ≤ level 的最高一档（仿羁绊取档）。"""
+    titles = _cfg("titles", [])
+    if not isinstance(titles, list) or not titles:
+        return ""
+    name = ""
+    for t in titles:
+        if int(level) >= int(t.get("min_level", 1)):
+            name = str(t.get("name", ""))
+        else:
+            break
+    return name
 
 
 # ==================== 今日装备（战力为隐藏值） ====================

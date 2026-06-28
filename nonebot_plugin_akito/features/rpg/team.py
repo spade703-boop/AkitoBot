@@ -30,7 +30,7 @@ from ...core.game_store import (
 )
 from ..gift import _bond_level  # rpg→gift 单向依赖：消费 gift 的羁绊等级
 from .config import _cfg, _copy, _error, _line
-from .hunt import _hunt_result_lines, _settle_coop, _settle_solo
+from .hunt import _buff_active, _hunt_result_lines, _settle_coop, _settle_solo
 from .player import _ensure_player, _equip_intact, _resolve_group
 
 # ==================== 纯逻辑：成功率 / 经验加成（按羁绊等级） ====================
@@ -64,12 +64,16 @@ def _member_line(rew: dict, name: str) -> str:
 
 
 def _build_coop_broadcast(out: dict, b_id: str, a_id: str, b_name: str, a_name: str):
-    """组队成功：合力胜负行（@ 双方）+ 两条成员收益行（文本名）。"""
+    """组队成功：合力胜负行（@ 双方，精英冠名）+ 两条成员收益行（文本名）+（今日增益生效则补一行）。"""
     name = out["monster"].get("name", "")
+    if out.get("elite"):
+        name = "精英·" + name
     head = random.choice(_copy("team_win" if out["win"] else "team_lose"))
     msg = _render_with_ats(head, {"a": b_id, "b": a_id, "monster": name})
     msg = msg + "\n" + _member_line(out["b"], b_name)
     msg = msg + "\n" + _member_line(out["a"], a_name)
+    if _buff_active(out.get("buff")):
+        msg = msg + "\n" + _line("daily_buff", buff=out["buff"].get("name", ""))
     return msg
 
 

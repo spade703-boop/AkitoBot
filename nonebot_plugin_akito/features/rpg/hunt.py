@@ -44,6 +44,36 @@ def _pick_monster(rng=random) -> dict:
     return rng.choices(pool, weights=weights, k=1)[0]
 
 
+def _pick_encounter(rng=random) -> tuple[dict, bool]:
+    """抽遭遇：先按权重抽怪，再按 combat.elite.chance 掷是否精英（精英更难打、胜则更肥）。"""
+    monster = _pick_monster(rng)
+    chance = float(_cfg("combat", {}).get("elite", {}).get("chance", 0.0))
+    return monster, (rng.random() < chance)
+
+
+def _today_buff() -> dict:
+    """今日增益：以日期为种子从 daily_buffs 加权选一个（同一天全群一致、可单测）。
+
+    返回含 name/exp_mult/drop_mult 的 spec；缺省/空表回落到「平日」（无效果、不外显）。
+    """
+    buffs = _cfg("daily_buffs", {})
+    if not isinstance(buffs, dict) or not buffs:
+        return {"key": "plain", "name": "平日", "exp_mult": 1.0, "drop_mult": 1.0}
+    weights = {k: int(v.get("weight", 0)) for k, v in buffs.items()}
+    key = _weighted_choice(weights, random.Random(_today_str()))
+    spec = dict(buffs.get(key, {}))
+    spec.setdefault("key", key)
+    spec.setdefault("name", key)
+    spec.setdefault("exp_mult", 1.0)
+    spec.setdefault("drop_mult", 1.0)
+    return spec
+
+
+def _buff_active(buff: dict | None) -> bool:
+    """今日增益是否真正生效（非平日）——决定是否在播报里揭示。"""
+    return bool(buff) and (float(buff.get("exp_mult", 1.0)) != 1.0 or float(buff.get("drop_mult", 1.0)) != 1.0)
+
+
 def _roll_hunt_event(margin: float, rng=random) -> str:
     """按战力优势分档抽随机事件（碾压→看破 / 劣势→爆发 / 其余→打滑），可能返回 '' 表示无事件。"""
     ccfg = _cfg("combat", {})
@@ -104,10 +134,11 @@ def _challenge_points(win: bool) -> int:
     return int(c.get("win_points", 30)) if win else int(c.get("lose_points", 10))
 
 
-def _apply_rewards(user: dict, today: str, *, win: bool, monster: dict,
-                   event_key: str = "", exp_bonus: float = 0.0) -> dict:
-    """给单个玩家结算（经验[含看破/双倍卡/组队加成] + 掉落 + 积分）并消耗其今日装备。
+def _apply_rewards(user: dict, today: str, *, win: bool, monster: dict, event_key: str = "",
+                   exp_bonus: float = 0.0, exp_mult: float = 1.0, drop_mult: float = 1.0) -> dict:
+    """给单个玩家结算（经验[含看破/双倍卡/组队加成/精英/今日增益] + 掉落 + 积分）并消耗其今日装备，记一次战绩。
 
+    `exp_mult`/`drop_mult` 由调用方算好（精英 × 今日增益）传入。
     返回奖励明细 {exp_gain, exp_buffed, drops, points_gain, old_level, new_level}（不含播报）。
     单刷与组队（双方各调一次）共用本函数：胜负由调用方判定后传入。
     """
@@ -119,6 +150,8 @@ def _apply_rewards(user: dict, today: str, *, win: bool, monster: dict,
         exp_gain = int(exp_gain * float(ccfg.get("events", {}).get("insight", {}).get("exp_mult", 1.5)))
     if exp_bonus:
         exp_gain = int(exp_gain * (1.0 + float(exp_bonus)))  # 组队羁绊加成
+    if exp_mult != 1.0:
+        exp_gain = int(exp_gain * float(exp_mult))           # 精英 × 今日增益
     buffed = False
     if int(user.get("exp_buff_uses", 0)) > 0:  # 双倍经验卡
         exp_gain *= int(user.get("exp_buff_mult", 2))
@@ -127,14 +160,16 @@ def _apply_rewards(user: dict, today: str, *, win: bool, monster: dict,
     user["exp"] = old_exp + exp_gain
 
     cc = _cfg("challenge", {})
-    drop_mult = float(cc.get("win_drop_mult", 1.0) if win else cc.get("lose_drop_mult", 0.3))
-    drop_mult *= _fortune_drop_factor(user, today)
-    drops = _roll_drops(monster, mult=drop_mult)
+    base_drop = float(cc.get("win_drop_mult", 1.0) if win else cc.get("lose_drop_mult", 0.3))
+    drops = _roll_drops(monster, mult=base_drop * _fortune_drop_factor(user, today) * float(drop_mult))
     for d in drops:
         _add_item(user, d, 1)
 
     points_gain = _challenge_points(win)
     user["points"] = int(user.get("points", 0)) + points_gain
+    user["hunt_total"] = int(user.get("hunt_total", 0)) + 1   # 战绩：累计打怪
+    if win:
+        user["hunt_wins"] = int(user.get("hunt_wins", 0)) + 1  # 战绩：累计胜场
     _consume_equip(user)  # 今日装备损坏
     return {
         "exp_gain": exp_gain, "exp_buffed": buffed, "drops": drops,
@@ -142,36 +177,64 @@ def _apply_rewards(user: dict, today: str, *, win: bool, monster: dict,
     }
 
 
+def _eff_monster(monster: dict, is_elite: bool) -> dict:
+    """精英则把怪 power_req 按 elite.power_mult 放大（更难打）；否则原样返回。"""
+    if not is_elite:
+        return monster
+    pm = float(_cfg("combat", {}).get("elite", {}).get("power_mult", 1.0))
+    return {**monster, "power_req": int(int(monster.get("power_req", 1)) * pm)}
+
+
+def _reward_mults(buff: dict, is_elite: bool, win: bool) -> tuple[float, float]:
+    """今日增益 ×（精英且胜则再加成）→ (exp_mult, drop_mult)，喂 `_apply_rewards`。"""
+    ecfg = _cfg("combat", {}).get("elite", {})
+    exp_mult = float(buff.get("exp_mult", 1.0))
+    drop_mult = float(buff.get("drop_mult", 1.0))
+    if is_elite and win:
+        exp_mult *= float(ecfg.get("exp_mult", 1.0))
+        drop_mult *= float(ecfg.get("drop_mult", 1.0))
+    return exp_mult, drop_mult
+
+
 def _settle_solo(user: dict, today: str) -> dict:
-    """单刷完整结算：遭遇 → 事件 → 胜负（随机系数 + 隐藏运势）→ 发奖 → 消耗装备。返回 out（不落库/不播报）。"""
+    """单刷完整结算：遭遇(含精英) → 事件 → 胜负（随机系数 + 隐藏运势）→ 发奖（含今日增益）→ 消耗装备。返回 out。"""
     ccfg = _cfg("combat", {})
+    buff = _today_buff()
+    monster, is_elite = _pick_encounter()
+    eff = _eff_monster(monster, is_elite)
     cp = _combat_power(user)
-    monster = _pick_monster()
-    margin = cp / max(1, int(monster.get("power_req", 1)))
+    margin = cp / max(1, int(eff.get("power_req", 1)))
     event_key = _roll_hunt_event(margin)
     fortune_factor = _fortune_combat_factor(user, today)
     power_factor = random.uniform(float(ccfg.get("factor_min", 0.8)), float(ccfg.get("factor_max", 1.2)))
-    res = resolve_hunt(cp, monster, power_factor=power_factor, fortune_factor=fortune_factor, event=event_key)
-    rew = _apply_rewards(user, today, win=res["win"], monster=monster, event_key=event_key)
-    return {**res, **rew, "monster": monster, "event": event_key}
+    res = resolve_hunt(cp, eff, power_factor=power_factor, fortune_factor=fortune_factor, event=event_key)
+    exp_mult, drop_mult = _reward_mults(buff, is_elite, res["win"])
+    rew = _apply_rewards(user, today, win=res["win"], monster=eff, event_key=event_key,
+                         exp_mult=exp_mult, drop_mult=drop_mult)
+    return {**res, **rew, "monster": monster, "event": event_key, "elite": is_elite, "buff": buff}
 
 
 def _settle_coop(b: dict, a: dict, today: str, *, exp_bonus: float = 0.0) -> dict:
-    """组队合力结算：合力战力（B+A）打一只怪、胜负共享；双方各按自身等级/运势发奖、各自消耗装备。
+    """组队合力结算：合力战力（B+A）打一只怪（含精英）、胜负共享；双方各按自身等级/运势/今日增益发奖、各自消耗装备。
 
-    返回 {win, monster, b: 奖励明细, a: 奖励明细}（不落库/不播报）。合力更易赢；不叠加随机事件/运势系数（保持简单）。
+    返回 {win, monster, elite, buff, b: 奖励明细, a: 奖励明细}（不落库/不播报）。合力更易赢；不叠加随机事件/运势系数（保持简单）。
     """
     ccfg = _cfg("combat", {})
+    buff = _today_buff()
+    monster, is_elite = _pick_encounter()
+    eff = _eff_monster(monster, is_elite)
     cp = _combat_power(b) + _combat_power(a)
-    monster = _pick_monster()
     power_factor = random.uniform(float(ccfg.get("factor_min", 0.8)), float(ccfg.get("factor_max", 1.2)))
-    res = resolve_hunt(cp, monster, power_factor=power_factor)
+    res = resolve_hunt(cp, eff, power_factor=power_factor)
     win = res["win"]
+    exp_mult, drop_mult = _reward_mults(buff, is_elite, win)
     return {
         "win": win,
         "monster": monster,
-        "b": _apply_rewards(b, today, win=win, monster=monster, exp_bonus=exp_bonus),
-        "a": _apply_rewards(a, today, win=win, monster=monster, exp_bonus=exp_bonus),
+        "elite": is_elite,
+        "buff": buff,
+        "b": _apply_rewards(b, today, win=win, monster=eff, exp_bonus=exp_bonus, exp_mult=exp_mult, drop_mult=drop_mult),
+        "a": _apply_rewards(a, today, win=win, monster=eff, exp_bonus=exp_bonus, exp_mult=exp_mult, drop_mult=drop_mult),
     }
 
 
@@ -191,13 +254,16 @@ def _hunt_result_lines(out: dict) -> list:
         lines.append(_line("hunt_loot", loot=summary))
     if out["new_level"] > out["old_level"]:
         lines.append(_line("levelup", level=out["old_level"], newlevel=out["new_level"]))
+    if _buff_active(out.get("buff")):  # 今日增益生效才揭示（平时无感）
+        lines.append(_line("daily_buff", buff=out["buff"].get("name", "")))
     return lines
 
 
 def _build_hunt_broadcast(out: dict, user_id: str):
-    """遭遇行（带真 @）+ 结果行，合并单条消息。"""
+    """遭遇行（带真 @，精英走专属文案）+ 结果行，合并单条消息。"""
     m = out["monster"]
-    msg = _render_with_ats(random.choice(_copy("hunt_encounter")), {"a": user_id, "monster": m.get("name", "")})
+    enc_key = "hunt_encounter_elite" if out.get("elite") else "hunt_encounter"
+    msg = _render_with_ats(random.choice(_copy(enc_key)), {"a": user_id, "monster": m.get("name", "")})
     for ln in _hunt_result_lines(out):
         msg = msg + "\n" + ln
     return msg

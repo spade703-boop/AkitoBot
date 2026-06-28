@@ -6,11 +6,17 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 import random
 
+from ...core import TZ_CN
 from ...core.game_store import _today_str, _weighted_choice, register_signin_hook
 from .config import _cfg, _line
 from .player import _ensure_player, _grant_equip, _level_of
+
+
+def _yesterday_str() -> str:
+    return (datetime.now(TZ_CN).date() - timedelta(days=1)).isoformat()
 
 # ==================== 运势抽取（隐藏） ====================
 
@@ -48,8 +54,15 @@ def _roll_fortune(user: dict, rng=random) -> str:
 
 # ==================== 签到钩子 ====================
 
+def _bump_streak(user: dict, today: str) -> int:
+    """更新连续签到：上次签到==昨天则 +1，否则重置为 1；写当日。返回当前连签天数。"""
+    user["signin_streak"] = int(user.get("signin_streak", 0)) + 1 if user.get("signin_last_date") == _yesterday_str() else 1
+    user["signin_last_date"] = today
+    return int(user["signin_streak"])
+
+
 def on_signin(group: dict, user_id: str, rng=random) -> str:
-    """签到结算：暗掷运势 + 发固定经验 + 发今日装备。返回追加播报行（当天已签到则返回空串）。"""
+    """签到结算：暗掷运势 + 发经验（基础 + 连签递增）+ 发今日装备。返回追加播报行（当天已签到则返回空串）。"""
     user = _ensure_player(group, user_id)
     today = _today_str()
     if user.get("fortune_date") == today:
@@ -62,11 +75,19 @@ def on_signin(group: dict, user_id: str, rng=random) -> str:
     user["fortune"] = key
     user["fortune_date"] = today
 
-    exp_gain = int(_cfg("signin", {}).get("exp", 50))
-    user["exp"] = int(user.get("exp", 0)) + exp_gain
+    # 连续签到：递增额外经验 bonus = min(streak*per_day, cap)
+    streak = _bump_streak(user, today)
+    scfg = _cfg("signin_streak", {})
+    streak_bonus = min(streak * int(scfg.get("per_day", 10)), int(scfg.get("cap", 100)))
+
+    base_exp = int(_cfg("signin", {}).get("exp", 50))
+    user["exp"] = int(user.get("exp", 0)) + base_exp + streak_bonus
     _grant_equip(user, today, rng)  # 发今日装备（按发放后的等级）
 
-    return _line("signin_exp", exp=exp_gain, level=_level_of(user["exp"]))
+    line = _line("signin_exp", exp=base_exp, level=_level_of(user["exp"]))
+    if streak_bonus > 0:
+        line = line + "\n" + _line("signin_streak", streak=streak, bonus=streak_bonus)
+    return line
 
 
 # 注册到共享签到钩子表：gift 的「签到」会在结算时回调本函数。

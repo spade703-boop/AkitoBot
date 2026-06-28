@@ -137,10 +137,13 @@ def test_on_signin_grants_exp_equip_fortune(monkeypatch):
     group = game_store._new_group()
     line = fortune.on_signin(group, "u1", _FixedRand(0))
     user = group["users"]["u1"]
-    assert user["exp"] == int(rpg_config._cfg("signin", {})["exp"])
+    scfg = rpg_config._cfg("signin_streak", {})
+    day1_bonus = min(1 * int(scfg["per_day"]), int(scfg["cap"]))  # 首签连签 1 天的额外经验
+    assert user["exp"] == int(rpg_config._cfg("signin", {})["exp"]) + day1_bonus
+    assert user["signin_streak"] == 1 and user["signin_last_date"] == "2026-06-22"
     assert user["fortune"] == "daji" and user["fortune_date"] == "2026-06-22"  # 运势暗掷
     assert user["equip_date"] == "2026-06-22" and user["equip_used"] is False  # 发今日装备
-    assert "经验" in line and "Lv" in line
+    assert "经验" in line and "Lv" in line and "连签" in line
     assert "大吉" not in line  # 运势不外显
 
 
@@ -281,11 +284,16 @@ def _equipped_user(**extra):
     return base
 
 
-def _stub_hunt_rng(monkeypatch, monster, *, event="", drops=None):
-    monkeypatch.setattr(hunt, "_pick_monster", lambda rng=hunt.random: monster)
+_PLAIN_BUFF = {"key": "plain", "name": "平日", "exp_mult": 1.0, "drop_mult": 1.0}
+
+
+def _stub_hunt_rng(monkeypatch, monster, *, event="", drops=None, elite=False, buff=None):
+    # 遭遇桩：精英默认关、今日增益默认平日 → 既有用例保持确定（数值不被随机精英/增益扰动）
+    monkeypatch.setattr(hunt, "_pick_encounter", lambda rng=hunt.random: (monster, elite))
     monkeypatch.setattr(hunt, "_roll_hunt_event", lambda margin, rng=hunt.random: event)
     monkeypatch.setattr(hunt.random, "uniform", lambda _a, _b: 1.0)
     monkeypatch.setattr(hunt, "_roll_drops", lambda m, rng=hunt.random, mult=1.0: list(drops or []))
+    monkeypatch.setattr(hunt, "_today_buff", lambda: buff or _PLAIN_BUFF)
 
 
 @pytest.mark.asyncio
@@ -482,3 +490,121 @@ async def test_team_fail_by_rng_degrades_to_solo(monkeypatch):
     assert g["u1"]["equip_used"] is True and g["u2"]["equip_used"] is False
     assert g["u2"]["exp"] == 0 and g["u2"]["points"] == 0
     assert "自己上" in str(exc.value.result)
+
+
+# ==================== 称号 / 连签 / 战绩 ====================
+
+def test_title_of_brackets():
+    titles = rpg_config._cfg("titles", [])
+    assert player._title_of(titles[0]["min_level"]) == titles[0]["name"]   # 最低档
+    assert player._title_of(int(titles[1]["min_level"])) == titles[1]["name"]
+    assert player._title_of(int(titles[1]["min_level"]) - 1) == titles[0]["name"]  # 未达则取低档
+    assert player._title_of(10 ** 6) == titles[-1]["name"]                  # 顶档
+
+
+def test_signin_streak_increment_and_reset(monkeypatch):
+    monkeypatch.setattr(fortune, "_yesterday_str", lambda: "2026-06-21")
+    u = {"signin_streak": 3, "signin_last_date": "2026-06-21"}      # 昨天签过 → +1
+    assert fortune._bump_streak(u, "2026-06-22") == 4 and u["signin_last_date"] == "2026-06-22"
+    assert fortune._bump_streak({"signin_streak": 9, "signin_last_date": "2026-06-19"}, "2026-06-22") == 1  # 断签重置
+    assert fortune._bump_streak({}, "2026-06-22") == 1             # 全新用户
+
+
+def test_signin_streak_bonus_scales(monkeypatch):
+    monkeypatch.setattr(fortune, "_today_str", lambda: "2026-06-22")
+    monkeypatch.setattr(fortune, "_yesterday_str", lambda: "2026-06-21")
+    monkeypatch.setattr(fortune, "_roll_fortune", lambda u, rng: "ping")
+    scfg = rpg_config._cfg("signin_streak", {})
+    group = game_store._new_group()
+    group["users"]["u1"] = {"signin_streak": 4, "signin_last_date": "2026-06-21"}  # 今天应到第 5 天
+    fortune.on_signin(group, "u1", _FixedRand(0))
+    u = group["users"]["u1"]
+    assert u["signin_streak"] == 5
+    bonus = min(5 * int(scfg["per_day"]), int(scfg["cap"]))
+    assert u["exp"] == int(rpg_config._cfg("signin", {})["exp"]) + bonus
+
+
+@pytest.mark.asyncio
+async def test_hunt_records_battle_stats(monkeypatch):
+    state = _patch_io(monkeypatch, hunt, store={"groups": {"1001": {"users": {"u1": _equipped_user()}}}})
+    _stub_hunt_rng(monkeypatch, {"name": "史莱姆", "power_req": 1, "drops": []})  # 必胜
+    with pytest.raises(FinishedException):
+        await hunt.hunt_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="u1"))
+    user = state["groups"]["1001"]["users"]["u1"]
+    assert user["hunt_total"] == 1 and user["hunt_wins"] == 1
+
+
+# ==================== 打怪变数：精英 / 今日增益 ====================
+
+@pytest.mark.asyncio
+async def test_hunt_elite_boosts_rewards_and_reveals(monkeypatch):
+    state = _patch_io(monkeypatch, hunt, store={"groups": {"1001": {"users": {"u1": _equipped_user()}}}})
+    _stub_hunt_rng(monkeypatch, {"name": "哥布林", "power_req": 1, "drops": []}, elite=True)
+    with pytest.raises(FinishedException) as exc:
+        await hunt.hunt_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="u1"))
+    user = state["groups"]["1001"]["users"]["u1"]
+    elite_mult = float(rpg_config._cfg("combat", {})["elite"]["exp_mult"])
+    assert user["exp"] == int(hunt._challenge_exp(True, 1) * elite_mult)  # 精英胜则经验 ×elite.exp_mult
+    assert "精英" in str(exc.value.result)
+
+
+def test_today_buff_deterministic_by_date(monkeypatch):
+    monkeypatch.setattr(hunt, "_today_str", lambda: "2026-07-01")
+    assert hunt._today_buff()["key"] == hunt._today_buff()["key"]            # 同一天一致
+    assert hunt._today_buff()["key"] in set(rpg_config._cfg("daily_buffs", {}))
+
+
+@pytest.mark.asyncio
+async def test_hunt_daily_buff_exp_applies(monkeypatch):
+    state = _patch_io(monkeypatch, hunt, store={"groups": {"1001": {"users": {"u1": _equipped_user()}}}})
+    surge = {"key": "exp", "name": "经验涌动日", "exp_mult": 1.5, "drop_mult": 1.0}
+    _stub_hunt_rng(monkeypatch, {"name": "史莱姆", "power_req": 1, "drops": []}, buff=surge)
+    with pytest.raises(FinishedException) as exc:
+        await hunt.hunt_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="u1"))
+    user = state["groups"]["1001"]["users"]["u1"]
+    assert user["exp"] == int(hunt._challenge_exp(True, 1) * 1.5)            # 经验涌动日 ×1.5
+    assert "经验涌动日" in str(exc.value.result)
+
+
+# ==================== 排行榜 / 面板（称号·战绩） ====================
+
+@pytest.mark.asyncio
+async def test_rank_sorts_filters_and_formats(monkeypatch):
+    lv5 = player._cum_exp(5, player._level_base())
+    state = game_store._normalize_data({"groups": {"1001": {"users": {
+        "u1": {"exp": 10, "display_name": "小一", "hunt_wins": 2},
+        "u2": {"exp": lv5, "display_name": "大二", "hunt_wins": 7},
+        "u3": {"exp": 0, "display_name": "路人"},   # 没开始冒险（exp=0）→ 不上榜
+    }}}})
+    monkeypatch.setattr(character, "_load_data", lambda: deepcopy(state))
+    with pytest.raises(FinishedException) as exc:
+        await character.rank_cmd.handlers[0](Event(group_id=1001, user_id="u1"))
+    r = str(exc.value.result)
+    assert r.index("大二") < r.index("小一")   # 经验高的排前
+    assert "路人" not in r                       # exp=0 不上榜
+    assert "胜7场" in r and "Lv5" in r
+
+
+@pytest.mark.asyncio
+async def test_rank_empty(monkeypatch):
+    state = game_store._normalize_data({"groups": {"1001": {"users": {}}}})
+    monkeypatch.setattr(character, "_load_data", lambda: deepcopy(state))
+    with pytest.raises(FinishedException) as exc:
+        await character.rank_cmd.handlers[0](Event(group_id=1001, user_id="u1"))
+    assert "还没人" in str(exc.value.result)
+
+
+@pytest.mark.asyncio
+async def test_status_panel_shows_title_and_record(monkeypatch):
+    lv3 = player._cum_exp(3, player._level_base())
+    state = game_store._normalize_data({"groups": {"1001": {"users": {
+        "u1": {"exp": lv3, "equip_date": "2026-06-22", "equip_used": False,
+               "hunt_total": 5, "hunt_wins": 4}}}}})
+    monkeypatch.setattr(character, "_today_str", lambda: "2026-06-22")
+    monkeypatch.setattr(character, "is_sleeping", lambda: False)
+    monkeypatch.setattr(character, "_load_data", lambda: deepcopy(state))
+    with pytest.raises(FinishedException) as exc:
+        await character.status_cmd.handlers[0](Event(group_id=1001, user_id="u1"))
+    r = str(exc.value.result)
+    assert player._title_of(3) in r            # 称号
+    assert "4 胜" in r and "5 场" in r          # 战绩
