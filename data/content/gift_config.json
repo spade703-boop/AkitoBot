@@ -3,42 +3,42 @@
     {
       "name": "彰冬无料",
       "cost": 50,
-      "intimacy": 12
+      "intimacy": 18
     },
     {
       "name": "彰冬谷子",
       "cost": 100,
-      "intimacy": 28
+      "intimacy": 42
     },
     {
       "name": "彰冬豆豆眼",
       "cost": 200,
-      "intimacy": 60
+      "intimacy": 90
     },
     {
       "name": "彰冬亚克力立牌",
       "cost": 270,
-      "intimacy": 85
+      "intimacy": 130
     },
     {
       "name": "彰冬同人本",
       "cost": 350,
-      "intimacy": 115
+      "intimacy": 175
     },
     {
       "name": "彰冬画集",
       "cost": 450,
-      "intimacy": 155
+      "intimacy": 235
     },
     {
       "name": "彰冬约稿点图",
       "cost": 525,
-      "intimacy": 200
+      "intimacy": 300
     },
     {
       "name": "彰冬手办",
       "cost": 648,
-      "intimacy": 255
+      "intimacy": 385
     },
     {
       "name": "自己产的彰冬饭",
@@ -74,42 +74,42 @@
   },
   "mishaps": {
     "damaged": {
-      "intimacy": 8,
+      "intimacy": 12,
       "refund_ratio": 0.5,
       "weight": 3
     },
     "freebie": {
-      "intimacy": 28,
+      "intimacy": 42,
       "refund_ratio": 0.0,
       "weight": 2
     },
     "rare": {
-      "intimacy": 24,
+      "intimacy": 36,
       "refund_ratio": 0.0,
       "weight": 2
     },
     "handwritten": {
-      "intimacy": 20,
+      "intimacy": 30,
       "refund_ratio": 0.0,
       "weight": 2
     },
     "praised": {
-      "intimacy": 22,
+      "intimacy": 33,
       "refund_ratio": 0.0,
       "weight": 2
     },
     "overboard": {
-      "intimacy": 30,
+      "intimacy": 45,
       "refund_ratio": 0.0,
       "weight": 1
     },
     "delayed": {
-      "intimacy": 12,
+      "intimacy": 18,
       "refund_ratio": 0.0,
       "weight": 2
     },
     "dupe": {
-      "intimacy": 6,
+      "intimacy": 9,
       "refund_ratio": 0.3,
       "weight": 2
     },
@@ -137,23 +137,23 @@
       "name": "Hot Dogs"
     },
     {
-      "min": 100,
+      "min": 250,
       "name": "大麦克风"
     },
     {
-      "min": 400,
+      "min": 1000,
       "name": "能信赖的搭档"
     },
     {
-      "min": 1000,
+      "min": 2500,
       "name": "云与柳的大头贴"
     },
     {
-      "min": 2500,
+      "min": 6000,
       "name": "想与你并肩而行"
     },
     {
-      "min": 6000,
+      "min": 15000,
       "name": "从今往后直到永远"
     }
   ],

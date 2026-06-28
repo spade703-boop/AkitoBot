@@ -64,14 +64,14 @@ CONFIG_FILE = "gift_config.json"
 DEFAULT_GIFT_CONFIG: dict = {
     # 礼物按「心意/稀有度」递增：买来的 → 自己产的。消耗积分与基础亲密度同步递增。
     "gifts": [
-        {"name": "彰冬无料", "cost": 50, "intimacy": 12},
-        {"name": "彰冬谷子", "cost": 100, "intimacy": 28},
-        {"name": "彰冬豆豆眼", "cost": 200, "intimacy": 60},
-        {"name": "彰冬亚克力立牌", "cost": 270, "intimacy": 85},
-        {"name": "彰冬同人本", "cost": 350, "intimacy": 115},
-        {"name": "彰冬画集", "cost": 450, "intimacy": 155},
-        {"name": "彰冬约稿点图", "cost": 525, "intimacy": 200},
-        {"name": "彰冬手办", "cost": 648, "intimacy": 255},
+        {"name": "彰冬无料", "cost": 50, "intimacy": 18},
+        {"name": "彰冬谷子", "cost": 100, "intimacy": 42},
+        {"name": "彰冬豆豆眼", "cost": 200, "intimacy": 90},
+        {"name": "彰冬亚克力立牌", "cost": 270, "intimacy": 130},
+        {"name": "彰冬同人本", "cost": 350, "intimacy": 175},
+        {"name": "彰冬画集", "cost": 450, "intimacy": 235},
+        {"name": "彰冬约稿点图", "cost": 525, "intimacy": 300},
+        {"name": "彰冬手办", "cost": 648, "intimacy": 385},
         # special=true 必定惊喜升级（不暴击不失败，固定取自身 intimacy）；copy 指定专属文案
         {"name": "自己产的彰冬饭", "cost": 819, "intimacy": 520, "special": True, "copy": "special_meal"},
         {"name": "彰冬婚礼邀请函", "cost": 1112, "intimacy": 1314, "special": True, "copy": "special_wedding"},
@@ -84,27 +84,27 @@ DEFAULT_GIFT_CONFIG: dict = {
     "event_weights": {"normal": 55, "crit": 16, "return": 12, "fail": 7, "mishap": 10},
     # 意外子事件表：每项 羁绊加成 / 返还积分比例 / 抽取权重（可增删调，热重载）
     "mishaps": {
-        "damaged":     {"intimacy": 8,  "refund_ratio": 0.5, "weight": 3},  # 快递翻车
-        "freebie":     {"intimacy": 28, "refund_ratio": 0.0, "weight": 2},  # 商家加赠
-        "rare":        {"intimacy": 24, "refund_ratio": 0.0, "weight": 2},  # 买到稀有
-        "handwritten": {"intimacy": 20, "refund_ratio": 0.0, "weight": 2},  # 附了手写卡
-        "praised":     {"intimacy": 22, "refund_ratio": 0.0, "weight": 2},  # 被同好夸甜
-        "overboard":   {"intimacy": 30, "refund_ratio": 0.0, "weight": 1},  # 一时上头加码
-        "delayed":     {"intimacy": 12, "refund_ratio": 0.0, "weight": 2},  # 慢递迟到
-        "dupe":        {"intimacy": 6,  "refund_ratio": 0.3, "weight": 2},  # 撞款了
+        "damaged":     {"intimacy": 12, "refund_ratio": 0.5, "weight": 3},  # 快递翻车
+        "freebie":     {"intimacy": 42, "refund_ratio": 0.0, "weight": 2},  # 商家加赠
+        "rare":        {"intimacy": 36, "refund_ratio": 0.0, "weight": 2},  # 买到稀有
+        "handwritten": {"intimacy": 30, "refund_ratio": 0.0, "weight": 2},  # 附了手写卡
+        "praised":     {"intimacy": 33, "refund_ratio": 0.0, "weight": 2},  # 被同好夸甜
+        "overboard":   {"intimacy": 45, "refund_ratio": 0.0, "weight": 1},  # 一时上头加码
+        "delayed":     {"intimacy": 18, "refund_ratio": 0.0, "weight": 2},  # 慢递迟到
+        "dupe":        {"intimacy": 9,  "refund_ratio": 0.3, "weight": 2},  # 撞款了
         "lost":        {"intimacy": 0,  "refund_ratio": 1.0, "weight": 1},  # 寄丢了
     },
-    # 羁绊等级：累计羁绊值 → 称号，门槛按礼物羁绊值校准（纯展示层，可热重载）
+    # 羁绊等级：累计羁绊值 → 称号；正向门槛拉长（养成线更长，给组队成功率更大爬升空间），负档不动（属偷积分体系）
     "bond_levels": [
         {"min": -1000, "name": "宿敌"},
         {"min": -300, "name": "结了梁子"},
         {"min": -50, "name": "有过节"},
         {"min": 0, "name": "Hot Dogs"},
-        {"min": 100, "name": "大麦克风"},
-        {"min": 400, "name": "能信赖的搭档"},
-        {"min": 1000, "name": "云与柳的大头贴"},
-        {"min": 2500, "name": "想与你并肩而行"},
-        {"min": 6000, "name": "从今往后直到永远"},
+        {"min": 250, "name": "大麦克风"},
+        {"min": 1000, "name": "能信赖的搭档"},
+        {"min": 2500, "name": "云与柳的大头贴"},
+        {"min": 6000, "name": "想与你并肩而行"},
+        {"min": 15000, "name": "从今往后直到永远"},
     ],
     # 偷积分：对抗玩法（轻量·强保护·掉羁绊），每项可配可热重载
     "steal": {

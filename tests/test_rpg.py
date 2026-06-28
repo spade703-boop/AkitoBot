@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import types
 
 from nonebot.adapters import Bot, Event, Message
 from nonebot.exception import FinishedException
@@ -22,10 +23,19 @@ import nonebot_plugin_akito.features.rpg.hunt as hunt
 import nonebot_plugin_akito.features.rpg.inventory as inventory
 import nonebot_plugin_akito.features.rpg.player as player
 import nonebot_plugin_akito.features.rpg.smith as smith
+import nonebot_plugin_akito.features.rpg.team as team
 
 
 def _bot():
     return Bot(self_id="114514")
+
+
+def _at(qq):
+    return types.SimpleNamespace(type="at", data={"qq": str(qq)})
+
+
+def _team_event(initiator, target):
+    return Event(group_id=1001, user_id=initiator, original_message=[_at(target)])
 
 
 class _FixedRand:
@@ -34,6 +44,19 @@ class _FixedRand:
 
     def randint(self, _a, _b):
         return self.val
+
+
+class _Rng:
+    """组队成功掷骰 + 文案随机选用 的桩：random() 返回固定值、choice 取首项。"""
+
+    def __init__(self, r):
+        self._r = r
+
+    def random(self):
+        return self._r
+
+    def choice(self, seq):
+        return seq[0]
 
 
 # ==================== 纯逻辑：等级 ====================
@@ -358,3 +381,104 @@ async def test_bag_and_use_book(monkeypatch):
         await inventory.use_cmd.handlers[0](Event(group_id=1001, user_id="u1"), Message("经验书"))
     user = state["groups"]["1001"]["users"]["u1"]
     assert user["exp"] == int(book["effect"]["amount"]) and "经验书" not in user.get("inventory", {})
+
+
+# ==================== 打怪给积分 ====================
+
+@pytest.mark.asyncio
+async def test_hunt_grants_points(monkeypatch):
+    state = _patch_io(monkeypatch, hunt, store={"groups": {"1001": {"users": {
+        "u1": _equipped_user(points=0)}}}})
+    _stub_hunt_rng(monkeypatch, {"name": "史莱姆", "power_req": 1, "drops": []})
+    with pytest.raises(FinishedException) as exc:
+        await hunt.hunt_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="u1"))
+    user = state["groups"]["1001"]["users"]["u1"]
+    assert user["points"] == hunt._challenge_points(True)  # 胜得 win_points
+    assert "积分" in str(exc.value.result)
+
+
+# ==================== 纯逻辑：组队成功率 / 经验加成 ====================
+
+def test_team_success_rate_scales_and_clamps():
+    t = rpg_config._cfg("team", {})
+    base, step = float(t["base_success"]), float(t["per_level"])
+    assert team._team_success_rate(1) == pytest.approx(base)              # Lv1 = base
+    assert team._team_success_rate(3) == pytest.approx(base + 2 * step)   # 随羁绊等级爬升
+    assert team._team_success_rate(99) == pytest.approx(float(t["max_success"]))   # 封顶
+    assert team._team_success_rate(-5) == pytest.approx(float(t["min_success"]))   # 封底（负档硬拉）
+
+
+def test_team_exp_bonus_scales_and_caps():
+    t = rpg_config._cfg("team", {})
+    per, cap = float(t["exp_bonus_per_level"]), float(t["exp_bonus_max"])
+    assert team._team_exp_bonus(1) == 0.0                       # Lv1 无加成
+    assert team._team_exp_bonus(3) == pytest.approx(2 * per)
+    assert team._team_exp_bonus(9999) == pytest.approx(cap)     # 封顶
+
+
+# ==================== 指令：组队 ====================
+
+@pytest.mark.asyncio
+async def test_team_guards(monkeypatch):
+    _patch_io(monkeypatch, team, store={"groups": {"1001": {"users": {"u1": _equipped_user()}}}})
+    with pytest.raises(FinishedException) as e1:  # 无 @ 目标
+        await team.team_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="u1", original_message=[]))
+    assert "@" in str(e1.value.result)
+    with pytest.raises(FinishedException) as e2:  # @ 自己
+        await team.team_cmd.handlers[0](_bot(), _team_event("u1", "u1"))
+    assert "自己" in str(e2.value.result)
+    with pytest.raises(FinishedException) as e3:  # @ bot
+        await team.team_cmd.handlers[0](_bot(), _team_event("u1", "114514"))
+    assert "小彰" in str(e3.value.result)
+
+
+@pytest.mark.asyncio
+async def test_team_success_both_rewarded(monkeypatch):
+    # 顶级羁绊 + random=0 → 必成功；合力打弱怪，双方各得经验+积分、各自装备都消耗、@ 双方
+    store = {"groups": {"1001": {
+        "users": {"u1": _equipped_user(points=0), "u2": _equipped_user(points=0)},
+        "intimacy": {game_store._pair_key("u1", "u2"): 20000},
+    }}}
+    state = _patch_io(monkeypatch, team, store=store)
+    monkeypatch.setattr(team, "random", _Rng(0.0))
+    _stub_hunt_rng(monkeypatch, {"name": "史莱姆", "power_req": 1, "drops": []})
+    with pytest.raises(FinishedException) as exc:
+        await team.team_cmd.handlers[0](_bot(), _team_event("u1", "u2"))
+    g = state["groups"]["1001"]["users"]
+    assert g["u1"]["equip_used"] is True and g["u2"]["equip_used"] is True   # 双方装备都消耗
+    win_pts = int(rpg_config._cfg("challenge", {})["win_points"])
+    assert g["u1"]["points"] == win_pts and g["u2"]["points"] == win_pts      # 双方各得积分
+    assert g["u1"]["exp"] > 0 and g["u2"]["exp"] > 0
+    r = str(exc.value.result)
+    assert "[at:u1]" in r and "[at:u2]" in r                                   # @ 双方
+
+
+@pytest.mark.asyncio
+async def test_team_fail_when_partner_no_equip(monkeypatch):
+    # 队友今天没装备 → 必定失败（拉不动），发起人单刷，只消耗发起人装备，队友毫发无损
+    store = {"groups": {"1001": {"users": {"u1": _equipped_user(points=0), "u2": {"exp": 0}}}}}
+    state = _patch_io(monkeypatch, team, store=store)
+    monkeypatch.setattr(team, "random", _Rng(0.0))  # 即便骰子必成，也因对方无装备而失败
+    _stub_hunt_rng(monkeypatch, {"name": "史莱姆", "power_req": 1, "drops": []})
+    with pytest.raises(FinishedException) as exc:
+        await team.team_cmd.handlers[0](_bot(), _team_event("u1", "u2"))
+    g = state["groups"]["1001"]["users"]
+    assert g["u1"]["equip_used"] is True              # 发起人单刷消耗
+    assert g["u2"].get("equip_used") is False          # 队友未被卷入、装备没动
+    assert g["u2"]["exp"] == 0 and g["u2"]["points"] == 0  # 队友零收益零损耗
+    assert "自己上" in str(exc.value.result)
+
+
+@pytest.mark.asyncio
+async def test_team_fail_by_rng_degrades_to_solo(monkeypatch):
+    # 无羁绊（低成功率）+ random=0.999 → 拉不动，退化单刷；只消耗发起人装备
+    store = {"groups": {"1001": {"users": {"u1": _equipped_user(points=0), "u2": _equipped_user(points=0)}}}}
+    state = _patch_io(monkeypatch, team, store=store)
+    monkeypatch.setattr(team, "random", _Rng(0.999))
+    _stub_hunt_rng(monkeypatch, {"name": "史莱姆", "power_req": 1, "drops": []})
+    with pytest.raises(FinishedException) as exc:
+        await team.team_cmd.handlers[0](_bot(), _team_event("u1", "u2"))
+    g = state["groups"]["1001"]["users"]
+    assert g["u1"]["equip_used"] is True and g["u2"]["equip_used"] is False
+    assert g["u2"]["exp"] == 0 and g["u2"]["points"] == 0
+    assert "自己上" in str(exc.value.result)

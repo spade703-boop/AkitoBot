@@ -133,25 +133,25 @@ def test_top_partners_sorted_desc():
 # ==================== 羁绊等级 / 送礼次数 ====================
 
 def test_bond_level_brackets():
-    # 每级最低门槛恰好进入该级
+    # 每级最低门槛恰好进入该级（正向门槛已拉长：0/250/1000/2500/6000/15000）
     assert gift._bond_level(0)["name"] == "Hot Dogs"
-    assert gift._bond_level(99)["name"] == "Hot Dogs"
-    assert gift._bond_level(100)["name"] == "大麦克风"
-    assert gift._bond_level(399)["name"] == "大麦克风"
-    assert gift._bond_level(400)["name"] == "能信赖的搭档"
-    assert gift._bond_level(1000)["name"] == "云与柳的大头贴"
-    assert gift._bond_level(2500)["name"] == "想与你并肩而行"
-    assert gift._bond_level(6000)["name"] == "从今往后直到永远"
+    assert gift._bond_level(249)["name"] == "Hot Dogs"
+    assert gift._bond_level(250)["name"] == "大麦克风"
+    assert gift._bond_level(999)["name"] == "大麦克风"
+    assert gift._bond_level(1000)["name"] == "能信赖的搭档"
+    assert gift._bond_level(2500)["name"] == "云与柳的大头贴"
+    assert gift._bond_level(6000)["name"] == "想与你并肩而行"
+    assert gift._bond_level(15000)["name"] == "从今往后直到永远"
     assert gift._bond_level(999999)["name"] == "从今往后直到永远"
 
 
 def test_bond_level_progress_and_maxed():
-    mid = gift._bond_level(620)
+    mid = gift._bond_level(1200)
     assert mid["name"] == "能信赖的搭档"
     assert mid["next_name"] == "云与柳的大头贴"
-    assert mid["to_next"] == 1000 - 620
+    assert mid["to_next"] == 2500 - 1200
     assert mid["level"] == 3  # Hot Dogs=Lv1 锚定（不受负档前置影响）
-    top = gift._bond_level(7000)
+    top = gift._bond_level(16000)
     assert top["name"] == "从今往后直到永远"
     assert top["level"] == 6
     assert top["next_name"] is None
@@ -191,7 +191,7 @@ def test_normalize_data_preserves_counts():
 
 def test_bond_card_shows_level_and_directed_counts():
     group = gift._new_group()
-    gift._add_intimacy(group, "10001", "10002", 620)
+    gift._add_intimacy(group, "10001", "10002", 1200)
     gift._bump_count(group, "10001", "10002")
     gift._bump_count(group, "10001", "10002")
     gift._bump_count(group, "10002", "10001")

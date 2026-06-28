@@ -56,11 +56,18 @@ DEFAULT_RPG_CONFIG: dict = {
             "desperate": {"weight": 35, "power_mult": 1.6},   # 绝境爆发：有效战力 ×1.6 可翻盘
         },
     },
-    # ---- 打怪奖励：经验按等级（胜/负不同），掉落系数 ----
+    # ---- 打怪奖励：经验按等级（胜/负不同），掉落系数，少量积分（串起送礼经济）----
     "challenge": {
         "win_exp_base": 60, "win_exp_per_level": 10,
         "lose_exp_base": 15, "lose_exp_per_level": 2,
         "win_drop_mult": 1.0, "lose_drop_mult": 0.3,
+        "win_points": 30, "lose_points": 10,
+    },
+    # ---- 组队：成功率随羁绊等级爬升（Lv6 顶级羁绊≈封顶必成）；失败退化为发起人单刷 ----
+    "team": {
+        "base_success": 0.35, "per_level": 0.12,   # Lv1=35%，每升一级 +12%
+        "min_success": 0.10, "max_success": 0.95,   # 封底（含负档硬拉）/ 封顶
+        "exp_bonus_per_level": 0.05, "exp_bonus_max": 0.50,  # 组队经验加成：每级 +5%，封顶 +50%
     },
     # ---- 野怪：power_req 作难度；今日装备战力随等级涨，自然匹配。drops 为掉落表 ----
     "monsters": [
@@ -82,8 +89,8 @@ DEFAULT_RPG_CONFIG: dict = {
             "{a} 用今日装备迎向 Lv? 的【{monster}】！",
             "{a} 提刀出门，撞上了【{monster}】！",
         ],
-        "hunt_win": ["击败了【{monster}】，经验 +{exp}（今日装备已损耗）。"],
-        "hunt_lose": ["不敌【{monster}】，狼狈撤退，经验 +{exp}（今日装备已损耗）。"],
+        "hunt_win": ["击败了【{monster}】，经验 +{exp}、积分 +{points}（今日装备已损耗）。"],
+        "hunt_lose": ["不敌【{monster}】，狼狈撤退，经验 +{exp}、积分 +{points}（今日装备已损耗）。"],
         "levelup": ["⬆️ 升级了！Lv{level} → Lv{newlevel}！"],
         "event_slip": ["💢 脚底一滑，这一下没使上全力……"],
         "event_insight": ["🎯 看破了【{monster}】的破绽，经验大涨！"],
@@ -93,6 +100,11 @@ DEFAULT_RPG_CONFIG: dict = {
         "forge_ok": ["🔨 强化成功，今日装备更锋利了（已强化 ×{forge}，花费 {cost} 积分）。"],
         "use_exp_buff": ["📖 用了【{name}】，下次打怪经验 ×{mult} 已就绪。"],
         "use_exp_grant": ["📖 用了【{name}】，经验 +{amount}。"],
+        # 组队（{a}{b}=真@；{name}{exp}{points}{loot}{levelup}{b_name}=文本）
+        "team_win": ["🤝 {a} 拉上 {b} 合力出击，一举击败了【{monster}】！"],
+        "team_lose": ["🤝 {a} 拉上 {b} 并肩死磕【{monster}】，可惜对手太猛，惜败而归……"],
+        "team_member": ["· {name}：经验 +{exp}、积分 +{points}{loot}{levelup}"],
+        "team_fail": ["{a} 想拉 {b_name} 组队，却没能拉动，只好自己上……"],
     },
     "errors": {
         "private_only": "冒险要在群里玩哦。",
@@ -107,6 +119,9 @@ DEFAULT_RPG_CONFIG: dict = {
         "use_need_name": "要用哪个道具？比如：使用 经验书。",
         "item_unknown": "没有「{name}」这个道具哦。",
         "item_none": "你背包里没有【{name}】。",
+        "team_need_target": "组队要 @一位群友 哦，比如：组队 @某人。",
+        "team_self": "自己跟自己组队？还是 @ 个群友吧。",
+        "team_bot": "小彰不下场打怪啦，去 @ 个群友组队吧。",
     },
 }
 

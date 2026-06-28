@@ -98,23 +98,107 @@ def _challenge_exp(win: bool, level: int) -> int:
     return int(c.get("lose_exp_base", 15)) + level * int(c.get("lose_exp_per_level", 2))
 
 
-def _build_hunt_broadcast(out: dict, user_id: str, old_level: int, new_level: int):
-    """遭遇 →（事件）→ 结果 →（双倍）→（掉落）→（升级），合并单条消息，仅遭遇行带真 @。"""
+def _challenge_points(win: bool) -> int:
+    """打怪积分（少量）：把「打怪赚分 → 送礼攒羁绊 → 组队」串成闭环。"""
+    c = _cfg("challenge", {})
+    return int(c.get("win_points", 30)) if win else int(c.get("lose_points", 10))
+
+
+def _apply_rewards(user: dict, today: str, *, win: bool, monster: dict,
+                   event_key: str = "", exp_bonus: float = 0.0) -> dict:
+    """给单个玩家结算（经验[含看破/双倍卡/组队加成] + 掉落 + 积分）并消耗其今日装备。
+
+    返回奖励明细 {exp_gain, exp_buffed, drops, points_gain, old_level, new_level}（不含播报）。
+    单刷与组队（双方各调一次）共用本函数：胜负由调用方判定后传入。
+    """
+    ccfg = _cfg("combat", {})
+    old_exp = int(user.get("exp", 0))
+    level = _level_of(old_exp)
+    exp_gain = _challenge_exp(win, level)
+    if win and event_key == "insight":
+        exp_gain = int(exp_gain * float(ccfg.get("events", {}).get("insight", {}).get("exp_mult", 1.5)))
+    if exp_bonus:
+        exp_gain = int(exp_gain * (1.0 + float(exp_bonus)))  # 组队羁绊加成
+    buffed = False
+    if int(user.get("exp_buff_uses", 0)) > 0:  # 双倍经验卡
+        exp_gain *= int(user.get("exp_buff_mult", 2))
+        buffed = True
+        user["exp_buff_uses"] = int(user["exp_buff_uses"]) - 1
+    user["exp"] = old_exp + exp_gain
+
+    cc = _cfg("challenge", {})
+    drop_mult = float(cc.get("win_drop_mult", 1.0) if win else cc.get("lose_drop_mult", 0.3))
+    drop_mult *= _fortune_drop_factor(user, today)
+    drops = _roll_drops(monster, mult=drop_mult)
+    for d in drops:
+        _add_item(user, d, 1)
+
+    points_gain = _challenge_points(win)
+    user["points"] = int(user.get("points", 0)) + points_gain
+    _consume_equip(user)  # 今日装备损坏
+    return {
+        "exp_gain": exp_gain, "exp_buffed": buffed, "drops": drops,
+        "points_gain": points_gain, "old_level": level, "new_level": _level_of(user["exp"]),
+    }
+
+
+def _settle_solo(user: dict, today: str) -> dict:
+    """单刷完整结算：遭遇 → 事件 → 胜负（随机系数 + 隐藏运势）→ 发奖 → 消耗装备。返回 out（不落库/不播报）。"""
+    ccfg = _cfg("combat", {})
+    cp = _combat_power(user)
+    monster = _pick_monster()
+    margin = cp / max(1, int(monster.get("power_req", 1)))
+    event_key = _roll_hunt_event(margin)
+    fortune_factor = _fortune_combat_factor(user, today)
+    power_factor = random.uniform(float(ccfg.get("factor_min", 0.8)), float(ccfg.get("factor_max", 1.2)))
+    res = resolve_hunt(cp, monster, power_factor=power_factor, fortune_factor=fortune_factor, event=event_key)
+    rew = _apply_rewards(user, today, win=res["win"], monster=monster, event_key=event_key)
+    return {**res, **rew, "monster": monster, "event": event_key}
+
+
+def _settle_coop(b: dict, a: dict, today: str, *, exp_bonus: float = 0.0) -> dict:
+    """组队合力结算：合力战力（B+A）打一只怪、胜负共享；双方各按自身等级/运势发奖、各自消耗装备。
+
+    返回 {win, monster, b: 奖励明细, a: 奖励明细}（不落库/不播报）。合力更易赢；不叠加随机事件/运势系数（保持简单）。
+    """
+    ccfg = _cfg("combat", {})
+    cp = _combat_power(b) + _combat_power(a)
+    monster = _pick_monster()
+    power_factor = random.uniform(float(ccfg.get("factor_min", 0.8)), float(ccfg.get("factor_max", 1.2)))
+    res = resolve_hunt(cp, monster, power_factor=power_factor)
+    win = res["win"]
+    return {
+        "win": win,
+        "monster": monster,
+        "b": _apply_rewards(b, today, win=win, monster=monster, exp_bonus=exp_bonus),
+        "a": _apply_rewards(a, today, win=win, monster=monster, exp_bonus=exp_bonus),
+    }
+
+
+def _hunt_result_lines(out: dict) -> list:
+    """结果行（不含遭遇行）：事件 →（胜负 = 经验 + 积分）→ 双倍 → 掉落 → 升级。供单刷与组队失败单刷复用。"""
     m = out["monster"]
-    lines = [_render_with_ats(random.choice(_copy("hunt_encounter")), {"a": user_id, "monster": m.get("name", "")})]
-    if out["event"]:
+    lines: list = []
+    if out.get("event"):
         lines.append(_render_with_ats(random.choice(_copy(f"event_{out['event']}")), {"monster": m.get("name", "")}))
-    lines.append(_line("hunt_win" if out["win"] else "hunt_lose", monster=m.get("name", ""), exp=out["exp_gain"]))
+    lines.append(_line("hunt_win" if out["win"] else "hunt_lose",
+                       monster=m.get("name", ""), exp=out["exp_gain"], points=out["points_gain"]))
     if out.get("exp_buffed"):
         lines.append(_line("hunt_exp_buffed"))
     drops = out.get("drops") or []
     if drops:
         summary = "、".join(f"{n} ×{c}" for n, c in Counter(drops).items())
         lines.append(_line("hunt_loot", loot=summary))
-    if new_level > old_level:
-        lines.append(_line("levelup", level=old_level, newlevel=new_level))
-    msg = lines[0]
-    for ln in lines[1:]:
+    if out["new_level"] > out["old_level"]:
+        lines.append(_line("levelup", level=out["old_level"], newlevel=out["new_level"]))
+    return lines
+
+
+def _build_hunt_broadcast(out: dict, user_id: str):
+    """遭遇行（带真 @）+ 结果行，合并单条消息。"""
+    m = out["monster"]
+    msg = _render_with_ats(random.choice(_copy("hunt_encounter")), {"a": user_id, "monster": m.get("name", "")})
+    for ln in _hunt_result_lines(out):
         msg = msg + "\n" + ln
     return msg
 
@@ -143,47 +227,14 @@ async def _(bot: Bot, event: Event):
         group = _get_group(data, group_id)
         user = _ensure_player(group, user_id, _display_name(event))
 
-        # 闸门：今日装备（替代精力做每日一次限制）
+        # 闸门：今日装备未损坏（替代精力做每日一次限制）
         if user.get("equip_date") != today:
             await hunt_cmd.finish(MessageSegment.reply(event.message_id) + _error("need_equip"))
         if user.get("equip_used") and not is_superuser:
             await hunt_cmd.finish(MessageSegment.reply(event.message_id) + _error("equip_broken"))
 
-        cp = _combat_power(user)
-        monster = _pick_monster()
-        margin = cp / max(1, int(monster.get("power_req", 1)))
-        event_key = _roll_hunt_event(margin)
-        fortune_factor = _fortune_combat_factor(user, today)
-        ccfg = _cfg("combat", {})
-        power_factor = random.uniform(float(ccfg.get("factor_min", 0.8)), float(ccfg.get("factor_max", 1.2)))
-
-        out = resolve_hunt(cp, monster, power_factor=power_factor, fortune_factor=fortune_factor, event=event_key)
-
-        old_exp = int(user.get("exp", 0))
-        level = _level_of(old_exp)
-        exp_gain = _challenge_exp(out["win"], level)
-        if out["win"] and event_key == "insight":
-            exp_gain = int(exp_gain * float(ccfg.get("events", {}).get("insight", {}).get("exp_mult", 1.5)))
-        # 双倍经验卡
-        if int(user.get("exp_buff_uses", 0)) > 0:
-            exp_gain *= int(user.get("exp_buff_mult", 2))
-            out["exp_buffed"] = True
-            user["exp_buff_uses"] = int(user["exp_buff_uses"]) - 1
-        out["exp_gain"] = exp_gain
-        user["exp"] = old_exp + exp_gain
-
-        # 掉落：怪 drops × (胜负系数 × 运势 drop_factor)
-        cc = _cfg("challenge", {})
-        drop_mult = float(cc.get("win_drop_mult", 1.0) if out["win"] else cc.get("lose_drop_mult", 0.3))
-        drop_mult *= _fortune_drop_factor(user, today)
-        drops = _roll_drops(monster, mult=drop_mult)
-        for d in drops:
-            _add_item(user, d, 1)
-        out["drops"] = drops
-
-        _consume_equip(user)  # 今日装备损坏
-        new_level = _level_of(user["exp"])
+        out = _settle_solo(user, today)
         _save_data(data)
 
-    broadcast = _build_hunt_broadcast(out, user_id, level, new_level)
+    broadcast = _build_hunt_broadcast(out, user_id)
     await hunt_cmd.finish(MessageSegment.reply(event.message_id) + broadcast)
