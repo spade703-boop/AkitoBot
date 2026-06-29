@@ -98,7 +98,7 @@ def _apply_item_effect(user: dict, item: dict) -> tuple[bool, str]:
 
 # ==================== 指令：背包 ====================
 
-bag_cmd = on_command("我的背包", force_whitespace=True, priority=5, block=True)
+bag_cmd = on_command("我的背包", priority=5, block=True)
 
 
 @bag_cmd.handle()
@@ -132,7 +132,7 @@ async def _(event: Event, args: Message = CommandArg()):
 
 # ==================== 指令：使用 ====================
 
-use_cmd = on_command("使用", force_whitespace=True, priority=5, block=True)
+use_cmd = on_command("使用", priority=5, block=True)
 
 
 @use_cmd.handle()

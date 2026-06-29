@@ -675,7 +675,7 @@ async def _(event: Event):
 
 # ==================== 指令：送礼 ====================
 
-gift_cmd = on_command("送礼", force_whitespace=True, priority=5, block=True)
+gift_cmd = on_command("送礼", priority=5, block=True)
 
 
 @gift_cmd.handle()
@@ -748,7 +748,7 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
 
 # ==================== 指令：偷 ====================
 
-steal_cmd = on_command("偷", aliases={"偷积分"}, force_whitespace=True, priority=5, block=True)
+steal_cmd = on_command("偷", aliases={"偷积分"}, priority=5, block=True)
 
 
 @steal_cmd.handle()

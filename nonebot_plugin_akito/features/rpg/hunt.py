@@ -313,7 +313,7 @@ def _build_hunt_broadcast(out: dict, user_id: str):
 
 # ==================== 指令：打怪 ====================
 
-hunt_cmd = on_command("今日打怪", force_whitespace=True, priority=5, block=True)
+hunt_cmd = on_command("今日打怪", priority=5, block=True)
 
 
 @hunt_cmd.handle()

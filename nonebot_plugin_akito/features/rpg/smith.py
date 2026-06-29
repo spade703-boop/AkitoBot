@@ -48,7 +48,7 @@ def _forge(user: dict, today: str) -> tuple[bool, str]:
     return True, _line("forge_ok", forge=times + 1, cost=cost)
 
 
-forge_cmd = on_command("强化今日装备", force_whitespace=True, priority=5, block=True)
+forge_cmd = on_command("强化今日装备", priority=5, block=True)
 
 
 @forge_cmd.handle()

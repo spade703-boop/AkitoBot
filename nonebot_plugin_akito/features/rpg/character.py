@@ -21,7 +21,7 @@ from .player import (
     _title_of,
 )
 
-status_cmd = on_command("我的角色", force_whitespace=True, priority=5, block=True)
+status_cmd = on_command("我的角色", priority=5, block=True)
 
 
 @status_cmd.handle()
@@ -62,7 +62,7 @@ async def _(event: Event, args: Message = CommandArg()):
 
 # ==================== 指令：排行榜（等级榜，纯文字、不 @、不出图） ====================
 
-rank_cmd = on_command("群排行榜", force_whitespace=True, priority=5, block=True)
+rank_cmd = on_command("群排行榜", priority=5, block=True)
 
 
 @rank_cmd.handle()
@@ -99,7 +99,7 @@ async def _(event: Event, args: Message = CommandArg()):
     await rank_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
 
 
-help_cmd = on_command("冒险帮助", aliases={"打怪帮助", "冒险说明"}, force_whitespace=True, priority=5, block=True)
+help_cmd = on_command("冒险帮助", aliases={"打怪帮助", "冒险说明"}, priority=5, block=True)
 
 
 @help_cmd.handle()

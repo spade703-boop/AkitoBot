@@ -88,7 +88,7 @@ def _build_fail_broadcast(out: dict, b_id: str, a_name: str):
 
 # ==================== 指令：组队 ====================
 
-team_cmd = on_command("组队", force_whitespace=True, priority=5, block=True)
+team_cmd = on_command("组队", priority=5, block=True)
 
 
 @team_cmd.handle()
