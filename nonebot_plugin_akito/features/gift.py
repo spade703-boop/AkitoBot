@@ -314,6 +314,14 @@ def _gift_list() -> list[dict]:
     return gifts if isinstance(gifts, list) else []
 
 
+def _pick_gift_by_name(name: str) -> dict | None:
+    """从礼物列表里按名字精确查找，供 RPG 掉落礼物券消费。"""
+    for g in _gift_list():
+        if g.get("name") == name:
+            return g
+    return None
+
+
 def _affordable_gifts(points: int) -> list[dict]:
     """返回当前积分买得起的礼物（cost ≤ points）。"""
     return [g for g in _gift_list() if int(g.get("cost", 0)) <= int(points)]

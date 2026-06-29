@@ -1,7 +1,8 @@
-"""背包与道具（精简版）：查看背包、使用消耗品（经验向），并向打怪提供掉落写入。
+"""背包与道具（精简版）：查看背包、使用消耗品（经验/礼物券），并向打怪提供掉落写入。
 
 道具按名称入背包（`user["inventory"] = {道具名: 数量}`，已被 game_store 的 normalize 原样保留）。
-消耗品只剩经验向：双倍经验卡（下次打怪经验×2）、经验书（即得经验）。纯逻辑（掉落/效果）拆出便于单测。
+消耗品三种：双倍经验卡（下次打怪经验×2）、经验书（即得经验）、礼物券（使用后触发完整送礼流程）。
+纯逻辑（掉落/效果）拆出便于单测。
 """
 
 from __future__ import annotations
@@ -9,12 +10,29 @@ from __future__ import annotations
 import random
 
 from nonebot import on_command
-from nonebot.adapters import Event, Message
+from nonebot.adapters import Bot, Event, Message
 from nonebot.adapters.onebot.v11 import MessageSegment
 from nonebot.params import CommandArg
 
 from ...core import is_sleeping
-from ...core.game_store import LOCK, _display_name, _get_group, _load_data, _save_data
+from ...core.game_store import (
+    LOCK,
+    _display_name,
+    _first_at_qq,
+    _get_group,
+    _load_data,
+    _save_data,
+)
+from ..gift import (
+    _build_broadcast,
+    _bump_count,
+    _is_special_gift,
+    _pick_gift_by_name,
+    _roll_main_event,
+    _roll_mishap,
+    _roll_return_gift,
+    _settle,
+)
 from .config import _cfg, _error, _line
 from .player import _ensure_player, _resolve_group
 
@@ -135,8 +153,12 @@ async def _(event: Event, args: Message = CommandArg()):
 use_cmd = on_command("使用", priority=5, block=True)
 
 
+def _is_gift_item(item: dict) -> bool:
+    return item.get("effect", {}).get("type") == "gift"
+
+
 @use_cmd.handle()
-async def _(event: Event, args: Message = CommandArg()):
+async def _(bot: Bot, event: Event, args: Message = CommandArg()):
     group_id, rejection = _resolve_group(event)
     if rejection:
         await use_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
@@ -153,6 +175,52 @@ async def _(event: Event, args: Message = CommandArg()):
     if not item:
         await use_cmd.finish(MessageSegment.reply(event.message_id) + _error("item_unknown", name=name))
 
+    # 礼物券分支：需要 @ 目标，走完整送礼结算
+    if _is_gift_item(item):
+        target = _first_at_qq(getattr(event, "original_message", None))
+        if not target or target == "all":
+            await use_cmd.finish(
+                MessageSegment.reply(event.message_id) + "使用礼物券要 @ 对方，比如：使用 彰冬无料券 @某人。"
+            )
+        if target == event.get_user_id():
+            await use_cmd.finish(
+                MessageSegment.reply(event.message_id) + "礼物券送给自己就没意思了，@ 个群友吧。"
+            )
+        if target == str(getattr(bot, "self_id", "")):
+            await use_cmd.finish(MessageSegment.reply(event.message_id) + "小彰不收礼物券，去 @ 个群友吧。")
+
+        gift_name = item.get("effect", {}).get("gift_name", "")
+        gift = _pick_gift_by_name(gift_name)
+        if not gift:
+            await use_cmd.finish(
+                MessageSegment.reply(event.message_id) + _error("item_unknown", name=name)
+            )
+
+        sender_id = event.get_user_id()
+        async with LOCK:
+            data = _load_data()
+            group = _get_group(data, group_id)
+            user = _ensure_player(group, sender_id, _display_name(event))
+            if _item_count(user, name) <= 0:
+                await use_cmd.finish(MessageSegment.reply(event.message_id) + _error("item_none", name=name))
+            _ensure_player(group, target)  # 确保目标入册
+            _remove_item(user, name, 1)
+
+            if _is_special_gift(gift):
+                main_event, mishap, return_key = "special", None, None
+            else:
+                main_event = _roll_main_event()
+                mishap = _roll_mishap() if main_event == "mishap" else None
+                return_key = _roll_return_gift() if main_event == "return" else None
+
+            out = _settle(group, sender_id, target, gift, main_event, mishap, return_key)
+            _bump_count(group, sender_id, target)
+            _save_data(data)
+
+        msg = _build_broadcast(out, sender_id, target)
+        await use_cmd.finish(MessageSegment.reply(event.message_id) + msg)
+
+    # 经验向道具：走原有效果分发
     async with LOCK:
         data = _load_data()
         group = _get_group(data, group_id)

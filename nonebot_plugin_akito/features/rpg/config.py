@@ -27,7 +27,7 @@ DEFAULT_RPG_CONFIG: dict = {
     # ---- 今日装备：战力 = base + 等级*per_level + rand(0,var) + 强化次数*forge.step（战力为隐藏值，不外显）----
     "equip": {"base": 10, "per_level": 5, "var": 6, "rebuy_cost": 100, "rebuy_points_mult": 0.5},
     # ---- 强化（积分出口）：优先按 costs 分段收费；未配时回退到 cost_base*n。+step 战力，每日最多 max_per_day 次，次日重置 ----
-    "forge": {"cost_base": 100, "costs": [60, 150, 300], "step": 6, "max_per_day": 3},
+    "forge": {"cost_base": 100, "costs": [30, 60, 90], "step": 6, "max_per_day": 3},
     # ---- 隐藏运势：签到暗掷，仅经 combat_factor / drop_factor 影响打怪（不外显）----
     "fortune": {
         "lucky_pity_days": 5,
@@ -91,16 +91,26 @@ DEFAULT_RPG_CONFIG: dict = {
     },
     # ---- 野怪：power_req 作难度；今日装备战力随等级涨，自然匹配。drops 为掉落表 ----
     "monsters": [
-        {"name": "史莱姆", "power_req": 15, "weight": 40, "drops": [{"item": "经验书", "chance": 0.10}]},
+        {"name": "史莱姆", "power_req": 15, "weight": 40,
+         "drops": [{"item": "经验书", "chance": 0.10}, {"item": "彰冬无料券", "chance": 0.08}]},
         {"name": "哥布林", "power_req": 35, "weight": 30,
-         "drops": [{"item": "经验书", "chance": 0.12}, {"item": "双倍经验卡", "chance": 0.05}]},
-        {"name": "座狼",   "power_req": 60, "weight": 20, "drops": [{"item": "双倍经验卡", "chance": 0.08}]},
-        {"name": "食人魔", "power_req": 95, "weight": 10, "drops": [{"item": "双倍经验卡", "chance": 0.12}]},
+         "drops": [{"item": "经验书", "chance": 0.12}, {"item": "双倍经验卡", "chance": 0.05},
+                   {"item": "彰冬无料券", "chance": 0.08}, {"item": "彰冬谷子券", "chance": 0.05}]},
+        {"name": "座狼",   "power_req": 60, "weight": 20,
+         "drops": [{"item": "双倍经验卡", "chance": 0.08},
+                   {"item": "彰冬谷子券", "chance": 0.06}, {"item": "彰冬豆豆眼券", "chance": 0.04}]},
+        {"name": "食人魔", "power_req": 95, "weight": 10,
+         "drops": [{"item": "双倍经验卡", "chance": 0.12},
+                   {"item": "彰冬豆豆眼券", "chance": 0.05}, {"item": "彰冬立牌券", "chance": 0.03}]},
     ],
     # ---- 道具（消耗品，经验向）：effect.type = exp_buff / exp_grant ----
     "items": [
         {"name": "双倍经验卡", "desc": "下次打怪经验翻倍", "effect": {"type": "exp_buff", "uses": 1, "mult": 2}},
         {"name": "经验书", "desc": "立即获得 80 经验", "effect": {"type": "exp_grant", "amount": 80}},
+        {"name": "彰冬无料券", "desc": "赠送「彰冬无料」，羁绊+12", "effect": {"type": "gift", "gift_name": "彰冬无料"}},
+        {"name": "彰冬谷子券", "desc": "赠送「彰冬谷子」，羁绊+28", "effect": {"type": "gift", "gift_name": "彰冬谷子"}},
+        {"name": "彰冬豆豆眼券", "desc": "赠送「彰冬豆豆眼」，羁绊+60", "effect": {"type": "gift", "gift_name": "彰冬豆豆眼"}},
+        {"name": "彰冬立牌券", "desc": "赠送「彰冬亚克力立牌」，羁绊+85", "effect": {"type": "gift", "gift_name": "彰冬亚克力立牌"}},
     ],
     # ---- 文案。占位符：{a}=真@；其余 {exp}{level}{newlevel}{monster}{cost}{forge}{name}{amount}{loot} 为文本 ----
     "copy": {

@@ -288,13 +288,13 @@ def test_forge_costs_list_and_linear_fallback(monkeypatch):
     monkeypatch.setattr(
         smith,
         "_cfg",
-        lambda key, default=None: {"cost_base": 100, "costs": [60, 150, 300], "max_per_day": 3, "step": 6}
+        lambda key, default=None: {"cost_base": 100, "costs": [30, 60, 90], "max_per_day": 3, "step": 6}
         if key == "forge" else orig_cfg(key, default),
     )
     u = {"equip_date": "D", "equip_used": False, "equip_forge": 0, "points": 1000}
-    assert smith._forge(u, "D")[0] is True and u["points"] == 940
-    assert smith._forge(u, "D")[0] is True and u["points"] == 790
-    assert smith._forge(u, "D")[0] is True and u["points"] == 490
+    assert smith._forge(u, "D")[0] is True and u["points"] == 970
+    assert smith._forge(u, "D")[0] is True and u["points"] == 910
+    assert smith._forge(u, "D")[0] is True and u["points"] == 820
 
     monkeypatch.setattr(
         smith,
@@ -433,12 +433,51 @@ async def test_bag_and_use_book(monkeypatch):
     assert "经验书" in str(exc.value.result)
     book = inventory._item_by_name("经验书")
     with pytest.raises(FinishedException):
-        await inventory.use_cmd.handlers[0](Event(group_id=1001, user_id="u1"), Message("经验书"))
+        await inventory.use_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="u1"), Message("经验书"))
     user = state["groups"]["1001"]["users"]["u1"]
     assert user["exp"] == int(book["effect"]["amount"]) and "经验书" not in user.get("inventory", {})
 
 
-# ==================== 打怪给积分 ====================
+def test_is_gift_item():
+    assert inventory._is_gift_item({"name": "彰冬无料券", "effect": {"type": "gift", "gift_name": "彰冬无料"}})
+    assert not inventory._is_gift_item({"name": "经验书", "effect": {"type": "exp_grant", "amount": 80}})
+    assert not inventory._is_gift_item({})
+
+
+def test_pick_gift_by_name():
+    from nonebot_plugin_akito.features.gift import _pick_gift_by_name
+    g = _pick_gift_by_name("彰冬无料")
+    assert g is not None and g["name"] == "彰冬无料" and g["cost"] == 50
+    assert _pick_gift_by_name("不存在的礼物") is None
+
+
+async def test_use_gift_voucher_flow(monkeypatch):
+    import nonebot_plugin_akito.features.gift as gift_mod
+    from nonebot_plugin_akito.features.rpg import inventory as inv
+    state = _patch_io(monkeypatch, inv, store={"groups": {"1001": {"users": {
+        "u1": {"exp": 0, "points": 0, "inventory": {"彰冬无料券": 1}},
+        "u2": {"exp": 0, "points": 0},
+    }, "intimacy": {}}}})
+    orig_cfg = inv._cfg
+    monkeypatch.setattr(inv, "_cfg", lambda key, default=None: {"gifts": [
+        {"name": "彰冬无料", "cost": 50, "intimacy": 12},
+    ]} if key == "gifts" else orig_cfg(key, default))
+    monkeypatch.setattr(gift_mod, "_cfg", lambda key, default=None: {
+        "sign_delay_sec": {}, "gifts": [{"name": "彰冬无料", "cost": 50, "intimacy": 12}],
+        "crit_multiplier": 2, "fail_refund_ratio": 0.3,
+        "event_weights": {"normal": 100}, "mishaps": {}, "return_gifts": {},
+        "bond_levels": [{"min": 0, "name": "Hot Dogs"}],
+        "copy": {"normal": ["{a} 送了 {b} {gift}，羁绊 +{amount}。"]},
+    }.get(key, orig_cfg(key, default) if key != "gifts" else [{"name": "彰冬无料", "cost": 50, "intimacy": 12}]))
+    monkeypatch.setattr(gift_mod, "_roll_main_event", lambda rng=gift_mod.random: "normal")
+    event = Event(group_id=1001, user_id="u1", original_message=[_at("u2")])
+    with pytest.raises(FinishedException) as exc:
+        await inv.use_cmd.handlers[0](_bot(), event, Message("彰冬无料券"))
+    result = str(exc.value.result)
+    assert "彰冬无料" in result
+    assert "羁绊" in result
+    u1 = state["groups"]["1001"]["users"]["u1"]
+    assert "彰冬无料券" not in u1.get("inventory", {})
 
 @pytest.mark.asyncio
 async def test_hunt_grants_points(monkeypatch):

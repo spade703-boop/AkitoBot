@@ -3,7 +3,7 @@
   "signin_streak": {"per_day": 10, "cap": 100},
   "level_curve": {"base": 100},
   "equip": {"base": 10, "per_level": 5, "var": 6, "rebuy_cost": 100, "rebuy_points_mult": 0.5},
-  "forge": {"cost_base": 100, "costs": [60, 150, 300], "step": 6, "max_per_day": 3},
+  "forge": {"cost_base": 100, "costs": [30, 60, 90], "step": 6, "max_per_day": 3},
   "fortune": {
     "lucky_pity_days": 5,
     "lucky_pity_boost": 30,
@@ -59,15 +59,25 @@
     "exp": {"name": "经验涌动日", "weight": 2, "exp_mult": 1.5, "drop_mult": 1.0}
   },
   "monsters": [
-    {"name": "史莱姆", "power_req": 15, "weight": 40, "drops": [{"item": "经验书", "chance": 0.10}]},
+    {"name": "史莱姆", "power_req": 15, "weight": 40,
+     "drops": [{"item": "经验书", "chance": 0.10}, {"item": "彰冬无料券", "chance": 0.08}]},
     {"name": "哥布林", "power_req": 35, "weight": 30,
-     "drops": [{"item": "经验书", "chance": 0.12}, {"item": "双倍经验卡", "chance": 0.05}]},
-    {"name": "座狼", "power_req": 60, "weight": 20, "drops": [{"item": "双倍经验卡", "chance": 0.08}]},
-    {"name": "食人魔", "power_req": 95, "weight": 10, "drops": [{"item": "双倍经验卡", "chance": 0.12}]}
+     "drops": [{"item": "经验书", "chance": 0.12}, {"item": "双倍经验卡", "chance": 0.05},
+               {"item": "彰冬无料券", "chance": 0.08}, {"item": "彰冬谷子券", "chance": 0.05}]},
+    {"name": "座狼", "power_req": 60, "weight": 20,
+     "drops": [{"item": "双倍经验卡", "chance": 0.08},
+               {"item": "彰冬谷子券", "chance": 0.06}, {"item": "彰冬豆豆眼券", "chance": 0.04}]},
+    {"name": "食人魔", "power_req": 95, "weight": 10,
+     "drops": [{"item": "双倍经验卡", "chance": 0.12},
+               {"item": "彰冬豆豆眼券", "chance": 0.05}, {"item": "彰冬立牌券", "chance": 0.03}]}
   ],
   "items": [
     {"name": "双倍经验卡", "desc": "下次打怪经验翻倍", "effect": {"type": "exp_buff", "uses": 1, "mult": 2}},
-    {"name": "经验书", "desc": "立即获得 80 经验", "effect": {"type": "exp_grant", "amount": 80}}
+    {"name": "经验书", "desc": "立即获得 80 经验", "effect": {"type": "exp_grant", "amount": 80}},
+    {"name": "彰冬无料券", "desc": "赠送「彰冬无料」，羁绊+12", "effect": {"type": "gift", "gift_name": "彰冬无料"}},
+    {"name": "彰冬谷子券", "desc": "赠送「彰冬谷子」，羁绊+28", "effect": {"type": "gift", "gift_name": "彰冬谷子"}},
+    {"name": "彰冬豆豆眼券", "desc": "赠送「彰冬豆豆眼」，羁绊+60", "effect": {"type": "gift", "gift_name": "彰冬豆豆眼"}},
+    {"name": "彰冬立牌券", "desc": "赠送「彰冬亚克力立牌」，羁绊+85", "effect": {"type": "gift", "gift_name": "彰冬亚克力立牌"}}
   ],
   "copy": {
     "signin_exp": ["🗡️ 签到记上了。经验 +{exp}，今日装备也给你备好了（Lv{level}）。"],
