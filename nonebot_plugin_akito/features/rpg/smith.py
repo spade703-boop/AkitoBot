@@ -49,11 +49,14 @@ def _forge(user: dict, today: str) -> tuple[bool, str]:
 
 
 def _rebuy_equip(user: dict, today: str) -> tuple[bool, str]:
-    """花积分重购今日装备（仅限已损坏时）；购买后装备重生但打怪积分打对折。"""
+    """花积分重购今日装备（仅限已损坏、未达每日上限）；购买后装备重生但打怪积分打对折。"""
     if user.get("equip_date") != today:
         return False, _error("rebuy_no_equip")
     if not user.get("equip_used"):
         return False, _error("rebuy_no_need")
+    mx = int(_cfg("equip", {}).get("rebuy_max_per_day", 1))
+    if int(user.get("equip_rebuy_count", 0)) >= mx:
+        return False, _error("rebuy_limit", max=mx)
     cost = int(_cfg("equip", {}).get("rebuy_cost", 100))
     points = int(user.get("points", 0))
     if points < cost:
@@ -62,6 +65,7 @@ def _rebuy_equip(user: dict, today: str) -> tuple[bool, str]:
     user["equip_used"] = False
     user["equip_rebought"] = True
     user["equip_forge"] = 0
+    user["equip_rebuy_count"] = int(user.get("equip_rebuy_count", 0)) + 1
     return True, _line("rebuy_ok", cost=cost)
 
 

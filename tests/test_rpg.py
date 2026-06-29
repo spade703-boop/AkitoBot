@@ -524,6 +524,8 @@ def test_rebuy_equip_rejects():
     assert ok is False and "还好好的" in msg
     ok, msg = _s._rebuy_equip({"equip_date": "D", "equip_used": True, "points": 10}, "D")
     assert ok is False and "积分不够" in msg
+    ok, msg = _s._rebuy_equip({"equip_date": "D", "equip_used": True, "points": 500, "equip_rebuy_count": 1}, "D")
+    assert ok is False and "买过" in msg
 
 
 def test_settle_solo_rookie_bonus_only_applies_to_solo(monkeypatch):

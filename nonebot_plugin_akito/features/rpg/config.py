@@ -25,7 +25,7 @@ DEFAULT_RPG_CONFIG: dict = {
     # ---- 等级曲线：升到 L 级累计需 base*(L-1)*L/2 经验 ----
     "level_curve": {"base": 100},
     # ---- 今日装备：战力 = base + 等级*per_level + rand(0,var) + 强化次数*forge.step（战力为隐藏值，不外显）----
-    "equip": {"base": 10, "per_level": 5, "var": 6, "rebuy_cost": 100, "rebuy_points_mult": 0.5},
+    "equip": {"base": 10, "per_level": 5, "var": 6, "rebuy_cost": 100, "rebuy_points_mult": 0.5, "rebuy_max_per_day": 1},
     # ---- 强化（积分出口）：优先按 costs 分段收费；未配时回退到 cost_base*n。+step 战力，每日最多 max_per_day 次，次日重置 ----
     "forge": {"cost_base": 100, "costs": [30, 60, 90], "step": 6, "max_per_day": 3},
     # ---- 隐藏运势：签到暗掷，仅经 combat_factor / drop_factor 影响打怪（不外显）----
@@ -157,7 +157,7 @@ DEFAULT_RPG_CONFIG: dict = {
         "private_only": "这套冒险玩法只在群里开。",
         "sleeping": "💤 这会儿不接单。等 6 点以后再来。",
         "need_equip": "你今天还没签到领装备。先去「签到」。",
-        "equip_broken": "你今天那套装备已经损坏了。明天签到再领新的。",
+        "equip_broken": "你今天那套装备已经损坏了。可以「购买装备」（100积分）补一套再打，或等明天签到领新的。",
         "forge_no_equip": "你今天还没领装备，先「签到」。",
         "forge_broken": "装备都损坏了，还强化什么。明天再来。",
         "forge_max": "今天这套装备已经强化到头了（上限 {max} 次）。",
@@ -165,6 +165,7 @@ DEFAULT_RPG_CONFIG: dict = {
         "rebuy_no_need": "装备还好好的，不用买新的。",
         "rebuy_no_equip": "今天还没签到领装备，没有坏掉的装备需要替换。",
         "rebuy_poor": "积分不够。购买装备需要 {cost}，你现在只有 {total}。",
+        "rebuy_limit": "今天已经买过 {max} 套替换装了，明天再来。",
         "bag_empty": "🎒 背包是空的。先去打一趟再说。",
         "use_need_name": "要用什么？比如：使用 经验书。",
         "item_unknown": "没这个道具：{name}。",
