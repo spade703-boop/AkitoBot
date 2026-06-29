@@ -8,7 +8,7 @@
   :root{
     --ak:#FF7722; --ak-l:#FFA050; --ak-d:#C9540E;
     --to:#0077DD; --to-l:#4DA6F5; --to-d:#005CAE;
-    --gold:#FFD98A; --txt:#FFFFFF; --muted:rgba(255,255,255,.55);
+    --gold:#FFD98A; --neg:#FF8A8A; --txt:#FFFFFF; --muted:rgba(255,255,255,.55);
     --surface:rgba(255,255,255,.045); --line:rgba(255,255,255,.09);
   }
   *{box-sizing:border-box;}
@@ -40,6 +40,7 @@
   .row{display:flex;align-items:center;gap:14px;padding:12px 16px;margin-bottom:11px;
     background:var(--surface);border:1px solid var(--line);border-radius:16px;position:relative;}
   .row.top{background:rgba(255,255,255,.06);}
+  .row.neg{border-color:rgba(255,110,110,.22);}
   .row.r1{border-color:rgba(255,200,90,.4);}
   .row.r2{border-color:rgba(200,212,228,.34);}
   .row.r3{border-color:rgba(220,150,90,.36);}
@@ -78,15 +79,18 @@
     border:1px solid rgba(255,210,130,.3);padding:2px 9px;border-radius:999px;
     letter-spacing:.04em;white-space:nowrap;}
   .tag.max{color:#ffd0e0;background:rgba(255,90,140,.18);border-color:rgba(255,120,160,.4);}
+  .tag.neg{color:var(--neg);background:rgba(255,90,90,.15);border-color:rgba(255,110,110,.4);}
   .sliver{flex:1 1 auto;max-width:200px;height:6px;background:rgba(0,0,0,.3);
     border-radius:999px;overflow:hidden;}
   .sliver .f{height:100%;background:linear-gradient(90deg,var(--ak),var(--to));border-radius:999px;}
+  .sliver.neg .f{background:linear-gradient(90deg,#4b5263,#ff4f68);}
 
   .val{flex:0 0 auto;text-align:right;}
   .val .lbl{font-size:11px;color:var(--muted);letter-spacing:.05em;}
   .val .n{display:flex;align-items:center;justify-content:flex-end;gap:6px;
     font-size:24px;font-weight:800;color:var(--gold);margin-top:1px;}
   .val.dim .n{color:#fff;}
+  .val.neg .n{color:var(--neg);}
   .val .n svg{width:15px;height:15px;}
 
   .footer{display:flex;justify-content:space-between;align-items:center;
@@ -107,7 +111,7 @@
 
     {% for row in rows %}
     {% set top3 = row.rank <= 3 %}
-    <div class="row{% if top3 %} top r{{ row.rank }}{% endif %}">
+    <div class="row{% if top3 %} top r{{ row.rank }}{% endif %}{% if row.is_neg %} neg{% endif %}">
       {% if top3 %}<div class="accent"></div>{% endif %}
       <div class="rank {{ 'g' if row.rank == 1 else 's' if row.rank == 2 else 'b' if row.rank == 3 else 'n' }}">{{ row.rank }}</div>
       <div class="avatars">
@@ -119,10 +123,10 @@
         <div class="pair"><span class="a">{{ row.left.name }}</span>
           <svg class="x" viewBox="0 0 24 24" aria-hidden="true"><path fill="#ff7e9e" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
           <span class="b">{{ row.right.name }}</span></div>
-        <div class="sub"><span class="tag{% if row.is_max %} max{% endif %}">{{ row.level_name }}{% if row.is_max %} · MAX{% endif %}</span>
-          <div class="sliver"><div class="f" style="width:{{ 100 if row.is_max else row.progress_pct }}%"></div></div></div>
+        <div class="sub"><span class="tag{% if row.is_neg %} neg{% elif row.is_max %} max{% endif %}">{{ row.level_name }}{% if row.is_max %} · MAX{% endif %}</span>
+          <div class="sliver{% if row.is_neg %} neg{% endif %}"><div class="f" style="width:{{ row.visual_progress_pct }}%"></div></div></div>
       </div>
-      <div class="val{% if not top3 %} dim{% endif %}"><div class="lbl">亲密度</div>
+      <div class="val{% if not top3 %} dim{% endif %}{% if row.is_neg %} neg{% endif %}"><div class="lbl">亲密度</div>
         <div class="n"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#ff6f91" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>{{ "{:,}".format(row.intimacy) }}</div></div>
     </div>
     {% endfor %}

@@ -930,6 +930,61 @@ async def _(bot: Bot, event: Event):
         await intimacy_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
 
 
+_TEST_MY_BOND_PARTNERS: list[dict] = [
+    {"qq": "test01", "name": "测试同好01", "avatar": "", "intimacy": 7200},
+    {"qq": "test02", "name": "测试同好02", "avatar": "", "intimacy": 4200},
+    {"qq": "test03", "name": "测试同好03", "avatar": "", "intimacy": 2600},
+    {"qq": "test04", "name": "测试同好04", "avatar": "", "intimacy": 1314},
+    {"qq": "test05", "name": "测试同好05", "avatar": "", "intimacy": 980},
+    {"qq": "test06", "name": "测试同好06", "avatar": "", "intimacy": 520},
+    {"qq": "test07", "name": "测试同好07", "avatar": "", "intimacy": 260},
+    {"qq": "test08", "name": "测试同好08", "avatar": "", "intimacy": 120},
+    {"qq": "test09", "name": "测试同好09", "avatar": "", "intimacy": 45},
+    {"qq": "test10", "name": "测试同好10", "avatar": "", "intimacy": 5},
+    {"qq": "test11", "name": "测试同好11", "avatar": "", "intimacy": -10},
+    {"qq": "test12", "name": "测试同好12", "avatar": "", "intimacy": -50},
+    {"qq": "test13", "name": "测试同好13", "avatar": "", "intimacy": -120},
+    {"qq": "test14", "name": "测试同好14", "avatar": "", "intimacy": -300},
+    {"qq": "test15", "name": "测试同好15", "avatar": "", "intimacy": -650},
+    {"qq": "test16", "name": "测试同好16", "avatar": "", "intimacy": -1000},
+]
+
+
+# ==================== 指令：测试我的羁绊界面 ====================
+
+test_my_bonds_cmd = on_command("test我的羁绊", aliases={"测试我的羁绊"}, priority=5, block=True)
+
+
+@test_my_bonds_cmd.handle()
+async def _(event: Event):
+    group_id, rejection = _resolve_group(event)
+    if rejection:
+        await test_my_bonds_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
+    if group_id is None:
+        return
+    if str(event.get_user_id()) != SUPERUSER_QQ:
+        await test_my_bonds_cmd.finish(MessageSegment.reply(event.message_id) + "这个测试指令仅限超管使用。")
+
+    owner = {"qq": event.get_user_id(), "name": f"{_display_name(event)}（测试）", "avatar": ""}
+    try:
+        page_data = build_my_bonds_page_data(
+            owner,
+            [p.copy() for p in _TEST_MY_BOND_PARTNERS],
+            levels=_bond_levels(),
+            title="我的羁绊 · 测试",
+        )
+        img_bytes = await render_bond_page("my_bonds.html", page_data)
+    except Exception as e:
+        logger.warning(f"test my bonds render failed ({e})")
+        await test_my_bonds_cmd.finish(MessageSegment.reply(event.message_id) + f"测试羁绊图渲染失败：{e}")
+
+    await test_my_bonds_cmd.finish(
+        MessageSegment.reply(event.message_id)
+        + "测试数据：16 段羁绊，不写入真实数据。\n"
+        + MessageSegment.image(img_bytes)
+    )
+
+
 def _top_partners(group: dict, user_id: str, limit: int = 5) -> list[tuple[str, int]]:
     """返回 user_id 的羁绊伙伴 [(other_id, value), ...]，按羁绊降序。"""
     result: list[tuple[str, int]] = []

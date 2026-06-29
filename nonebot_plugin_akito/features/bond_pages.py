@@ -83,6 +83,22 @@ def level_info(intimacy: int, levels: list[dict]) -> dict:
     }
 
 
+def _negative_progress_pct(intimacy: int, levels: list[dict]) -> int:
+    """负羁绊的视觉进度：越负越长，按最低负档到 0 的区间折算。"""
+    if intimacy >= 0:
+        return 0
+    negative_floor = min((int(lv.get("min", 0)) for lv in levels if int(lv.get("min", 0)) < 0), default=-1000)
+    span = max(1, abs(negative_floor))
+    pct = round(abs(intimacy) / span * 100)
+    return max(0, min(100, pct))
+
+
+def _visual_progress_pct(intimacy: int, levels: list[dict], info: dict) -> int:
+    if int(intimacy) < 0:
+        return _negative_progress_pct(int(intimacy), levels)
+    return 100 if info["is_max"] else int(info["progress_pct"])
+
+
 def _person(p: dict) -> dict:
     """规整一个人的字段：补全 avatar（默认 QQ 头像）与首字占位。"""
     qq = str(p.get("qq", ""))
@@ -118,6 +134,7 @@ def build_bond_page_data(
     if levels is None:
         levels = _default_levels()
     info = level_info(intimacy, levels)
+    visual_progress_pct = _visual_progress_pct(intimacy, levels, info)
     return {
         "page_width": 680,
         "title": title,
@@ -125,6 +142,8 @@ def build_bond_page_data(
         "left": _person(left),
         "right": _person(right),
         "intimacy": int(intimacy),
+        "is_neg": int(intimacy) < 0,
+        "visual_progress_pct": visual_progress_pct,
         "footer_left": footer_left or _now_text(),
         "footer_right": footer_right,
         **info,
@@ -157,16 +176,19 @@ def build_bond_rank_page_data(
 
     rows = []
     for i, e in enumerate(ranked, start=1):
-        info = level_info(e.get("intimacy", 0), levels)
+        intimacy = int(e.get("intimacy", 0))
+        info = level_info(intimacy, levels)
         rows.append(
             {
                 "rank": i,
                 "left": _person(e["left"]),
                 "right": _person(e["right"]),
-                "intimacy": int(e.get("intimacy", 0)),
+                "intimacy": intimacy,
                 "level_name": info["level_name"],
                 "progress_pct": info["progress_pct"],
+                "visual_progress_pct": _visual_progress_pct(intimacy, levels, info),
                 "is_max": info["is_max"],
+                "is_neg": intimacy < 0,
             }
         )
 
@@ -208,6 +230,7 @@ def build_my_bonds_page_data(
     eyebrow_tail: str = "MY BONDS",
     pill: str | None = None,
     limit: int | None = 10,
+    compact_threshold: int = 10,
     footer_left: str | None = None,
     footer_right: str = FOOTER_BRAND,
 ) -> dict:
@@ -216,7 +239,7 @@ def build_my_bonds_page_data(
     owner:    {"qq": "...", "name": "...", "avatar": 可选}  查询者本人
     partners: [{"qq": "...", "name": "...", "avatar": 可选, "intimacy": int}, ...]
               ta 的所有羁绊伙伴（如 gift.py 的 _top_partners 取出后补名字）。
-    会按亲密度从高到低排序；stats 统计「全部」伙伴，列表只展示前 limit 位。
+    会按亲密度从高到低排序；超过 compact_threshold 时切换精简行并展示全部伙伴。
     is_neg（亲密度<0）在模板里走冷色/红色 + 裂痕心。
     """
     if levels is None:
@@ -228,7 +251,8 @@ def build_my_bonds_page_data(
     total = sum(int(p.get("intimacy", 0)) for p in ordered)
     top_level = level_info(int(ordered[0].get("intimacy", 0)), levels)["level_name"] if ordered else "—"
 
-    shown = ordered[:limit] if limit is not None else ordered
+    compact = count > compact_threshold
+    shown = ordered if compact or limit is None else ordered[:limit]
     rows = []
     for i, p in enumerate(shown, start=1):
         intim = int(p.get("intimacy", 0))
@@ -240,18 +264,23 @@ def build_my_bonds_page_data(
                 "intimacy": intim,
                 "level_name": info["level_name"],
                 "progress_pct": info["progress_pct"],
+                "visual_progress_pct": _visual_progress_pct(intim, levels, info),
                 "is_max": info["is_max"],
                 "is_neg": intim < 0,
             }
         )
+
+    if pill is None and compact:
+        pill = f"全部 {count} 段 · 精简版"
 
     return {
         "page_width": 680,
         "title": title,
         "eyebrow_tail": eyebrow_tail,
         "pill": pill,
+        "compact": compact,
         "owner": _person(owner),
-        "stats": {"count": count, "total": total, "top_level": top_level},
+        "stats": {"count": count, "shown_count": len(rows), "total": total, "top_level": top_level},
         "rows": rows,
         "footer_left": footer_left or _now_text(),
         "footer_right": footer_right,
