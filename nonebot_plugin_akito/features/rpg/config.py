@@ -149,7 +149,7 @@ DEFAULT_RPG_CONFIG: dict = {
         "use_need_name": "要用什么？比如：使用 经验书。",
         "item_unknown": "没这个道具：{name}。",
         "item_none": "你背包里没有【{name}】。",
-        "team_need_target": "组队得 @ 人。比如：组队 @某人。",
+        "team_need_target": "组队得@人。比如：组队@某人。",
         "team_self": "自己跟自己组队就算了。换个人 @。",
         "team_bot": "小彰不下场。去 @ 个群友。",
         "rank_empty": "本群还没人开打。先「签到」领装备，再去「打怪」。",

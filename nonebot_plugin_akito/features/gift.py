@@ -2,10 +2,10 @@
 
 玩法闭环（完全自包含，不依赖其他模块）：
 - `签到`：每天 1 次领取积分（赚取入口）。
-- `送礼 @对方`：每天 1 次，系统从「你当前积分买得起的礼物」里随机送一份给对方，按权重抽随机事件
+- `送礼@对方`：每天 1 次，系统从「你当前积分买得起的礼物」里随机送一份给对方，按权重抽随机事件
   （普通/暴击/回礼/失败/意外），累积两个群友之间的「亲密度（同好羁绊）」。
   顶档「自己产的彰冬饭」一旦抽中，必定触发「惊喜升级」固定结算。
-- `偷 @对方`：每天 2 次，小概率顺走对方少量积分（强保护 + 偷必掉羁绊，偷越亲近掉越多）。
+- `偷@对方`：每天 2 次，小概率顺走对方少量积分（强保护 + 偷必掉羁绊，偷越亲近掉越多）。
 - `我的积分` / `礼物列表` / `亲密度` / `群羁绊排行` 查询；`重置送礼`（超管）清空本群数据。
 
 数据与套路对照 features/random_keyword.py：按群存储、每日按日期重置、原子读写、文件优先+缺省兜底配置。
@@ -249,11 +249,11 @@ DEFAULT_GIFT_CONFIG: dict = {
         "private_only": "送礼系统在群里才能玩哦。",
         "sleeping": "💤 这会儿小彰睡着了，等 6 点天亮以后再来吧……",
         "already_gifted": "今天的礼已经送过了，明天再来吧。",
-        "need_target": "送礼要 @一位群友 哦，系统会随机送出一份礼物。比如：送礼 @某人。",
+        "need_target": "送礼要 @一位群友 哦，系统会随机送出一份礼物。比如：送礼@某人。",
         "self_target": "给自己送礼就没什么意思啦，去 @一个群友吧。",
         "bot_target": "小彰拒绝了你的礼物。",
         "insufficient": "积分还不太够，最便宜的【{name}】也要 {cost}，你现在有 {total}，先去签到攒一攒吧。",
-        "steal_need_target": "偷要 @一个目标 才行，比如：偷 @某人。",
+        "steal_need_target": "偷要 @一个目标 才行，比如：偷@某人。",
         "steal_self": "偷自己？图啥呀。",
         "steal_bot": "偷到小彰头上来了，胆子不小——不给。",
         "steal_limit": "你今天的手气用完了，明天再来当大盗吧。",
@@ -424,7 +424,7 @@ def _bond_card(group: dict, me: str, other: str):
     if sent or recv:
         lines.append(f"· 你送出 {sent} 次，ta 回送 {recv} 次（共 {sent + recv} 次往来）")
     else:
-        lines.append("· 你们还没互送过礼，快去 送礼 @ta 吧～")
+        lines.append("· 你们还没互送过礼，快去 送礼@ta 吧～")
 
     head = MessageSegment.at(me) + " 和 " + MessageSegment.at(other) + " 的同好羁绊"
     return head + "\n" + "\n".join(lines)
@@ -686,10 +686,10 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
     if group_id is None:
         return
 
-    # 格式校验：只接受「送礼 @某人」，后面不能带任何文字
+    # 格式校验：只接受「送礼@某人」，后面不能带任何文字
     if args and args.extract_plain_text().strip():
         await gift_cmd.finish(
-            MessageSegment.reply(event.message_id) + "格式是「送礼 @某人」，不用加字。"
+            MessageSegment.reply(event.message_id) + "格式是「送礼@某人」，不用加字。"
         )
 
     sender_id = event.get_user_id()
@@ -759,10 +759,10 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
     if group_id is None:
         return
 
-    # 格式校验：只接受「偷 @某人」，后面不能带任何文字
+    # 格式校验：只接受「偷@某人」，后面不能带任何文字
     if args and args.extract_plain_text().strip():
         await steal_cmd.finish(
-            MessageSegment.reply(event.message_id) + "格式是「偷 @某人」，不用加字。"
+            MessageSegment.reply(event.message_id) + "格式是「偷@某人」，不用加字。"
         )
 
     thief_id = event.get_user_id()
@@ -859,7 +859,7 @@ async def _(event: Event):
     lines = ["🎁 彰冬礼物档位（稀有度递增）："]
     for gift in _gift_list():
         lines.append(f"· {gift['name']}　{gift['cost']} 积分　羁绊+{gift['intimacy']}")
-    lines.append("用法：送礼 @某人 —— 系统会从你买得起的礼物里随机送一份（越贵的越容易抽中）。")
+    lines.append("用法：送礼@某人 —— 系统会从你买得起的礼物里随机送一份（越贵的越容易抽中）。")
     await list_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
 
 
@@ -1142,11 +1142,11 @@ async def _(event: Event):
         "🎁 彰冬送礼系统\n"
         "━━━━━━━━━━━━━━\n"
         "· 签到 — 每天领一次积分（50~100）\n"
-        "· 送礼 @某人 — 每天一次，随机送礼物给对方，累积羁绊值\n"
-        "· 偷 @某人 — 每天两次，冒险顺走对方积分（会掉羁绊）\n"
+        "· 送礼@某人 — 每天一次，随机送礼物给对方，累积羁绊值\n"
+        "· 偷@某人 — 每天两次，冒险顺走对方积分（会掉羁绊）\n"
         "· 我的积分 — 查看当前积分和今日状态\n"
         "· 礼物列表 — 查看全部礼物档位和花费\n"
-        "· 我的羁绊 @某人 — 查看你与 ta 的羁绊详情图\n"
+        "· 我的羁绊@某人 — 查看你与 ta 的羁绊详情图\n"
         "· 群羁绊排行 — 查看本群羁绊排行榜\n"
         "\n"
         "💡 礼物越贵羁绊加得越多；送礼有概率暴击/回礼/意外事件。\n"

@@ -1,4 +1,4 @@
-"""组队打怪：打怪前 `组队 @某人` 合力出击。
+"""组队打怪：打怪前 `组队@某人` 合力出击。
 
 定调：直接 @ 即组队，不设开关/确认；但**有成功率**——拉不动就失败（只消耗发起人当天的打怪次数 → 退化为单刷）。
 成功率与**羁绊（亲密度）等级**正相关，把「送礼攒羁绊 → 组队更易成功」串成闭环。
@@ -101,7 +101,7 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
 
     if args and args.extract_plain_text().strip():
         await team_cmd.finish(
-            MessageSegment.reply(event.message_id) + "格式是「组队 @某人」，不用加字。"
+            MessageSegment.reply(event.message_id) + "格式是「组队@某人」，不用加字。"
         )
 
     initiator = event.get_user_id()
