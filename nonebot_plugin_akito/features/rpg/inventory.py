@@ -98,16 +98,21 @@ def _apply_item_effect(user: dict, item: dict) -> tuple[bool, str]:
 
 # ==================== 指令：背包 ====================
 
-bag_cmd = on_command("背包", aliases={"我的背包", "道具"}, priority=5, block=True)
+bag_cmd = on_command("我的背包", force_whitespace=True, priority=5, block=True)
 
 
 @bag_cmd.handle()
-async def _(event: Event):
+async def _(event: Event, args: Message = CommandArg()):
     group_id, rejection = _resolve_group(event)
     if rejection:
         await bag_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
     if group_id is None:
         return
+
+    if args and args.extract_plain_text().strip():
+        await bag_cmd.finish(
+            MessageSegment.reply(event.message_id) + "格式是「我的背包」，不用带其他字。"
+        )
 
     data = _load_data()
     group = _get_group(data, group_id)
@@ -127,7 +132,7 @@ async def _(event: Event):
 
 # ==================== 指令：使用 ====================
 
-use_cmd = on_command("使用", priority=5, block=True)
+use_cmd = on_command("使用", force_whitespace=True, priority=5, block=True)
 
 
 @use_cmd.handle()

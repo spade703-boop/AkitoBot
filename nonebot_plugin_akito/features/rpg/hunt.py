@@ -10,8 +10,9 @@ from collections import Counter
 import random
 
 from nonebot import on_command
-from nonebot.adapters import Bot, Event
+from nonebot.adapters import Bot, Event, Message
 from nonebot.adapters.onebot.v11 import MessageSegment
+from nonebot.params import CommandArg
 
 from ...core import SUPERUSER_QQ, is_sleeping
 from ...core.game_store import (
@@ -312,16 +313,21 @@ def _build_hunt_broadcast(out: dict, user_id: str):
 
 # ==================== 指令：打怪 ====================
 
-hunt_cmd = on_command("打怪", aliases={"打野", "挑战"}, priority=5, block=True)
+hunt_cmd = on_command("今日打怪", force_whitespace=True, priority=5, block=True)
 
 
 @hunt_cmd.handle()
-async def _(bot: Bot, event: Event):
+async def _(bot: Bot, event: Event, args: Message = CommandArg()):
     group_id, rejection = _resolve_group(event)
     if rejection:
         await hunt_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
     if group_id is None:
         return
+
+    if args and args.extract_plain_text().strip():
+        await hunt_cmd.finish(
+            MessageSegment.reply(event.message_id) + "格式是「今日打怪」，不用带其他字。"
+        )
 
     user_id = event.get_user_id()
     is_superuser = user_id == SUPERUSER_QQ

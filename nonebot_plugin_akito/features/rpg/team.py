@@ -13,8 +13,9 @@ from collections import Counter
 import random
 
 from nonebot import on_command
-from nonebot.adapters import Bot, Event
+from nonebot.adapters import Bot, Event, Message
 from nonebot.adapters.onebot.v11 import MessageSegment
+from nonebot.params import CommandArg
 
 from ...core import SUPERUSER_QQ, is_sleeping
 from ...core.game_store import (
@@ -87,16 +88,21 @@ def _build_fail_broadcast(out: dict, b_id: str, a_name: str):
 
 # ==================== 指令：组队 ====================
 
-team_cmd = on_command("组队", aliases={"组队挑战"}, priority=5, block=True)
+team_cmd = on_command("组队", force_whitespace=True, priority=5, block=True)
 
 
 @team_cmd.handle()
-async def _(bot: Bot, event: Event):
+async def _(bot: Bot, event: Event, args: Message = CommandArg()):
     group_id, rejection = _resolve_group(event)
     if rejection:
         await team_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
     if group_id is None:
         return
+
+    if args and args.extract_plain_text().strip():
+        await team_cmd.finish(
+            MessageSegment.reply(event.message_id) + "格式是「组队 @某人」，不用加字。"
+        )
 
     initiator = event.get_user_id()
     is_superuser = initiator == SUPERUSER_QQ

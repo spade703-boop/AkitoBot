@@ -5,8 +5,9 @@
 from __future__ import annotations
 
 from nonebot import on_command
-from nonebot.adapters import Event
+from nonebot.adapters import Event, Message
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageSegment
+from nonebot.params import CommandArg
 
 from ...core import ALLOWED_CHAT_GROUPS, is_sleeping
 from ...core.game_store import _display_name, _get_group, _load_data, _today_str
@@ -20,16 +21,22 @@ from .player import (
     _title_of,
 )
 
-status_cmd = on_command("我的角色", aliases={"角色", "状态", "角色面板"}, priority=5, block=True)
+status_cmd = on_command("我的角色", force_whitespace=True, priority=5, block=True)
 
 
 @status_cmd.handle()
-async def _(event: Event):
+async def _(event: Event, args: Message = CommandArg()):
     group_id, rejection = _resolve_group(event)
     if rejection:
         await status_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
     if group_id is None:
         return
+
+    if args and args.extract_plain_text().strip():
+        await status_cmd.finish(
+            MessageSegment.reply(event.message_id) + "格式是「我的角色」，不用带其他字。"
+        )
+
     if is_sleeping():
         await status_cmd.finish(MessageSegment.reply(event.message_id) + _error("sleeping"))
 
@@ -55,16 +62,21 @@ async def _(event: Event):
 
 # ==================== 指令：排行榜（等级榜，纯文字、不 @、不出图） ====================
 
-rank_cmd = on_command("排行榜", aliases={"等级榜", "冒险排行"}, priority=5, block=True)
+rank_cmd = on_command("群排行榜", force_whitespace=True, priority=5, block=True)
 
 
 @rank_cmd.handle()
-async def _(event: Event):
+async def _(event: Event, args: Message = CommandArg()):
     group_id, rejection = _resolve_group(event)
     if rejection:
         await rank_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
     if group_id is None:
         return
+
+    if args and args.extract_plain_text().strip():
+        await rank_cmd.finish(
+            MessageSegment.reply(event.message_id) + "格式是「群排行榜」，不用带其他字。"
+        )
 
     data = _load_data()
     group = _get_group(data, group_id)
@@ -87,23 +99,27 @@ async def _(event: Event):
     await rank_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
 
 
-help_cmd = on_command("冒险帮助", aliases={"打怪帮助", "冒险说明"}, priority=5, block=True)
+help_cmd = on_command("冒险帮助", aliases={"打怪帮助", "冒险说明"}, force_whitespace=True, priority=5, block=True)
 
 
 @help_cmd.handle()
-async def _(event: Event):
+async def _(event: Event, args: Message = CommandArg()):
+    if args and args.extract_plain_text().strip():
+        await help_cmd.finish(
+            MessageSegment.reply(event.message_id) + "格式是「冒险帮助」，不用带其他字。"
+        )
     if isinstance(event, GroupMessageEvent) and event.group_id not in ALLOWED_CHAT_GROUPS:
         return
     msg = (
         "🗺️ 冒险系统\n"
         "━━━━━━━━━━━━━━\n"
         "· 签到 — 领积分、经验和今天这套装备\n"
-        "· 打怪 / 挑战 — 用今天的装备出去打一趟，赚经验、积分和掉落\n"
+        "· 今日打怪 — 用今天的装备出去打一趟，赚经验、积分和掉落\n"
         "· 组队 @某人 — 拉群友一起上；羁绊越深，越容易拉动\n"
-        "· 强化 — 花积分把今天这套装备再提一提\n"
-        "· 我的角色 / 状态 — 看等级、称号、战绩和装备状态\n"
-        "· 排行榜 / 等级榜 — 看本群谁练得最快\n"
-        "· 背包 / 使用 [道具] — 看道具，或者直接把它用了\n"
+        "· 强化今日装备 — 花积分把今天这套装备再提一提\n"
+        "· 我的角色 — 看等级、称号、战绩和装备状态\n"
+        "· 群排行榜 — 看本群谁练得最快\n"
+        "· 我的背包 / 使用 [道具] — 看道具，或者直接把它用了\n"
         "\n"
         "💡 每天就两步：先签到，再决定今天要不要出去打一趟。"
     )

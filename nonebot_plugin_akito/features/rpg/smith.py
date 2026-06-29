@@ -7,8 +7,9 @@
 from __future__ import annotations
 
 from nonebot import on_command
-from nonebot.adapters import Event
+from nonebot.adapters import Event, Message
 from nonebot.adapters.onebot.v11 import MessageSegment
+from nonebot.params import CommandArg
 
 from ...core import is_sleeping
 from ...core.game_store import LOCK, _display_name, _get_group, _load_data, _save_data, _today_str
@@ -47,16 +48,22 @@ def _forge(user: dict, today: str) -> tuple[bool, str]:
     return True, _line("forge_ok", forge=times + 1, cost=cost)
 
 
-forge_cmd = on_command("强化", aliases={"锻造", "强化装备"}, priority=5, block=True)
+forge_cmd = on_command("强化今日装备", force_whitespace=True, priority=5, block=True)
 
 
 @forge_cmd.handle()
-async def _(event: Event):
+async def _(event: Event, args: Message = CommandArg()):
     group_id, rejection = _resolve_group(event)
     if rejection:
         await forge_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
     if group_id is None:
         return
+
+    if args and args.extract_plain_text().strip():
+        await forge_cmd.finish(
+            MessageSegment.reply(event.message_id) + "格式是「强化今日装备」，不用带其他字。"
+        )
+
     if is_sleeping():
         await forge_cmd.finish(MessageSegment.reply(event.message_id) + _error("sleeping"))
 
