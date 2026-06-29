@@ -217,12 +217,12 @@ def test_pick_encounter_uses_stage_weights_and_elite_gate():
 
     low = _CaptureRng(0.0)
     _monster, elite = hunt._pick_encounter(2, low)
-    assert low.weights == [58, 32, 10, 0]
+    assert low.weights == [55, 45, 0, 0, 0, 0]
     assert elite is False
 
     high = _CaptureRng(0.0)
     _monster, elite = hunt._pick_encounter(8, high)
-    assert high.weights == [40, 30, 20, 10]
+    assert high.weights == [30, 25, 20, 15, 10, 0]
     assert elite is True
 
 

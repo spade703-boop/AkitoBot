@@ -38,20 +38,22 @@ def _monsters() -> list[dict]:
 
 
 def _encounter_weights(level: int) -> list[int]:
-    """按等级收窄早期怪池：新手先少撞高难怪，后期回到完整分布。"""
+    """按等级收窄早期怪池：新手先少撞高难怪，后期回到完整分布。6 档怪对应 6 元权重。"""
     if level <= 2:
-        return [58, 32, 10, 0]
+        return [55, 45, 0, 0, 0, 0]
     if level <= 4:
-        return [50, 35, 15, 0]
+        return [45, 35, 20, 0, 0, 0]
     if level <= 7:
-        return [45, 30, 20, 5]
-    return [40, 30, 20, 10]
+        return [35, 30, 20, 15, 0, 0]
+    if level <= 10:
+        return [30, 25, 20, 15, 10, 0]
+    return [25, 20, 20, 15, 10, 10]
 
 
 def _pick_monster(level: int, rng=random) -> dict:
     pool = _monsters()
     weights = [max(0, int(m.get("weight", 0))) for m in pool]
-    if len(pool) == 4:
+    if len(pool) == 6:
         weights = _encounter_weights(level)
     if not pool or sum(weights) <= 0:
         return pool[0] if pool else {"name": "野怪", "power_req": 10}

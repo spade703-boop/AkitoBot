@@ -69,7 +69,7 @@ DEFAULT_RPG_CONFIG: dict = {
     },
     # ---- 组队：成功率随羁绊等级爬升（Lv6 顶级羁绊≈封顶必成）；失败退化为发起人单刷 ----
     "team": {
-        "base_success": 0.35, "per_level": 0.12,   # Lv1=35%，每升一级 +12%
+        "base_success": 0.50, "per_level": 0.10,   # Lv1=50%，每升一级 +10%，Lv6 封顶 95%
         "min_success": 0.10, "max_success": 0.95,   # 封底（含负档硬拉）/ 封顶
         "exp_bonus_per_level": 0.05, "exp_bonus_max": 0.50,  # 组队经验加成：每级 +5%，封顶 +50%
     },
@@ -91,17 +91,23 @@ DEFAULT_RPG_CONFIG: dict = {
     },
     # ---- 野怪：power_req 作难度；今日装备战力随等级涨，自然匹配。drops 为掉落表 ----
     "monsters": [
-        {"name": "史莱姆", "power_req": 15, "weight": 40,
+        {"name": "史莱姆", "power_req": 15, "weight": 30,
          "drops": [{"item": "经验书", "chance": 0.10}, {"item": "彰冬无料券", "chance": 0.08}]},
-        {"name": "哥布林", "power_req": 35, "weight": 30,
+        {"name": "哥布林", "power_req": 25, "weight": 25,
          "drops": [{"item": "经验书", "chance": 0.12}, {"item": "双倍经验卡", "chance": 0.05},
                    {"item": "彰冬无料券", "chance": 0.08}, {"item": "彰冬谷子券", "chance": 0.05}]},
-        {"name": "座狼",   "power_req": 60, "weight": 20,
+        {"name": "座狼",   "power_req": 40, "weight": 20,
          "drops": [{"item": "双倍经验卡", "chance": 0.08},
                    {"item": "彰冬谷子券", "chance": 0.06}, {"item": "彰冬豆豆眼券", "chance": 0.04}]},
-        {"name": "食人魔", "power_req": 95, "weight": 10,
-         "drops": [{"item": "双倍经验卡", "chance": 0.12},
+        {"name": "食人魔", "power_req": 55, "weight": 15,
+         "drops": [{"item": "双倍经验卡", "chance": 0.10},
                    {"item": "彰冬豆豆眼券", "chance": 0.05}, {"item": "彰冬立牌券", "chance": 0.03}]},
+        {"name": "石像鬼", "power_req": 75, "weight": 10,
+         "drops": [{"item": "双倍经验卡", "chance": 0.12},
+                   {"item": "彰冬豆豆眼券", "chance": 0.06}, {"item": "彰冬立牌券", "chance": 0.04}]},
+        {"name": "龙",     "power_req": 95, "weight": 5,
+         "drops": [{"item": "双倍经验卡", "chance": 0.15},
+                   {"item": "彰冬立牌券", "chance": 0.06}]},
     ],
     # ---- 道具（消耗品，经验向）：effect.type = exp_buff / exp_grant ----
     "items": [

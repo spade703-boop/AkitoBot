@@ -40,7 +40,7 @@
     "win_points": 15, "lose_points": 5
   },
   "team": {
-    "base_success": 0.35, "per_level": 0.12,
+    "base_success": 0.50, "per_level": 0.10,
     "min_success": 0.10, "max_success": 0.95,
     "exp_bonus_per_level": 0.05, "exp_bonus_max": 0.50
   },
@@ -59,17 +59,23 @@
     "exp": {"name": "经验涌动日", "weight": 2, "exp_mult": 1.5, "drop_mult": 1.0}
   },
   "monsters": [
-    {"name": "史莱姆", "power_req": 15, "weight": 40,
+    {"name": "史莱姆", "power_req": 15, "weight": 30,
      "drops": [{"item": "经验书", "chance": 0.10}, {"item": "彰冬无料券", "chance": 0.08}]},
-    {"name": "哥布林", "power_req": 35, "weight": 30,
+    {"name": "哥布林", "power_req": 25, "weight": 25,
      "drops": [{"item": "经验书", "chance": 0.12}, {"item": "双倍经验卡", "chance": 0.05},
                {"item": "彰冬无料券", "chance": 0.08}, {"item": "彰冬谷子券", "chance": 0.05}]},
-    {"name": "座狼", "power_req": 60, "weight": 20,
+    {"name": "座狼", "power_req": 40, "weight": 20,
      "drops": [{"item": "双倍经验卡", "chance": 0.08},
                {"item": "彰冬谷子券", "chance": 0.06}, {"item": "彰冬豆豆眼券", "chance": 0.04}]},
-    {"name": "食人魔", "power_req": 95, "weight": 10,
+    {"name": "食人魔", "power_req": 55, "weight": 15,
+     "drops": [{"item": "双倍经验卡", "chance": 0.10},
+               {"item": "彰冬豆豆眼券", "chance": 0.05}, {"item": "彰冬立牌券", "chance": 0.03}]},
+    {"name": "石像鬼", "power_req": 75, "weight": 10,
      "drops": [{"item": "双倍经验卡", "chance": 0.12},
-               {"item": "彰冬豆豆眼券", "chance": 0.05}, {"item": "彰冬立牌券", "chance": 0.03}]}
+               {"item": "彰冬豆豆眼券", "chance": 0.06}, {"item": "彰冬立牌券", "chance": 0.04}]},
+    {"name": "龙", "power_req": 95, "weight": 5,
+     "drops": [{"item": "双倍经验卡", "chance": 0.15},
+               {"item": "彰冬立牌券", "chance": 0.06}]}
   ],
   "items": [
     {"name": "双倍经验卡", "desc": "下次打怪经验翻倍", "effect": {"type": "exp_buff", "uses": 1, "mult": 2}},
