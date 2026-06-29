@@ -202,6 +202,30 @@ def test_fortune_combat_and_drop_factors():
     assert hunt._fortune_drop_factor({"fortune_date": "X"}, "D") == 1.0
 
 
+def test_pick_encounter_uses_stage_weights_and_elite_gate():
+    class _CaptureRng:
+        def __init__(self, roll):
+            self.roll = roll
+            self.weights = []
+
+        def choices(self, seq, weights, k):
+            self.weights = list(weights)
+            return [seq[0]]
+
+        def random(self):
+            return self.roll
+
+    low = _CaptureRng(0.0)
+    _monster, elite = hunt._pick_encounter(2, low)
+    assert low.weights == [58, 32, 10, 0]
+    assert elite is False
+
+    high = _CaptureRng(0.0)
+    _monster, elite = hunt._pick_encounter(8, high)
+    assert high.weights == [40, 30, 20, 10]
+    assert elite is True
+
+
 # ==================== 纯逻辑：背包 / 掉落 / 道具 ====================
 
 class _SeqRandom:
@@ -245,7 +269,7 @@ def test_apply_item_effect_exp_buff_and_grant():
 def test_forge_guards_and_success():
     today = "D"
     fcfg = rpg_config._cfg("forge", {})
-    base, mx = int(fcfg["cost_base"]), int(fcfg["max_per_day"])
+    first_cost, mx = smith._forge_cost(fcfg, 0), int(fcfg["max_per_day"])
     ok, msg = smith._forge({"equip_date": ""}, today)
     assert ok is False and "还没领装备" in msg
     ok, msg = smith._forge({"equip_date": today, "equip_used": True}, today)
@@ -254,9 +278,32 @@ def test_forge_guards_and_success():
     assert ok is False and "积分不够" in msg
     u = {"equip_date": today, "equip_used": False, "equip_forge": 0, "points": 1000}
     ok, msg = smith._forge(u, today)
-    assert ok and u["equip_forge"] == 1 and u["points"] == 1000 - base
+    assert ok and u["equip_forge"] == 1 and u["points"] == 1000 - first_cost
     ok, msg = smith._forge({"equip_date": today, "equip_used": False, "equip_forge": mx, "points": 10 ** 9}, today)
     assert ok is False and "上限" in msg
+
+
+def test_forge_costs_list_and_linear_fallback(monkeypatch):
+    orig_cfg = smith._cfg
+    monkeypatch.setattr(
+        smith,
+        "_cfg",
+        lambda key, default=None: {"cost_base": 100, "costs": [60, 150, 300], "max_per_day": 3, "step": 6}
+        if key == "forge" else orig_cfg(key, default),
+    )
+    u = {"equip_date": "D", "equip_used": False, "equip_forge": 0, "points": 1000}
+    assert smith._forge(u, "D")[0] is True and u["points"] == 940
+    assert smith._forge(u, "D")[0] is True and u["points"] == 790
+    assert smith._forge(u, "D")[0] is True and u["points"] == 490
+
+    monkeypatch.setattr(
+        smith,
+        "_cfg",
+        lambda key, default=None: {"cost_base": 80, "max_per_day": 5, "step": 6}
+        if key == "forge" else orig_cfg(key, default),
+    )
+    u2 = {"equip_date": "D", "equip_used": False, "equip_forge": 0, "points": 1000}
+    assert smith._forge(u2, "D")[0] is True and u2["points"] == 920
 
 
 # ==================== 指令 ====================
@@ -289,7 +336,7 @@ _PLAIN_BUFF = {"key": "plain", "name": "平日", "exp_mult": 1.0, "drop_mult": 1
 
 def _stub_hunt_rng(monkeypatch, monster, *, event="", drops=None, elite=False, buff=None):
     # 遭遇桩：精英默认关、今日增益默认平日 → 既有用例保持确定（数值不被随机精英/增益扰动）
-    monkeypatch.setattr(hunt, "_pick_encounter", lambda rng=hunt.random: (monster, elite))
+    monkeypatch.setattr(hunt, "_pick_encounter", lambda level, rng=hunt.random: (monster, elite))
     monkeypatch.setattr(hunt, "_roll_hunt_event", lambda margin, rng=hunt.random: event)
     monkeypatch.setattr(hunt.random, "uniform", lambda _a, _b: 1.0)
     monkeypatch.setattr(hunt, "_roll_drops", lambda m, rng=hunt.random, mult=1.0: list(drops or []))
@@ -351,7 +398,7 @@ async def test_hunt_loot_into_bag(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_forge_cmd_deducts_points(monkeypatch):
-    base = int(rpg_config._cfg("forge", {})["cost_base"])
+    base = smith._forge_cost(rpg_config._cfg("forge", {}), 0)
     state = _patch_io(monkeypatch, smith, store={"groups": {"1001": {"users": {
         "u1": _equipped_user(points=1000)}}}})
     with pytest.raises(FinishedException) as exc:
@@ -403,6 +450,33 @@ async def test_hunt_grants_points(monkeypatch):
     user = state["groups"]["1001"]["users"]["u1"]
     assert user["points"] == hunt._challenge_points(True)  # 胜得 win_points
     assert "积分" in str(exc.value.result)
+
+
+def test_settle_solo_rookie_bonus_only_applies_to_solo(monkeypatch):
+    factors: list[float] = []
+    monster = {"name": "史莱姆", "power_req": 1, "drops": []}
+
+    def _pick(level, rng=hunt.random):
+        return monster, False
+
+    def _resolve(combat_power, eff_monster, *, power_factor, fortune_factor=1.0, event=None):
+        factors.append(power_factor)
+        return {"win": True, "effective": int(combat_power * power_factor * fortune_factor),
+                "event": event or "", "monster": eff_monster}
+
+    reward = {"exp_gain": 0, "exp_buffed": False, "drops": [], "points_gain": 0, "old_level": 1, "new_level": 1}
+    monkeypatch.setattr(hunt, "_pick_encounter", _pick)
+    monkeypatch.setattr(hunt.random, "uniform", lambda _a, _b: 1.0)
+    monkeypatch.setattr(hunt, "_roll_hunt_event", lambda margin, rng=hunt.random: "")
+    monkeypatch.setattr(hunt, "_today_buff", lambda: _PLAIN_BUFF)
+    monkeypatch.setattr(hunt, "resolve_hunt", _resolve)
+    monkeypatch.setattr(hunt, "_apply_rewards", lambda *args, **kwargs: dict(reward))
+
+    hunt._settle_solo(_equipped_user(exp=0, equip_level=1), "D")
+    hunt._settle_coop(_equipped_user(exp=0, equip_level=1), _equipped_user(exp=0, equip_level=1), "D")
+
+    assert factors[0] == pytest.approx(1.08)
+    assert factors[1] == pytest.approx(1.0)
 
 
 # ==================== 纯逻辑：组队成功率 / 经验加成 ====================
@@ -459,6 +533,36 @@ async def test_team_success_both_rewarded(monkeypatch):
     assert g["u1"]["exp"] > 0 and g["u2"]["exp"] > 0
     r = str(exc.value.result)
     assert "[at:u1]" in r and "[at:u2]" in r                                   # @ 双方
+
+
+def test_settle_coop_uses_higher_level_for_encounter(monkeypatch):
+    captured: dict = {}
+    monster = {"name": "史莱姆", "power_req": 1, "drops": []}
+
+    def _pick(level, rng=hunt.random):
+        captured["level"] = level
+        return monster, False
+
+    reward = {"exp_gain": 0, "exp_buffed": False, "drops": [], "points_gain": 0, "old_level": 1, "new_level": 1}
+    monkeypatch.setattr(hunt, "_pick_encounter", _pick)
+    monkeypatch.setattr(hunt.random, "uniform", lambda _a, _b: 1.0)
+    monkeypatch.setattr(hunt, "_today_buff", lambda: _PLAIN_BUFF)
+    monkeypatch.setattr(
+        hunt,
+        "resolve_hunt",
+        lambda combat_power, eff_monster, *, power_factor, fortune_factor=1.0, event=None:
+        {"win": True, "effective": int(combat_power * power_factor * fortune_factor),
+         "event": event or "", "monster": eff_monster},
+    )
+    monkeypatch.setattr(hunt, "_apply_rewards", lambda *args, **kwargs: dict(reward))
+
+    hunt._settle_coop(
+        _equipped_user(exp=player._cum_exp(2, player._level_base()), equip_level=2),
+        _equipped_user(exp=player._cum_exp(7, player._level_base()), equip_level=7),
+        "D",
+    )
+
+    assert captured["level"] == 7
 
 
 @pytest.mark.asyncio

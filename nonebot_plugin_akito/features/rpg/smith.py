@@ -1,6 +1,7 @@
 """强化：唯一的积分出口——花积分给今日装备加战力（当天有效、次日随装备重置）。
 
-逐次涨价（第 n 次 = cost_base*n）、每日有上限。提高今天打怪的胜率。战力为隐藏值，反馈走文案。
+优先走 `forge.costs` 的分段费用；未配置时回退到旧的 cost_base*n 线性涨价。提高今天打怪的胜率。
+战力为隐藏值，反馈走文案。
 """
 
 from __future__ import annotations
@@ -15,6 +16,17 @@ from .config import _cfg, _error, _line
 from .player import _ensure_player, _resolve_group
 
 
+def _forge_cost(fcfg: dict, times: int) -> int:
+    """优先按 costs 取分段费用；缺省时兼容旧配置的线性涨价。"""
+    costs = fcfg.get("costs", [])
+    if isinstance(costs, list) and 0 <= times < len(costs):
+        try:
+            return int(costs[times])
+        except (TypeError, ValueError):
+            pass
+    return int(fcfg.get("cost_base", 100)) * (times + 1)
+
+
 def _forge(user: dict, today: str) -> tuple[bool, str]:
     """花积分强化今日装备一次。返回 (是否成功, 文案)；失败不扣分。"""
     if user.get("equip_date") != today:
@@ -26,7 +38,7 @@ def _forge(user: dict, today: str) -> tuple[bool, str]:
     mx = int(fcfg.get("max_per_day", 5))
     if times >= mx:
         return False, _error("forge_max", max=mx)
-    cost = int(fcfg.get("cost_base", 100)) * (times + 1)
+    cost = _forge_cost(fcfg, times)
     points = int(user.get("points", 0))
     if points < cost:
         return False, _error("forge_poor", cost=cost, total=points)

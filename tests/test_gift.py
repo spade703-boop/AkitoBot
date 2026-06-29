@@ -847,3 +847,67 @@ async def test_sign_cmd_sets_protect_until(monkeypatch):
         await gift.sign_cmd.handlers[0](Event(group_id=1001, user_id="10001"))
     pm = gift._steal_cfg()["protect_minutes"]
     assert state["groups"]["1001"]["users"]["10001"]["protect_until"] == 1000.0 + pm * 60
+
+
+@pytest.mark.asyncio
+async def test_reset_signin_cmd_clears_only_today_gate(monkeypatch):
+    su = gift.SUPERUSER_QQ
+    state = _patch_runtime(
+        monkeypatch,
+        store={"groups": {"1001": {"users": {
+            "10001": {
+                "points": 88,
+                "last_sign_in": "2026-06-22",
+                "fortune_date": "2026-06-22",
+                "equip_date": "2026-06-22",
+                "equip_used": False,
+                "signin_streak": 7,
+                "signin_last_date": "2026-06-22",
+                "protect_until": 9999.0,
+            },
+            "10002": {"points": 10, "last_sign_in": "2026-06-21"},
+            "10003": {"points": 20, "last_sign_in": "2026-06-22"},
+        }, "intimacy": {}}}},
+    )
+    with pytest.raises(FinishedException) as exc:
+        await gift.reset_signin_cmd.handlers[0](Event(group_id=1001, user_id=su))
+
+    assert "已清掉 2 人" in str(exc.value.result)
+    users = state["groups"]["1001"]["users"]
+    assert users["10001"]["last_sign_in"] == ""
+    assert users["10003"]["last_sign_in"] == ""
+    assert users["10002"]["last_sign_in"] == "2026-06-21"
+    assert users["10001"]["fortune_date"] == "2026-06-22"
+    assert users["10001"]["equip_date"] == "2026-06-22"
+    assert users["10001"]["equip_used"] is False
+    assert users["10001"]["signin_streak"] == 7
+    assert users["10001"]["signin_last_date"] == "2026-06-22"
+    assert users["10001"]["protect_until"] == 9999.0
+
+
+@pytest.mark.asyncio
+async def test_reset_signin_cmd_silent_for_non_superuser(monkeypatch):
+    state = _patch_runtime(
+        monkeypatch,
+        store={"groups": {"1001": {"users": {
+            "10001": {"last_sign_in": "2026-06-22"},
+        }, "intimacy": {}}}},
+    )
+    result = await gift.reset_signin_cmd.handlers[0](Event(group_id=1001, user_id="10001"))
+    assert result is None
+    assert state["groups"]["1001"]["users"]["10001"]["last_sign_in"] == "2026-06-22"
+
+
+@pytest.mark.asyncio
+async def test_reset_signin_cmd_reports_when_nobody_blocked(monkeypatch):
+    su = gift.SUPERUSER_QQ
+    _patch_runtime(
+        monkeypatch,
+        store={"groups": {"1001": {"users": {
+            "10001": {"last_sign_in": "2026-06-21"},
+            "10002": {"points": 5},
+        }, "intimacy": {}}}},
+    )
+    with pytest.raises(FinishedException) as exc:
+        await gift.reset_signin_cmd.handlers[0](Event(group_id=1001, user_id=su))
+    assert "还没人被签到闸门卡住" in str(exc.value.result)

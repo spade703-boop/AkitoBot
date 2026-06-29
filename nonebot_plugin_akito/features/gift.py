@@ -612,6 +612,16 @@ def _resolve_group(event: Event) -> tuple[str | None, str | None]:
     return group_id, None
 
 
+def _reset_today_signins(group: dict, today: str) -> int:
+    """仅清掉本群用户当日签到闸门；不改 RPG 连签/装备/运势等状态。"""
+    cleared = 0
+    for user in group.get("users", {}).values():
+        if isinstance(user, dict) and user.get("last_sign_in") == today:
+            user["last_sign_in"] = ""
+            cleared += 1
+    return cleared
+
+
 async def _sign_in_delay() -> None:
     """签到回复前的随机延迟，错开群里另一个签到 bot 的消息。"""
     d = _cfg("sign_delay_sec", {})
@@ -665,7 +675,7 @@ async def _(event: Event):
 
 # ==================== 指令：送礼 ====================
 
-gift_cmd = on_command("送礼", priority=5, block=True)
+gift_cmd = on_command("送礼", force_whitespace=True, priority=5, block=True)
 
 
 @gift_cmd.handle()
@@ -675,6 +685,12 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
         await gift_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
     if group_id is None:
         return
+
+    # 格式校验：只接受「送礼 @某人」，后面不能带任何文字
+    if args and args.extract_plain_text().strip():
+        await gift_cmd.finish(
+            MessageSegment.reply(event.message_id) + "格式是「送礼 @某人」，不用加字。"
+        )
 
     sender_id = event.get_user_id()
     is_superuser = sender_id == SUPERUSER_QQ  # 超管不限次（测试用）
@@ -732,16 +748,22 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
 
 # ==================== 指令：偷 ====================
 
-steal_cmd = on_command("偷", aliases={"偷积分"}, priority=5, block=True)
+steal_cmd = on_command("偷", aliases={"偷积分"}, force_whitespace=True, priority=5, block=True)
 
 
 @steal_cmd.handle()
-async def _(bot: Bot, event: Event):
+async def _(bot: Bot, event: Event, args: Message = CommandArg()):
     group_id, rejection = _resolve_group(event)
     if rejection:
         await steal_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
     if group_id is None:
         return
+
+    # 格式校验：只接受「偷 @某人」，后面不能带任何文字
+    if args and args.extract_plain_text().strip():
+        await steal_cmd.finish(
+            MessageSegment.reply(event.message_id) + "格式是「偷 @某人」，不用加字。"
+        )
 
     thief_id = event.get_user_id()
     is_superuser = thief_id == SUPERUSER_QQ  # 超管不限、跳过保护与睡眠（测试用）
@@ -1072,6 +1094,41 @@ async def _(event: Event):
     data.setdefault("groups", {})[str(group_id)] = _new_group()
     _save_data(data)
     await reset_cmd.finish(MessageSegment.reply(event.message_id) + "已清空本群的送礼/积分/羁绊数据。")
+
+
+# ==================== 指令：重置本群签到（超管） ====================
+
+reset_signin_cmd = on_command(
+    "重置本群签到",
+    aliases={"重置全群签到", "重置签到次数"},
+    priority=5,
+    block=True,
+)
+
+
+@reset_signin_cmd.handle()
+async def _(event: Event):
+    if str(event.get_user_id()) != SUPERUSER_QQ:
+        return
+
+    group_id, rejection = _resolve_group(event)
+    if rejection:
+        await reset_signin_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
+    if group_id is None:
+        return
+
+    today = _today_str()
+    async with _GIFT_LOCK:
+        data = _load_data()
+        group = _get_group(data, group_id)
+        cleared = _reset_today_signins(group, today)
+        _save_data(data)
+
+    if cleared:
+        msg = f"本群今日签到已放开，已清掉 {cleared} 人的签到闸门。RPG 连签和今日装备没动。"
+    else:
+        msg = "本群今天还没人被签到闸门卡住。"
+    await reset_signin_cmd.finish(MessageSegment.reply(event.message_id) + msg)
 
 
 # ==================== 指令：送礼功能帮助 ====================

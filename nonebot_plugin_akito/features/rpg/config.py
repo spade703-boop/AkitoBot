@@ -26,8 +26,8 @@ DEFAULT_RPG_CONFIG: dict = {
     "level_curve": {"base": 100},
     # ---- 今日装备：战力 = base + 等级*per_level + rand(0,var) + 强化次数*forge.step（战力为隐藏值，不外显）----
     "equip": {"base": 10, "per_level": 5, "var": 6},
-    # ---- 强化（积分出口）：第 n 次花 cost_base*n 积分、+step 战力，每日最多 max_per_day 次，次日重置 ----
-    "forge": {"cost_base": 100, "step": 4, "max_per_day": 5},
+    # ---- 强化（积分出口）：优先按 costs 分段收费；未配时回退到 cost_base*n。+step 战力，每日最多 max_per_day 次，次日重置 ----
+    "forge": {"cost_base": 100, "costs": [60, 150, 300], "step": 6, "max_per_day": 3},
     # ---- 隐藏运势：签到暗掷，仅经 combat_factor / drop_factor 影响打怪（不外显）----
     "fortune": {
         "lucky_pity_days": 5,
@@ -46,16 +46,16 @@ DEFAULT_RPG_CONFIG: dict = {
     },
     # ---- 打怪战斗：今日装备战力 vs 怪 power_req，有胜负 ----
     "combat": {
-        "factor_min": 0.8,
-        "factor_max": 1.2,
+        "factor_min": 0.9,
+        "factor_max": 1.1,
         "fortune_affects_hunt": True,
         "crush_margin": 1.5,
         "weak_margin": 0.8,
-        "no_event_weight": 60,
+        "no_event_weight": 65,
         "events": {
-            "slip":      {"weight": 25, "power_mult": 0.75},  # 脚底打滑：有效战力 ×0.75
-            "insight":   {"weight": 25, "exp_mult": 1.5},     # 弱点看破：胜则经验 ×1.5
-            "desperate": {"weight": 35, "power_mult": 1.6},   # 绝境爆发：有效战力 ×1.6 可翻盘
+            "slip":      {"weight": 18, "power_mult": 0.82},  # 脚底打滑：有效战力 ×0.82
+            "insight":   {"weight": 22, "exp_mult": 1.5},     # 弱点看破：胜则经验 ×1.5
+            "desperate": {"weight": 28, "power_mult": 1.45},  # 绝境爆发：有效战力 ×1.45 可翻盘
         },
         # ---- 精英怪：遭遇时小概率升级，更难打（power_req×）但胜则更肥（经验/掉落×）。藏着不外显，撞上才知道 ----
         "elite": {"chance": 0.12, "power_mult": 1.6, "exp_mult": 1.8, "drop_mult": 2.0},
@@ -63,9 +63,9 @@ DEFAULT_RPG_CONFIG: dict = {
     # ---- 打怪奖励：经验按等级（胜/负不同），掉落系数，少量积分（串起送礼经济）----
     "challenge": {
         "win_exp_base": 60, "win_exp_per_level": 10,
-        "lose_exp_base": 15, "lose_exp_per_level": 2,
+        "lose_exp_base": 18, "lose_exp_per_level": 3,
         "win_drop_mult": 1.0, "lose_drop_mult": 0.3,
-        "win_points": 30, "lose_points": 10,
+        "win_points": 15, "lose_points": 5,
     },
     # ---- 组队：成功率随羁绊等级爬升（Lv6 顶级羁绊≈封顶必成）；失败退化为发起人单刷 ----
     "team": {
@@ -104,55 +104,55 @@ DEFAULT_RPG_CONFIG: dict = {
     ],
     # ---- 文案。占位符：{a}=真@；其余 {exp}{level}{newlevel}{monster}{cost}{forge}{name}{amount}{loot} 为文本 ----
     "copy": {
-        "signin_exp": ["🗡️ 签到完成，经验 +{exp}，今日装备已就位（Lv{level}）。"],
+        "signin_exp": ["🗡️ 签到记上了。经验 +{exp}，今日装备也给你备好了（Lv{level}）。"],
         "hunt_encounter": [
-            "{a} 用今日装备迎向 Lv? 的【{monster}】！",
-            "{a} 提刀出门，撞上了【{monster}】！",
+            "{a} 提着今天那套装备出去，正面撞上了【{monster}】。",
+            "{a} 刚出门没几步，就和【{monster}】对上了。",
         ],
-        "hunt_win": ["击败了【{monster}】，经验 +{exp}、积分 +{points}（今日装备已损耗）。"],
-        "hunt_lose": ["不敌【{monster}】，狼狈撤退，经验 +{exp}、积分 +{points}（今日装备已损耗）。"],
-        "levelup": ["⬆️ 升级了！Lv{level} → Lv{newlevel}！"],
-        "event_slip": ["💢 脚底一滑，这一下没使上全力……"],
-        "event_insight": ["🎯 看破了【{monster}】的破绽，经验大涨！"],
-        "event_desperate": ["🔥 被逼到绝境，反而爆发出惊人的战力！"],
-        "hunt_exp_buffed": ["✨ 双倍经验卡生效，这次经验翻倍！"],
-        "hunt_loot": ["📦 战利品掉落：{loot}。"],
-        "forge_ok": ["🔨 强化成功，今日装备更锋利了（已强化 ×{forge}，花费 {cost} 积分）。"],
-        "use_exp_buff": ["📖 用了【{name}】，下次打怪经验 ×{mult} 已就绪。"],
-        "use_exp_grant": ["📖 用了【{name}】，经验 +{amount}。"],
+        "hunt_win": ["【{monster}】解决了。经验 +{exp}、积分 +{points}（今日装备已损耗）。"],
+        "hunt_lose": ["没压住【{monster}】。经验 +{exp}、积分 +{points}（今日装备已损耗）。"],
+        "levelup": ["⬆️ 等级上去了。Lv{level} → Lv{newlevel}。"],
+        "event_slip": ["💢 脚下一偏，力道没打满。"],
+        "event_insight": ["🎯 破绽看出来了，这一下打得更准。"],
+        "event_desperate": ["🔥 被逼急了，反而把状态顶上来了。"],
+        "hunt_exp_buffed": ["✨ 双倍经验卡起效，这次经验翻倍。"],
+        "hunt_loot": ["📦 掉落到手：{loot}。"],
+        "forge_ok": ["🔨 强化好了。今日装备更稳了（已强化 ×{forge}，花费 {cost} 积分）。"],
+        "use_exp_buff": ["📖 【{name}】用了。下次打怪经验 ×{mult}。"],
+        "use_exp_grant": ["📖 【{name}】用了。经验 +{amount}。"],
         # 组队（{a}{b}=真@；{name}{exp}{points}{loot}{levelup}{b_name}=文本）
-        "team_win": ["🤝 {a} 拉上 {b} 合力出击，一举击败了【{monster}】！"],
-        "team_lose": ["🤝 {a} 拉上 {b} 并肩死磕【{monster}】，可惜对手太猛，惜败而归……"],
+        "team_win": ["🤝 {a} 把 {b} 拉上了，一起收掉了【{monster}】。"],
+        "team_lose": ["🤝 {a} 和 {b} 联手顶了一轮【{monster}】，还是差了口气。"],
         "team_member": ["· {name}：经验 +{exp}、积分 +{points}{loot}{levelup}"],
-        "team_fail": ["{a} 想拉 {b_name} 组队，却没能拉动，只好自己上……"],
+        "team_fail": ["{a} 想拉 {b_name} 一起上，结果没拉动，只好自己上。"],
         # 精英怪遭遇（{a}=真@；{monster}=文本）
         "hunt_encounter_elite": [
-            "{a} 迎面撞上气势汹汹的 精英·{monster}！",
-            "{a} 提刀出门，竟遇上了 精英·{monster}！",
+            "{a} 这回撞上的，是精英·{monster}。",
+            "{a} 刚出门就碰上了精英·{monster}。",
         ],
         # 连签 / 今日增益（{streak}{bonus}{buff} 为文本）
-        "signin_streak": ["🔥 连签 {streak} 天，额外经验 +{bonus}！"],
-        "daily_buff": ["✨ 今日「{buff}」加持，收获更丰！"],
+        "signin_streak": ["🔥 连签 {streak} 天，额外经验 +{bonus}。"],
+        "daily_buff": ["✨ 今天碰上「{buff}」，这一趟收获会多一点。"],
         # 排行榜
-        "rank_title": ["🏆 本群冒险者排行（等级榜）："],
+        "rank_title": ["🏆 本群冒险排行："],
     },
     "errors": {
-        "private_only": "冒险要在群里玩哦。",
-        "sleeping": "💤 这会儿小彰睡着了，等 6 点天亮以后再来探险吧……",
-        "need_equip": "今天还没签到领装备，先「签到」再来打怪。",
-        "equip_broken": "今日装备已经在上一场打怪里损坏了，明天签到再领新的。",
-        "forge_no_equip": "今天还没领装备，先「签到」。",
-        "forge_broken": "今日装备已损坏，强化不了，明天再来。",
-        "forge_max": "今日装备强化次数已达上限（{max}）。",
-        "forge_poor": "积分不够，本次强化要 {cost}，你只有 {total}。",
-        "bag_empty": "🎒 背包空空如也，去打怪掉点东西吧～",
-        "use_need_name": "要用哪个道具？比如：使用 经验书。",
-        "item_unknown": "没有「{name}」这个道具哦。",
+        "private_only": "这套冒险玩法只在群里开。",
+        "sleeping": "💤 这会儿不接单。等 6 点以后再来。",
+        "need_equip": "你今天还没签到领装备。先去「签到」。",
+        "equip_broken": "你今天那套装备已经损坏了。明天签到再领新的。",
+        "forge_no_equip": "你今天还没领装备，先「签到」。",
+        "forge_broken": "装备都损坏了，还强化什么。明天再来。",
+        "forge_max": "今天这套装备已经强化到头了（上限 {max} 次）。",
+        "forge_poor": "积分不够。这次强化要 {cost}，你现在只有 {total}。",
+        "bag_empty": "🎒 背包是空的。先去打一趟再说。",
+        "use_need_name": "要用什么？比如：使用 经验书。",
+        "item_unknown": "没这个道具：{name}。",
         "item_none": "你背包里没有【{name}】。",
-        "team_need_target": "组队要 @一位群友 哦，比如：组队 @某人。",
-        "team_self": "自己跟自己组队？还是 @ 个群友吧。",
-        "team_bot": "小彰不下场打怪啦，去 @ 个群友组队吧。",
-        "rank_empty": "本群还没人开始冒险，先「签到」领装备再「打怪」吧～",
+        "team_need_target": "组队得 @ 人。比如：组队 @某人。",
+        "team_self": "自己跟自己组队就算了。换个人 @。",
+        "team_bot": "小彰不下场。去 @ 个群友。",
+        "rank_empty": "本群还没人开打。先「签到」领装备，再去「打怪」。",
     },
 }
 

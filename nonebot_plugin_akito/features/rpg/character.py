@@ -43,7 +43,7 @@ async def _(event: Event):
     bag = sum(int(v) for v in (user.get("inventory") or {}).values())
     wins, total = int(user.get("hunt_wins", 0)), int(user.get("hunt_total", 0))
     lines = [
-        f"🗡️ 角色面板 · {_display_name(event)}",
+        f"🗡️ 角色档案 · {_display_name(event)}",
         f"· 等级：Lv{prog['level']} {title}（经验 {prog['into']}/{prog['span']}）",
         f"· 战绩：{wins} 胜 / 共 {total} 场",
         f"· 今日装备：{_equip_status(user, today)}",
@@ -97,15 +97,15 @@ async def _(event: Event):
     msg = (
         "🗺️ 冒险系统\n"
         "━━━━━━━━━━━━━━\n"
-        "· 签到 — 领积分、经验和今日装备\n"
-        "· 打怪 / 挑战 — 用今日装备挑战野怪，赢取经验、积分与掉落（装备打完即损坏，每日一次）\n"
-        "· 组队 @某人 — 拉群友合力打怪，羁绊越深越容易拉动；拉不动就自己上\n"
-        "· 强化 — 花积分强化今日装备，提高胜率\n"
-        "· 我的角色 / 状态 — 查看等级、称号、战绩与今日装备\n"
-        "· 排行榜 / 等级榜 — 看本群冒险者等级排行\n"
-        "· 背包 / 使用 [道具] — 查看与使用道具\n"
+        "· 签到 — 领积分、经验和今天这套装备\n"
+        "· 打怪 / 挑战 — 用今天的装备出去打一趟，赚经验、积分和掉落\n"
+        "· 组队 @某人 — 拉群友一起上；羁绊越深，越容易拉动\n"
+        "· 强化 — 花积分把今天这套装备再提一提\n"
+        "· 我的角色 / 状态 — 看等级、称号、战绩和装备状态\n"
+        "· 排行榜 / 等级榜 — 看本群谁练得最快\n"
+        "· 背包 / 使用 [道具] — 看道具，或者直接把它用了\n"
         "\n"
-        "💡 每天就两件事：签到领装备、选择打不打怪。连续签到额外有奖～"
+        "💡 每天就两步：先签到，再决定今天要不要出去打一趟。"
     )
     if isinstance(event, GroupMessageEvent):
         await help_cmd.finish(MessageSegment.reply(event.message_id) + msg)

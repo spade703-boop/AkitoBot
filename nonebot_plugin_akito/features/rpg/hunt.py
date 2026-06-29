@@ -36,19 +36,57 @@ def _monsters() -> list[dict]:
     return monsters if isinstance(monsters, list) and monsters else []
 
 
-def _pick_monster(rng=random) -> dict:
+def _encounter_weights(level: int) -> list[int]:
+    """按等级收窄早期怪池：新手先少撞高难怪，后期回到完整分布。"""
+    if level <= 2:
+        return [58, 32, 10, 0]
+    if level <= 4:
+        return [50, 35, 15, 0]
+    if level <= 7:
+        return [45, 30, 20, 5]
+    return [40, 30, 20, 10]
+
+
+def _pick_monster(level: int, rng=random) -> dict:
     pool = _monsters()
     weights = [max(0, int(m.get("weight", 0))) for m in pool]
+    if len(pool) == 4:
+        weights = _encounter_weights(level)
     if not pool or sum(weights) <= 0:
         return pool[0] if pool else {"name": "野怪", "power_req": 10}
     return rng.choices(pool, weights=weights, k=1)[0]
 
 
-def _pick_encounter(rng=random) -> tuple[dict, bool]:
-    """抽遭遇：先按权重抽怪，再按 combat.elite.chance 掷是否精英（精英更难打、胜则更肥）。"""
-    monster = _pick_monster(rng)
+def _elite_chance(level: int) -> float:
+    """低级阶段减少精英惊吓；后期回到常规精英概率。"""
     chance = float(_cfg("combat", {}).get("elite", {}).get("chance", 0.0))
+    if level <= 3:
+        return 0.0
+    if level <= 7:
+        return min(chance, 0.08)
+    return chance
+
+
+def _pick_encounter(level: int, rng=random) -> tuple[dict, bool]:
+    """抽遭遇：先按等级分段怪池抽怪，再按该等级的精英概率掷是否精英。"""
+    monster = _pick_monster(level, rng)
+    chance = _elite_chance(level)
     return monster, (rng.random() < chance)
+
+
+def _encounter_level(user: dict) -> int:
+    """遭遇池用装备等级分段；没装备等级时回落到当前角色等级。"""
+    level = int(user.get("equip_level", 0))
+    return max(1, level or _level_of(int(user.get("exp", 0))))
+
+
+def _rookie_power_factor(level: int) -> float:
+    """单刷新手保护：前几级略抬战力，避免一天一把时连续挫败。"""
+    if level <= 1:
+        return 1.08
+    if level <= 4:
+        return 1.04
+    return 1.0
 
 
 def _today_buff() -> dict:
@@ -200,13 +238,15 @@ def _settle_solo(user: dict, today: str) -> dict:
     """单刷完整结算：遭遇(含精英) → 事件 → 胜负（随机系数 + 隐藏运势）→ 发奖（含今日增益）→ 消耗装备。返回 out。"""
     ccfg = _cfg("combat", {})
     buff = _today_buff()
-    monster, is_elite = _pick_encounter()
+    level = _encounter_level(user)
+    monster, is_elite = _pick_encounter(level)
     eff = _eff_monster(monster, is_elite)
     cp = _combat_power(user)
     margin = cp / max(1, int(eff.get("power_req", 1)))
     event_key = _roll_hunt_event(margin)
     fortune_factor = _fortune_combat_factor(user, today)
     power_factor = random.uniform(float(ccfg.get("factor_min", 0.8)), float(ccfg.get("factor_max", 1.2)))
+    power_factor *= _rookie_power_factor(level)
     res = resolve_hunt(cp, eff, power_factor=power_factor, fortune_factor=fortune_factor, event=event_key)
     exp_mult, drop_mult = _reward_mults(buff, is_elite, res["win"])
     rew = _apply_rewards(user, today, win=res["win"], monster=eff, event_key=event_key,
@@ -221,7 +261,8 @@ def _settle_coop(b: dict, a: dict, today: str, *, exp_bonus: float = 0.0) -> dic
     """
     ccfg = _cfg("combat", {})
     buff = _today_buff()
-    monster, is_elite = _pick_encounter()
+    level = max(_encounter_level(b), _encounter_level(a))
+    monster, is_elite = _pick_encounter(level)
     eff = _eff_monster(monster, is_elite)
     cp = _combat_power(b) + _combat_power(a)
     power_factor = random.uniform(float(ccfg.get("factor_min", 0.8)), float(ccfg.get("factor_max", 1.2)))

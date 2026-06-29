@@ -116,12 +116,12 @@ async def _(event: Event):
     if not inv:
         await bag_cmd.finish(MessageSegment.reply(event.message_id) + _error("bag_empty"))
 
-    lines = ["🎒 你的背包："]
+    lines = ["🎒 你包里现在有："]
     for name, cnt in inv.items():
         it = _item_by_name(name)
         desc = f"　{it.get('desc', '')}" if it else ""
         lines.append(f"· {name} ×{cnt}{desc}")
-    lines.append("用法：使用 [道具名]")
+    lines.append("要用就发：使用 [道具名]")
     await bag_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
 
 

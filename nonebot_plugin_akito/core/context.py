@@ -11,10 +11,15 @@ from .data import (
     SCRIPT_DB,
     SONG_DATA,
     get_pjsk_intro,
-    get_pjsk_knowledge_base,
+    get_pjsk_knowledge_base,  # noqa: F401
     load_prompt_template,
 )
-from .retrieval import RetrievalContext, build_retrieval_context, retrieve, retrieve_result
+from .retrieval import (
+    RetrievalContext,
+    build_retrieval_context,
+    retrieve,  # noqa: F401
+    retrieve_result,
+)
 
 # Backward-compatible re-export for tests/legacy patch points.
 expand_query_for_retrieval = None
