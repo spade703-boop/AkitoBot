@@ -10,6 +10,7 @@ docs/FEATURE_LOGIC.md
 !/data/content/
 /data/content/*
 !/data/content/gift_config.json
+!/data/content/rpg_config.json
 
 # Python
 __pycache__/

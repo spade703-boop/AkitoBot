@@ -239,6 +239,13 @@ def reload_assets() -> int:
     except Exception as e:
         logger.debug(f"🔄 gift 热重载跳过: {e}")
 
+    try:
+        from ..features.rpg import reload_rpg_config
+        reload_rpg_config()
+        count += 1
+    except Exception as e:
+        logger.debug(f"🔄 rpg 热重载跳过: {e}")
+
     init_pjsk_knowledge()
     count += 1
 

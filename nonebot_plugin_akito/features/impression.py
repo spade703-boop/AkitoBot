@@ -4,7 +4,6 @@ import asyncio
 import datetime
 import json
 import random
-import re
 import sqlite3
 import time
 
@@ -21,7 +20,6 @@ from ..core import (
     TZ_CN,
     build_retrieval_context,
     call_deepseek_api,
-    extract_json_block,
     get_base_persona,
     get_daily_activity,
     get_group_context,

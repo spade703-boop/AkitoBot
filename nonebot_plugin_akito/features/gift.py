@@ -15,11 +15,8 @@ from __future__ import annotations
 
 import asyncio
 import copy
-from datetime import datetime
-import json
 import os
 import random
-import re
 import time
 
 from nonebot import on_command
@@ -31,11 +28,29 @@ from nonebot.params import CommandArg
 from ..core import (
     ALLOWED_CHAT_GROUPS,
     SUPERUSER_QQ,
-    TZ_CN,
-    find_data_path,
-    get_data_dir,
     is_sleeping,
     load_json_file,
+)
+from ..core.game_store import (
+    LOCK,
+    SCHEMA_VERSION,  # noqa: F401  仅供 tests/test_gift.py 引用 gift.SCHEMA_VERSION
+    _add_intimacy,
+    _add_points,
+    _display_name,
+    _first_at_qq,
+    _get_group,
+    _get_intimacy,
+    _load_data,
+    _new_group,
+    _normalize_data,  # noqa: F401  仅供 tests/test_gift.py 引用 gift._normalize_data
+    _pair_key,  # noqa: F401  仅供 tests/test_gift.py 引用 gift._pair_key
+    _render_with_ats,
+    _save_data,
+    _today_str,
+    _weighted_choice,
+    get_user,
+    resolve_group_id,
+    run_signin_hooks,
 )
 from .bond_pages import build_bond_page_data, build_bond_rank_page_data, build_my_bonds_page_data
 from .bond_render import render_bond_page
@@ -43,8 +58,6 @@ from .bond_render import render_bond_page
 GIFT_USE_HTML_RENDER = os.environ.get("GIFT_USE_HTML_RENDER", "1").strip() not in {"0", "false", "False"}
 
 CONFIG_FILE = "gift_config.json"
-DATA_FILE = "gift_data.json"
-SCHEMA_VERSION = 1
 
 # ==================== 默认配置（可被 data/content/gift_config.json 覆盖） ====================
 
@@ -323,120 +336,25 @@ def _cheapest_gift() -> dict | None:
     return min(gifts, key=lambda g: int(g.get("cost", 0))) if gifts else None
 
 
-# ==================== 数据持久化 ====================
+# ==================== 数据持久化 / 亲密度（复用 core.game_store） ====================
+# 存储原语（读写/锁/积分/亲密度/每日键/加权随机/@渲染/群校验）已抽到 core.game_store，
+# 本模块直接复用，并共用同一把 LOCK —— 使送礼/签到/偷与 rpg 打野等串行写同一份
+# gift_data.json，互不踩踏。下方仅保留送礼专属的用户字段封装。
 
-def _today_str() -> str:
-    return datetime.now(TZ_CN).date().isoformat()
-
-
-def _new_data() -> dict:
-    return {"schema_version": SCHEMA_VERSION, "groups": {}}
-
-
-def _new_group() -> dict:
-    return {"users": {}, "intimacy": {}, "counts": {}}
-
-
-def _normalize_data(raw: object) -> dict:
-    data = _new_data()
-    if not isinstance(raw, dict):
-        return data
-    groups = raw.get("groups")
-    if isinstance(groups, dict):
-        for gid, group in groups.items():
-            if not isinstance(group, dict):
-                continue
-            users = group.get("users") if isinstance(group.get("users"), dict) else {}
-            intimacy = group.get("intimacy") if isinstance(group.get("intimacy"), dict) else {}
-            counts = group.get("counts") if isinstance(group.get("counts"), dict) else {}
-            data["groups"][str(gid)] = {
-                "users": {str(uid): rec for uid, rec in users.items() if isinstance(rec, dict)},
-                "intimacy": {str(k): int(v) for k, v in intimacy.items() if isinstance(v, (int, float))},
-                "counts": {str(k): int(v) for k, v in counts.items() if isinstance(v, (int, float))},
-            }
-    return data
-
-
-def _load_data() -> dict:
-    path = find_data_path(DATA_FILE)
-    if not path:
-        path = get_data_dir() / DATA_FILE
-    if not path.exists():
-        return _new_data()
-    try:
-        with open(path, encoding="utf-8") as f:
-            raw = json.load(f)
-    except Exception:
-        logger.warning(f"读取 {DATA_FILE} 失败，已重置送礼数据")
-        return _new_data()
-    return _normalize_data(raw)
-
-
-def _save_data(data: dict) -> None:
-    path = find_data_path(DATA_FILE)
-    if not path:
-        path = get_data_dir() / DATA_FILE
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(_normalize_data(data), f, ensure_ascii=False, indent=2)
-    os.replace(tmp, path)
-
-
-def _get_group(data: dict, group_id) -> dict:
-    groups = data.setdefault("groups", {})
-    group = groups.get(str(group_id))
-    if not isinstance(group, dict):
-        group = _new_group()
-        groups[str(group_id)] = group
-    group.setdefault("users", {})
-    group.setdefault("intimacy", {})
-    group.setdefault("counts", {})
-    return group
+_GIFT_LOCK = LOCK
 
 
 def _get_user(group: dict, user_id, display_name: str = "") -> dict:
-    users = group.setdefault("users", {})
-    user = users.get(str(user_id))
-    if not isinstance(user, dict):
-        user = {}
-        users[str(user_id)] = user
-    user.setdefault("points", 0)
-    user.setdefault("last_sign_in", "")
-    user.setdefault("last_gift", "")
-    user.setdefault("display_name", "")
-    user.setdefault("steal_date", "")        # 贼：上次偷的日期
-    user.setdefault("steal_used", 0)         # 贼：今日已偷次数
-    user.setdefault("robbed_date", "")       # 受害者：上次被偷日期
-    user.setdefault("robbed_count", 0)       # 受害者：今日被偷次数
-    user.setdefault("protect_until", 0)      # 受害者：签到保护期截止 epoch
-    if display_name:
-        user["display_name"] = display_name
+    """在通用用户记录（points/display_name）上补齐送礼专属字段。"""
+    user = get_user(group, user_id, display_name)
+    user.setdefault("last_sign_in", "")     # 上次签到日期
+    user.setdefault("last_gift", "")        # 上次送礼日期
+    user.setdefault("steal_date", "")       # 贼：上次偷的日期
+    user.setdefault("steal_used", 0)        # 贼：今日已偷次数
+    user.setdefault("robbed_date", "")      # 受害者：上次被偷日期
+    user.setdefault("robbed_count", 0)      # 受害者：今日被偷次数
+    user.setdefault("protect_until", 0)     # 受害者：签到保护期截止 epoch
     return user
-
-
-# ==================== 亲密度 ====================
-
-def _pair_key(uid1, uid2) -> str:
-    """无方向 pair key：两端 id 排序后用 '|||' 连接（对照 random_paro 的 pair_hits）。"""
-    return "|||".join(sorted([str(uid1), str(uid2)]))
-
-
-def _add_intimacy(group: dict, uid1, uid2, amount: int) -> int:
-    intimacy = group.setdefault("intimacy", {})
-    key = _pair_key(uid1, uid2)
-    intimacy[key] = int(intimacy.get(key, 0)) + int(amount)
-    return intimacy[key]
-
-
-def _get_intimacy(group: dict, uid1, uid2) -> int:
-    return int(group.get("intimacy", {}).get(_pair_key(uid1, uid2), 0))
-
-
-def _add_points(group: dict, user_id, amount: int) -> int:
-    user = _get_user(group, user_id)
-    user["points"] = int(user.get("points", 0)) + int(amount)
-    return user["points"]
 
 
 # ==================== 羁绊等级 / 送礼次数 ====================
@@ -513,14 +431,6 @@ def _bond_card(group: dict, me: str, other: str):
 
 
 # ==================== 随机事件 ====================
-
-def _weighted_choice(weights: dict, rng) -> str:
-    keys = list(weights.keys())
-    values = [max(0, weights[k]) for k in keys]
-    if not keys or sum(values) <= 0:
-        return keys[0] if keys else ""
-    return rng.choices(keys, weights=values, k=1)[0]
-
 
 def _roll_main_event(rng=random) -> str:
     return _weighted_choice(_cfg("event_weights", {}), rng)
@@ -668,31 +578,6 @@ def _settle_steal(group: dict, thief_id: str, victim_id: str, outcome: str, rng=
 
 # ==================== 消息组装 ====================
 
-_PLACEHOLDER_RE = re.compile(r"(\{[a-z_]+\})")
-_AT_KEYS = {"a", "b"}
-
-
-def _render_with_ats(template: str, ctx: dict):
-    """把模板渲染成消息：{a}{b} → 真 @，其余占位符 → 文本。"""
-    rendered = None
-    for part in _PLACEHOLDER_RE.split(template):
-        if not part:
-            continue
-        if part.startswith("{") and part.endswith("}"):
-            key = part[1:-1]
-            value = ctx.get(key)
-            if key in _AT_KEYS and value is not None:
-                seg = MessageSegment.at(value)
-            elif value is None:
-                seg = part  # 未提供的占位符原样保留
-            else:
-                seg = str(value)
-        else:
-            seg = part
-        rendered = seg if rendered is None else rendered + seg
-    return rendered if rendered is not None else ""
-
-
 def _outcome_copy_key(out: dict) -> str:
     if out["event"] == "mishap":
         return f"mishap_{out['mishap']}"
@@ -720,35 +605,21 @@ def _build_broadcast(out: dict, sender_id: str, target_id: str, rng=random):
 # ==================== 通用校验 ====================
 
 def _resolve_group(event: Event) -> tuple[str | None, str | None]:
-    """返回 (group_id, 拒绝消息)。私聊给提示；非白名单群静默忽略。"""
-    group_id = getattr(event, "group_id", None)
+    """返回 (group_id, 拒绝消息)。私聊给提示；非白名单群静默忽略（复用 game_store.resolve_group_id）。"""
+    group_id, is_private = resolve_group_id(event)
     if group_id is None:
-        return None, _error("private_only")
-    if int(group_id) not in ALLOWED_CHAT_GROUPS:
-        return None, None
-    return str(group_id), None
+        return None, (_error("private_only") if is_private else None)
+    return group_id, None
 
 
-def _display_name(event: Event) -> str:
-    sender = getattr(event, "sender", None)
-    if sender:
-        name = getattr(sender, "card", None) or getattr(sender, "nickname", None)
-        if isinstance(name, str) and name.strip():
-            return name.strip()
-    return f"用户{event.get_user_id()}"
-
-
-def _first_at_qq(original_message) -> str | None:
-    """取消息里第一个 @ 的 QQ（含 'all'）；没有 @ 返回 None。对照 impression.py:78-83。"""
-    for seg in original_message or []:
-        if getattr(seg, "type", None) == "at":
-            qq = str(seg.data.get("qq"))
-            if qq:
-                return qq
-    return None
-
-
-_GIFT_LOCK = asyncio.Lock()
+def _reset_today_signins(group: dict, today: str) -> int:
+    """仅清掉本群用户当日签到闸门；不改 RPG 连签/装备/运势等状态。"""
+    cleared = 0
+    for user in group.get("users", {}).values():
+        if isinstance(user, dict) and user.get("last_sign_in") == today:
+            user["last_sign_in"] = ""
+            cleared += 1
+    return cleared
 
 
 async def _sign_in_delay() -> None:
@@ -788,6 +659,8 @@ async def _(event: Event):
         user["points"] = int(user.get("points", 0)) + amount
         user["last_sign_in"] = today
         user["protect_until"] = time.time() + int(_steal_cfg().get("protect_minutes", 60)) * 60
+        # 签到搭车钩子（rpg 运势/经验等）：持锁内纯内存改 group，收集追加播报行
+        extra_lines = run_signin_hooks(group, user_id, random)
         _save_data(data)
         total = int(user["points"])
 
@@ -795,12 +668,14 @@ async def _(event: Event):
     await _sign_in_delay()
     template = random.choice(_copy("sign_in"))
     msg = _render_with_ats(template, {"a": user_id, "amount": amount, "total": total})
+    for line in extra_lines:
+        msg = msg + "\n" + line
     await sign_cmd.finish(MessageSegment.reply(event.message_id) + msg)
 
 
 # ==================== 指令：送礼 ====================
 
-gift_cmd = on_command("送礼", priority=5, block=True)
+gift_cmd = on_command("送礼", force_whitespace=True, priority=5, block=True)
 
 
 @gift_cmd.handle()
@@ -810,6 +685,12 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
         await gift_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
     if group_id is None:
         return
+
+    # 格式校验：只接受「送礼 @某人」，后面不能带任何文字
+    if args and args.extract_plain_text().strip():
+        await gift_cmd.finish(
+            MessageSegment.reply(event.message_id) + "格式是「送礼 @某人」，不用加字。"
+        )
 
     sender_id = event.get_user_id()
     is_superuser = sender_id == SUPERUSER_QQ  # 超管不限次（测试用）
@@ -867,16 +748,22 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
 
 # ==================== 指令：偷 ====================
 
-steal_cmd = on_command("偷", aliases={"偷积分"}, priority=5, block=True)
+steal_cmd = on_command("偷", aliases={"偷积分"}, force_whitespace=True, priority=5, block=True)
 
 
 @steal_cmd.handle()
-async def _(bot: Bot, event: Event):
+async def _(bot: Bot, event: Event, args: Message = CommandArg()):
     group_id, rejection = _resolve_group(event)
     if rejection:
         await steal_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
     if group_id is None:
         return
+
+    # 格式校验：只接受「偷 @某人」，后面不能带任何文字
+    if args and args.extract_plain_text().strip():
+        await steal_cmd.finish(
+            MessageSegment.reply(event.message_id) + "格式是「偷 @某人」，不用加字。"
+        )
 
     thief_id = event.get_user_id()
     is_superuser = thief_id == SUPERUSER_QQ  # 超管不限、跳过保护与睡眠（测试用）
@@ -1207,6 +1094,41 @@ async def _(event: Event):
     data.setdefault("groups", {})[str(group_id)] = _new_group()
     _save_data(data)
     await reset_cmd.finish(MessageSegment.reply(event.message_id) + "已清空本群的送礼/积分/羁绊数据。")
+
+
+# ==================== 指令：重置本群签到（超管） ====================
+
+reset_signin_cmd = on_command(
+    "重置本群签到",
+    aliases={"重置全群签到", "重置签到次数"},
+    priority=5,
+    block=True,
+)
+
+
+@reset_signin_cmd.handle()
+async def _(event: Event):
+    if str(event.get_user_id()) != SUPERUSER_QQ:
+        return
+
+    group_id, rejection = _resolve_group(event)
+    if rejection:
+        await reset_signin_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
+    if group_id is None:
+        return
+
+    today = _today_str()
+    async with _GIFT_LOCK:
+        data = _load_data()
+        group = _get_group(data, group_id)
+        cleared = _reset_today_signins(group, today)
+        _save_data(data)
+
+    if cleared:
+        msg = f"本群今日签到已放开，已清掉 {cleared} 人的签到闸门。RPG 连签和今日装备没动。"
+    else:
+        msg = "本群今天还没人被签到闸门卡住。"
+    await reset_signin_cmd.finish(MessageSegment.reply(event.message_id) + msg)
 
 
 # ==================== 指令：送礼功能帮助 ====================
