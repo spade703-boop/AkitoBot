@@ -2,6 +2,7 @@
 
 定调：直接 @ 即组队，不设开关/确认；但**有成功率**——拉不动就失败（只消耗发起人当天的打怪次数 → 退化为单刷）。
 成功率与**羁绊（亲密度）等级**正相关，把「送礼攒羁绊 → 组队更易成功」串成闭环。
+对方今日未签到或装备已损坏 → 直接拒绝（不退化单刷），明确告知发起人原因。
 
 依赖方向：本模块读 `game_store._get_intimacy` + `gift._bond_level` —— 一条 rpg→gift 单向依赖
 （gift 拥有羁绊体系、rpg 组队消费它）；gift 不依赖 rpg，无环。战斗结算复用 hunt（合力/单刷共用一套发奖）。
@@ -32,7 +33,7 @@ from ...core.game_store import (
 from ..gift import _bond_level  # rpg→gift 单向依赖：消费 gift 的羁绊等级
 from .config import _cfg, _copy, _error, _line
 from .hunt import _buff_active, _hunt_result_lines, _settle_coop, _settle_solo
-from .player import _ensure_player, _equip_intact, _resolve_group
+from .player import _ensure_player, _resolve_group
 
 # ==================== 纯逻辑：成功率 / 经验加成（按羁绊等级） ====================
 
@@ -131,11 +132,13 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
 
         a = _ensure_player(group, target)
         a_name = a.get("display_name") or f"群友{target}"
-        if _equip_intact(a, today):
-            bond_level = _bond_level(_get_intimacy(group, initiator, target))["level"]
-            success = random.random() < _team_success_rate(bond_level)
-        else:
-            bond_level, success = 0, False  # 对方今天没装备（没签到 / 已打过）→ 拉不动
+        if a.get("equip_date") != today:
+            await team_cmd.finish(MessageSegment.reply(event.message_id) + _error("team_target_no_signin"))
+        if a.get("equip_used"):
+            await team_cmd.finish(MessageSegment.reply(event.message_id) + _error("team_target_broken"))
+
+        bond_level = _bond_level(_get_intimacy(group, initiator, target))["level"]
+        success = random.random() < _team_success_rate(bond_level)
 
         if success:
             out = _settle_coop(b, a, today, exp_bonus=_team_exp_bonus(bond_level))
@@ -143,7 +146,7 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
             b_name = b.get("display_name") or f"群友{initiator}"
             msg = _build_coop_broadcast(out, initiator, target, b_name, a_name)
         else:
-            out = _settle_solo(b, today)  # 失败：只消耗发起人装备，单刷
+            out = _settle_solo(b, today)  # 羁绊不够拉不动：消耗发起人装备，单刷
             _save_data(data)
             msg = _build_fail_broadcast(out, initiator, a_name)
 

@@ -48,6 +48,23 @@ def _forge(user: dict, today: str) -> tuple[bool, str]:
     return True, _line("forge_ok", forge=times + 1, cost=cost)
 
 
+def _rebuy_equip(user: dict, today: str) -> tuple[bool, str]:
+    """花积分重购今日装备（仅限已损坏时）；购买后装备重生但打怪积分打对折。"""
+    if user.get("equip_date") != today:
+        return False, _error("rebuy_no_equip")
+    if not user.get("equip_used"):
+        return False, _error("rebuy_no_need")
+    cost = int(_cfg("equip", {}).get("rebuy_cost", 100))
+    points = int(user.get("points", 0))
+    if points < cost:
+        return False, _error("rebuy_poor", cost=cost, total=points)
+    user["points"] = points - cost
+    user["equip_used"] = False
+    user["equip_rebought"] = True
+    user["equip_forge"] = 0
+    return True, _line("rebuy_ok", cost=cost)
+
+
 forge_cmd = on_command("强化今日装备", priority=5, block=True)
 
 
@@ -76,3 +93,35 @@ async def _(event: Event, args: Message = CommandArg()):
         if ok:
             _save_data(data)
     await forge_cmd.finish(MessageSegment.reply(event.message_id) + result)
+
+
+# ==================== 指令：购买装备 ====================
+
+rebuy_cmd = on_command("购买装备", priority=5, block=True)
+
+
+@rebuy_cmd.handle()
+async def _(event: Event, args: Message = CommandArg()):
+    group_id, rejection = _resolve_group(event)
+    if rejection:
+        await rebuy_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
+    if group_id is None:
+        return
+
+    if args and args.extract_plain_text().strip():
+        await rebuy_cmd.finish(
+            MessageSegment.reply(event.message_id) + "格式是「购买装备」，不用带其他字。"
+        )
+
+    if is_sleeping():
+        await rebuy_cmd.finish(MessageSegment.reply(event.message_id) + _error("sleeping"))
+
+    today = _today_str()
+    async with LOCK:
+        data = _load_data()
+        group = _get_group(data, group_id)
+        user = _ensure_player(group, event.get_user_id(), _display_name(event))
+        ok, result = _rebuy_equip(user, today)
+        if ok:
+            _save_data(data)
+    await rebuy_cmd.finish(MessageSegment.reply(event.message_id) + result)

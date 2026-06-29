@@ -448,8 +448,43 @@ async def test_hunt_grants_points(monkeypatch):
     with pytest.raises(FinishedException) as exc:
         await hunt.hunt_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="u1"))
     user = state["groups"]["1001"]["users"]["u1"]
-    assert user["points"] == hunt._challenge_points(True)  # 胜得 win_points
+    assert user["points"] == hunt._challenge_points(True, user)  # 胜得 win_points
     assert "积分" in str(exc.value.result)
+
+
+def test_challenge_points_halved_for_rebought_equip():
+    cfg = rpg_config._cfg("challenge", {})
+    wp = int(cfg.get("win_points", 15))
+    lp = int(cfg.get("lose_points", 5))
+    mult = float(rpg_config._cfg("equip", {}).get("rebuy_points_mult", 0.5))
+    assert hunt._challenge_points(True, {"equip_rebought": True}) == int(wp * mult)
+    assert hunt._challenge_points(False, {"equip_rebought": True}) == int(lp * mult)
+    assert hunt._challenge_points(True, {"equip_rebought": False}) == wp
+    assert hunt._challenge_points(False, {}) == lp
+
+
+def test_rebuy_equip_success(monkeypatch):
+    from nonebot_plugin_akito.features.rpg import smith as _s
+    cf = {"equip": {"base": 10, "per_level": 5, "var": 6, "rebuy_cost": 100, "rebuy_points_mult": 0.5}}
+    orig = _s._cfg
+    monkeypatch.setattr(_s, "_cfg", lambda key, default=None: cf.get(key, orig(key, default)))
+    u = {"equip_date": "D", "equip_used": True, "points": 300, "equip_forge": 2, "equip_rebought": False}
+    ok, msg = _s._rebuy_equip(u, "D")
+    assert ok
+    assert u["equip_used"] is False
+    assert u["equip_rebought"] is True
+    assert u["equip_forge"] == 0
+    assert u["points"] == 200
+
+
+def test_rebuy_equip_rejects():
+    from nonebot_plugin_akito.features.rpg import smith as _s
+    ok, msg = _s._rebuy_equip({}, "D")
+    assert ok is False and "没签到" in msg
+    ok, msg = _s._rebuy_equip({"equip_date": "D", "equip_used": False}, "D")
+    assert ok is False and "还好好的" in msg
+    ok, msg = _s._rebuy_equip({"equip_date": "D", "equip_used": True, "points": 10}, "D")
+    assert ok is False and "积分不够" in msg
 
 
 def test_settle_solo_rookie_bonus_only_applies_to_solo(monkeypatch):
@@ -566,19 +601,29 @@ def test_settle_coop_uses_higher_level_for_encounter(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_team_fail_when_partner_no_equip(monkeypatch):
-    # 队友今天没装备 → 必定失败（拉不动），发起人单刷，只消耗发起人装备，队友毫发无损
+async def test_team_rejects_target_no_signin(monkeypatch):
+    # 对方今天未签到 → 硬性拒绝，不退化单刷
     store = {"groups": {"1001": {"users": {"u1": _equipped_user(points=0), "u2": {"exp": 0}}}}}
     state = _patch_io(monkeypatch, team, store=store)
-    monkeypatch.setattr(team, "random", _Rng(0.0))  # 即便骰子必成，也因对方无装备而失败
-    _stub_hunt_rng(monkeypatch, {"name": "史莱姆", "power_req": 1, "drops": []})
     with pytest.raises(FinishedException) as exc:
         await team.team_cmd.handlers[0](_bot(), _team_event("u1", "u2"))
     g = state["groups"]["1001"]["users"]
-    assert g["u1"]["equip_used"] is True              # 发起人单刷消耗
-    assert g["u2"].get("equip_used") is False          # 队友未被卷入、装备没动
-    assert g["u2"]["exp"] == 0 and g["u2"]["points"] == 0  # 队友零收益零损耗
-    assert "自己上" in str(exc.value.result)
+    assert g["u1"]["equip_used"] is False              # 发起人装备未消耗
+    assert "未签到" in str(exc.value.result)
+
+
+async def test_team_rejects_target_broken_equip(monkeypatch):
+    # 对方装备已损坏 → 硬性拒绝，不退化单刷
+    u2 = _equipped_user(points=0)
+    u2["equip_used"] = True
+    store = {"groups": {"1001": {"users": {"u1": _equipped_user(points=0), "u2": u2}}}}
+    state = _patch_io(monkeypatch, team, store=store)
+    with pytest.raises(FinishedException) as exc:
+        await team.team_cmd.handlers[0](_bot(), _team_event("u1", "u2"))
+    g = state["groups"]["1001"]["users"]
+    assert g["u1"]["equip_used"] is False              # 发起人装备未消耗
+    assert "损坏" in str(exc.value.result)
+    assert "购买装备" in str(exc.value.result)
 
 
 @pytest.mark.asyncio

@@ -23,6 +23,7 @@ def _ensure_player(group: dict, user_id, display_name: str = "") -> dict:
     user.setdefault("equip_roll", 0)          # 发放时的随机浮动
     user.setdefault("equip_forge", 0)         # 今日已强化次数
     user.setdefault("equip_used", False)      # 是否已被打怪消耗（损坏）
+    user.setdefault("equip_rebought", False)  # 是否今天购买过替换装（积分打对折）
     # 隐藏运势（签到暗掷，供打怪）
     user.setdefault("fortune", "")
     user.setdefault("fortune_date", "")
@@ -100,6 +101,7 @@ def _grant_equip(user: dict, today: str, rng=random) -> None:
     user["equip_roll"] = rng.randint(0, int(ecfg.get("var", 6)))
     user["equip_used"] = False
     user["equip_forge"] = 0
+    user["equip_rebought"] = False
 
 
 def _equip_power(user: dict) -> int:

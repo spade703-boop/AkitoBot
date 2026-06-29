@@ -167,10 +167,13 @@ def _challenge_exp(win: bool, level: int) -> int:
     return int(c.get("lose_exp_base", 15)) + level * int(c.get("lose_exp_per_level", 2))
 
 
-def _challenge_points(win: bool) -> int:
-    """打怪积分（少量）：把「打怪赚分 → 送礼攒羁绊 → 组队」串成闭环。"""
+def _challenge_points(win: bool, user: dict) -> int:
+    """打怪积分（少量）：把「打怪赚分 → 送礼攒羁绊 → 组队」串成闭环。替换装（equip_rebought）积分打对折。"""
     c = _cfg("challenge", {})
-    return int(c.get("win_points", 30)) if win else int(c.get("lose_points", 10))
+    pts = int(c.get("win_points", 30)) if win else int(c.get("lose_points", 10))
+    if user.get("equip_rebought"):
+        pts = int(pts * float(_cfg("equip", {}).get("rebuy_points_mult", 0.5)))
+    return pts
 
 
 def _apply_rewards(user: dict, today: str, *, win: bool, monster: dict, event_key: str = "",
@@ -204,7 +207,7 @@ def _apply_rewards(user: dict, today: str, *, win: bool, monster: dict, event_ke
     for d in drops:
         _add_item(user, d, 1)
 
-    points_gain = _challenge_points(win)
+    points_gain = _challenge_points(win, user)
     user["points"] = int(user.get("points", 0)) + points_gain
     user["hunt_total"] = int(user.get("hunt_total", 0)) + 1   # 战绩：累计打怪
     if win:

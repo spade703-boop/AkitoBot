@@ -524,8 +524,8 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（戳一戳
 | `player.py` | 纯函数：`_level_of(exp)` 经验→等级、`_level_progress(exp)` 进度、`_title_of(level)` 称号分档、`_cum_exp(level)` 升到此级所需累计经验、`_ensure_player(group, uid, name)` 初始化玩家记录；`_combat_power(user)` 计算今日装备隐藏战力；`_resolve_group(event)` 群校验 |
 | `fortune.py` | `on_signin(group, uid, rng, today)` 签到钩子入口（暗掷运势 + 发经验 + 今日装备 + 连签判定含额外经验 + 断签重置）；`_fortune_combat/drop_factor` 为战力/掉落提供运势修正；连签保底机制（连凶天数达阈值自动转大吉） |
 | `hunt.py` | `打怪` 指令 + 战斗结算管线：`_encounter_level`（装备等级分段）→ `_pick_encounter`（怪池权重按等级分档 + 精英概率按等级门槛）→ `_settle_solo`（单刷含新手保护 `_rookie_power_factor` + 随机事件 + 运势修正 + 今日增益）→ `_settle_coop`（组队合力，取双方较高等级抽怪）；掉率/经验乘数含精英与今日增益双乘 |
-| `team.py` | `组队@某人` 指令：从 `gift._bond_level` 取羁绊→算成功率 → 成功走 `_settle_coop`（双方各得经验积分掉落、各自装备消耗）→ 失败/对方没装备走 `_settle_solo`（只消耗发起人，队友无损） |
-| `smith.py` | `强化` 指令（主要积分出口）：`_forge_cost` 优先走 `forge.costs` 分段费用 `[60,150,300]`，未配时回退 `cost_base*n` 线性；每日上限 `max_per_day`；战力变化为隐藏值，反馈走文案 |
+| `team.py` | `组队@某人` 指令：从 `gift._bond_level` 取羁绊→算成功率；对方未签到/装备已损坏 → 直接拒绝（不退化单刷）；成功走 `_settle_coop`（双方各得经验积分掉落、各自装备消耗）；羁绊不够 → 走 `_settle_solo`（只消耗发起人，队友无损） |
+| `smith.py` | `强化` / `购买装备` 指令（积分出口）：强化走 `forge.costs` 分段收费 `[60,150,300]`；购买装备花 100 积分重置已损坏装备（打上 `equip_rebought` 标记，打怪积分减半） |
 | `inventory.py` | `背包` / `使用 [道具名]` 指令 + 道具效果（`exp_buff`/`exp_grant` 两种类型）+ `_roll_drops` 掉落判定 + `_add_item` 背包入库 |
 | `character.py` | `我的角色` 面板（含称号 `_title_of`/战绩/装备状态/积分/背包）+ `排行榜`（本群 exp>0 的人按经验降序 Top 10，纯文字不 @）+ `冒险帮助` |
 
