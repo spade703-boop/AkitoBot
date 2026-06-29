@@ -148,6 +148,29 @@ python bot.py        # 或：nb run
 - 仅白名单群可用（与聊天同一白名单）；亲密度按群隔离；每人每天各 1 次签到与送礼（超管不限次，便于测试），基于日期自动跨天刷新
 - 0–6 点（北京时间）小彰睡觉，签到 / 送礼 / 偷会收到固定回复、暂不结算（接入全局 `is_sleeping()`）；查询类（积分 / 亲密度 / 排行）照常。超管不受睡眠限制，便于测试
 - 礼物档位 / 事件权重 / 签到积分 / 羁绊等级 / 偷窃参数 / 全部文案都在 `data/content/gift_config.json`（可热重载，仓库附带模板），缺省值同时内置于代码
+- 「重置本群签到 / 重置全群签到 / 重置签到次数」可仅清掉本群当日签到闸门，不碰 RPG 的连签和装备状态（**超管**）
+
+### RPG 冒险系统（`打怪` / `组队` / `强化` / `背包` / `排行榜`）
+
+在送礼社交之上的轻量群文字 RPG。与送礼共享同一套积分账本，签到同时触发两种结算（积分 + 经验 + 今日装备）。设计原则：**每天就两步——先签到领装备，再决定今天要不要出去打一趟。**
+
+| 指令 | 别名 | 说明 |
+|------|------|------|
+| `签到` | （送礼系统提供） | 领积分 + 经验 + 暗掷当日运势（隐藏）+ 今日装备（战力随等级涨、随机浮动）；连签有额外经验递增 |
+| `打怪` | `打野`、`挑战` | 用今日装备挑战随机野怪；遇精英怪 / 今日增益（藏着不外显）；胜败均有经验 + 积分 + 概率掉落；低等级前几天会先落在更温和的怪物池里；打完装备损耗，每日一次 |
+| `组队 @某人` | `组队挑战` | 拉群友合力打怪，直接 @ 即组队、不设确认；成功率由两人羁绊等级决定（满羁绊 ≈ 必成）；成功双方各得经验积分掉落，失败退化为发起人单刷（只消耗发起人，队友无损） |
+| `强化` | `锻造`、`强化装备` | 花积分提升今日装备战力（唯一的积分出口）；优先走分段收费 `[60, 150, 300]`，未配时回退线性涨价；每日上限 3 次，次日重置 |
+| `我的角色` | `角色`、`状态`、`角色面板` | 查看等级 + 称号（按等级派生）+ 战绩（胜场/总场）+ 今日装备状态 + 积分 + 背包；战力为隐藏值，不显示数字 |
+| `排行榜` | `等级榜`、`冒险排行` | 本群冒险者经验降序 Top 10，显示名次/名字/Lv/称号/累计胜场；纯文字、不 @、不出图 |
+| `背包` | `我的背包`、`道具` | 列出背包道具与数量 |
+| `使用 [道具名]` | — | 使用消耗品：`双倍经验卡`（下次打怪经验 ×2）、`经验书`（立即获得经验） |
+| `冒险帮助` | `打怪帮助`、`冒险说明` | 列出 RPG 全部指令 |
+
+- 角色对外的唯一数值是「等级」；战力/运势/今日增益均为隐藏值（暗中影响打怪），只在面板和播报中给模糊反馈
+- 称号随等级分档（如 Lv1 新手冒险者 → Lv10 老练冒险者 → Lv20 传说冒险者…），与战绩搭配供攀比，不刷屏
+- 组队把「送礼攒羁绊 → 拉人成功率」串成了社交闭环：羁绊越深越容易拉动，反过来促进送礼
+- 数值 / 野怪 / 掉落 / 文案全部在 `data/content/rpg_config.json`（热重载），缺省值内置于代码
+- 睡眠时段 0–6 点拦截写操作（打怪/组队/强化），查询类照常；超管不受限
 
 ### 记忆系统
 
@@ -226,7 +249,9 @@ akito_bot/
 │   │   ├── life_state.py           # 状态机（routine / 睡眠 / 节日）
 │   │   ├── memory.py               # 长期记忆 & SQLite 群聊上下文
 │   │   ├── retrieval.py            # 语义检索引擎（BGE-M3 + 均值中心化）
-│   │   └── time_awareness.py       # 时间流逝感知
+│   │   ├── time_awareness.py       # 时间流逝感知
+│   │   ├── game_store.py           # 共享玩家存储层（gift/rpg 共用）
+│   │   └── paths.py                # 数据路径定位
 │   ├── handlers/                   # 主处理层
 │   │   ├── chat.py                 # 主对话引擎（ReAct Agent）
 │   │   ├── commands.py             # 记忆管理指令
@@ -239,7 +264,18 @@ akito_bot/
 │       ├── verify.py               # 新人审核管理
 │       ├── scheduled.py            # 定时任务
 │       ├── event_mode.py           # WL2 世界线开关
-│       └── director.py             # 导演骰子（可安全删除，删除后主对话自动降级）
+│       ├── director.py             # 导演骰子（可安全删除，删除后主对话自动降级）
+│       ├── gift.py                 # 送礼系统（积分/送礼/偷分/羁绊/签到闸门）
+│       └── rpg/                    # RPG 子包：签到/打怪/组队/强化/背包/排行榜
+│           ├── __init__.py
+│           ├── config.py           # 全部数值/文案/配置（可被 rpg_config.json 热更新）
+│           ├── player.py           # 经验→等级/称号/装备/战力
+│           ├── fortune.py          # 隐藏运势 + 签到钩子
+│           ├── hunt.py             # 打怪指令 + 战斗结算
+│           ├── team.py             # 组队 @某人 指令
+│           ├── smith.py            # 强化指令（积分出口）
+│           ├── inventory.py        # 背包 / 使用道具
+│           └── character.py        # 角色面板 / 排行榜 / 冒险帮助
 └── data/                           # 持久化数据 + 本地素材（不纳入 Git）
 ```
 
@@ -273,6 +309,8 @@ pytest tests/test_data.py -q
 pytest tests/test_director.py -q
 pytest tests/test_event_mode_helpers.py -q
 pytest tests/test_scheduled_helpers.py -q
+pytest tests/test_gift.py -q
+pytest tests/test_rpg.py -q
 ```
 
 常见对应关系：
@@ -288,6 +326,8 @@ pytest tests/test_scheduled_helpers.py -q
 - 改 `features/director.py` → 先跑 `pytest tests/test_director.py -q`
 - 改 `features/event_mode.py` → 先跑 `pytest tests/test_event_mode_helpers.py -q`
 - 改 `features/scheduled.py` → 先跑 `pytest tests/test_scheduled_helpers.py -q`
+- 改 `features/gift.py` → 先跑 `pytest tests/test_gift.py -q`
+- 改 `features/rpg/` → 先跑 `pytest tests/test_rpg.py -q`
 - 改 `core/data.py` → 先跑 `pytest tests/test_data.py -q`
 - 改 `core/` 里的共享底层，或一次改了多块联动逻辑 → 直接补跑 `pytest -q`
 
@@ -340,6 +380,7 @@ pytest tests/test_scheduled_helpers.py -q
 | `akito_director.json` | 导演骰子资产 |
 | `pjsk_knowledge.json` | PJSK 世界观 / 黑话库 |
 | `gift_config.json` | 送礼系统配置（礼物档位 / 事件权重 / 签到积分 / 播报文案，可热重载；仓库附带一份可直接编辑的模板，缺省值同时内置于代码） |
+| `rpg_config.json` | RPG 全量配置（战斗/运势/强化/掉落/精英/野怪/道具/文案/错误信息，热重载；仓库附带模板，缺省值内置于代码） |
 
 **`data/` 根目录（功能 / 运行时，多为自动读写）**：`paro_pools.json`、`fanfic_keywords.json`、`keyword_draws.json`、`gift_data.json`、`akito_memories.json`、`verify_*.json`、`last_interactions.json`、`impression_history.db`
 
