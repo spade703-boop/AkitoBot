@@ -8,7 +8,7 @@
   :root{
     --ak:#FF7722; --ak-l:#FFA050; --ak-d:#C9540E;
     --to:#0077DD; --to-l:#4DA6F5; --to-d:#005CAE;
-    --gold:#FFD98A; --txt:#FFFFFF; --muted:rgba(255,255,255,.55);
+    --gold:#FFD98A; --neg:#FF8A8A; --txt:#FFFFFF; --muted:rgba(255,255,255,.55);
     --surface:rgba(255,255,255,.045); --line:rgba(255,255,255,.09);
   }
   *{box-sizing:border-box;}
@@ -66,6 +66,8 @@
   .intimacy .num{font-size:46px;font-weight:800;line-height:1;
     background:linear-gradient(120deg,#FFE6AE,#FFC04D);
     -webkit-background-clip:text;background-clip:text;color:transparent;}
+  .intimacy.neg .num{background:linear-gradient(120deg,#ffd0d0,#ff6678);
+    -webkit-background-clip:text;background-clip:text;color:transparent;}
   .intimacy .heart-s{width:22px;height:22px;}
   .lvl-right{text-align:right;}
   .lvl-right .v{font-size:24px;font-weight:800;color:var(--gold);}
@@ -76,13 +78,16 @@
   .prog-head .l{color:var(--muted);}
   .prog-head .l b{color:var(--gold);font-weight:800;}
   .prog-head .r{color:var(--gold);font-weight:800;}
+  .prog-head .r.neg{color:var(--neg);}
   .bar{position:relative;height:15px;background:rgba(0,0,0,.32);border-radius:999px;
     border:1px solid rgba(255,255,255,.06);}
   .bar .fill{position:absolute;left:0;top:0;bottom:0;border-radius:999px;
     background:linear-gradient(90deg,var(--ak),#ff5e7e 55%,var(--to));}
+  .bar.neg .fill{background:linear-gradient(90deg,#4b5263,#ff4f68);}
   .bar .knob{position:absolute;top:50%;width:20px;height:20px;border-radius:50%;
     transform:translate(-50%,-50%);background:#fff;
     box-shadow:0 2px 8px rgba(0,0,0,.45),0 0 0 3px rgba(255,120,90,.35);}
+  .bar.neg .knob{box-shadow:0 2px 8px rgba(0,0,0,.45),0 0 0 3px rgba(255,80,104,.35);}
 
   .neg-note{font-size:13px;color:var(--muted);margin-top:4px;font-style:italic;}
 
@@ -130,7 +135,7 @@
       <div class="panel-top">
         <div>
           <div class="stat-label">当前亲密度</div>
-          <div class="intimacy">
+          <div class="intimacy{% if is_neg %} neg{% endif %}">
             <span class="num">{{ "{:,}".format(intimacy) }}</span>
             <svg class="heart-s" viewBox="0 0 24 24" aria-hidden="true"><path fill="#ff6f91" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
           </div>
@@ -145,6 +150,9 @@
         {% if is_max %}
         <span class="l">已达到最高羁绊等级</span>
         <span class="r">MAX</span>
+        {% elif is_neg %}
+        <span class="l">负向羁绊进度 · 当前 <b>{{ level_name }}</b></span>
+        <span class="r neg">{{ visual_progress_pct }}%</span>
         {% elif level_no < 1 %}
         <span class="l">距离 <b>{{ next_level_name }}</b> 还需 {{ next_need }} 亲密度</span>
         <span class="r">{{ progress_pct }}%</span>
@@ -153,9 +161,9 @@
         <span class="r">{{ progress_pct }}%</span>
         {% endif %}
       </div>
-      <div class="bar">
-        <div class="fill" style="width:{{ 100 if is_max else progress_pct }}%"></div>
-        {% if not is_max %}<div class="knob" style="left:{{ progress_pct }}%"></div>{% endif %}
+      <div class="bar{% if is_neg %} neg{% endif %}">
+        <div class="fill" style="width:{{ visual_progress_pct }}%"></div>
+        {% if not is_max %}<div class="knob" style="left:{{ visual_progress_pct }}%"></div>{% endif %}
       </div>
       {% if level_no < 1 and not is_max %}
       <div class="neg-note">羁绊尚浅，多送几次礼就能回暖~</div>
