@@ -694,21 +694,18 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
     if group_id is None:
         return
 
-    # 格式校验：只接受「送礼@某人」，后面不能带任何文字
-    if args and args.extract_plain_text().strip():
-        await gift_cmd.finish(
-            MessageSegment.reply(event.message_id) + "格式是「送礼@某人」，不用加字。"
-        )
-
-    sender_id = event.get_user_id()
-    is_superuser = sender_id == SUPERUSER_QQ  # 超管不限次（测试用）
-    if is_sleeping() and not is_superuser:  # 0–6 点睡眠拦截（超管除外）
-        await gift_cmd.finish(MessageSegment.reply(event.message_id) + _error("sleeping"))
     target_qq = _first_at_qq(getattr(event, "original_message", None))
 
-    # 没有 @ 有效对象时静默忽略（避免"偷什么"之类误触发）
+    # 没 @ 任何人或格式不对 → 静默
     if not target_qq or target_qq == "all":
         return
+    if args and args.extract_plain_text().strip():
+        return
+
+    sender_id = event.get_user_id()
+    is_superuser = sender_id == SUPERUSER_QQ
+    if is_sleeping() and not is_superuser:
+        await gift_cmd.finish(MessageSegment.reply(event.message_id) + _error("sleeping"))
     if target_qq == sender_id:
         return
     if target_qq == str(getattr(bot, "self_id", "")):
@@ -767,21 +764,18 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
     if group_id is None:
         return
 
-    # 格式校验：只接受「偷@某人」，后面不能带任何文字
-    if args and args.extract_plain_text().strip():
-        await steal_cmd.finish(
-            MessageSegment.reply(event.message_id) + "格式是「偷@某人」，不用加字。"
-        )
-
-    thief_id = event.get_user_id()
-    is_superuser = thief_id == SUPERUSER_QQ  # 超管不限、跳过保护与睡眠（测试用）
-    if is_sleeping() and not is_superuser:
-        await steal_cmd.finish(MessageSegment.reply(event.message_id) + _error("sleeping"))
     target_qq = _first_at_qq(getattr(event, "original_message", None))
 
-    # 没有 @ 有效对象时静默忽略（避免"偷什么"之类误触发）
+    # 没 @ 任何人或格式不对 → 静默
     if not target_qq or target_qq == "all":
         return
+    if args and args.extract_plain_text().strip():
+        return
+
+    thief_id = event.get_user_id()
+    is_superuser = thief_id == SUPERUSER_QQ
+    if is_sleeping() and not is_superuser:
+        await steal_cmd.finish(MessageSegment.reply(event.message_id) + _error("sleeping"))
     if target_qq == thief_id:
         return
     if target_qq == str(getattr(bot, "self_id", "")):

@@ -33,9 +33,7 @@ async def _(event: Event, args: Message = CommandArg()):
         return
 
     if args and args.extract_plain_text().strip():
-        await status_cmd.finish(
-            MessageSegment.reply(event.message_id) + "格式是「我的角色」，不用带其他字。"
-        )
+        return
 
     if is_sleeping():
         await status_cmd.finish(MessageSegment.reply(event.message_id) + _error("sleeping"))
@@ -74,9 +72,7 @@ async def _(event: Event, args: Message = CommandArg()):
         return
 
     if args and args.extract_plain_text().strip():
-        await rank_cmd.finish(
-            MessageSegment.reply(event.message_id) + "格式是「群排行榜」，不用带其他字。"
-        )
+        return
 
     data = _load_data()
     group = _get_group(data, group_id)
@@ -105,9 +101,7 @@ help_cmd = on_command("冒险帮助", aliases={"打怪帮助", "冒险说明"}, 
 @help_cmd.handle()
 async def _(event: Event, args: Message = CommandArg()):
     if args and args.extract_plain_text().strip():
-        await help_cmd.finish(
-            MessageSegment.reply(event.message_id) + "格式是「冒险帮助」，不用带其他字。"
-        )
+        return
     if isinstance(event, GroupMessageEvent) and event.group_id not in ALLOWED_CHAT_GROUPS:
         return
     msg = (

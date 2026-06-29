@@ -330,9 +330,7 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
         return
 
     if args and args.extract_plain_text().strip():
-        await hunt_cmd.finish(
-            MessageSegment.reply(event.message_id) + "格式是「今日打怪」，不用带其他字。"
-        )
+        return
 
     user_id = event.get_user_id()
     is_superuser = user_id == SUPERUSER_QQ

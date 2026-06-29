@@ -81,9 +81,7 @@ async def _(event: Event, args: Message = CommandArg()):
         return
 
     if args and args.extract_plain_text().strip():
-        await forge_cmd.finish(
-            MessageSegment.reply(event.message_id) + "格式是「强化今日装备」，不用带其他字。"
-        )
+        return
 
     if is_sleeping():
         await forge_cmd.finish(MessageSegment.reply(event.message_id) + _error("sleeping"))
@@ -113,9 +111,7 @@ async def _(event: Event, args: Message = CommandArg()):
         return
 
     if args and args.extract_plain_text().strip():
-        await rebuy_cmd.finish(
-            MessageSegment.reply(event.message_id) + "格式是「购买装备」，不用带其他字。"
-        )
+        return
 
     if is_sleeping():
         await rebuy_cmd.finish(MessageSegment.reply(event.message_id) + _error("sleeping"))

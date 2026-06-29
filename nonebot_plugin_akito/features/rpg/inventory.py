@@ -128,9 +128,7 @@ async def _(event: Event, args: Message = CommandArg()):
         return
 
     if args and args.extract_plain_text().strip():
-        await bag_cmd.finish(
-            MessageSegment.reply(event.message_id) + "格式是「我的背包」，不用带其他字。"
-        )
+        return
 
     data = _load_data()
     group = _get_group(data, group_id)
@@ -179,13 +177,9 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
     if _is_gift_item(item):
         target = _first_at_qq(getattr(event, "original_message", None))
         if not target or target == "all":
-            await use_cmd.finish(
-                MessageSegment.reply(event.message_id) + "使用礼物券要 @ 对方，比如：使用 彰冬无料券 @某人。"
-            )
+            return
         if target == event.get_user_id():
-            await use_cmd.finish(
-                MessageSegment.reply(event.message_id) + "礼物券送给自己就没意思了，@ 个群友吧。"
-            )
+            return
         if target == str(getattr(bot, "self_id", "")):
             await use_cmd.finish(MessageSegment.reply(event.message_id) + "小彰不收礼物券，去 @ 个群友吧。")
 

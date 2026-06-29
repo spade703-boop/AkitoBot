@@ -101,9 +101,7 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
         return
 
     if args and args.extract_plain_text().strip():
-        await team_cmd.finish(
-            MessageSegment.reply(event.message_id) + "格式是「组队@某人」，不用加字。"
-        )
+        return
 
     initiator = event.get_user_id()
     is_superuser = initiator == SUPERUSER_QQ
