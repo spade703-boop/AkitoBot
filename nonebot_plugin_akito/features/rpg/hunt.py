@@ -356,3 +356,76 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
 
     broadcast = _build_hunt_broadcast(out, user_id)
     await hunt_cmd.finish(MessageSegment.reply(event.message_id) + broadcast)
+
+
+# ==================== 指令：test打怪掉落（超管） ====================
+
+test_drop_cmd = on_command("test打怪掉落", priority=5, block=True)
+
+
+@test_drop_cmd.handle()
+async def _(event: Event, args: Message = CommandArg()):
+    if str(event.get_user_id()) != SUPERUSER_QQ:
+        return
+
+    group_id, rejection = _resolve_group(event)
+    if rejection:
+        await test_drop_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
+    if group_id is None:
+        return
+
+    # 解析参数：可指定怪名, 可选指定状态
+    text = args.extract_plain_text().strip() if args else ""
+    parts = text.split() if text else []
+    target_name = parts[0] if parts else ""
+    flags = set(parts[1:])
+
+    monsters = _monsters()
+    candidates = []
+    if target_name:
+        candidates = [m for m in monsters if m.get("name") == target_name]
+        if not candidates:
+            await test_drop_cmd.finish(
+                MessageSegment.reply(event.message_id) + f"没找到怪「{target_name}」。可用的：{'/'.join(m.get('name','') for m in monsters)}"
+            )
+
+    buff = _today_buff()
+    elite = "精英" in flags
+
+    lines = ["🧪 掉落测试" + (f"（{target_name}{'·精英' if elite else ''}）" if target_name else "")]
+    lines.append(f"今日增益：{buff.get('name','')} xp×{buff.get('exp_mult',1):.1f} drop×{buff.get('drop_mult',1):.1f}")
+    lines.append("")
+
+    mons_to_test = candidates if target_name else monsters
+    for m in mons_to_test:
+        eff = _eff_monster(m, elite)
+        lines.append(f"【{eff.get('name','')}】power_req={eff.get('power_req',0)}")
+        drops = m.get("drops", [])
+        if not drops:
+            lines.append("  无掉落配置")
+        else:
+            for d in drops:
+                base = float(d.get("chance", 0))
+                # 模拟 win 下的基础倍率
+                win_mult = float(_cfg("challenge", {}).get("win_drop_mult", 1.0))
+                fortune_factor = 1.0  # 无法模拟运势
+                elite_mult = float(_cfg("combat", {}).get("elite", {}).get("drop_mult", 2.0)) if elite else 1.0
+                buff_mult = float(buff.get("drop_mult", 1.0))
+                full_mult = win_mult * fortune_factor * elite_mult * buff_mult
+                effective = base * full_mult
+                lines.append(f"  {d.get('item','?')}: 基础{d.get('chance',0)*100:.0f}% ×{full_mult:.2f} = {effective*100:.1f}%")
+            # 模拟掷 20 次
+            rolled = []
+            for _ in range(20):
+                r = _roll_drops(m, mult=win_mult * elite_mult * buff_mult)
+                for item in r:
+                    rolled.append(item)
+            from collections import Counter
+            counts = Counter(rolled)
+            if counts:
+                lines.append(f"  20次模拟掉落: {'  '.join(f'{n}×{c}' for n,c in counts.items())}")
+            else:
+                lines.append("  20次模拟掉落: 无")
+        lines.append("")
+
+    await test_drop_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
