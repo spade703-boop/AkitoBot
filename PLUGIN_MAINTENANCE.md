@@ -3,7 +3,7 @@
 **角色**：东云彰人（初音未来：缤纷舞台 同人 AI，CP 立场：彰冬不拆不逆）  
 **框架**：NoneBot2 + OneBot V11  
 **AI 后端**：DeepSeek API / 智谱 GLM-4V（视觉）/ Tavily（搜索）  
-**文档更新**：2026-06-29
+**文档更新**：2026-06-30
 
 ---
 
@@ -513,7 +513,7 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（戳一戳
 
 ### rpg/
 
-在送礼社交玩法之上的轻量群文字 RPG。设计原则：**每天就两步——先签到领装备，再决定今天要不要打怪**。不是送礼的附庸，而是和送礼并列的积分去向：给手上有分但一时没地方送礼的人一个稳定的消耗口。当前循环除了单刷 / 组队打怪，还补了一层低频的世界 BOSS，用来承接群体参与感。
+在送礼社交玩法之上的轻量群文字 RPG。设计原则是：**平时走轻量个人挑战线，低频再用世界 BOSS 承接群体参与感**。不是送礼的附庸，而是和送礼并列的积分去向：给手上有分但一时没地方送礼的人一个稳定的消耗口。
 
 完整架构与指令说明见 `features/rpg/README.md`，此处仅记维护要点：
 
@@ -525,9 +525,9 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（戳一戳
 | `player.py` | 纯函数：`_level_of(exp)` 经验→等级、`_level_progress(exp)` 进度、`_title_of(level)` 称号分档、`_cum_exp(level)` 升到此级所需累计经验、`_ensure_player(group, uid, name)` 初始化玩家记录；`_combat_power(user)` 计算今日装备隐藏战力；`_resolve_group(event)` 群校验 |
 | `fortune.py` | `on_signin(group, uid, rng, today)` 签到钩子入口（暗掷运势 + 发经验 + 今日装备 + 连签判定含额外经验 + 断签重置）；`_fortune_combat/drop_factor` 为战力/掉落提供运势修正；连签保底机制（连凶天数达阈值自动转大吉） |
 | `hunt.py` | `今日打怪` 指令 + 战斗结算管线：`_encounter_level`（装备等级分段）→ `_pick_encounter`（怪池权重按等级分档 + 精英概率按等级门槛）→ `_settle_solo`（单刷含新手保护 `_rookie_power_factor` + 随机事件 + 运势修正 + 今日增益）→ `_settle_coop`（组队合力，取双方较高等级抽怪）；普通打怪结算后会额外触发一次世界 BOSS 刷出判定 |
-| `boss.py` | 世界 BOSS 逻辑：近 7 日活跃签到人数缩放、群级状态 `group["rpg"]["world_boss"]` 持久化、`世界BOSS` / `攻击世界BOSS` / `组队世界BOSS@某人` 指令、贡献榜、按贡献发放经验/积分；奖励不计入 `hunt_total/hunt_wins` |
-| `team.py` | `组队@某人` 指令：从 `gift._bond_level` 取羁绊→算成功率；对方未签到/装备已损坏 → 直接拒绝（不退化单刷）；成功走 `_settle_coop`（双方各得经验积分掉落、各自装备消耗）；羁绊不够 → 走 `_settle_solo`（只消耗发起人，队友无损）；普通组队结算后同样会触发世界 BOSS 刷出判定 |
-| `smith.py` | `强化` / `购买装备` / `重置RPG功能` 指令（积分出口 + 超管测试辅助）：强化走 `forge.costs` 分段收费 `[30,60,90]`；购买装备花 100 积分重置已损坏装备（每天限 1 次，打上 `equip_rebought` 标记，打怪积分减半）；`重置RPG功能` 仅为今天已完成 RPG 签到的人重发装备，不改运势和连签 |
+| `boss.py` | 世界 BOSS 逻辑：近 7 日活跃签到人数缩放、群级状态 `group["rpg"]["world_boss"]` 持久化、`世界BOSS` / `攻击世界BOSS` / `组队世界BOSS@某人` 指令、贡献榜、按贡献发放经验/积分；每个已签到玩家在每只 BOSS 上都有独立的 `participants[uid]` 临时装备与 1 次出手机会；奖励不计入 `hunt_total/hunt_wins` |
+| `team.py` | `组队@某人` 指令：从 `gift._bond_level` 取羁绊→算成功率；对方未签到/装备已损坏 → 直接拒绝（不退化单刷）；成功走 `_settle_coop`（双方各得经验积分掉落、各自装备消耗，并额外结算战力/经验/掉落协作加成）；羁绊不够 → 走 `_settle_solo`（只消耗发起人，队友无损）；普通组队结算后同样会触发世界 BOSS 刷出判定 |
+| `smith.py` | `强化今日装备` / `强化世界BOSS装备` / `购买装备` / `重置RPG功能` 指令（积分出口 + 超管测试辅助）：两套强化都走 `forge.costs` 分段收费 `[30,60,90]`；世界 BOSS 强化只作用于该 BOSS 的独立临时装备；购买装备花 100 积分重置已损坏普通装备（每天限 1 次，打上 `equip_rebought` 标记，打怪积分减半）；`重置RPG功能` 仅为今天签到过的人重发普通装备，不改运势、连签和世界 BOSS 状态 |
 | `inventory.py` | `背包` / `使用 [道具名]` 指令 + 道具效果（`exp_buff`/`exp_grant`/`gift` 三种类型）+ 礼物券分支走完整送礼流程（`_settle`/`_build_broadcast`） + `_roll_drops` 掉落判定 + `_add_item` 背包入库 |
 | `character.py` | `我的角色` 面板（含称号 `_title_of`/战绩/装备状态/积分/背包）+ `群排行榜`（本群 exp>0 的人按经验降序 Top 10，纯文字不 @）+ `冒险帮助`（含世界 BOSS 指令） |
 

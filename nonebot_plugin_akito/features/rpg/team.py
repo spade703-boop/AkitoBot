@@ -55,6 +55,11 @@ def _team_drop_bonus(bond_level: int) -> float:
     )
 
 
+def _team_power_bonus() -> float:
+    """组队成功时的基础战力协作加成。"""
+    return max(0.0, float(_cfg("team", {}).get("power_bonus", 0.0)))
+
+
 def _roll_fail_flavor(rng=random) -> str:
     """组队失败时抽一条前置氛围事件。"""
     weights = _cfg("team", {}).get("fail_flavor", {})
@@ -84,11 +89,11 @@ def _build_coop_broadcast(out: dict, b_id: str, a_id: str, b_name: str, a_name: 
     msg = _render_with_ats(head, {"a": b_id, "b": a_id, "monster": name})
     if out.get("team_event"):
         msg = msg + "\n" + _line(f"team_event_{out['team_event']}")
-    if out.get("exp_bonus") or out.get("drop_bonus"):
-        msg = msg + "\n" + _line(
-            "team_bonus",
-            exp_pct=int(round(float(out.get("exp_bonus", 0.0)) * 100)),
-            drop_pct=int(round(float(out.get("drop_bonus", 0.0)) * 100)),
+    if out.get("power_bonus") or out.get("exp_bonus") or out.get("drop_bonus"):
+        msg = msg + "\n" + (
+            f"✅ 协作加成：战力 +{int(round(float(out.get('power_bonus', 0.0)) * 100))}% / "
+            f"经验 +{int(round(float(out.get('exp_bonus', 0.0)) * 100))}% / "
+            f"掉落 +{int(round(float(out.get('drop_bonus', 0.0)) * 100))}%。"
         )
     msg = msg + "\n" + _member_line(out["b"], b_name)
     msg = msg + "\n" + _member_line(out["a"], a_name)
@@ -129,11 +134,11 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
 
     target = _first_at_qq(getattr(event, "original_message", None))
     if not target or target == "all":
-        await team_cmd.finish(MessageSegment.reply(event.message_id) + _error("team_need_target"))
+        return
     if target == initiator:
-        await team_cmd.finish(MessageSegment.reply(event.message_id) + _error("team_self"))
+        return
     if target == str(getattr(bot, "self_id", "")):
-        await team_cmd.finish(MessageSegment.reply(event.message_id) + _error("team_bot"))
+        return
 
     today = _today_str()
     async with LOCK:
@@ -164,6 +169,7 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
                 exp_bonus=_team_exp_bonus(bond_level),
                 drop_bonus=_team_drop_bonus(bond_level),
             )
+            out["power_bonus"] = _team_power_bonus()
             boss_lines = _maybe_spawn_world_boss_lines(group, today, initiator, rng=random)
             _save_data(data)
             b_name = b.get("display_name") or f"群友{initiator}"

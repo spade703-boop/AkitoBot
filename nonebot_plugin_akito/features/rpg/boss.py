@@ -1,4 +1,4 @@
-"""世界 BOSS：在常规打怪后极低概率出现的全群共享目标。"""
+"""World boss flow for the lightweight group RPG."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ from ...core.game_store import (
 from ..gift import _bond_level
 from .config import _cfg, _copy, _error, _line
 from .fortune import _fortune_by_key
-from .player import _combat_power, _consume_equip, _ensure_player, _level_of, _resolve_group
+from .player import _consume_equip, _ensure_player, _equip_power, _level_of, _resolve_group
 
 
 def _world_boss_cfg() -> dict:
@@ -38,6 +38,10 @@ def _team_success_rate(bond_level: int) -> float:
     tcfg = _cfg("team", {})
     rate = float(tcfg.get("base_success", 0.35)) + (int(bond_level) - 1) * float(tcfg.get("per_level", 0.12))
     return max(float(tcfg.get("min_success", 0.10)), min(float(tcfg.get("max_success", 0.95)), rate))
+
+
+def _team_power_bonus() -> float:
+    return max(0.0, float(_cfg("team", {}).get("power_bonus", 0.0)))
 
 
 def _roll_team_fail_flavor(rng=random) -> str:
@@ -81,6 +85,10 @@ def _active_world_boss(group: dict, today: str, *, clear_stale: bool = True) -> 
     if not isinstance(contributors, dict):
         contributors = {}
         boss["contributors"] = contributors
+    participants = boss.get("participants")
+    if not isinstance(participants, dict):
+        participants = {}
+        boss["participants"] = participants
     return boss
 
 
@@ -155,7 +163,7 @@ def _spawn_world_boss(group: dict, today: str, user_id: str, rng=random, snapsho
         return None
     boss_names = _world_boss_cfg().get("boss_names", [])
     if not isinstance(boss_names, list) or not boss_names:
-        boss_names = ["赤鳞灾龙"]
+        boss_names = ["世界BOSS"]
     boss = {
         "date": today,
         "name": str(rng.choice(boss_names)),
@@ -166,6 +174,7 @@ def _spawn_world_boss(group: dict, today: str, user_id: str, rng=random, snapsho
         "avg_level": int(snap["avg_level"]),
         "avg_power": int(snap["avg_power"]),
         "contributors": {},
+        "participants": {},
         "spawned_by": str(user_id),
     }
     _rpg_state(group)["world_boss"] = boss
@@ -194,11 +203,45 @@ def _fortune_combat_factor(user: dict, today: str) -> float:
     return float(_fortune_by_key(user.get("fortune", "")).get("combat_factor", 1.0))
 
 
-def _boss_damage(user: dict, today: str, *, virtual_bonus: int = 0, rng=random) -> int:
+def _boss_participants(boss: dict) -> dict:
+    participants = boss.get("participants")
+    if not isinstance(participants, dict):
+        participants = {}
+        boss["participants"] = participants
+    return participants
+
+
+def _ensure_boss_participant(boss: dict, user_id: str, user: dict, today: str, *, rng=random) -> dict | None:
+    if user.get("equip_date") != today:
+        return None
+
+    participants = _boss_participants(boss)
+    rec = participants.get(str(user_id))
+    if isinstance(rec, dict):
+        rec.setdefault("equip_date", today)
+        rec.setdefault("equip_level", int(user.get("equip_level", _level_of(int(user.get("exp", 0))))))
+        rec.setdefault("equip_roll", 0)
+        rec.setdefault("equip_forge", 0)
+        rec.setdefault("equip_used", False)
+        return rec
+
+    ecfg = _cfg("equip", {})
+    rec = {
+        "equip_date": today,
+        "equip_level": int(user.get("equip_level", _level_of(int(user.get("exp", 0))))),
+        "equip_roll": rng.randint(0, int(ecfg.get("var", 6))),
+        "equip_forge": 0,
+        "equip_used": False,
+    }
+    participants[str(user_id)] = rec
+    return rec
+
+
+def _boss_damage(equip_rec: dict, fortune_user: dict, today: str, *, rng=random) -> int:
     cfg = _world_boss_cfg()
     factor = rng.uniform(float(cfg.get("damage_factor_min", 0.92)), float(cfg.get("damage_factor_max", 1.08)))
-    power = max(1, _combat_power(user) + int(virtual_bonus))
-    return max(1, int(power * _fortune_combat_factor(user, today) * factor))
+    power = max(1, _equip_power(equip_rec))
+    return max(1, int(power * _fortune_combat_factor(fortune_user, today) * factor))
 
 
 def _allocate_exact(total: int, weights: dict[str, int]) -> dict[str, int]:
@@ -223,6 +266,19 @@ def _allocate_exact(total: int, weights: dict[str, int]) -> dict[str, int]:
     for _frac, key in ranked[:remain]:
         result[key] += 1
     return result
+
+
+def _apply_team_bonus(hits: dict[str, int]) -> tuple[dict[str, int], int]:
+    base_hits = {str(uid): max(0, int(dmg)) for uid, dmg in hits.items() if int(dmg) > 0}
+    total = sum(base_hits.values())
+    bonus_total = int(total * _team_power_bonus())
+    if bonus_total <= 0 or total <= 0:
+        return {str(uid): max(0, int(dmg)) for uid, dmg in hits.items()}, 0
+    bonus = _allocate_exact(bonus_total, base_hits)
+    merged = {str(uid): max(0, int(dmg)) for uid, dmg in hits.items()}
+    for uid, extra in bonus.items():
+        merged[uid] = merged.get(uid, 0) + extra
+    return merged, bonus_total
 
 
 def _apply_world_boss_damage(boss: dict, hits: dict[str, int]) -> dict[str, int]:
@@ -263,9 +319,9 @@ def _world_boss_kill_lines(group: dict, boss: dict) -> list[str]:
 
     scale_count = max(1, int(boss.get("scale_count", 1)))
     exp_pool = max(0, int(rewards.get("exp_pool_per_scale", 60)) * scale_count)
-    points_pool = max(0, int(rewards.get("points_pool_per_scale", 16)) * scale_count)
+    points_pool = max(0, int(rewards.get("points_pool_per_scale", 8)) * scale_count)
     exp_fixed = max(0, int(rewards.get("exp_fixed", 20)))
-    points_fixed = max(0, int(rewards.get("points_fixed", 5)))
+    points_fixed = max(0, int(rewards.get("points_fixed", 3)))
     exp_alloc = _allocate_exact(exp_pool, contributors)
     points_alloc = _allocate_exact(points_pool, contributors)
 
@@ -351,7 +407,7 @@ def _boss_at_line(key: str, ctx: dict):
     return _render_with_ats(random.choice(_copy(key)), ctx)
 
 
-world_boss_cmd = on_command("世界BOSS", aliases={"世界 BOSS"}, priority=5, block=True)
+world_boss_cmd = on_command("世界BOSS", priority=5, block=True)
 
 
 @world_boss_cmd.handle()
@@ -374,7 +430,7 @@ async def _(event: Event, args: Message = CommandArg()):
     await world_boss_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
 
 
-attack_world_boss_cmd = on_command("攻击世界BOSS", aliases={"攻击世界 BOSS"}, priority=5, block=True)
+attack_world_boss_cmd = on_command("攻击世界BOSS", priority=5, block=True)
 
 
 @attack_world_boss_cmd.handle()
@@ -401,15 +457,22 @@ async def _(event: Event, args: Message = CommandArg()):
 
         if user.get("equip_date") != today:
             await attack_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + _error("need_equip"))
-        if user.get("equip_used") and not is_superuser:
-            await attack_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + _error("equip_broken"))
 
         boss = _active_world_boss(group, today)
         if not boss:
             await attack_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + _error("boss_none"))
 
-        dealt = _apply_world_boss_damage(boss, {user_id: _boss_damage(user, today)}).get(str(user_id), 0)
-        _consume_equip(user)
+        participant = _ensure_boss_participant(boss, user_id, user, today, rng=random)
+        if participant is None:
+            await attack_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + _error("need_equip"))
+        if participant.get("equip_used") and not is_superuser:
+            await attack_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + _error("boss_already_attacked"))
+
+        dealt = _apply_world_boss_damage(
+            boss,
+            {user_id: _boss_damage(participant, user, today, rng=random)},
+        ).get(str(user_id), 0)
+        _consume_equip(participant)
 
         head_key = "world_boss_attack_kill" if int(boss.get("hp", 0)) <= 0 else "world_boss_attack"
         lines = [
@@ -434,12 +497,7 @@ async def _(event: Event, args: Message = CommandArg()):
     await attack_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + msg)
 
 
-team_world_boss_cmd = on_command(
-    "组队世界BOSS",
-    aliases={"组队世界 BOSS", "世界BOSS组队", "世界 BOSS 组队"},
-    priority=5,
-    block=True,
-)
+team_world_boss_cmd = on_command("组队世界BOSS", priority=5, block=True)
 
 
 @team_world_boss_cmd.handle()
@@ -460,11 +518,11 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
 
     target = _first_at_qq(getattr(event, "original_message", None))
     if not target or target == "all":
-        await team_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + _error("boss_need_target"))
+        return
     if target == initiator:
-        await team_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + _error("team_self"))
+        return
     if target == str(getattr(bot, "self_id", "")):
-        await team_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + _error("team_bot"))
+        return
 
     today = _today_str()
     async with LOCK:
@@ -477,14 +535,21 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
         b = _ensure_player(group, initiator, _display_name(event))
         if b.get("equip_date") != today:
             await team_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + _error("need_equip"))
-        if b.get("equip_used") and not is_superuser:
-            await team_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + _error("equip_broken"))
 
         a = _ensure_player(group, target)
         a_name = a.get("display_name") or f"群友{target}"
         if a.get("equip_date") != today:
             await team_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + _error("team_target_no_signin"))
-        if a.get("equip_used"):
+
+        b_participant = _ensure_boss_participant(boss, initiator, b, today, rng=random)
+        a_participant = _ensure_boss_participant(boss, target, a, today, rng=random)
+        if b_participant is None:
+            await team_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + _error("need_equip"))
+        if a_participant is None:
+            await team_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + _error("team_target_no_signin"))
+        if b_participant.get("equip_used") and not is_superuser:
+            await team_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + _error("boss_already_attacked"))
+        if a_participant.get("equip_used"):
             await team_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + _error("team_target_broken"))
 
         bond_level = _bond_level(_get_intimacy(group, initiator, target))["level"]
@@ -492,16 +557,14 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
         lines: list = []
 
         if success:
-            team_bonus = int(_cfg("forge", {}).get("step", 0)) * int(_cfg("forge", {}).get("max_per_day", 0))
-            dealt = _apply_world_boss_damage(
-                boss,
-                {
-                    initiator: _boss_damage(b, today, virtual_bonus=team_bonus),
-                    target: _boss_damage(a, today, virtual_bonus=team_bonus),
-                },
-            )
-            _consume_equip(b)
-            _consume_equip(a)
+            raw_hits = {
+                initiator: _boss_damage(b_participant, b, today, rng=random),
+                target: _boss_damage(a_participant, a, today, rng=random),
+            }
+            team_hits, bonus_total = _apply_team_bonus(raw_hits)
+            dealt = _apply_world_boss_damage(boss, team_hits)
+            _consume_equip(b_participant)
+            _consume_equip(a_participant)
             b_name = b.get("display_name") or f"群友{initiator}"
             head_key = "world_boss_team_kill" if int(boss.get("hp", 0)) <= 0 else "world_boss_team_attack"
             lines.append(
@@ -521,6 +584,8 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
                     },
                 )
             )
+            if bonus_total > 0:
+                lines.append(_line("world_boss_team_bonus", bonus_total=bonus_total))
         else:
             fail_event = _roll_team_fail_flavor()
             if fail_event:
@@ -535,8 +600,11 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
                     },
                 )
             )
-            dealt = _apply_world_boss_damage(boss, {initiator: _boss_damage(b, today)})
-            _consume_equip(b)
+            dealt = _apply_world_boss_damage(
+                boss,
+                {initiator: _boss_damage(b_participant, b, today, rng=random)},
+            )
+            _consume_equip(b_participant)
             lines.append(
                 _boss_at_line(
                     "world_boss_attack_kill" if int(boss.get("hp", 0)) <= 0 else "world_boss_attack",

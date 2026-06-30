@@ -216,7 +216,7 @@ DEFAULT_RPG_CONFIG: dict = {
         "world_boss_status_empty": ["· 目前还没有人造成伤害。"],
         "world_boss_status_rank": ["· 当前贡献："],
         "world_boss_status_entry": ["{rank}. {name}　{damage} 伤害"],
-        "world_boss_status_hint": ["· 指令：攻击世界BOSS / 组队世界BOSS@某人"],
+        "world_boss_status_hint": ["· 指令：攻击世界BOSS / 组队世界BOSS@某人 / 强化世界BOSS装备"],
         "world_boss_attack": ["{a} 对【{monster}】造成了 {damage} 点伤害。剩余生命 {hp}/{max_hp}。"],
         "world_boss_attack_kill": ["{a} 对【{monster}】造成了 {damage} 点伤害，完成了最后一击。"],
         "world_boss_team_attack": [
@@ -229,8 +229,10 @@ DEFAULT_RPG_CONFIG: dict = {
         "world_boss_fail_event_hesitate": ["……{b_name} 临时迟疑了一下。"],
         "world_boss_fail_event_late_reply": ["……{b_name} 赶到得慢了半步。"],
         "world_boss_fail_event_out_of_step": ["……两人没能在开战前顺利会合。"],
+        "world_boss_team_bonus": ["· 协作加成：本次合击额外提高了 {bonus_total} 点总伤害。"],
         "world_boss_kill": ["🏆 世界BOSS【{monster}】已被击败，开始按贡献结算奖励。"],
         "world_boss_reward": ["· {name}：贡献 {damage}，经验 +{exp}、积分 +{points}{levelup}"],
+        "forge_world_boss_ok": ["🔧 世界BOSS装备已强化（已强化 ×{forge}，花费 {cost} 积分）。"],
         # 精英怪遭遇（{a}=真@；{monster}=文本）
         "hunt_encounter_elite": [
             "{a} 这次遭遇的是精英·{monster}。",
@@ -249,6 +251,8 @@ DEFAULT_RPG_CONFIG: dict = {
         "equip_broken": "你今天那套装备已经损坏了。可以「购买装备」（100积分）补一套再打，或等明天签到领新的。",
         "forge_no_equip": "你今天还没领装备，先「签到」。",
         "forge_broken": "装备都损坏了，还强化什么。明天再来。",
+        "forge_world_boss_no_equip": "你今天还没签到，先领到今天的装备再准备世界BOSS。",
+        "forge_world_boss_used": "你这套世界BOSS装备已经用过了，等下次新的世界BOSS吧。",
         "forge_max": "今天这套装备已经强化到头了（上限 {max} 次）。",
         "forge_poor": "积分不够。这次强化要 {cost}，你现在只有 {total}。",
         "rebuy_no_need": "装备还好好的，不用买新的。",
@@ -265,6 +269,7 @@ DEFAULT_RPG_CONFIG: dict = {
         "team_bot": "小彰不下场。去 @ 个群友。",
         "team_target_no_signin": "对方今天还未签到领装备，组队失败。",
         "team_target_broken": "对方今天的装备已经损坏了，组队失败。可以让ta「购买装备」补充。",
+        "boss_already_attacked": "你这次世界BOSS已经出手过了，等下次新的世界BOSS吧。",
         "boss_none": "当前没有可挑战的世界BOSS。先去正常打一趟看看吧。",
         "rank_empty": "本群还没人开打。先「签到」领装备，再去「打怪」。",
     },

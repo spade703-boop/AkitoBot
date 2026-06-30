@@ -1,8 +1,4 @@
-"""强化：唯一的积分出口——花积分给今日装备加战力（当天有效、次日随装备重置）。
-
-优先走 `forge.costs` 的分段费用；未配置时回退到旧的 cost_base*n 线性涨价。提高今天打怪的胜率。
-战力为隐藏值，反馈走文案。
-"""
+"""Forging and reset commands for the RPG module."""
 
 from __future__ import annotations
 
@@ -15,12 +11,12 @@ from nonebot.params import CommandArg
 
 from ...core import SUPERUSER_QQ, is_sleeping
 from ...core.game_store import LOCK, _display_name, _get_group, _load_data, _save_data, _today_str
+from .boss import _active_world_boss, _ensure_boss_participant
 from .config import _cfg, _error, _line
 from .player import _ensure_player, _grant_equip, _resolve_group
 
 
 def _forge_cost(fcfg: dict, times: int) -> int:
-    """优先按 costs 取分段费用；缺省时兼容旧配置的线性涨价。"""
     costs = fcfg.get("costs", [])
     if isinstance(costs, list) and 0 <= times < len(costs):
         try:
@@ -30,14 +26,48 @@ def _forge_cost(fcfg: dict, times: int) -> int:
     return int(fcfg.get("cost_base", 100)) * (times + 1)
 
 
-def _forge(user: dict, today: str) -> tuple[bool, str]:
-    """花积分强化今日装备一次。返回 (是否成功, 文案)；失败不扣分。"""
-    if user.get("equip_date") != today:
-        return False, _error("forge_no_equip")
-    if user.get("equip_used"):
-        return False, _error("forge_broken")
+def _forge_record(owner: dict, equip_rec: dict, today: str, *, no_equip_error: str, used_error: str, ok_key: str) -> tuple[bool, str]:
+    if equip_rec.get("equip_date") != today:
+        return False, _error(no_equip_error)
+    if equip_rec.get("equip_used"):
+        return False, _error(used_error)
     fcfg = _cfg("forge", {})
-    times = int(user.get("equip_forge", 0))
+    times = int(equip_rec.get("equip_forge", 0))
+    mx = int(fcfg.get("max_per_day", 5))
+    if times >= mx:
+        return False, _error("forge_max", max=mx)
+    cost = _forge_cost(fcfg, times)
+    points = int(owner.get("points", 0))
+    if points < cost:
+        return False, _error("forge_poor", cost=cost, total=points)
+    owner["points"] = points - cost
+    equip_rec["equip_forge"] = times + 1
+    return True, _line(ok_key, forge=times + 1, cost=cost)
+
+
+def _forge(user: dict, today: str) -> tuple[bool, str]:
+    return _forge_record(
+        user,
+        user,
+        today,
+        no_equip_error="forge_no_equip",
+        used_error="forge_broken",
+        ok_key="forge_ok",
+    )
+
+
+def _sleep_blocked(user_id: str) -> bool:
+    return is_sleeping() and str(user_id) != SUPERUSER_QQ
+
+
+def _forge_world_boss(boss: dict, user_id: str, user: dict, today: str, *, rng=random) -> tuple[bool, str]:
+    equip_rec = _ensure_boss_participant(boss, user_id, user, today, rng=rng)
+    if equip_rec is None:
+        return False, _error("forge_world_boss_no_equip")
+    if equip_rec.get("equip_used"):
+        return False, _error("forge_world_boss_used")
+    fcfg = _cfg("forge", {})
+    times = int(equip_rec.get("equip_forge", 0))
     mx = int(fcfg.get("max_per_day", 5))
     if times >= mx:
         return False, _error("forge_max", max=mx)
@@ -46,12 +76,11 @@ def _forge(user: dict, today: str) -> tuple[bool, str]:
     if points < cost:
         return False, _error("forge_poor", cost=cost, total=points)
     user["points"] = points - cost
-    user["equip_forge"] = times + 1
-    return True, _line("forge_ok", forge=times + 1, cost=cost)
+    equip_rec["equip_forge"] = times + 1
+    return True, _line("forge_world_boss_ok", forge=times + 1, cost=cost)
 
 
 def _rebuy_equip(user: dict, today: str) -> tuple[bool, str]:
-    """花积分重购今日装备（仅限已损坏、未达每日上限）；购买后装备重生但打怪积分打对折。"""
     if user.get("equip_date") != today:
         return False, _error("rebuy_no_equip")
     if not user.get("equip_used"):
@@ -72,7 +101,6 @@ def _rebuy_equip(user: dict, today: str) -> tuple[bool, str]:
 
 
 def _reset_group_rpg_equip(group: dict, today: str, rng=random) -> int:
-    """超管测试用：仅为今天已完成 RPG 签到的用户重发一套今日装备。"""
     reset = 0
     for user_id, rec in group.get("users", {}).items():
         if not isinstance(rec, dict):
@@ -99,7 +127,7 @@ async def _(event: Event, args: Message = CommandArg()):
     if args and args.extract_plain_text().strip():
         return
 
-    if is_sleeping():
+    if _sleep_blocked(event.get_user_id()):
         await forge_cmd.finish(MessageSegment.reply(event.message_id) + _error("sleeping"))
 
     today = _today_str()
@@ -113,7 +141,37 @@ async def _(event: Event, args: Message = CommandArg()):
     await forge_cmd.finish(MessageSegment.reply(event.message_id) + result)
 
 
-# ==================== 指令：购买装备 ====================
+boss_forge_cmd = on_command("强化世界BOSS装备", priority=5, block=True)
+
+
+@boss_forge_cmd.handle()
+async def _(event: Event, args: Message = CommandArg()):
+    group_id, rejection = _resolve_group(event)
+    if rejection:
+        await boss_forge_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
+    if group_id is None:
+        return
+
+    if args and args.extract_plain_text().strip():
+        return
+
+    if _sleep_blocked(event.get_user_id()):
+        await boss_forge_cmd.finish(MessageSegment.reply(event.message_id) + _error("sleeping"))
+
+    today = _today_str()
+    async with LOCK:
+        data = _load_data()
+        group = _get_group(data, group_id)
+        boss = _active_world_boss(group, today)
+        if not boss:
+            await boss_forge_cmd.finish(MessageSegment.reply(event.message_id) + _error("boss_none"))
+        user_id = event.get_user_id()
+        user = _ensure_player(group, user_id, _display_name(event))
+        ok, result = _forge_world_boss(boss, user_id, user, today, rng=random)
+        if ok:
+            _save_data(data)
+    await boss_forge_cmd.finish(MessageSegment.reply(event.message_id) + result)
+
 
 rebuy_cmd = on_command("购买装备", priority=5, block=True)
 
@@ -129,7 +187,7 @@ async def _(event: Event, args: Message = CommandArg()):
     if args and args.extract_plain_text().strip():
         return
 
-    if is_sleeping():
+    if _sleep_blocked(event.get_user_id()):
         await rebuy_cmd.finish(MessageSegment.reply(event.message_id) + _error("sleeping"))
 
     today = _today_str()
@@ -143,9 +201,7 @@ async def _(event: Event, args: Message = CommandArg()):
     await rebuy_cmd.finish(MessageSegment.reply(event.message_id) + result)
 
 
-# ==================== 指令：重置 RPG 功能（超管） ====================
-
-reset_rpg_cmd = on_command("重置RPG功能", aliases={"重置 RPG 功能"}, priority=5, block=True)
+reset_rpg_cmd = on_command("重置RPG功能", priority=5, block=True)
 
 
 @reset_rpg_cmd.handle()
@@ -170,7 +226,7 @@ async def _(event: Event, args: Message = CommandArg()):
         _save_data(data)
 
     if reset:
-        msg = f"本群 RPG 已重置，已为今天已签到的 {reset} 人重新发放今日装备。运势、连签和其他状态未改。"
+        msg = f"本群 RPG 已重置，已为今天签到过的 {reset} 人重新发放今日装备。运势、连签和其他状态不变。"
     else:
         msg = "本群今天还没有可重发装备的 RPG 签到记录。"
     await reset_rpg_cmd.finish(MessageSegment.reply(event.message_id) + msg)

@@ -171,6 +171,11 @@ def _coop_event_spec(event_key: str) -> dict:
     return spec if isinstance(spec, dict) else {}
 
 
+def _team_power_bonus() -> float:
+    """组队成功时的基础协作战力加成。"""
+    return max(0.0, float(_cfg("team", {}).get("power_bonus", 0.0)))
+
+
 def _fortune_combat_factor(user: dict, today: str) -> float:
     """当日隐藏运势给打怪的战力系数（关闭或未签到则 1.0）。"""
     ccfg = _cfg("combat", {})
@@ -316,7 +321,9 @@ def _settle_coop(b: dict, a: dict, today: str, *, exp_bonus: float = 0.0, drop_b
     team_event = _roll_coop_event()
     event_spec = _coop_event_spec(team_event)
     fortune_factor = (_fortune_combat_factor(b, today) + _fortune_combat_factor(a, today)) / 2.0
+    power_bonus = _team_power_bonus()
     power_factor = random.uniform(float(ccfg.get("factor_min", 0.8)), float(ccfg.get("factor_max", 1.2)))
+    power_factor *= 1.0 + power_bonus
     if margin > 0 and event_spec.get("power_mult") is not None:
         power_factor *= float(event_spec.get("power_mult", 1.0))
     res = resolve_hunt(cp, eff, power_factor=power_factor, fortune_factor=fortune_factor)
@@ -331,6 +338,7 @@ def _settle_coop(b: dict, a: dict, today: str, *, exp_bonus: float = 0.0, drop_b
         "elite": is_elite,
         "buff": buff,
         "team_event": team_event,
+        "power_bonus": power_bonus,
         "exp_bonus": exp_bonus,
         "drop_bonus": drop_bonus,
         "b": _apply_rewards(
