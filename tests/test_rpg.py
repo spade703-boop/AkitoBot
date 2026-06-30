@@ -646,6 +646,65 @@ def test_rebuy_equip_rejects():
     assert ok is False and "买过" in msg
 
 
+def test_reset_group_rpg_equip_only_refreshes_signed_users():
+    group = game_store._new_group()
+    lv3 = player._cum_exp(3, player._level_base())
+    group["users"]["u1"] = {
+        "exp": lv3,
+        "fortune": "daji",
+        "fortune_date": "2026-06-22",
+        "signin_last_date": "2026-06-22",
+        "equip_date": "2026-06-22",
+        "equip_used": True,
+        "equip_forge": 2,
+        "equip_rebought": True,
+        "equip_rebuy_count": 1,
+        "equip_roll": 0,
+    }
+    group["users"]["u2"] = {"exp": 0, "fortune_date": "", "signin_last_date": ""}
+
+    reset = smith._reset_group_rpg_equip(group, "2026-06-22", _FixedRand(4))
+
+    u1 = group["users"]["u1"]
+    u2 = group["users"]["u2"]
+    assert reset == 1
+    assert u1["equip_date"] == "2026-06-22"
+    assert u1["equip_used"] is False
+    assert u1["equip_forge"] == 0
+    assert u1["equip_rebought"] is False
+    assert u1["equip_rebuy_count"] == 0
+    assert u1["equip_roll"] == 4
+    assert u1["equip_level"] == 3
+    assert u1["fortune"] == "daji" and u1["fortune_date"] == "2026-06-22"
+    assert u2.get("equip_date", "") == ""
+
+
+@pytest.mark.asyncio
+async def test_reset_rpg_cmd_only_regrants_equips_for_signed_users(monkeypatch):
+    state = _patch_io(monkeypatch, smith, store={"groups": {"1001": {"users": {
+        "u1": {
+            "exp": 0,
+            "fortune": "ping",
+            "fortune_date": "2026-06-22",
+            "signin_last_date": "2026-06-22",
+            "equip_date": "2026-06-22",
+            "equip_used": True,
+            "equip_forge": 2,
+        },
+        "u2": {"exp": 0},
+    }}}})
+    monkeypatch.setattr(smith, "random", _FixedRand(2))
+
+    with pytest.raises(FinishedException) as exc:
+        await smith.reset_rpg_cmd.handlers[0](Event(group_id=1001, user_id=smith.SUPERUSER_QQ))
+
+    u1 = state["groups"]["1001"]["users"]["u1"]
+    u2 = state["groups"]["1001"]["users"]["u2"]
+    assert u1["equip_used"] is False and u1["equip_forge"] == 0 and u1["equip_roll"] == 2
+    assert u2.get("equip_date", "") == ""
+    assert "今天已签到的 1 人" in str(exc.value.result)
+
+
 def test_settle_solo_rookie_bonus_only_applies_to_solo(monkeypatch):
     factors: list[float] = []
     monster = {"name": "史莱姆", "power_req": 1, "drops": []}
