@@ -25,6 +25,7 @@ from ...core.game_store import (
     _today_str,
     _weighted_choice,
 )
+from .boss import _maybe_spawn_world_boss_lines
 from .config import _cfg, _copy, _error, _line
 from .fortune import _fortune_by_key
 from .inventory import _add_item, _roll_drops
@@ -421,9 +422,12 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
             await hunt_cmd.finish(MessageSegment.reply(event.message_id) + _error("equip_broken"))
 
         out = _settle_solo(user, today)
+        boss_lines = _maybe_spawn_world_boss_lines(group, today, user_id, rng=random)
         _save_data(data)
 
     broadcast = _build_hunt_broadcast(out, user_id)
+    if boss_lines:
+        broadcast = broadcast + "\n" + "\n".join(boss_lines)
     await hunt_cmd.finish(MessageSegment.reply(event.message_id) + broadcast)
 
 

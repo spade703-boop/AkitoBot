@@ -16,6 +16,7 @@ import pytest
 from nonebot_plugin_akito.core import game_store
 
 # 导入子包即触发命令注册与签到钩子注册
+import nonebot_plugin_akito.features.rpg.boss as boss
 import nonebot_plugin_akito.features.rpg.character as character
 import nonebot_plugin_akito.features.rpg.config as rpg_config
 import nonebot_plugin_akito.features.rpg.fortune as fortune
@@ -445,6 +446,23 @@ def _patch_io(monkeypatch, mod, *, today="2026-06-22", store=None):
 def _equipped_user(**extra):
     base = {"exp": 0, "equip_date": "2026-06-22", "equip_level": 1, "equip_roll": 0,
             "equip_used": False, "equip_forge": 0}
+    base.update(extra)
+    return base
+
+
+def _world_boss_record(**extra):
+    base = {
+        "date": "2026-06-22",
+        "name": "深渊巨像",
+        "max_hp": 120,
+        "hp": 120,
+        "recent_active_count": 6,
+        "scale_count": 6,
+        "avg_level": 2,
+        "avg_power": 18,
+        "contributors": {},
+        "spawned_by": "u0",
+    }
     base.update(extra)
     return base
 
@@ -1072,3 +1090,212 @@ async def test_status_panel_shows_title_and_record(monkeypatch):
     r = str(exc.value.result)
     assert player._title_of(3) in r            # 称号
     assert "4 胜" in r and "5 场" in r          # 战绩
+
+
+# ==================== 世界 BOSS ====================
+
+def test_game_store_normalize_preserves_group_rpg():
+    data = game_store._normalize_data({
+        "groups": {
+            "1001": {
+                "users": {},
+                "intimacy": {},
+                "counts": {},
+                "rpg": {"world_boss": {"hp": 9}},
+            }
+        }
+    })
+    assert data["groups"]["1001"]["rpg"]["world_boss"]["hp"] == 9
+
+
+def test_world_boss_snapshot_uses_recent_active_not_today():
+    group = game_store._new_group()
+    recent_days = [
+        "2026-06-22",
+        "2026-06-21",
+        "2026-06-20",
+        "2026-06-19",
+        "2026-06-18",
+        "2026-06-17",
+        "2026-06-16",
+        "2026-06-16",
+    ]
+    for idx, day in enumerate(recent_days, 1):
+        group["users"][f"u{idx}"] = {"exp": 0, "last_sign_in": day, "signin_last_date": day}
+
+    snapshot = boss._world_boss_snapshot(group, "2026-06-22")
+
+    assert snapshot["recent_active_count"] == 8
+    assert snapshot["scale_count"] == 8
+    assert snapshot["max_hp"] == 18 * 8
+
+
+def test_world_boss_does_not_spawn_when_recent_active_under_min():
+    class _SpawnRng:
+        def random(self):
+            return 0.0
+
+        def choice(self, seq):
+            return seq[0]
+
+    group = game_store._new_group()
+    group["users"]["u1"] = {"exp": 0, "last_sign_in": "2026-06-22"}
+    group["users"]["u2"] = {"exp": 0, "last_sign_in": "2026-06-21"}
+
+    lines = boss._maybe_spawn_world_boss_lines(group, "2026-06-22", "u1", rng=_SpawnRng())
+
+    assert lines == []
+    assert group["rpg"] == {}
+
+
+@pytest.mark.asyncio
+async def test_hunt_appends_world_boss_spawn_lines(monkeypatch):
+    state = _patch_io(monkeypatch, hunt, store={"groups": {"1001": {"users": {"u1": _equipped_user()}}}})
+    _stub_hunt_rng(monkeypatch, {"name": "史莱姆", "power_req": 1, "drops": []})
+    monkeypatch.setattr(hunt, "_maybe_spawn_world_boss_lines", lambda *args, **kwargs: ["世界BOSS出现"])
+
+    with pytest.raises(FinishedException) as exc:
+        await hunt.hunt_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="u1"))
+
+    assert state["groups"]["1001"]["users"]["u1"]["equip_used"] is True
+    assert "世界BOSS出现" in str(exc.value.result)
+
+
+@pytest.mark.asyncio
+async def test_team_appends_world_boss_spawn_lines(monkeypatch):
+    store = {"groups": {"1001": {
+        "users": {"u1": _equipped_user(points=0), "u2": _equipped_user(points=0)},
+        "intimacy": {game_store._pair_key("u1", "u2"): 20000},
+    }}}
+    _patch_io(monkeypatch, team, store=store)
+    monkeypatch.setattr(team, "random", _Rng(0.0))
+    _stub_hunt_rng(monkeypatch, {"name": "史莱姆", "power_req": 1, "drops": []})
+    monkeypatch.setattr(team, "_maybe_spawn_world_boss_lines", lambda *args, **kwargs: ["世界BOSS出现"])
+
+    with pytest.raises(FinishedException) as exc:
+        await team.team_cmd.handlers[0](_bot(), _team_event("u1", "u2"))
+
+    assert "世界BOSS出现" in str(exc.value.result)
+
+
+@pytest.mark.asyncio
+async def test_world_boss_status_no_active_boss(monkeypatch):
+    _patch_io(monkeypatch, boss, store={"groups": {"1001": {"users": {}}}})
+
+    with pytest.raises(FinishedException) as exc:
+        await boss.world_boss_cmd.handlers[0](Event(group_id=1001, user_id="u1"))
+
+    assert "当前没有可挑战的世界BOSS" in str(exc.value.result)
+
+
+@pytest.mark.asyncio
+async def test_world_boss_status_shows_hp_and_contributors(monkeypatch):
+    _patch_io(monkeypatch, boss, store={"groups": {"1001": {
+        "users": {
+            "u1": {"display_name": "阿一"},
+            "u2": {"display_name": "阿二"},
+        },
+        "rpg": {"world_boss": _world_boss_record(hp=80, contributors={"u1": 45, "u2": 20})},
+    }}})
+
+    with pytest.raises(FinishedException) as exc:
+        await boss.world_boss_cmd.handlers[0](Event(group_id=1001, user_id="u1"))
+
+    result = str(exc.value.result)
+    assert "深渊巨像" in result
+    assert "80/120" in result
+    assert "阿一" in result and "45" in result
+
+
+@pytest.mark.asyncio
+async def test_attack_world_boss_consumes_equip_and_records_damage(monkeypatch):
+    state = _patch_io(monkeypatch, boss, store={"groups": {"1001": {
+        "users": {"u1": _equipped_user(hunt_total=7, hunt_wins=4)},
+        "rpg": {"world_boss": _world_boss_record(max_hp=100, hp=100)},
+    }}})
+    monkeypatch.setattr(boss.random, "uniform", lambda _a, _b: 1.0)
+
+    with pytest.raises(FinishedException) as exc:
+        await boss.attack_world_boss_cmd.handlers[0](Event(group_id=1001, user_id="u1"))
+
+    user = state["groups"]["1001"]["users"]["u1"]
+    wb = state["groups"]["1001"]["rpg"]["world_boss"]
+    assert user["equip_used"] is True
+    assert wb["hp"] == 85
+    assert wb["contributors"]["u1"] == 15
+    assert user["hunt_total"] == 7 and user["hunt_wins"] == 4
+    assert "15 点伤害" in str(exc.value.result)
+
+
+@pytest.mark.asyncio
+async def test_team_world_boss_success_uses_virtual_forge_bonus(monkeypatch):
+    store = {"groups": {"1001": {
+        "users": {
+            "u1": _equipped_user(points=0),
+            "u2": _equipped_user(points=0),
+        },
+        "intimacy": {game_store._pair_key("u1", "u2"): 20000},
+        "rpg": {"world_boss": _world_boss_record(max_hp=200, hp=200)},
+    }}}
+    state = _patch_io(monkeypatch, boss, store=store)
+    monkeypatch.setattr(boss.random, "random", lambda: 0.0)
+    monkeypatch.setattr(boss.random, "uniform", lambda _a, _b: 1.0)
+
+    with pytest.raises(FinishedException) as exc:
+        await boss.team_world_boss_cmd.handlers[0](_bot(), _team_event("u1", "u2"))
+
+    users = state["groups"]["1001"]["users"]
+    wb = state["groups"]["1001"]["rpg"]["world_boss"]
+    assert users["u1"]["equip_used"] is True and users["u2"]["equip_used"] is True
+    assert wb["contributors"]["u1"] == 33 and wb["contributors"]["u2"] == 33
+    assert wb["hp"] == 134
+    result = str(exc.value.result)
+    assert "33 点" in result and "66 点" in result
+
+
+@pytest.mark.asyncio
+async def test_team_world_boss_fail_only_consumes_initiator(monkeypatch):
+    store = {"groups": {"1001": {
+        "users": {
+            "u1": _equipped_user(points=0),
+            "u2": _equipped_user(points=0),
+        },
+        "rpg": {"world_boss": _world_boss_record(max_hp=100, hp=100)},
+    }}}
+    state = _patch_io(monkeypatch, boss, store=store)
+    monkeypatch.setattr(boss.random, "random", lambda: 0.999)
+    monkeypatch.setattr(boss.random, "uniform", lambda _a, _b: 1.0)
+    monkeypatch.setattr(boss, "_roll_team_fail_flavor", lambda rng=boss.random: "hesitate")
+
+    with pytest.raises(FinishedException) as exc:
+        await boss.team_world_boss_cmd.handlers[0](_bot(), _team_event("u1", "u2"))
+
+    users = state["groups"]["1001"]["users"]
+    wb = state["groups"]["1001"]["rpg"]["world_boss"]
+    assert users["u1"]["equip_used"] is True and users["u2"]["equip_used"] is False
+    assert wb["contributors"]["u1"] == 15
+    assert "没能会合" in str(exc.value.result)
+
+
+@pytest.mark.asyncio
+async def test_world_boss_kill_settlement_preserves_reward_pool_and_battle_stats(monkeypatch):
+    store = {"groups": {"1001": {
+        "users": {
+            "u1": _equipped_user(hunt_total=7, hunt_wins=3),
+            "u2": {"exp": 0, "points": 0, "hunt_total": 2, "hunt_wins": 1},
+        },
+        "rpg": {"world_boss": _world_boss_record(max_hp=12, hp=2, scale_count=3, contributors={"u1": 4, "u2": 6})},
+    }}}
+    state = _patch_io(monkeypatch, boss, store=store)
+    monkeypatch.setattr(boss.random, "uniform", lambda _a, _b: 1.0)
+
+    with pytest.raises(FinishedException) as exc:
+        await boss.attack_world_boss_cmd.handlers[0](Event(group_id=1001, user_id="u1"))
+
+    users = state["groups"]["1001"]["users"]
+    assert "world_boss" not in state["groups"]["1001"]["rpg"]
+    assert users["u1"]["exp"] == 110 and users["u2"]["exp"] == 110
+    assert users["u1"]["points"] == 29 and users["u2"]["points"] == 29
+    assert users["u1"]["hunt_total"] == 7 and users["u1"]["hunt_wins"] == 3
+    assert users["u2"]["hunt_total"] == 2 and users["u2"]["hunt_wins"] == 1
+    assert "按贡献结算奖励" in str(exc.value.result)

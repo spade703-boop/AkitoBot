@@ -90,6 +90,27 @@ DEFAULT_RPG_CONFIG: dict = {
         },
         "fail_flavor": {"hesitate": 4, "late_reply": 3, "out_of_step": 3},
     },
+    # ---- 世界 BOSS：极低概率在常规打怪后出现；强度按近 7 日活跃签到人数缩放 ----
+    "world_boss": {
+        "spawn_chance": 0.001,
+        "activity_window_days": 7,
+        "activity_min_users": 3,
+        "activity_scale_cap": 12,
+        "hp_factor": 1.0,
+        "damage_factor_min": 0.92,
+        "damage_factor_max": 1.08,
+        "rewards": {
+            "exp_fixed": 20,
+            "exp_pool_per_scale": 60,
+            "points_fixed": 5,
+            "points_pool_per_scale": 16,
+        },
+        "boss_names": [
+            "赤鳞灾龙",
+            "断潮魔虾",
+            "焦壳披萨王",
+        ],
+    },
     # ---- 称号：累计经验→等级→称号（纯派生、零存储，仿羁绊取档）。显示在「我的角色」与排行榜 ----
     "titles": [
         {"min_level": 1,  "name": "见习冒险者"},
@@ -186,6 +207,30 @@ DEFAULT_RPG_CONFIG: dict = {
         "team_fail_event_hesitate": ["……{b_name} 似乎迟疑了一下，没能及时加入战斗。"],
         "team_fail_event_late_reply": ["……{b_name} 赶来得稍晚，没能在战斗开始前会合。"],
         "team_fail_event_out_of_step": ["……两人没能顺利会合，这次组队作战失败了。"],
+        # 世界 BOSS
+        "world_boss_spawn": ["🌍 世界BOSS【{monster}】出现了。"],
+        "world_boss_spawn_scale": ["· 这次的强度按近 7 日活跃冒险者规模生成。"],
+        "world_boss_status_head": ["🌍 世界BOSS【{monster}】"],
+        "world_boss_status_hp": ["· 生命：{hp}/{max_hp}（{percent}%）"],
+        "world_boss_status_scale": ["· 规模：近 7 日活跃 {recent_active} 人，本次按 {scale_count} 人强度生成。"],
+        "world_boss_status_empty": ["· 目前还没有人造成伤害。"],
+        "world_boss_status_rank": ["· 当前贡献："],
+        "world_boss_status_entry": ["{rank}. {name}　{damage} 伤害"],
+        "world_boss_status_hint": ["· 指令：攻击世界BOSS / 组队世界BOSS@某人"],
+        "world_boss_attack": ["{a} 对【{monster}】造成了 {damage} 点伤害。剩余生命 {hp}/{max_hp}。"],
+        "world_boss_attack_kill": ["{a} 对【{monster}】造成了 {damage} 点伤害，完成了最后一击。"],
+        "world_boss_team_attack": [
+            "🤝 {a} 与 {b} 联手攻击【{monster}】。{a_name} 造成 {a_damage} 点，{b_name} 造成 {b_damage} 点，总计 {total_damage} 点。剩余生命 {hp}/{max_hp}。"
+        ],
+        "world_boss_team_kill": [
+            "🤝 {a} 与 {b} 联手攻击【{monster}】。{a_name} 造成 {a_damage} 点，{b_name} 造成 {b_damage} 点，总计 {total_damage} 点，并完成了讨伐。"
+        ],
+        "world_boss_team_fail": ["{a} 试着和 {b_name} 一起挑战【{monster}】，没能会合，只能自己先上。"],
+        "world_boss_fail_event_hesitate": ["……{b_name} 临时迟疑了一下。"],
+        "world_boss_fail_event_late_reply": ["……{b_name} 赶到得慢了半步。"],
+        "world_boss_fail_event_out_of_step": ["……两人没能在开战前顺利会合。"],
+        "world_boss_kill": ["🏆 世界BOSS【{monster}】已被击败，开始按贡献结算奖励。"],
+        "world_boss_reward": ["· {name}：贡献 {damage}，经验 +{exp}、积分 +{points}{levelup}"],
         # 精英怪遭遇（{a}=真@；{monster}=文本）
         "hunt_encounter_elite": [
             "{a} 这次遭遇的是精英·{monster}。",
@@ -215,10 +260,12 @@ DEFAULT_RPG_CONFIG: dict = {
         "item_unknown": "没这个道具：{name}。",
         "item_none": "你背包里没有【{name}】。",
         "team_need_target": "组队得@人。比如：组队@某人。",
+        "boss_need_target": "组队世界BOSS得@人。比如：组队世界BOSS@某人。",
         "team_self": "自己跟自己组队就算了。换个人 @。",
         "team_bot": "小彰不下场。去 @ 个群友。",
         "team_target_no_signin": "对方今天还未签到领装备，组队失败。",
         "team_target_broken": "对方今天的装备已经损坏了，组队失败。可以让ta「购买装备」补充。",
+        "boss_none": "当前没有可挑战的世界BOSS。先去正常打一趟看看吧。",
         "rank_empty": "本群还没人开打。先「签到」领装备，再去「打怪」。",
     },
 }

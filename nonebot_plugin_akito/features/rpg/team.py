@@ -24,6 +24,7 @@ from ...core.game_store import (
     _weighted_choice,
 )
 from ..gift import _bond_level
+from .boss import _maybe_spawn_world_boss_lines
 from .config import _copy, _cfg, _error, _line
 from .hunt import _buff_active, _hunt_result_lines, _settle_coop, _settle_solo
 from .player import _ensure_player, _resolve_group
@@ -163,12 +164,16 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
                 exp_bonus=_team_exp_bonus(bond_level),
                 drop_bonus=_team_drop_bonus(bond_level),
             )
+            boss_lines = _maybe_spawn_world_boss_lines(group, today, initiator, rng=random)
             _save_data(data)
             b_name = b.get("display_name") or f"群友{initiator}"
             msg = _build_coop_broadcast(out, initiator, target, b_name, a_name)
         else:
             out = _settle_solo(b, today)
+            boss_lines = _maybe_spawn_world_boss_lines(group, today, initiator, rng=random)
             _save_data(data)
             msg = _build_fail_broadcast(out, initiator, a_name, _roll_fail_flavor())
+        if boss_lines:
+            msg = msg + "\n" + "\n".join(boss_lines)
 
     await team_cmd.finish(MessageSegment.reply(event.message_id) + msg)

@@ -42,11 +42,11 @@ def _new_data() -> dict:
 
 
 def _new_group() -> dict:
-    return {"users": {}, "intimacy": {}, "counts": {}}
+    return {"users": {}, "intimacy": {}, "counts": {}, "rpg": {}}
 
 
 def _normalize_data(raw: object) -> dict:
-    """容错归一：丢弃非法结构，保证 groups[gid] = {users, intimacy, counts}。
+    """容错归一：丢弃非法结构，保证 groups[gid] = {users, intimacy, counts, rpg}。
 
     user 记录整条原样保留 —— gift 的偷窃字段、rpg 的经验/精力等都挂在 user 内，天然持久化。
     """
@@ -61,10 +61,12 @@ def _normalize_data(raw: object) -> dict:
             users = group.get("users") if isinstance(group.get("users"), dict) else {}
             intimacy = group.get("intimacy") if isinstance(group.get("intimacy"), dict) else {}
             counts = group.get("counts") if isinstance(group.get("counts"), dict) else {}
+            rpg = group.get("rpg") if isinstance(group.get("rpg"), dict) else {}
             data["groups"][str(gid)] = {
                 "users": {str(uid): rec for uid, rec in users.items() if isinstance(rec, dict)},
                 "intimacy": {str(k): int(v) for k, v in intimacy.items() if isinstance(v, (int, float))},
                 "counts": {str(k): int(v) for k, v in counts.items() if isinstance(v, (int, float))},
+                "rpg": rpg,
             }
     return data
 
@@ -106,6 +108,7 @@ def _get_group(data: dict, group_id) -> dict:
     group.setdefault("users", {})
     group.setdefault("intimacy", {})
     group.setdefault("counts", {})
+    group.setdefault("rpg", {})
     return group
 
 

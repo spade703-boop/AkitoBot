@@ -5,6 +5,6 @@
 - reload_rpg_config：供 core.data.reload_assets 热重载。
 """
 
-from . import character, fortune, hunt, inventory, smith, team  # noqa: F401  导入即注册命令/钩子
+from . import boss, character, fortune, hunt, inventory, smith, team  # noqa: F401  导入即注册命令/钩子
 from .config import reload_rpg_config  # noqa: F401  供 core.data.reload_assets 调用
 from .fortune import on_signin  # noqa: F401  供签到钩子（已自动注册到 game_store）
