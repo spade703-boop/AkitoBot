@@ -25,7 +25,15 @@ DEFAULT_RPG_CONFIG: dict = {
     # ---- 等级曲线：升到 L 级累计需 base*(L-1)*L/2 经验 ----
     "level_curve": {"base": 100},
     # ---- 今日装备：战力 = base + 等级*per_level + rand(0,var) + 强化次数*forge.step（战力为隐藏值，不外显）----
-    "equip": {"base": 10, "per_level": 5, "var": 6, "rebuy_cost": 100, "rebuy_points_mult": 0.5, "rebuy_max_per_day": 1},
+    "equip": {
+        "base": 10,
+        "per_level": 5,
+        "var": 6,
+        "rebuy_cost": 100,
+        "rebuy_points_mult": 0.5,
+        "rebuy_exp_mult": 0.5,
+        "rebuy_max_per_day": 1,
+    },
     # ---- 强化（积分出口）：优先按 costs 分段收费；未配时回退到 cost_base*n。+step 战力，每日最多 max_per_day 次，次日重置 ----
     "forge": {"cost_base": 100, "costs": [30, 60, 90], "step": 6, "max_per_day": 3},
     # ---- 隐藏运势：签到暗掷，仅经 combat_factor / drop_factor 影响打怪（不外显）----
@@ -96,14 +104,18 @@ DEFAULT_RPG_CONFIG: dict = {
         "activity_window_days": 7,
         "activity_min_users": 3,
         "activity_scale_cap": 12,
+        "hp_scale_extra_rate": 0.45,
+        "hp_scale_max": 28,
+        "reward_scale_extra_rate": 0.15,
+        "reward_scale_max": 16,
         "hp_factor": 1.0,
         "damage_factor_min": 0.92,
         "damage_factor_max": 1.08,
         "rewards": {
-            "exp_fixed": 20,
+            "exp_fixed": 12,
             "exp_pool_per_scale": 60,
-            "points_fixed": 5,
-            "points_pool_per_scale": 16,
+            "points_fixed": 2,
+            "points_pool_per_scale": 8,
         },
         "boss_names": [
             "赤鳞灾龙",
@@ -176,7 +188,7 @@ DEFAULT_RPG_CONFIG: dict = {
         "hunt_exp_buffed": ["✨ 双倍经验卡起效，这次经验翻倍。"],
         "hunt_loot": ["📦 掉落到手：{loot}。"],
         "forge_ok": ["🔨 强化好了。今日装备更稳了（已强化 ×{forge}，花费 {cost} 积分）。"],
-        "rebuy_ok": ["🛡️ 替换装备已就位，花了 {cost} 积分。不过这套是临时凑的，打怪积分会少一点。"],
+        "rebuy_ok": ["🛡️ 替换装备已就位，花了 {cost} 积分。不过这套是临时凑的，打怪经验和积分都会减半。"],
         "use_exp_buff": ["📖 【{name}】用了。下次打怪经验 ×{mult}。"],
         "use_exp_grant": ["📖 【{name}】用了。经验 +{amount}。"],
         # 组队（{a}{b}=真@；{name}{exp}{points}{loot}{levelup}{b_name}=文本）
@@ -217,6 +229,8 @@ DEFAULT_RPG_CONFIG: dict = {
         "world_boss_status_rank": ["· 当前贡献："],
         "world_boss_status_entry": ["{rank}. {name}　{damage} 伤害"],
         "world_boss_status_hint": ["· 指令：攻击世界BOSS / 组队世界BOSS@某人 / 强化世界BOSS装备"],
+        "world_boss_force_opened": ["🛠️ 已强制开启世界BOSS测试。"],
+        "world_boss_force_exists": ["🛠️ 当前已经有世界BOSS了，直接看现在这只。"],
         "world_boss_attack": ["{a} 对【{monster}】造成了 {damage} 点伤害。剩余生命 {hp}/{max_hp}。"],
         "world_boss_attack_kill": ["{a} 对【{monster}】造成了 {damage} 点伤害，完成了最后一击。"],
         "world_boss_team_attack": [

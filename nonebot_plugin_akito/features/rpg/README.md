@@ -26,8 +26,9 @@
 | `攻击世界BOSS` | 只要今天签到过，就会为你生成一套临时世界BOSS装备；每只 BOSS 每人可出手 1 次，返回本次精确伤害 |
 | `组队世界BOSS@某人` | 邀请 1 名已签到群友双人挑战世界 BOSS；成功则双方分别结算伤害并吃到小额协作伤害加成，失败则退化为发起人单打 |
 | `强化世界BOSS装备` | 世界 BOSS 出现后，可单独强化这套临时装备；与普通今日装备分开计算，同样是 `[30,60,90]` 三段、最多 3 次 |
+| `强制开启世界BOSS` | 仅超管；无视概率和活跃人数门槛，立刻在本群刷出一只世界 BOSS；若今天已有 BOSS，则只返回当前状态 |
 | `强化今日装备` | 花积分把今天装备提一提；分段收费 `[30,60,90]`，每日限 3 次，次日重置 |
-| `购买装备` | 装备损坏后花 100 积分买一套替换装（每天限 1 次，打怪积分减半） |
+| `购买装备` | 装备损坏后花 100 积分买一套替换装（每天限 1 次，打怪经验和积分减半） |
 | `重置RPG功能` | 仅超管；给今天签到过的玩家重发普通今日装备，不改运势、连签和世界 BOSS 状态 |
 | `我的角色` | 看等级/称号/战绩/装备状态/积分/背包，战力为隐藏值不显示 |
 | `群排行榜` | 本群冒险者经验 Top 10，纯文字不 @ 不出图 |
@@ -37,7 +38,7 @@
 
 野怪/道具掉落与数值见 `data/content/rpg_config.json`，改完发 `重载配置` 即热更（无需重启）。
 低等级遭遇分段由 `combat.encounter_brackets` 控制；`monsters[*].weight` 只在分段缺失或非法时作为回退。
-世界 BOSS 也走同一份配置：当前默认 `0.1%` 概率触发，强度按近 7 日活跃签到人数缩放，奖励只有经验和积分，不计入普通战绩。
+世界 BOSS 也走同一份配置：当前默认 `0.1%` 概率触发，强度按近 7 日活跃签到人数缩放；12 人后血量继续软扩容，奖励扩容更慢。奖励只有经验和积分，不计入普通战绩。
 普通打怪和世界 BOSS 是两条独立线：普通装备是否已损坏，不影响你打世界 BOSS；每只 BOSS 会给每个已签到玩家单独记录一套临时装备与 1 次出手机会。
 
 ---
@@ -53,7 +54,7 @@ features/rpg/
 ├── player.py                 经验→等级派生；称号派生 `_title_of`；今日装备 helper；_combat_power；群校验 _resolve_group
 ├── fortune.py                隐藏运势掷取（含连签保底 / 大凶转大吉修正）+ 签到钩子 on_signin（暗掷运势 + 发经验[含连签] + 发今日装备）
 ├── hunt.py                   `今日打怪` 指令 + 战斗结算（精英 `_pick_encounter` / 今日增益 `_today_buff` / 单刷 `_settle_solo` / 组队合力 `_settle_coop` / 发奖 `_apply_rewards` 共用）
-├── boss.py                   世界 BOSS 刷出 / 查询 / 独立临时装备的单人攻击 / 双人攻击 / 贡献结算
+├── boss.py                   世界 BOSS 刷出 / 强制开启 / 查询 / 独立临时装备的单人攻击 / 双人攻击 / 贡献结算
 ├── team.py                   `组队@某人` 指令：羁绊定成功率、失败退化单刷（复用 hunt 结算）
 ├── smith.py                  `强化今日装备` / `强化世界BOSS装备` / `购买装备` / `重置RPG功能`
 ├── inventory.py              `背包` / `使用` 指令 + 道具效果 + 打怪掉落 helper
@@ -69,7 +70,7 @@ features/rpg/
 - 签到：`gift.签到` →（持锁）`run_signin_hooks` → `fortune.on_signin` → `player._grant_equip`（发今日装备）。
 - 打怪：`hunt` → `player._combat_power`（今日装备战力）+ `fortune` 运势系数 + `inventory._roll_drops/_add_item`（掉落）+ 少量积分 → `_maybe_spawn_world_boss_lines`（低概率刷出世界 BOSS）。
 - 组队：`team` → `game_store._get_intimacy` + `gift._bond_level`（定成功率）→ `hunt._settle_coop`（成）/ `hunt._settle_solo`（败，单刷）。
-- 世界 BOSS：`boss` 读取 `group["rpg"]["world_boss"]` → 为参与者懒创建独立临时装备记录 `participants[uid]` → 单人或双人计算本次伤害 → 更新贡献榜和剩余生命 → 击杀时按贡献发经验 / 积分并清掉群级状态。
+- 世界 BOSS：`boss` 读取 `group["rpg"]["world_boss"]` → 近 7 日活跃人数先映射成血量规模 `scale_count`，再单独映射成奖励规模 `reward_scale_count` → 为参与者懒创建独立临时装备记录 `participants[uid]` → 单人或双人计算本次伤害 → 更新贡献榜和剩余生命 → 击杀时按贡献发经验 / 积分并清掉群级状态。
 
 **玩家与群数据**（存于 `gift_data.json`，与送礼共用）：
 - 共享：`points`（积分）、`display_name` 等（送礼系统维护）。

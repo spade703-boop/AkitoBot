@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
+import math
 import random
 
 from nonebot import on_command
@@ -32,6 +33,16 @@ from .player import _consume_equip, _ensure_player, _equip_power, _level_of, _re
 def _world_boss_cfg() -> dict:
     cfg = _cfg("world_boss", {})
     return cfg if isinstance(cfg, dict) else {}
+
+
+def _soft_scale_count(active_count: int, *, base_cap: int, extra_rate: float, max_cap: int) -> int:
+    active_count = max(0, int(active_count))
+    base_cap = max(1, int(base_cap))
+    if active_count <= base_cap:
+        return active_count
+    extra_rate = max(0.0, float(extra_rate))
+    max_cap = max(base_cap, int(max_cap))
+    return min(max_cap, base_cap + math.ceil((active_count - base_cap) * extra_rate))
 
 
 def _team_success_rate(bond_level: int) -> float:
@@ -123,34 +134,84 @@ def _world_boss_snapshot(group: dict, today: str) -> dict:
     active_ids = _recent_active_user_ids(group, today)
     active_count = len(active_ids)
     min_users = max(1, int(cfg.get("activity_min_users", 3)))
-    cap = max(min_users, int(cfg.get("activity_scale_cap", 12)))
+    base_cap = max(min_users, int(cfg.get("activity_scale_cap", 12)))
     if active_count < min_users:
         return {
             "spawnable": False,
             "recent_active_count": active_count,
-            "scale_count": min(active_count, cap),
+            "scale_count": min(active_count, base_cap),
+            "reward_scale_count": min(active_count, base_cap),
             "avg_level": 1,
             "avg_power": 1,
             "max_hp": 1,
         }
 
-    levels: list[int] = []
-    powers: list[int] = []
-    for uid in active_ids:
-        rec = group.get("users", {}).get(uid, {})
-        if not isinstance(rec, dict):
-            continue
-        levels.append(_level_of(int(rec.get("exp", 0))))
-        powers.append(_expected_daily_power(rec))
-    avg_level = max(1, round(sum(levels) / len(levels))) if levels else 1
-    avg_power = max(1, round(sum(powers) / len(powers))) if powers else 1
-    scale_count = min(active_count, cap)
+    avg_level, avg_power = _snapshot_averages(group, active_ids)
+    scale_count = _soft_scale_count(
+        active_count,
+        base_cap=base_cap,
+        extra_rate=float(cfg.get("hp_scale_extra_rate", 0.0)),
+        max_cap=int(cfg.get("hp_scale_max", base_cap)),
+    )
+    reward_scale_count = _soft_scale_count(
+        active_count,
+        base_cap=base_cap,
+        extra_rate=float(cfg.get("reward_scale_extra_rate", 0.0)),
+        max_cap=int(cfg.get("reward_scale_max", base_cap)),
+    )
     hp_factor = float(cfg.get("hp_factor", 1.0))
     max_hp = max(1, round(avg_power * scale_count * hp_factor))
     return {
         "spawnable": True,
         "recent_active_count": active_count,
         "scale_count": scale_count,
+        "reward_scale_count": reward_scale_count,
+        "avg_level": avg_level,
+        "avg_power": avg_power,
+        "max_hp": max_hp,
+    }
+
+
+def _snapshot_averages(group: dict, user_ids: list[str]) -> tuple[int, int]:
+    levels: list[int] = []
+    powers: list[int] = []
+    for uid in user_ids:
+        rec = group.get("users", {}).get(uid, {})
+        if not isinstance(rec, dict):
+            continue
+        levels.append(_level_of(int(rec.get("exp", 0))))
+        powers.append(_expected_daily_power(rec))
+    avg_level = max(1, round(sum(levels) / len(levels))) if levels else 1
+    avg_power = max(1, round(sum(powers) / len(powers))) if powers else _expected_daily_power({})
+    return avg_level, avg_power
+
+
+def _force_world_boss_snapshot(group: dict, today: str) -> dict:
+    cfg = _world_boss_cfg()
+    active_ids = _recent_active_user_ids(group, today)
+    active_count = len(active_ids)
+    base_cap = max(1, int(cfg.get("activity_scale_cap", 12)))
+    seeded_count = max(active_count, 1)
+    avg_level, avg_power = _snapshot_averages(group, active_ids)
+    scale_count = _soft_scale_count(
+        seeded_count,
+        base_cap=base_cap,
+        extra_rate=float(cfg.get("hp_scale_extra_rate", 0.0)),
+        max_cap=int(cfg.get("hp_scale_max", base_cap)),
+    )
+    reward_scale_count = _soft_scale_count(
+        seeded_count,
+        base_cap=base_cap,
+        extra_rate=float(cfg.get("reward_scale_extra_rate", 0.0)),
+        max_cap=int(cfg.get("reward_scale_max", base_cap)),
+    )
+    hp_factor = float(cfg.get("hp_factor", 1.0))
+    max_hp = max(1, round(avg_power * scale_count * hp_factor))
+    return {
+        "spawnable": True,
+        "recent_active_count": active_count,
+        "scale_count": scale_count,
+        "reward_scale_count": reward_scale_count,
         "avg_level": avg_level,
         "avg_power": avg_power,
         "max_hp": max_hp,
@@ -171,6 +232,7 @@ def _spawn_world_boss(group: dict, today: str, user_id: str, rng=random, snapsho
         "hp": int(snap["max_hp"]),
         "recent_active_count": int(snap["recent_active_count"]),
         "scale_count": int(snap["scale_count"]),
+        "reward_scale_count": int(snap.get("reward_scale_count", snap["scale_count"])),
         "avg_level": int(snap["avg_level"]),
         "avg_power": int(snap["avg_power"]),
         "contributors": {},
@@ -317,11 +379,11 @@ def _world_boss_kill_lines(group: dict, boss: dict) -> list[str]:
         _rpg_state(group).pop("world_boss", None)
         return lines
 
-    scale_count = max(1, int(boss.get("scale_count", 1)))
-    exp_pool = max(0, int(rewards.get("exp_pool_per_scale", 60)) * scale_count)
-    points_pool = max(0, int(rewards.get("points_pool_per_scale", 8)) * scale_count)
-    exp_fixed = max(0, int(rewards.get("exp_fixed", 20)))
-    points_fixed = max(0, int(rewards.get("points_fixed", 3)))
+    reward_scale_count = max(1, int(boss.get("reward_scale_count", boss.get("scale_count", 1))))
+    exp_pool = max(0, int(rewards.get("exp_pool_per_scale", 60)) * reward_scale_count)
+    points_pool = max(0, int(rewards.get("points_pool_per_scale", 8)) * reward_scale_count)
+    exp_fixed = max(0, int(rewards.get("exp_fixed", 12)))
+    points_fixed = max(0, int(rewards.get("points_fixed", 2)))
     exp_alloc = _allocate_exact(exp_pool, contributors)
     points_alloc = _allocate_exact(points_pool, contributors)
 
@@ -428,6 +490,43 @@ async def _(event: Event, args: Message = CommandArg()):
         lines = _world_boss_status_lines(group, today)
 
     await world_boss_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
+
+
+force_world_boss_cmd = on_command("强制开启世界BOSS", priority=5, block=True)
+
+
+@force_world_boss_cmd.handle()
+async def _(event: Event, args: Message = CommandArg()):
+    if str(event.get_user_id()) != SUPERUSER_QQ:
+        return
+
+    group_id, rejection = _resolve_group(event)
+    if rejection:
+        await force_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
+    if group_id is None:
+        return
+
+    if args and args.extract_plain_text().strip():
+        return
+
+    today = _today_str()
+    async with LOCK:
+        data = _load_data()
+        group = _get_group(data, group_id)
+        current = _active_world_boss(group, today)
+        if current:
+            lines = [_line("world_boss_force_exists"), *_world_boss_status_lines(group, today)]
+        else:
+            spawned = _spawn_world_boss(
+                group,
+                today,
+                event.get_user_id(),
+                rng=random,
+                snapshot=_force_world_boss_snapshot(group, today),
+            )
+            _save_data(data)
+            lines = [_line("world_boss_force_opened"), *_world_boss_spawn_lines(spawned)]
+    await force_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
 
 
 attack_world_boss_cmd = on_command("攻击世界BOSS", priority=5, block=True)

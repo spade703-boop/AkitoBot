@@ -223,6 +223,11 @@ def _challenge_points(win: bool, user: dict) -> int:
     return pts
 
 
+def _rebuy_exp_mult() -> float:
+    ecfg = _cfg("equip", {})
+    return float(ecfg.get("rebuy_exp_mult", ecfg.get("rebuy_points_mult", 0.5)))
+
+
 def _apply_rewards(user: dict, today: str, *, win: bool, monster: dict, event_key: str = "",
                    exp_bonus: float = 0.0, exp_mult: float = 1.0, drop_mult: float = 1.0) -> dict:
     """给单个玩家结算（经验[含看破/双倍卡/组队加成/精英/今日增益] + 掉落 + 积分）并消耗其今日装备，记一次战绩。
@@ -246,6 +251,8 @@ def _apply_rewards(user: dict, today: str, *, win: bool, monster: dict, event_ke
         exp_gain *= int(user.get("exp_buff_mult", 2))
         buffed = True
         user["exp_buff_uses"] = int(user["exp_buff_uses"]) - 1
+    if user.get("equip_rebought"):
+        exp_gain = int(exp_gain * _rebuy_exp_mult())
     user["exp"] = old_exp + exp_gain
 
     cc = _cfg("challenge", {})

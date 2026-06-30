@@ -458,6 +458,7 @@ def _world_boss_record(**extra):
         "hp": 120,
         "recent_active_count": 6,
         "scale_count": 6,
+        "reward_scale_count": 6,
         "avg_level": 2,
         "avg_power": 18,
         "contributors": {},
@@ -686,9 +687,27 @@ def test_challenge_points_halved_for_rebought_equip():
     assert hunt._challenge_points(False, {}) == lp
 
 
+def test_apply_rewards_halves_exp_for_rebought_equip():
+    equip_cfg = rpg_config._cfg("equip", {})
+    mult = float(equip_cfg.get("rebuy_exp_mult", equip_cfg.get("rebuy_points_mult", 0.5)))
+    user = _equipped_user(exp=0, points=0, equip_rebought=True)
+    out = hunt._apply_rewards(user, "2026-06-22", win=True, monster={"name": "史莱姆", "drops": []})
+    assert out["exp_gain"] == int(hunt._challenge_exp(True, 1) * mult)
+    assert user["exp"] == out["exp_gain"]
+
+
 def test_rebuy_equip_success(monkeypatch):
     from nonebot_plugin_akito.features.rpg import smith as _s
-    cf = {"equip": {"base": 10, "per_level": 5, "var": 6, "rebuy_cost": 100, "rebuy_points_mult": 0.5}}
+    cf = {
+        "equip": {
+            "base": 10,
+            "per_level": 5,
+            "var": 6,
+            "rebuy_cost": 100,
+            "rebuy_points_mult": 0.5,
+            "rebuy_exp_mult": 0.5,
+        }
+    }
     orig = _s._cfg
     monkeypatch.setattr(_s, "_cfg", lambda key, default=None: cf.get(key, orig(key, default)))
     u = {"equip_date": "D", "equip_used": True, "points": 300, "equip_forge": 2, "equip_rebought": False}
@@ -1173,7 +1192,37 @@ def test_world_boss_snapshot_uses_recent_active_not_today():
 
     assert snapshot["recent_active_count"] == 8
     assert snapshot["scale_count"] == 8
-    assert snapshot["max_hp"] == 18 * 8
+    assert snapshot["reward_scale_count"] == 8
+    assert snapshot["max_hp"] == boss._expected_daily_power({}) * 8
+
+
+def test_world_boss_snapshot_soft_scales_large_group():
+    cfg = rpg_config._cfg("world_boss", {})
+    group = game_store._new_group()
+    for idx in range(1, 48):
+        group["users"][f"u{idx}"] = {"exp": 0, "last_sign_in": "2026-06-22", "signin_last_date": "2026-06-22"}
+
+    snapshot = boss._world_boss_snapshot(group, "2026-06-22")
+    base_cap = int(cfg.get("activity_scale_cap", 12))
+    expected_hp_scale = boss._soft_scale_count(
+        47,
+        base_cap=base_cap,
+        extra_rate=float(cfg.get("hp_scale_extra_rate", 0.0)),
+        max_cap=int(cfg.get("hp_scale_max", base_cap)),
+    )
+    expected_reward_scale = boss._soft_scale_count(
+        47,
+        base_cap=base_cap,
+        extra_rate=float(cfg.get("reward_scale_extra_rate", 0.0)),
+        max_cap=int(cfg.get("reward_scale_max", base_cap)),
+    )
+
+    assert snapshot["recent_active_count"] == 47
+    assert snapshot["scale_count"] == expected_hp_scale
+    assert snapshot["reward_scale_count"] == expected_reward_scale
+    assert snapshot["max_hp"] == round(
+        boss._expected_daily_power({}) * expected_hp_scale * float(cfg.get("hp_factor", 1.0))
+    )
 
 
 def test_world_boss_does_not_spawn_when_recent_active_under_min():
@@ -1251,6 +1300,41 @@ async def test_world_boss_status_shows_hp_and_contributors(monkeypatch):
     assert "深渊巨像" in result
     assert "80/120" in result
     assert "阿一" in result and "45" in result
+
+
+@pytest.mark.asyncio
+async def test_force_world_boss_cmd_spawns_without_recent_activity(monkeypatch):
+    state = _patch_io(monkeypatch, boss, store={"groups": {"1001": {"users": {}}}})
+    monkeypatch.setattr(boss.random, "choice", lambda seq: seq[0])
+
+    with pytest.raises(FinishedException) as exc:
+        await boss.force_world_boss_cmd.handlers[0](Event(group_id=1001, user_id=boss.SUPERUSER_QQ))
+
+    wb = state["groups"]["1001"]["rpg"]["world_boss"]
+    result = str(exc.value.result)
+    assert wb["recent_active_count"] == 0
+    assert wb["scale_count"] == 1
+    assert wb["reward_scale_count"] == 1
+    assert wb["hp"] == wb["max_hp"] and wb["max_hp"] > 1
+    assert "已强制开启世界BOSS测试" in result
+    assert wb["name"] in result
+
+
+@pytest.mark.asyncio
+async def test_force_world_boss_cmd_keeps_existing_boss(monkeypatch):
+    state = _patch_io(monkeypatch, boss, store={"groups": {"1001": {
+        "users": {},
+        "rpg": {"world_boss": _world_boss_record(hp=80)},
+    }}})
+    before = deepcopy(state["groups"]["1001"]["rpg"]["world_boss"])
+
+    with pytest.raises(FinishedException) as exc:
+        await boss.force_world_boss_cmd.handlers[0](Event(group_id=1001, user_id=boss.SUPERUSER_QQ))
+
+    result = str(exc.value.result)
+    assert state["groups"]["1001"]["rpg"]["world_boss"] == before
+    assert "当前已经有世界BOSS了" in result
+    assert "80/120" in result
 
 
 @pytest.mark.asyncio
@@ -1379,7 +1463,7 @@ async def test_world_boss_kill_settlement_preserves_reward_pool_and_battle_stats
             "u1": _equipped_user(hunt_total=7, hunt_wins=3),
             "u2": {"exp": 0, "points": 0, "hunt_total": 2, "hunt_wins": 1},
         },
-        "rpg": {"world_boss": _world_boss_record(max_hp=12, hp=2, scale_count=3, contributors={"u1": 4, "u2": 6})},
+        "rpg": {"world_boss": _world_boss_record(max_hp=12, hp=2, scale_count=3, reward_scale_count=3, contributors={"u1": 4, "u2": 6})},
     }}}
     state = _patch_io(monkeypatch, boss, store=store)
     monkeypatch.setattr(boss.random, "randint", lambda _a, _b: 0)
@@ -1389,9 +1473,17 @@ async def test_world_boss_kill_settlement_preserves_reward_pool_and_battle_stats
         await boss.attack_world_boss_cmd.handlers[0](Event(group_id=1001, user_id="u1"))
 
     users = state["groups"]["1001"]["users"]
+    rewards = rpg_config._cfg("world_boss", {}).get("rewards", {})
+    exp_pool = int(rewards.get("exp_pool_per_scale", 60)) * 3
+    points_pool = int(rewards.get("points_pool_per_scale", 8)) * 3
+    exp_fixed = int(rewards.get("exp_fixed", 12))
+    points_fixed = int(rewards.get("points_fixed", 2))
+    alloc = boss._allocate_exact(exp_pool, {"u1": 6, "u2": 6})
+    points_alloc = boss._allocate_exact(points_pool, {"u1": 6, "u2": 6})
     assert "world_boss" not in state["groups"]["1001"]["rpg"]
-    assert users["u1"]["exp"] == 110 and users["u2"]["exp"] == 110
-    assert users["u1"]["points"] == 15 and users["u2"]["points"] == 15
+    assert users["u1"]["exp"] == exp_fixed + alloc["u1"] and users["u2"]["exp"] == exp_fixed + alloc["u2"]
+    assert users["u1"]["points"] == points_fixed + points_alloc["u1"]
+    assert users["u2"]["points"] == points_fixed + points_alloc["u2"]
     assert users["u1"]["hunt_total"] == 7 and users["u1"]["hunt_wins"] == 3
     assert users["u2"]["hunt_total"] == 2 and users["u2"]["hunt_wins"] == 1
     assert "按贡献结算奖励" in str(exc.value.result)
