@@ -30,6 +30,7 @@
 | `冒险帮助` | 列出以上所有指令 |
 
 野怪/道具掉落与数值见 `data/content/rpg_config.json`，改完发 `重载配置` 即热更（无需重启）。
+低等级遭遇分段由 `combat.encounter_brackets` 控制；`monsters[*].weight` 只在分段缺失或非法时作为回退。
 
 ---
 

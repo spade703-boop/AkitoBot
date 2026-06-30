@@ -37,24 +37,41 @@ def _monsters() -> list[dict]:
     return monsters if isinstance(monsters, list) and monsters else []
 
 
-def _encounter_weights(level: int) -> list[int]:
-    """按等级收窄早期怪池：新手先少撞高难怪，后期回到完整分布。6 档怪对应 6 元权重。"""
-    if level <= 2:
-        return [55, 45, 0, 0, 0, 0]
-    if level <= 4:
-        return [45, 35, 20, 0, 0, 0]
-    if level <= 7:
-        return [35, 30, 20, 15, 0, 0]
-    if level <= 10:
-        return [30, 25, 20, 15, 10, 0]
-    return [25, 20, 20, 15, 10, 10]
+def _monster_weights(pool: list[dict]) -> list[int]:
+    return [max(0, int(m.get("weight", 0))) for m in pool]
+
+
+def _encounter_weights(level: int, monster_count: int) -> list[int] | None:
+    """按等级读取配置里的遭遇权重分段；缺失或非法时返回 None 交给怪物自带 weight 兜底。"""
+    brackets = _cfg("combat", {}).get("encounter_brackets", [])
+    if not isinstance(brackets, list):
+        return None
+    for bracket in brackets:
+        if not isinstance(bracket, dict):
+            return None
+        max_level = bracket.get("max_level")
+        if max_level is not None:
+            try:
+                max_level = int(max_level)
+            except (TypeError, ValueError):
+                return None
+            if level > max_level:
+                continue
+        weights = bracket.get("weights")
+        if not isinstance(weights, list) or len(weights) != monster_count:
+            return None
+        try:
+            return [max(0, int(weight)) for weight in weights]
+        except (TypeError, ValueError):
+            return None
+    return None
 
 
 def _pick_monster(level: int, rng=random) -> dict:
     pool = _monsters()
-    weights = [max(0, int(m.get("weight", 0))) for m in pool]
-    if len(pool) == 6:
-        weights = _encounter_weights(level)
+    if not pool:
+        return {"name": "野怪", "power_req": 10}
+    weights = _encounter_weights(level, len(pool)) or _monster_weights(pool)
     if not pool or sum(weights) <= 0:
         return pool[0] if pool else {"name": "野怪", "power_req": 10}
     return rng.choices(pool, weights=weights, k=1)[0]
@@ -129,6 +146,28 @@ def _roll_hunt_event(margin: float, rng=random) -> str:
         key = "slip"
     cands = {key: int(events.get(key, {}).get("weight", 0)), "": int(ccfg.get("no_event_weight", 60))}
     return _weighted_choice(cands, rng)
+
+
+def _roll_coop_event(rng=random) -> str:
+    """组队事件单独抽取；可返回空串表示本次只是普通配合。"""
+    tcfg = _cfg("team", {})
+    events = tcfg.get("events", {})
+    if not isinstance(events, dict):
+        return ""
+    cands = {key: int(spec.get("weight", 0)) for key, spec in events.items() if isinstance(spec, dict)}
+    cands[""] = int(tcfg.get("no_event_weight", 60))
+    if sum(cands.values()) <= 0:
+        return ""
+    return _weighted_choice(cands, rng)
+
+
+def _coop_event_spec(event_key: str) -> dict:
+    """读取组队事件配置，缺失时回退为空配置。"""
+    events = _cfg("team", {}).get("events", {})
+    if not isinstance(events, dict):
+        return {}
+    spec = events.get(event_key, {})
+    return spec if isinstance(spec, dict) else {}
 
 
 def _fortune_combat_factor(user: dict, today: str) -> float:
@@ -260,10 +299,11 @@ def _settle_solo(user: dict, today: str) -> dict:
     return {**res, **rew, "monster": monster, "event": event_key, "elite": is_elite, "buff": buff}
 
 
-def _settle_coop(b: dict, a: dict, today: str, *, exp_bonus: float = 0.0) -> dict:
+def _settle_coop(b: dict, a: dict, today: str, *, exp_bonus: float = 0.0, drop_bonus: float = 0.0) -> dict:
     """组队合力结算：合力战力（B+A）打一只怪（含精英）、胜负共享；双方各按自身等级/运势/今日增益发奖、各自消耗装备。
 
-    返回 {win, monster, elite, buff, b: 奖励明细, a: 奖励明细}（不落库/不播报）。合力更易赢；不叠加随机事件/运势系数（保持简单）。
+    返回 {win, monster, elite, buff, team_event, exp_bonus, drop_bonus, b, a}。
+    组队会额外结算平均运势、协作事件，以及随羁绊提升的经验/掉落加成。
     """
     ccfg = _cfg("combat", {})
     buff = _today_buff()
@@ -271,17 +311,45 @@ def _settle_coop(b: dict, a: dict, today: str, *, exp_bonus: float = 0.0) -> dic
     monster, is_elite = _pick_encounter(level)
     eff = _eff_monster(monster, is_elite)
     cp = _combat_power(b) + _combat_power(a)
+    margin = cp / max(1, int(eff.get("power_req", 1)))
+    team_event = _roll_coop_event()
+    event_spec = _coop_event_spec(team_event)
+    fortune_factor = (_fortune_combat_factor(b, today) + _fortune_combat_factor(a, today)) / 2.0
     power_factor = random.uniform(float(ccfg.get("factor_min", 0.8)), float(ccfg.get("factor_max", 1.2)))
-    res = resolve_hunt(cp, eff, power_factor=power_factor)
+    if margin > 0 and event_spec.get("power_mult") is not None:
+        power_factor *= float(event_spec.get("power_mult", 1.0))
+    res = resolve_hunt(cp, eff, power_factor=power_factor, fortune_factor=fortune_factor)
     win = res["win"]
     exp_mult, drop_mult = _reward_mults(buff, is_elite, win)
+    exp_mult *= float(event_spec.get("exp_mult", 1.0))
+    drop_mult *= float(event_spec.get("drop_mult", 1.0))
+    drop_mult *= 1.0 + float(drop_bonus)
     return {
         "win": win,
         "monster": monster,
         "elite": is_elite,
         "buff": buff,
-        "b": _apply_rewards(b, today, win=win, monster=eff, exp_bonus=exp_bonus, exp_mult=exp_mult, drop_mult=drop_mult),
-        "a": _apply_rewards(a, today, win=win, monster=eff, exp_bonus=exp_bonus, exp_mult=exp_mult, drop_mult=drop_mult),
+        "team_event": team_event,
+        "exp_bonus": exp_bonus,
+        "drop_bonus": drop_bonus,
+        "b": _apply_rewards(
+            b,
+            today,
+            win=win,
+            monster=eff,
+            exp_bonus=exp_bonus,
+            exp_mult=exp_mult,
+            drop_mult=drop_mult,
+        ),
+        "a": _apply_rewards(
+            a,
+            today,
+            win=win,
+            monster=eff,
+            exp_bonus=exp_bonus,
+            exp_mult=exp_mult,
+            drop_mult=drop_mult,
+        ),
     }
 
 
@@ -290,7 +358,10 @@ def _hunt_result_lines(out: dict) -> list:
     m = out["monster"]
     lines: list = []
     if out.get("event"):
-        lines.append(_render_with_ats(random.choice(_copy(f"event_{out['event']}")), {"monster": m.get("name", "")}))
+        copy_table = _cfg("copy", {})
+        result_key = f"event_{out['event']}_{'win' if out['win'] else 'lose'}"
+        event_key = result_key if isinstance(copy_table, dict) and copy_table.get(result_key) else f"event_{out['event']}"
+        lines.append(_render_with_ats(random.choice(_copy(event_key)), {"monster": m.get("name", "")}))
     lines.append(_line("hunt_win" if out["win"] else "hunt_lose",
                        monster=m.get("name", ""), exp=out["exp_gain"], points=out["points_gain"]))
     if out.get("exp_buffed"):

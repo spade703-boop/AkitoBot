@@ -51,12 +51,20 @@ DEFAULT_RPG_CONFIG: dict = {
         "fortune_affects_hunt": True,
         "crush_margin": 1.5,
         "weak_margin": 0.8,
-        "no_event_weight": 65,
+        "no_event_weight": 45,
         "events": {
-            "slip":      {"weight": 18, "power_mult": 0.82},  # 脚底打滑：有效战力 ×0.82
-            "insight":   {"weight": 22, "exp_mult": 1.5},     # 弱点看破：胜则经验 ×1.5
-            "desperate": {"weight": 28, "power_mult": 1.45},  # 绝境爆发：有效战力 ×1.45 可翻盘
+            "slip":      {"weight": 18, "power_mult": 0.74},  # 脚底打滑：有效战力 ×0.74
+            "insight":   {"weight": 22, "exp_mult": 1.6},     # 弱点看破：胜则经验 ×1.6
+            "desperate": {"weight": 28, "power_mult": 1.60},  # 绝境爆发：有效战力 ×1.60 可翻盘
         },
+        # ---- 低等级先少撞高难怪；默认 6 档分段，若缺失/非法则回退到 monsters[*].weight ----
+        "encounter_brackets": [
+            {"max_level": 2, "weights": [55, 45, 0, 0, 0, 0]},
+            {"max_level": 4, "weights": [45, 35, 20, 0, 0, 0]},
+            {"max_level": 7, "weights": [35, 30, 20, 15, 0, 0]},
+            {"max_level": 10, "weights": [30, 25, 20, 15, 10, 0]},
+            {"max_level": None, "weights": [25, 20, 20, 15, 10, 10]},
+        ],
         # ---- 精英怪：遭遇时小概率升级，更难打（power_req×）但胜则更肥（经验/掉落×）。藏着不外显，撞上才知道 ----
         "elite": {"chance": 0.12, "power_mult": 1.6, "exp_mult": 1.8, "drop_mult": 2.0},
     },
@@ -72,6 +80,15 @@ DEFAULT_RPG_CONFIG: dict = {
         "base_success": 0.50, "per_level": 0.10,   # Lv1=50%，每升一级 +10%，Lv6 封顶 95%
         "min_success": 0.10, "max_success": 0.95,   # 封底（含负档硬拉）/ 封顶
         "exp_bonus_per_level": 0.05, "exp_bonus_max": 0.50,  # 组队经验加成：每级 +5%，封顶 +50%
+        "drop_bonus_per_level": 0.08, "drop_bonus_max": 0.40,  # 组队掉落加成：每级 +8%，封顶 +40%
+        "no_event_weight": 45,
+        "events": {
+            "focus_fire": {"weight": 18, "power_mult": 1.10, "exp_mult": 1.10},
+            "cover_route": {"weight": 16, "drop_mult": 1.35},
+            "follow_up": {"weight": 14, "exp_mult": 1.20},
+            "missed_beat": {"weight": 12, "power_mult": 0.90},
+        },
+        "fail_flavor": {"hesitate": 4, "late_reply": 3, "out_of_step": 3},
     },
     # ---- 称号：累计经验→等级→称号（纯派生、零存储，仿羁绊取档）。显示在「我的角色」与排行榜 ----
     "titles": [
@@ -122,15 +139,19 @@ DEFAULT_RPG_CONFIG: dict = {
     "copy": {
         "signin_exp": ["🗡️ 签到记上了。经验 +{exp}，今日装备也给你备好了（Lv{level}）。"],
         "hunt_encounter": [
-            "{a} 提着今天那套装备出去，正面撞上了【{monster}】。",
-            "{a} 刚出门没几步，就和【{monster}】对上了。",
+            "{a} 在野外遭遇了【{monster}】。",
+            "{a} 出发没多久，就遇上了【{monster}】。",
         ],
-        "hunt_win": ["【{monster}】解决了。经验 +{exp}、积分 +{points}（今日装备已损耗）。"],
-        "hunt_lose": ["没压住【{monster}】。经验 +{exp}、积分 +{points}（今日装备已损耗）。"],
+        "hunt_win": ["已击败【{monster}】。经验 +{exp}、积分 +{points}（今日装备已损耗）。"],
+        "hunt_lose": ["未能击败【{monster}】。经验 +{exp}、积分 +{points}（今日装备已损耗）。"],
         "levelup": ["⬆️ 等级上去了。Lv{level} → Lv{newlevel}。"],
-        "event_slip": ["💢 脚下一偏，力道没打满。"],
-        "event_insight": ["🎯 破绽看出来了，这一下打得更准。"],
-        "event_desperate": ["🔥 被逼急了，反而把状态顶上来了。"],
+        "event_slip": ["💢 行动受阻，这一击没能完全发挥。"],
+        "event_slip_win": ["💢 行动受阻，但还是成功击败了【{monster}】。"],
+        "event_slip_lose": ["💢 行动受阻，这次没能稳住局面。"],
+        "event_insight": ["🎯 看穿了【{monster}】的弱点，攻击更有效了。"],
+        "event_desperate": ["🔥 陷入苦战时强撑住了阵脚。"],
+        "event_desperate_win": ["🔥 陷入苦战时强撑住了阵脚，成功反败为胜。"],
+        "event_desperate_lose": ["🔥 即使强撑住阵脚，也还是没能扭转战局。"],
         "hunt_exp_buffed": ["✨ 双倍经验卡起效，这次经验翻倍。"],
         "hunt_loot": ["📦 掉落到手：{loot}。"],
         "forge_ok": ["🔨 强化好了。今日装备更稳了（已强化 ×{forge}，花费 {cost} 积分）。"],
@@ -138,18 +159,41 @@ DEFAULT_RPG_CONFIG: dict = {
         "use_exp_buff": ["📖 【{name}】用了。下次打怪经验 ×{mult}。"],
         "use_exp_grant": ["📖 【{name}】用了。经验 +{amount}。"],
         # 组队（{a}{b}=真@；{name}{exp}{points}{loot}{levelup}{b_name}=文本）
-        "team_win": ["🤝 {a} 把 {b} 拉上了，一起收掉了【{monster}】。"],
-        "team_lose": ["🤝 {a} 和 {b} 联手顶了一轮【{monster}】，还是差了口气。"],
+        "team_win": [
+            "🤝 {a} 与 {b} 一同出击，成功击败了【{monster}】。",
+            "🤝 {a} 和 {b} 组队作战，顺利讨伐了【{monster}】。",
+            "🤝 {a} 与 {b} 联手战斗，最终拿下了【{monster}】。",
+            "🤝 {a} 和 {b} 协力迎战，成功解决了【{monster}】。",
+        ],
+        "team_lose": [
+            "🤝 {a} 与 {b} 一同迎战【{monster}】，但还是没能取胜。",
+            "🤝 {a} 和 {b} 组队作战，可惜未能击败【{monster}】。",
+            "🤝 {a} 与 {b} 联手挑战【{monster}】，最终还是败下阵来。",
+            "🤝 {a} 和 {b} 协力作战，但这次没能拿下【{monster}】。",
+        ],
+        "team_bonus": ["✨ 协作加成：经验 +{exp_pct}% / 掉落 +{drop_pct}%。"],
+        "team_event_focus_fire": ["⚔️ 两人的攻击集中在一处，造成了更有效的打击。"],
+        "team_event_cover_route": ["🧭 一人牵制、一人搜索，额外带回了更多战利品。"],
+        "team_event_follow_up": ["🔁 前后配合顺利，追加攻击打得很完整。"],
+        "team_event_missed_beat": ["😵 配合出现偏差，这一轮没能完全发挥实力。"],
         "team_member": ["· {name}：经验 +{exp}、积分 +{points}{loot}{levelup}"],
-        "team_fail": ["{a} 想拉 {b_name} 一起上，结果没拉动，只好自己上。"],
+        "team_fail": [
+            "{a} 试着邀请 {b_name} 一起出战，但没能组队成功，只好独自前往。",
+            "{a} 想和 {b_name} 一起行动，可惜这次没能成功会合。",
+            "{a} 原本准备和 {b_name} 同行，最后还是只能自己应战。",
+            "{a} 邀请了 {b_name} 协助作战，但最终没能组成队伍。",
+        ],
+        "team_fail_event_hesitate": ["……{b_name} 似乎迟疑了一下，没能及时加入战斗。"],
+        "team_fail_event_late_reply": ["……{b_name} 赶来得稍晚，没能在战斗开始前会合。"],
+        "team_fail_event_out_of_step": ["……两人没能顺利会合，这次组队作战失败了。"],
         # 精英怪遭遇（{a}=真@；{monster}=文本）
         "hunt_encounter_elite": [
-            "{a} 这回撞上的，是精英·{monster}。",
-            "{a} 刚出门就碰上了精英·{monster}。",
+            "{a} 这次遭遇的是精英·{monster}。",
+            "{a} 刚一出发，就遇上了精英·{monster}。",
         ],
         # 连签 / 今日增益（{streak}{bonus}{buff} 为文本）
         "signin_streak": ["🔥 连签 {streak} 天，额外经验 +{bonus}。"],
-        "daily_buff": ["✨ 今天碰上「{buff}」，这一趟收获会多一点。"],
+        "daily_buff": ["✨ 今天触发了「{buff}」，这一趟的收获提高了。"],
         # 排行榜
         "rank_title": ["🏆 本群冒险排行："],
     },

@@ -172,10 +172,49 @@ def test_resolve_hunt_win_lose():
 def test_resolve_hunt_slip_and_desperate_flip():
     m = {"name": "怪", "power_req": 18}
     assert hunt.resolve_hunt(20, m, power_factor=1.0)["win"] is True
-    assert hunt.resolve_hunt(20, m, power_factor=1.0, event="slip")["win"] is False  # ×0.75=15<18
+    assert hunt.resolve_hunt(20, m, power_factor=1.0, event="slip")["win"] is False  # ×0.74=14.8<18
     big = {"name": "强怪", "power_req": 28}
     assert hunt.resolve_hunt(20, big, power_factor=1.0)["win"] is False
     assert hunt.resolve_hunt(20, big, power_factor=1.0, event="desperate")["win"] is True  # ×1.6=32≥28
+
+
+def test_hunt_result_lines_prefers_result_specific_event_copy_and_falls_back(monkeypatch):
+    copy_table = {
+        "event_slip_win": ["slip-win {monster}"],
+        "event_insight": ["insight-generic {monster}"],
+    }
+    orig_cfg = hunt._cfg
+    monkeypatch.setattr(hunt, "_cfg", lambda key, default=None: copy_table if key == "copy" else orig_cfg(key, default))
+    monkeypatch.setattr(hunt, "_copy", lambda key: copy_table.get(key, [key]))
+    monkeypatch.setattr(hunt.random, "choice", lambda seq: seq[0])
+
+    slip_lines = hunt._hunt_result_lines({
+        "monster": {"name": "slime"},
+        "event": "slip",
+        "win": True,
+        "exp_gain": 1,
+        "points_gain": 1,
+        "exp_buffed": False,
+        "drops": [],
+        "old_level": 1,
+        "new_level": 1,
+        "buff": _PLAIN_BUFF,
+    })
+    insight_lines = hunt._hunt_result_lines({
+        "monster": {"name": "goblin"},
+        "event": "insight",
+        "win": True,
+        "exp_gain": 1,
+        "points_gain": 1,
+        "exp_buffed": False,
+        "drops": [],
+        "old_level": 1,
+        "new_level": 1,
+        "buff": _PLAIN_BUFF,
+    })
+
+    assert slip_lines[0] == "slip-win slime"
+    assert insight_lines[0] == "insight-generic goblin"
 
 
 def test_challenge_exp_scales_with_level():
@@ -215,15 +254,94 @@ def test_pick_encounter_uses_stage_weights_and_elite_gate():
         def random(self):
             return self.roll
 
+    def _weights_for(level: int) -> list[int]:
+        brackets = rpg_config._cfg("combat", {}).get("encounter_brackets", [])
+        for bracket in brackets:
+            max_level = bracket.get("max_level")
+            if max_level is None or level <= int(max_level):
+                return list(bracket["weights"])
+        return []
+
     low = _CaptureRng(0.0)
     _monster, elite = hunt._pick_encounter(2, low)
-    assert low.weights == [55, 45, 0, 0, 0, 0]
+    assert low.weights == _weights_for(2)
     assert elite is False
 
     high = _CaptureRng(0.0)
     _monster, elite = hunt._pick_encounter(8, high)
-    assert high.weights == [30, 25, 20, 15, 10, 0]
+    assert high.weights == _weights_for(8)
     assert elite is True
+
+
+def test_pick_monster_uses_brackets_for_non_six_monster_pool(monkeypatch):
+    class _CaptureRng:
+        def __init__(self):
+            self.weights = []
+
+        def choices(self, seq, weights, k):
+            self.weights = list(weights)
+            return [seq[0]]
+
+    monsters = [
+        {"name": "A", "power_req": 1, "weight": 7},
+        {"name": "B", "power_req": 2, "weight": 5},
+        {"name": "C", "power_req": 3, "weight": 99},
+    ]
+    combat = {
+        "encounter_brackets": [
+            {"max_level": 2, "weights": [9, 1, 0]},
+            {"max_level": None, "weights": [1, 2, 3]},
+        ]
+    }
+    orig_cfg = hunt._cfg
+    monkeypatch.setattr(
+        hunt,
+        "_cfg",
+        lambda key, default=None: monsters if key == "monsters"
+        else combat if key == "combat"
+        else orig_cfg(key, default),
+    )
+    rng = _CaptureRng()
+
+    picked = hunt._pick_monster(2, rng)
+
+    assert picked["name"] == "A"
+    assert rng.weights == [9, 1, 0]
+
+
+@pytest.mark.parametrize("combat", [
+    {},
+    {"encounter_brackets": "oops"},
+    {"encounter_brackets": [{"max_level": None, "weights": [9, 1]}]},
+])
+def test_pick_monster_falls_back_to_monster_weights_when_brackets_unusable(monkeypatch, combat):
+    class _CaptureRng:
+        def __init__(self):
+            self.weights = []
+
+        def choices(self, seq, weights, k):
+            self.weights = list(weights)
+            return [seq[0]]
+
+    monsters = [
+        {"name": "A", "power_req": 1, "weight": 7},
+        {"name": "B", "power_req": 2, "weight": 5},
+        {"name": "C", "power_req": 3, "weight": 3},
+    ]
+    orig_cfg = hunt._cfg
+    monkeypatch.setattr(
+        hunt,
+        "_cfg",
+        lambda key, default=None: monsters if key == "monsters"
+        else combat if key == "combat"
+        else orig_cfg(key, default),
+    )
+    rng = _CaptureRng()
+
+    picked = hunt._pick_monster(2, rng)
+
+    assert picked["name"] == "A"
+    assert rng.weights == [7, 5, 3]
 
 
 # ==================== 纯逻辑：背包 / 掉落 / 道具 ====================
@@ -544,6 +662,7 @@ def test_settle_solo_rookie_bonus_only_applies_to_solo(monkeypatch):
     monkeypatch.setattr(hunt, "_pick_encounter", _pick)
     monkeypatch.setattr(hunt.random, "uniform", lambda _a, _b: 1.0)
     monkeypatch.setattr(hunt, "_roll_hunt_event", lambda margin, rng=hunt.random: "")
+    monkeypatch.setattr(hunt, "_roll_coop_event", lambda rng=hunt.random: "")
     monkeypatch.setattr(hunt, "_today_buff", lambda: _PLAIN_BUFF)
     monkeypatch.setattr(hunt, "resolve_hunt", _resolve)
     monkeypatch.setattr(hunt, "_apply_rewards", lambda *args, **kwargs: dict(reward))
@@ -576,6 +695,14 @@ def test_team_exp_bonus_scales_and_caps():
 
 # ==================== 指令：组队 ====================
 
+def test_team_drop_bonus_scales_and_caps():
+    t = rpg_config._cfg("team", {})
+    per, cap = float(t["drop_bonus_per_level"]), float(t["drop_bonus_max"])
+    assert team._team_drop_bonus(1) == 0.0
+    assert team._team_drop_bonus(3) == pytest.approx(2 * per)
+    assert team._team_drop_bonus(9999) == pytest.approx(cap)
+
+
 @pytest.mark.asyncio
 async def test_team_guards(monkeypatch):
     _patch_io(monkeypatch, team, store={"groups": {"1001": {"users": {"u1": _equipped_user()}}}})
@@ -600,6 +727,7 @@ async def test_team_success_both_rewarded(monkeypatch):
     state = _patch_io(monkeypatch, team, store=store)
     monkeypatch.setattr(team, "random", _Rng(0.0))
     _stub_hunt_rng(monkeypatch, {"name": "史莱姆", "power_req": 1, "drops": []})
+    monkeypatch.setattr(hunt, "_roll_coop_event", lambda rng=hunt.random: "focus_fire")
     with pytest.raises(FinishedException) as exc:
         await team.team_cmd.handlers[0](_bot(), _team_event("u1", "u2"))
     g = state["groups"]["1001"]["users"]
@@ -607,6 +735,7 @@ async def test_team_success_both_rewarded(monkeypatch):
     win_pts = int(rpg_config._cfg("challenge", {})["win_points"])
     assert g["u1"]["points"] == win_pts and g["u2"]["points"] == win_pts      # 双方各得积分
     assert g["u1"]["exp"] > 0 and g["u2"]["exp"] > 0
+    assert "协作加成" in str(exc.value.result)
     r = str(exc.value.result)
     assert "[at:u1]" in r and "[at:u2]" in r                                   # @ 双方
 
@@ -622,6 +751,7 @@ def test_settle_coop_uses_higher_level_for_encounter(monkeypatch):
     reward = {"exp_gain": 0, "exp_buffed": False, "drops": [], "points_gain": 0, "old_level": 1, "new_level": 1}
     monkeypatch.setattr(hunt, "_pick_encounter", _pick)
     monkeypatch.setattr(hunt.random, "uniform", lambda _a, _b: 1.0)
+    monkeypatch.setattr(hunt, "_roll_coop_event", lambda rng=hunt.random: "")
     monkeypatch.setattr(hunt, "_today_buff", lambda: _PLAIN_BUFF)
     monkeypatch.setattr(
         hunt,
@@ -641,6 +771,88 @@ def test_settle_coop_uses_higher_level_for_encounter(monkeypatch):
     assert captured["level"] == 7
 
 
+def test_settle_coop_uses_average_fortune_factor(monkeypatch):
+    captured: dict = {}
+    monster = {"name": "slime", "power_req": 1, "drops": []}
+    left = _equipped_user()
+    right = _equipped_user()
+    reward = {"exp_gain": 0, "exp_buffed": False, "drops": [], "points_gain": 0, "old_level": 1, "new_level": 1}
+
+    monkeypatch.setattr(hunt, "_pick_encounter", lambda level, rng=hunt.random: (monster, False))
+    monkeypatch.setattr(hunt.random, "uniform", lambda _a, _b: 1.0)
+    monkeypatch.setattr(hunt, "_roll_coop_event", lambda rng=hunt.random: "")
+    monkeypatch.setattr(hunt, "_today_buff", lambda: _PLAIN_BUFF)
+    monkeypatch.setattr(hunt, "_fortune_combat_factor", lambda user, today: 1.4 if user is left else 0.8)
+    monkeypatch.setattr(
+        hunt,
+        "resolve_hunt",
+        lambda combat_power, eff_monster, *, power_factor, fortune_factor=1.0, event=None:
+        (captured.update({"fortune_factor": fortune_factor}) or {
+            "win": True,
+            "effective": int(combat_power * power_factor * fortune_factor),
+            "event": event or "",
+            "monster": eff_monster,
+        }),
+    )
+    monkeypatch.setattr(hunt, "_apply_rewards", lambda *args, **kwargs: dict(reward))
+
+    hunt._settle_coop(left, right, "D")
+
+    assert captured["fortune_factor"] == pytest.approx(1.1)
+
+
+@pytest.mark.parametrize(
+    ("event_key", "expected_power", "expected_exp_mult", "expected_drop_mult"),
+    [
+        ("focus_fire", 1.10, 1.10, 1.25),
+        ("cover_route", 1.00, 1.00, 1.35 * 1.25),
+        ("follow_up", 1.00, 1.20, 1.25),
+        ("missed_beat", 0.90, 1.00, 1.25),
+    ],
+)
+def test_settle_coop_applies_team_event_and_drop_bonus(
+    monkeypatch,
+    event_key,
+    expected_power,
+    expected_exp_mult,
+    expected_drop_mult,
+):
+    captured: dict = {"reward_kwargs": []}
+    monster = {"name": "slime", "power_req": 1, "drops": []}
+    reward = {"exp_gain": 0, "exp_buffed": False, "drops": [], "points_gain": 0, "old_level": 1, "new_level": 1}
+
+    monkeypatch.setattr(hunt, "_pick_encounter", lambda level, rng=hunt.random: (monster, False))
+    monkeypatch.setattr(hunt.random, "uniform", lambda _a, _b: 1.0)
+    monkeypatch.setattr(hunt, "_roll_coop_event", lambda rng=hunt.random: event_key)
+    monkeypatch.setattr(hunt, "_today_buff", lambda: _PLAIN_BUFF)
+    monkeypatch.setattr(
+        hunt,
+        "resolve_hunt",
+        lambda combat_power, eff_monster, *, power_factor, fortune_factor=1.0, event=None:
+        (captured.update({"power_factor": power_factor}) or {
+            "win": True,
+            "effective": int(combat_power * power_factor * fortune_factor),
+            "event": event or "",
+            "monster": eff_monster,
+        }),
+    )
+
+    def _apply_rewards(*args, **kwargs):
+        captured["reward_kwargs"].append(kwargs)
+        return dict(reward)
+
+    monkeypatch.setattr(hunt, "_apply_rewards", _apply_rewards)
+
+    hunt._settle_coop(_equipped_user(), _equipped_user(), "D", exp_bonus=0.15, drop_bonus=0.25)
+
+    assert captured["power_factor"] == pytest.approx(expected_power)
+    assert len(captured["reward_kwargs"]) == 2
+    for kwargs in captured["reward_kwargs"]:
+        assert kwargs["exp_bonus"] == pytest.approx(0.15)
+        assert kwargs["exp_mult"] == pytest.approx(expected_exp_mult)
+        assert kwargs["drop_mult"] == pytest.approx(expected_drop_mult)
+
+
 @pytest.mark.asyncio
 async def test_team_rejects_target_no_signin(monkeypatch):
     # 对方今天未签到 → 硬性拒绝，不退化单刷
@@ -653,6 +865,7 @@ async def test_team_rejects_target_no_signin(monkeypatch):
     assert "未签到" in str(exc.value.result)
 
 
+@pytest.mark.asyncio
 async def test_team_rejects_target_broken_equip(monkeypatch):
     # 对方装备已损坏 → 硬性拒绝，不退化单刷
     u2 = _equipped_user(points=0)
@@ -673,13 +886,15 @@ async def test_team_fail_by_rng_degrades_to_solo(monkeypatch):
     store = {"groups": {"1001": {"users": {"u1": _equipped_user(points=0), "u2": _equipped_user(points=0)}}}}
     state = _patch_io(monkeypatch, team, store=store)
     monkeypatch.setattr(team, "random", _Rng(0.999))
+    monkeypatch.setattr(team, "_roll_fail_flavor", lambda rng=team.random: "hesitate")
     _stub_hunt_rng(monkeypatch, {"name": "史莱姆", "power_req": 1, "drops": []})
     with pytest.raises(FinishedException) as exc:
         await team.team_cmd.handlers[0](_bot(), _team_event("u1", "u2"))
     g = state["groups"]["1001"]["users"]
     assert g["u1"]["equip_used"] is True and g["u2"]["equip_used"] is False
     assert g["u2"]["exp"] == 0 and g["u2"]["points"] == 0
-    assert "自己上" in str(exc.value.result)
+    assert "独自前往" in str(exc.value.result)
+    assert "迟疑" in str(exc.value.result)
 
 
 # ==================== 称号 / 连签 / 战绩 ====================
