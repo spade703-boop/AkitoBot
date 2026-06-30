@@ -6,7 +6,8 @@
 - **签到** → 领积分 + 经验（+ 连签递增）+ 今日装备
 - **打怪** → 用今日装备挑战野怪，赢经验、积分与掉落；偶遇**精英怪**、撞上**今日增益**（藏着不外显）
 - **组队**（可选）→ 打怪前 `组队@某人` 合力，羁绊越深越容易拉动，串起「送礼攒羁绊 → 组队」闭环
-- **攀比层** → `排行榜` 看等级榜、`我的角色` 显示**称号 + 战绩**（都按需查询、不刷屏）
+- **世界 BOSS**（低频）→ 常规打怪后极低概率刷出全群共享目标，单人或双人挑战，按贡献结算经验和积分
+- **攀比层** → `群排行榜` 看等级榜、`我的角色` 显示**称号 + 战绩**（都按需查询、不刷屏）
 
 角色对外只有「等级」一个数值；战力是今日装备的隐藏值；运势/今日增益是隐藏值（只暗中影响打怪）。
 
@@ -19,10 +20,14 @@
 | 指令 | 说明 |
 |---|---|
 | `签到` | （由送礼系统提供）领积分 + 经验 + 今日装备；送礼系统发积分，RPG 钩子同时暗掷运势、发经验和装备。每日一次 |
-| `今日打怪` | 用今日装备出门打怪，胜败均有经验和积分、概率掉道具；遇精英怪/今日增益藏着不外显；低等级先碰温和怪；打完装备损耗，每日一次 |
+| `今日打怪` | 用今日装备出门打怪，胜败均有经验和积分、概率掉道具；遇精英怪/今日增益藏着不外显；低等级先碰温和怪；打完装备损耗，每日一次；战后额外判定是否刷世界 BOSS |
 | `组队@某人` | 拉群友合力打怪，直接 @ 即组队；成功率绑羁绊等级（满羁绊≈必成）；成功双方各得经验积分掉落，失败退化为发起人单刷（队友无损） |
+| `世界BOSS` | 查看当前世界 BOSS 的生命、规模和贡献榜；若当天没有刷出会直接提示 |
+| `攻击世界BOSS` | 用今天的装备单人攻击世界 BOSS，返回本次精确伤害；装备照常消耗 |
+| `组队世界BOSS@某人` | 邀请 1 名群友双人挑战世界 BOSS；成功则双方分别结算伤害，失败则退化为发起人单打 |
 | `强化今日装备` | 花积分把今天装备提一提；分段收费 `[30,60,90]`，每日限 3 次，次日重置 |
 | `购买装备` | 装备损坏后花 100 积分买一套替换装（每天限 1 次，打怪积分减半） |
+| `重置RPG功能` | 仅超管；给今天已经完成 RPG 签到的玩家重发今日装备，不改运势、连签和其他状态 |
 | `我的角色` | 看等级/称号/战绩/装备状态/积分/背包，战力为隐藏值不显示 |
 | `群排行榜` | 本群冒险者经验 Top 10，纯文字不 @ 不出图 |
 | `我的背包` | 列出道具与数量 |
@@ -31,6 +36,7 @@
 
 野怪/道具掉落与数值见 `data/content/rpg_config.json`，改完发 `重载配置` 即热更（无需重启）。
 低等级遭遇分段由 `combat.encounter_brackets` 控制；`monsters[*].weight` 只在分段缺失或非法时作为回退。
+世界 BOSS 也走同一份配置：当前默认 `0.1%` 概率触发，强度按近 7 日活跃签到人数缩放，奖励只有经验和积分，不计入普通战绩。
 
 ---
 
@@ -44,36 +50,39 @@ features/rpg/
 ├── config.py                 全部数值 / 文案 / 配置（DEFAULT_RPG_CONFIG，可被 rpg_config.json 覆盖热重载）；_cfg/_copy/_error/_line
 ├── player.py                 经验→等级派生；称号派生 `_title_of`；今日装备 helper；_combat_power；群校验 _resolve_group
 ├── fortune.py                隐藏运势掷取（含连签保底 / 大凶转大吉修正）+ 签到钩子 on_signin（暗掷运势 + 发经验[含连签] + 发今日装备）
-├── hunt.py                   `打怪` 指令 + 战斗结算（精英 `_pick_encounter` / 今日增益 `_today_buff` / 单刷 `_settle_solo` / 组队合力 `_settle_coop` / 发奖 `_apply_rewards` 共用）
+├── hunt.py                   `今日打怪` 指令 + 战斗结算（精英 `_pick_encounter` / 今日增益 `_today_buff` / 单刷 `_settle_solo` / 组队合力 `_settle_coop` / 发奖 `_apply_rewards` 共用）
+├── boss.py                   世界 BOSS 刷出 / 查询 / 单人攻击 / 双人攻击 / 贡献结算
 ├── team.py                   `组队@某人` 指令：羁绊定成功率、失败退化单刷（复用 hunt 结算）
-├── smith.py                  `强化` / `购买装备` 指令（积分出口）
+├── smith.py                  `强化` / `购买装备` / `重置RPG功能`
 ├── inventory.py              `背包` / `使用` 指令 + 道具效果 + 打怪掉落 helper
-└── character.py              `我的角色` 面板（含称号/战绩）+ `排行榜`（等级榜）+ `冒险帮助`
+└── character.py              `我的角色` 面板（含称号/战绩）+ `群排行榜`（等级榜）+ `冒险帮助`
 ```
 
 **依赖方向**：`features/gift.py` 与 `features/rpg/*` 都依赖 `core/game_store.py`。
 签到的衔接走 **钩子注册表**解耦：`fortune.on_signin` 在 import 时 `register_signin_hook` 注册；
 送礼系统的 `签到` 结算时调用 `run_signin_hooks(...)` 回调它（**`gift.py` 不依赖 rpg**）。
-组队需要「羁绊等级」，故 `team.py` 引入一条 **rpg→gift 单向依赖**（`from ..gift import _bond_level`，消费 gift 拥有的羁绊体系）；gift 仍不反向依赖 rpg，无环。
+组队和双人世界 BOSS 都要消费「羁绊等级」，故 `team.py` 与 `boss.py` 都有 **rpg→gift 单向依赖**（`from ..gift import _bond_level`，消费 gift 拥有的羁绊体系）；`inventory.py` 里的礼物券也会回调 gift 的送礼结算；gift 仍不反向依赖 rpg，无环。
 
 **数据流**：
 - 签到：`gift.签到` →（持锁）`run_signin_hooks` → `fortune.on_signin` → `player._grant_equip`（发今日装备）。
-- 打怪：`hunt` → `player._combat_power`（今日装备战力）+ `fortune` 运势系数 + `inventory._roll_drops/_add_item`（掉落）+ 少量积分。
+- 打怪：`hunt` → `player._combat_power`（今日装备战力）+ `fortune` 运势系数 + `inventory._roll_drops/_add_item`（掉落）+ 少量积分 → `_maybe_spawn_world_boss_lines`（低概率刷出世界 BOSS）。
 - 组队：`team` → `game_store._get_intimacy` + `gift._bond_level`（定成功率）→ `hunt._settle_coop`（成）/ `hunt._settle_solo`（败，单刷）。
+- 世界 BOSS：`boss` 读取 `group["rpg"]["world_boss"]` → 单人或双人计算本次伤害 → 更新贡献榜和剩余生命 → 击杀时按贡献发经验 / 积分并清掉群级状态。
 
-**玩家数据**（存于 `gift_data.json` 的 `users[uid]` 内，与送礼共用一条记录）：
+**玩家与群数据**（存于 `gift_data.json`，与送礼共用）：
 - 共享：`points`（积分）、`display_name` 等（送礼系统维护）。
 - RPG：`exp`（经验，→等级）、`inventory`（背包）、`fortune/fortune_date/last_fortune/no_lucky_streak`（隐藏运势）、
   `equip_date/equip_level/equip_roll/equip_forge/equip_used`（今日装备）、`exp_buff_uses/exp_buff_mult`（双倍经验卡）、
   `hunt_total/hunt_wins`（战绩，喂排行榜/面板）、`signin_streak/signin_last_date`（连续签到）。
-- 称号（按等级派生）与今日增益（按日期算）**不落库**。字段都挂在 user 记录内，`game_store._normalize_data` 原样保留，天然持久化。
+- 群级 RPG 状态：`groups[gid]["rpg"]["world_boss"]` 保存当日世界 BOSS 的名字、剩余生命、贡献榜、活跃人数快照等。
+- 称号（按等级派生）与今日增益（按日期算）**不落库**。用户字段挂在 `users[uid]`，群级 BOSS 状态挂在 `groups[gid]["rpg"]`；`game_store._normalize_data` 必须保留这两层结构。
 
 ---
 
 ## 测试
 
-`tests/test_rpg.py`：纯逻辑（等级/今日装备/运势/胜负/掉落/强化/组队成功率/称号分档/连签递增·断签/今日增益按日期确定）
-+ 指令行为（签到钩子含连签/打怪含积分·精英·今日增益/战绩计数/强化/面板含称号战绩/排行榜排序·过滤·空榜/背包/组队成功·失败退化单刷）。
+`tests/test_rpg.py`：纯逻辑（等级/今日装备/运势/胜负/掉落/强化/组队成功率/称号分档/连签递增·断签/今日增益按日期确定 / 世界 BOSS 缩放与贡献分配）
++ 指令行为（签到钩子含连签/打怪含积分·精英·今日增益/战绩计数/强化与重置 RPG / 面板含称号战绩/排行榜排序·过滤·空榜/背包/普通组队成功·失败退化单刷/世界 BOSS 查询·单人攻击·双人攻击·击杀结算）。
 数值断言一律从 `_cfg(...)` 读，调数值不会让测试变脆。
 
 > 组队复用「送礼」**现有**的羁绊梯（6 档正向，顶档「从今往后直到永远」=Lv6），送礼数值平衡由 `gift` 自身维护——

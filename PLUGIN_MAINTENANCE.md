@@ -39,16 +39,17 @@ nonebot_plugin_akito/
     ├── scheduled.py          # 定时任务（早晚安 / 过期记忆清理）
     ├── event_mode.py         # WL2 世界线剧情模式开关
     ├── gift.py               # 送礼系统（积分/送礼/偷分/羁绊/签到闸门/超管重置）
-    └── rpg/                  # RPG 子包：签到/打怪/组队/强化/背包/排行榜（详见 rpg/README.md）
-                                  ├── __init__.py
-                                  ├── config.py         # 全部数值/文案/配置（可被 rpg_config.json 热更新）
-                                  ├── player.py         # 经验→等级派生/称号/今日装备 helper/战力计算
-                                  ├── fortune.py        # 隐藏运势掷取（含连签保底）+ 签到钩子 on_signin
-                                  ├── hunt.py           # 打怪指令 + 战斗结算（精英/今日增益/单刷/组队合力）
-                                  ├── team.py           # 组队@某人 指令（羁绊定成功率、失败退化单刷）
-                                  ├── smith.py          # 强化指令（积分→战力）
-                                  ├── inventory.py      # 背包/使用指令 + 道具效果 + 掉落 helper
-                                  └── character.py      # 我的角色面板（含称号/战绩）+ 排行榜 + 冒险帮助
+    └── rpg/                  # RPG 子包：签到/打怪/世界BOSS/组队/强化/背包/群排行榜（详见 rpg/README.md）
+                                   ├── __init__.py
+                                   ├── config.py         # 全部数值/文案/配置（可被 rpg_config.json 热更新）
+                                   ├── player.py         # 经验→等级派生/称号/今日装备 helper/战力计算
+                                   ├── fortune.py        # 隐藏运势掷取（含连签保底）+ 签到钩子 on_signin
+                                   ├── hunt.py           # 打怪指令 + 战斗结算（精英/今日增益/单刷/组队合力）
+                                   ├── boss.py           # 世界BOSS刷出/查询/单人攻击/双人攻击/贡献结算
+                                   ├── team.py           # 组队@某人 指令（羁绊定成功率、失败退化单刷）
+                                   ├── smith.py          # 强化/购买装备/重置RPG功能
+                                   ├── inventory.py      # 背包/使用指令 + 道具效果 + 掉落 helper
+                                   └── character.py      # 我的角色面板（含称号/战绩）+ 群排行榜 + 冒险帮助
 ```
 
 ---
@@ -512,7 +513,7 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（戳一戳
 
 ### rpg/
 
-在送礼社交玩法之上的轻量群文字 RPG。设计原则：**每天就两步——先签到领装备，再决定今天要不要打怪**。不是送礼的附庸，而是和送礼并列的积分去向：给手上有分但一时没地方送礼的人一个稳定的消耗口。
+在送礼社交玩法之上的轻量群文字 RPG。设计原则：**每天就两步——先签到领装备，再决定今天要不要打怪**。不是送礼的附庸，而是和送礼并列的积分去向：给手上有分但一时没地方送礼的人一个稳定的消耗口。当前循环除了单刷 / 组队打怪，还补了一层低频的世界 BOSS，用来承接群体参与感。
 
 完整架构与指令说明见 `features/rpg/README.md`，此处仅记维护要点：
 
@@ -520,20 +521,27 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（戳一戳
 
 | 文件 | 职责 |
 |------|------|
-| `config.py` | 全部数值（战斗/运势/强化/掉落/连签/精英）/ 文案 / 错误的默认配置 `DEFAULT_RPG_CONFIG`；`_cfg(key)` 读取、`_error(key)` 错误文案、`_copy(key)` 随机文案；`reload_rpg_config()` 被 `reload_assets()` 联动热更 |
+| `config.py` | 全部数值（战斗/运势/强化/掉落/连签/精英/世界BOSS）/ 文案 / 错误的默认配置 `DEFAULT_RPG_CONFIG`；`_cfg(key)` 读取、`_error(key)` 错误文案、`_copy(key)` 随机文案；`reload_rpg_config()` 被 `reload_assets()` 联动热更 |
 | `player.py` | 纯函数：`_level_of(exp)` 经验→等级、`_level_progress(exp)` 进度、`_title_of(level)` 称号分档、`_cum_exp(level)` 升到此级所需累计经验、`_ensure_player(group, uid, name)` 初始化玩家记录；`_combat_power(user)` 计算今日装备隐藏战力；`_resolve_group(event)` 群校验 |
 | `fortune.py` | `on_signin(group, uid, rng, today)` 签到钩子入口（暗掷运势 + 发经验 + 今日装备 + 连签判定含额外经验 + 断签重置）；`_fortune_combat/drop_factor` 为战力/掉落提供运势修正；连签保底机制（连凶天数达阈值自动转大吉） |
-| `hunt.py` | `打怪` 指令 + 战斗结算管线：`_encounter_level`（装备等级分段）→ `_pick_encounter`（怪池权重按等级分档 + 精英概率按等级门槛）→ `_settle_solo`（单刷含新手保护 `_rookie_power_factor` + 随机事件 + 运势修正 + 今日增益）→ `_settle_coop`（组队合力，取双方较高等级抽怪）；掉率/经验乘数含精英与今日增益双乘 |
-| `team.py` | `组队@某人` 指令：从 `gift._bond_level` 取羁绊→算成功率；对方未签到/装备已损坏 → 直接拒绝（不退化单刷）；成功走 `_settle_coop`（双方各得经验积分掉落、各自装备消耗）；羁绊不够 → 走 `_settle_solo`（只消耗发起人，队友无损） |
-| `smith.py` | `强化` / `购买装备` 指令（积分出口）：强化走 `forge.costs` 分段收费 `[30,60,90]`；购买装备花 100 积分重置已损坏装备（每天限 1 次，打上 `equip_rebought` 标记，打怪积分减半） |
+| `hunt.py` | `今日打怪` 指令 + 战斗结算管线：`_encounter_level`（装备等级分段）→ `_pick_encounter`（怪池权重按等级分档 + 精英概率按等级门槛）→ `_settle_solo`（单刷含新手保护 `_rookie_power_factor` + 随机事件 + 运势修正 + 今日增益）→ `_settle_coop`（组队合力，取双方较高等级抽怪）；普通打怪结算后会额外触发一次世界 BOSS 刷出判定 |
+| `boss.py` | 世界 BOSS 逻辑：近 7 日活跃签到人数缩放、群级状态 `group["rpg"]["world_boss"]` 持久化、`世界BOSS` / `攻击世界BOSS` / `组队世界BOSS@某人` 指令、贡献榜、按贡献发放经验/积分；奖励不计入 `hunt_total/hunt_wins` |
+| `team.py` | `组队@某人` 指令：从 `gift._bond_level` 取羁绊→算成功率；对方未签到/装备已损坏 → 直接拒绝（不退化单刷）；成功走 `_settle_coop`（双方各得经验积分掉落、各自装备消耗）；羁绊不够 → 走 `_settle_solo`（只消耗发起人，队友无损）；普通组队结算后同样会触发世界 BOSS 刷出判定 |
+| `smith.py` | `强化` / `购买装备` / `重置RPG功能` 指令（积分出口 + 超管测试辅助）：强化走 `forge.costs` 分段收费 `[30,60,90]`；购买装备花 100 积分重置已损坏装备（每天限 1 次，打上 `equip_rebought` 标记，打怪积分减半）；`重置RPG功能` 仅为今天已完成 RPG 签到的人重发装备，不改运势和连签 |
 | `inventory.py` | `背包` / `使用 [道具名]` 指令 + 道具效果（`exp_buff`/`exp_grant`/`gift` 三种类型）+ 礼物券分支走完整送礼流程（`_settle`/`_build_broadcast`） + `_roll_drops` 掉落判定 + `_add_item` 背包入库 |
-| `character.py` | `我的角色` 面板（含称号 `_title_of`/战绩/装备状态/积分/背包）+ `排行榜`（本群 exp>0 的人按经验降序 Top 10，纯文字不 @）+ `冒险帮助` |
+| `character.py` | `我的角色` 面板（含称号 `_title_of`/战绩/装备状态/积分/背包）+ `群排行榜`（本群 exp>0 的人按经验降序 Top 10，纯文字不 @）+ `冒险帮助`（含世界 BOSS 指令） |
 
-**依赖方向**（design constraint）：`features/gift.py` 与 `features/rpg/*` 都依赖 `core/game_store.py`；签到走钩子表解耦（gift → `run_signin_hooks` → `fortune.on_signin`，gift 不依赖 rpg）；两条 rpg→gift 单向依赖：`rpg/team.py` → `gift._bond_level`（消费羁绊）、`rpg/inventory.py` → `gift._pick_gift_by_name`/`_settle`/`_build_broadcast` 等（礼物券消费走完整送礼流程）；gift 不反向依赖 rpg，无环。
+**依赖方向**（design constraint）：`features/gift.py` 与 `features/rpg/*` 都依赖 `core/game_store.py`；签到走钩子表解耦（gift → `run_signin_hooks` → `fortune.on_signin`，gift 不依赖 rpg）；三条 rpg→gift 单向依赖：`rpg/team.py` / `rpg/boss.py` → `gift._bond_level`（消费羁绊）、`rpg/inventory.py` → `gift._pick_gift_by_name`/`_settle`/`_build_broadcast` 等（礼物券消费走完整送礼流程）；gift 不反向依赖 rpg，无环。
 
 **配置热更**：修改 `data/content/rpg_config.json` → 群内 `重载配置 assets` → `reload_assets()` → `rpg_config.reload_rpg_config()`，无需重启。
 
 **数值断言规则**：测试一律从 `rpg_config._cfg(...)` 走读取，不硬编码数字——调 `rpg_config.json` 数值不会导致测试变脆。
+
+**当前维护重点**：
+- 世界 BOSS 只会在普通 `今日打怪` / `组队@某人` 后以 `0.1%` 概率刷出；若近 7 日活跃签到人数少于 3，就算随机命中也不会生成。
+- 世界 BOSS 强度按近 7 日活跃签到人数缩放，而不是按“今天当前已签到人数”计算，避免早时段触发时血量异常偏小。
+- 世界 BOSS 奖励只有经验和积分；贡献结算会更新玩家 `exp/points`，但不会改普通战绩字段 `hunt_total/hunt_wins`。
+- `core/game_store.py` 现在必须保留 `groups[gid]["rpg"]`，否则世界 BOSS 的群级状态会在归一化时丢失。
 
 ---
 
@@ -568,14 +576,14 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（戳一戳
 | `content/pjsk_embeddings.npz` | PJSK 语义向量库（`tools/build_embeddings.py` 生成，gitignore） |
 | `content/akito_director.json` | 导演骰子资产（toya_directions / dynamic_lexicon） |
 | `content/gift_config.json` | 送礼系统配置覆盖（礼物档位/随机事件权重/偷参数/签到延迟） |
-| `content/rpg_config.json` | RPG 全量配置覆盖（战斗/运势/强化/掉落/精英/文案/错误）/ 热更可见 |
+| `content/rpg_config.json` | RPG 全量配置覆盖（战斗/运势/强化/掉落/精英/世界BOSS/文案/错误）/ 热更可见 |
 | `content/intimacy_tiers.json` | 羁绊梯定义（6 档正向，从「初识」到「从今往后直到永远」） |
 
 ### 功能 / 运行时 — `data/` 根目录（多为写回）
 
 | 路径 | 读写 | 说明 |
 |------|------|------|
-| `data/gift_data.json` | 读写 | gift + rpg 共享玩家数据（积分/送礼/偷/羁绊/RPG 经验/装备/运势/背包/连签） |
+| `data/gift_data.json` | 读写 | gift + rpg 共享玩家数据；`groups[*].users[*]` 保存积分/送礼/偷/羁绊/RPG 经验/装备/运势/背包/连签，`groups[*].rpg` 保存世界 BOSS 等群级 RPG 状态 |
 | `data/akito_memories.json` | 读写 | 核心记忆库（启动时加载，记忆变更时写入） |
 | `data/last_interactions.json` | 读写 | 各群最后互动时间戳和 routine 快照（time_awareness.py） |
 | `data/impression_history.db` | 读写 | 群消息 SQLite（impression.py 独占） |
