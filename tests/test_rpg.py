@@ -1685,6 +1685,49 @@ async def test_world_boss_kill_settlement_preserves_reward_pool_and_battle_stats
 
 
 @pytest.mark.asyncio
+async def test_team_world_boss_kill_grants_full_last_hit_bonus_to_both(monkeypatch):
+    store = {"groups": {"1001": {
+        "users": {
+            "u1": _equipped_user(hunt_total=3, hunt_wins=1),
+            "u2": _equipped_user(hunt_total=5, hunt_wins=2),
+        },
+        "intimacy": {game_store._pair_key("u1", "u2"): 20000},
+        "rpg": {"world_boss": _world_boss_record(max_hp=20, hp=20, scale_count=3, reward_scale_count=3)},
+    }}} 
+    state = _patch_io(monkeypatch, boss, store=store)
+    monkeypatch.setattr(boss.random, "random", lambda: 0.0)
+    monkeypatch.setattr(boss.random, "randint", lambda _a, _b: 0)
+    monkeypatch.setattr(boss.random, "uniform", lambda _a, _b: 1.0)
+    async def _fake_render(_settlement):
+        return b"fake-world-boss-rank"
+    monkeypatch.setattr(boss, "_render_world_boss_settlement_image", _fake_render)
+
+    with pytest.raises(FinishedException) as exc:
+        await boss.team_world_boss_cmd.handlers[0](_bot(), _team_event("u1", "u2"))
+
+    users = state["groups"]["1001"]["users"]
+    rewards = rpg_config._cfg("world_boss", {}).get("rewards", {})
+    exp_pool = int(rewards.get("exp_pool_per_scale", 60)) * 3
+    points_pool = int(rewards.get("points_pool_per_scale", 8)) * 3
+    exp_fixed = int(rewards.get("exp_fixed", 12))
+    points_fixed = int(rewards.get("points_fixed", 2))
+    last_hit_exp_bonus = int(rewards.get("last_hit_exp_bonus", 0))
+    last_hit_points_bonus = int(rewards.get("last_hit_points_bonus", 0))
+    alloc = boss._allocate_exact(exp_pool, {"u1": 10, "u2": 10})
+    points_alloc = boss._allocate_exact(points_pool, {"u1": 10, "u2": 10})
+
+    assert "world_boss" not in state["groups"]["1001"]["rpg"]
+    assert users["u1"]["exp"] == exp_fixed + alloc["u1"] + last_hit_exp_bonus
+    assert users["u2"]["exp"] == exp_fixed + alloc["u2"] + last_hit_exp_bonus
+    assert users["u1"]["points"] == points_fixed + points_alloc["u1"] + last_hit_points_bonus
+    assert users["u2"]["points"] == points_fixed + points_alloc["u2"] + last_hit_points_bonus
+    text = str(exc.value.result)
+    assert "世界BOSS 已经被成功击杀" in text
+    assert "u1" not in text
+    assert "[image]" in text
+
+
+@pytest.mark.asyncio
 async def test_test_world_rank_cmd_renders_image(monkeypatch):
     async def _fake_render(_settlement):
         return b"fake-world-boss-rank"
@@ -1760,7 +1803,7 @@ def test_world_boss_kill_settlement_carries_team_bond_gain():
     settlement = boss._world_boss_kill_settlement(
         group,
         group["rpg"]["world_boss"],
-        last_hit_uid="u2",
+        last_hit_uids=["u2"],
     )
 
     rows = {row["uid"]: row for row in settlement["rows"]}
@@ -1769,6 +1812,36 @@ def test_world_boss_kill_settlement_carries_team_bond_gain():
     assert rows["u2"]["bond"] == 2
     reward_lines = boss._world_boss_reward_lines(settlement["rows"])
     assert any("羁绊 +2" in line for line in reward_lines)
+
+
+def test_world_boss_kill_settlement_shared_last_hit_bonus_for_team():
+    group = game_store._normalize_data({"groups": {"1001": {
+        "users": {
+            "u1": _equipped_user(display_name="阿一"),
+            "u2": _equipped_user(display_name="阿二"),
+        },
+        "rpg": {"world_boss": _world_boss_record(
+            max_hp=20,
+            hp=0,
+            contributors={"u1": 10, "u2": 10},
+            last_hit_uids=["u1", "u2"],
+        )},
+    }}})["groups"]["1001"]
+
+    settlement = boss._world_boss_kill_settlement(
+        group,
+        group["rpg"]["world_boss"],
+        last_hit_uids=["u1", "u2"],
+    )
+
+    rows = {row["uid"]: row for row in settlement["rows"]}
+    reward_cfg = rpg_config._cfg("world_boss", {}).get("rewards", {})
+    assert rows["u1"]["exp_bonus"] == int(reward_cfg.get("last_hit_exp_bonus", 0))
+    assert rows["u2"]["exp_bonus"] == int(reward_cfg.get("last_hit_exp_bonus", 0))
+    assert rows["u1"]["points_bonus"] == int(reward_cfg.get("last_hit_points_bonus", 0))
+    assert rows["u2"]["points_bonus"] == int(reward_cfg.get("last_hit_points_bonus", 0))
+    assert settlement["last_hit_name"] == "阿一 / 阿二"
+    assert any("阿一 / 阿二 拿下了尾刀" in line for line in settlement["lines"])
 
 
 def test_world_boss_special_drop_only_awards_once(monkeypatch):

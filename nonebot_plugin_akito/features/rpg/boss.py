@@ -373,8 +373,10 @@ def _apply_world_boss_damage(boss: dict, hits: dict[str, int]) -> dict[str, int]
         remaining -= dealt
     if int(boss.get("hp", 0)) <= 0 and last_hit_uid is not None:
         boss["last_hit"] = last_hit_uid
+        boss.pop("last_hit_uids", None)
     else:
         boss.pop("last_hit", None)
+        boss.pop("last_hit_uids", None)
 
     result = {str(uid): 0 for uid in hits}
     result.update(actual)
@@ -511,7 +513,7 @@ def _world_boss_reward_results(
     points_pool: int,
     exp_fixed: int,
     points_fixed: int,
-    last_hit_uid: str | None = None,
+    last_hit_uids: list[str] | tuple[str, ...] | set[str] | None = None,
     bond_gains: dict[str, int] | None = None,
     allow_special_drop: bool = False,
 ) -> list[dict]:
@@ -520,7 +522,7 @@ def _world_boss_reward_results(
     points_alloc = _allocate_exact(points_pool, contributors)
     reward_cfg = _world_boss_reward_cfg()
     total_damage = max(1, sum(int(dmg) for dmg in contributors.values()))
-    last_hit_uid = str(last_hit_uid) if last_hit_uid is not None else None
+    last_hit_uid_set = {str(uid) for uid in (last_hit_uids or []) if str(uid)}
     cleaned_bonds = {
         str(uid): max(0, int(amount))
         for uid, amount in (bond_gains or {}).items()
@@ -531,7 +533,7 @@ def _world_boss_reward_results(
     for rank, (uid, damage) in enumerate(ranked, 1):
         user = _ensure_player(group, uid)
         old_level = _level_of(int(user.get("exp", 0)))
-        is_last_hit = last_hit_uid == uid
+        is_last_hit = uid in last_hit_uid_set
         exp_bonus = int(reward_cfg.get("last_hit_exp_bonus", 0)) if is_last_hit else 0
         points_bonus = int(reward_cfg.get("last_hit_points_bonus", 0)) if is_last_hit else 0
         bond_gain = int(cleaned_bonds.get(uid, 0))
@@ -592,12 +594,21 @@ def _world_boss_reward_lines(rows: list[dict]) -> list[str]:
     return lines
 
 
-def _world_boss_kill_settlement(group: dict, boss: dict, *, last_hit_uid: str | None = None) -> dict:
+def _normalize_last_hit_uids(last_hit_ref) -> list[str]:
+    if isinstance(last_hit_ref, (list, tuple, set)):
+        return [str(uid) for uid in last_hit_ref if str(uid)]
+    if last_hit_ref is None:
+        return []
+    text = str(last_hit_ref).strip()
+    return [text] if text else []
+
+
+def _world_boss_kill_settlement(group: dict, boss: dict, *, last_hit_uids: list[str] | tuple[str, ...] | set[str] | None = None) -> dict:
     contributors = _world_boss_contributors(boss)
     result = {
         "monster": str(boss.get("name", "世界BOSS")),
         "rows": [],
-        "last_hit_uid": None,
+        "last_hit_uids": [],
         "last_hit_name": "",
         "last_hit_reward": {"exp": 0, "points": 0},
         "total_bond": 0,
@@ -608,9 +619,7 @@ def _world_boss_kill_settlement(group: dict, boss: dict, *, last_hit_uid: str | 
         _rpg_state(group).pop("world_boss", None)
         return result
 
-    normalized_last_hit = str(last_hit_uid) if last_hit_uid is not None else None
-    if normalized_last_hit not in contributors:
-        normalized_last_hit = None
+    normalized_last_hit = [uid for uid in _normalize_last_hit_uids(last_hit_uids) if uid in contributors]
 
     reward_values = _world_boss_reward_values(boss)
     rows = _world_boss_reward_results(
@@ -621,22 +630,25 @@ def _world_boss_kill_settlement(group: dict, boss: dict, *, last_hit_uid: str | 
         points_pool=reward_values["points_pool"],
         exp_fixed=reward_values["exp_fixed"],
         points_fixed=reward_values["points_fixed"],
-        last_hit_uid=normalized_last_hit,
+        last_hit_uids=normalized_last_hit,
         bond_gains=_world_boss_bond_gains(boss),
         allow_special_drop=True,
     )
     result["rows"] = rows
     result["total_bond"] = sum(int(row.get("bond", 0)) for row in rows)
-    result["last_hit_uid"] = normalized_last_hit
+    result["last_hit_uids"] = normalized_last_hit
+    last_hit_names: list[str] = []
+    last_hit_reward = {"exp": 0, "points": 0}
     for row in rows:
-        if row.get("uid") != normalized_last_hit:
+        if row.get("uid") not in normalized_last_hit:
             continue
-        result["last_hit_name"] = str(row.get("name", ""))
-        result["last_hit_reward"] = {
+        last_hit_names.append(str(row.get("name", "")))
+        last_hit_reward = {
             "exp": int(row.get("exp_bonus", 0)),
             "points": int(row.get("points_bonus", 0)),
         }
-        break
+    result["last_hit_name"] = " / ".join(name for name in last_hit_names if name)
+    result["last_hit_reward"] = last_hit_reward
     result["lines"] = [_line("world_boss_kill")]
     if result["last_hit_name"]:
         result["lines"].append(_line("world_boss_last_hit", name=result["last_hit_name"]))
@@ -646,7 +658,7 @@ def _world_boss_kill_settlement(group: dict, boss: dict, *, last_hit_uid: str | 
 
 
 def _world_boss_kill_lines(group: dict, boss: dict) -> list[str]:
-    settlement = _world_boss_kill_settlement(group, boss, last_hit_uid=boss.get("last_hit"))
+    settlement = _world_boss_kill_settlement(group, boss, last_hit_uids=boss.get("last_hit_uids") or boss.get("last_hit"))
     if not settlement["rows"]:
         return settlement["lines"]
     return [*settlement["lines"], *_world_boss_reward_lines(settlement["rows"])]
@@ -958,7 +970,7 @@ async def _(event: Event, args: Message = CommandArg()):
 
         head_key = "world_boss_attack_kill" if int(boss.get("hp", 0)) <= 0 else "world_boss_attack"
         if int(boss.get("hp", 0)) <= 0:
-            settlement = _world_boss_kill_settlement(group, boss, last_hit_uid=boss.get("last_hit"))
+            settlement = _world_boss_kill_settlement(group, boss, last_hit_uids=boss.get("last_hit_uids") or boss.get("last_hit"))
             lines = list(settlement["lines"])
         else:
             lines = [
@@ -1068,20 +1080,23 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
             dealt = _apply_world_boss_damage(boss, team_hits)
             _consume_equip(b_participant)
             _consume_equip(a_participant)
+            kill_done = int(boss.get("hp", 0)) <= 0
+            if kill_done:
+                boss["last_hit_uids"] = [str(initiator), str(target)]
+                boss.pop("last_hit", None)
             _grant_world_boss_team_bond(
                 group,
                 boss,
                 initiator,
                 target,
                 today,
-                kill=int(boss.get("hp", 0)) <= 0,
+                kill=kill_done,
                 negative=raw_intimacy < 0,
             )
             b_name = b.get("display_name") or f"群友{initiator}"
-            last_hit_uid = str(boss.get("last_hit", ""))
-            last_hit_name = b_name if last_hit_uid == str(initiator) else a_name
-            head_key = "world_boss_team_kill" if int(boss.get("hp", 0)) <= 0 else "world_boss_team_attack"
-            if int(boss.get("hp", 0)) <= 0:
+            last_hit_name = f"{b_name} 与 {a_name}"
+            head_key = "world_boss_team_kill" if kill_done else "world_boss_team_attack"
+            if kill_done:
                 lines = []
             else:
                 lines.append(
@@ -1101,7 +1116,7 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
                             "last_hit_name": last_hit_name,
                         },
                     )
-                )
+            )
             if bonus_total > 0 and int(boss.get("hp", 0)) > 0:
                 lines.append(_line("world_boss_team_bonus", bonus_total=bonus_total))
         else:
@@ -1139,7 +1154,7 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
                 lines.append(attack_line)
 
         if int(boss.get("hp", 0)) <= 0:
-            settlement = _world_boss_kill_settlement(group, boss, last_hit_uid=boss.get("last_hit"))
+            settlement = _world_boss_kill_settlement(group, boss, last_hit_uids=boss.get("last_hit_uids") or boss.get("last_hit"))
             lines = list(settlement["lines"])
         _save_data(data)
 
