@@ -1155,6 +1155,24 @@ async def test_status_panel_shows_title_and_record(monkeypatch):
     r = str(exc.value.result)
     assert player._title_of(3) in r            # 称号
     assert "4 胜" in r and "5 场" in r          # 战绩
+    assert "当前无世界BOSS" in r
+
+
+@pytest.mark.asyncio
+async def test_status_panel_shows_world_boss_equip_status(monkeypatch):
+    store = {"groups": {"1001": {
+        "users": {"u1": _equipped_user()},
+        "rpg": {"world_boss": _world_boss_record()},
+    }}}
+    state = _patch_io(monkeypatch, character, store=store)
+
+    with pytest.raises(FinishedException) as exc:
+        await character.status_cmd.handlers[0](Event(group_id=1001, user_id="u1"))
+
+    result = str(exc.value.result)
+    assert "深渊巨像" in result
+    assert "装备：已就绪" in result
+    assert "u1" in state["groups"]["1001"]["rpg"]["world_boss"]["participants"]
 
 
 # ==================== 世界 BOSS ====================
@@ -1225,6 +1243,37 @@ def test_world_boss_snapshot_soft_scales_large_group():
     )
 
 
+def test_cleanup_stale_world_boss_grants_scaled_compensation():
+    group = game_store._new_group()
+    group["users"]["u1"] = {"exp": 0, "points": 0, "display_name": "阿一"}
+    group["users"]["u2"] = {"exp": 0, "points": 0, "display_name": "阿二"}
+    stale_boss = _world_boss_record(
+        date="2026-06-21",
+        max_hp=200,
+        hp=120,
+        reward_scale_count=3,
+        contributors={"u1": 50, "u2": 30},
+    )
+    group["rpg"] = {
+        "world_boss": deepcopy(stale_boss)
+    }
+
+    lines, changed = boss._cleanup_stale_world_boss(group, "2026-06-22")
+
+    reward_ratio = (80 / 200) * float(rpg_config._cfg("world_boss", {}).get("rewards", {}).get("unfinished_reward_mult", 0.5))
+    reward_values = boss._world_boss_reward_values(stale_boss, reward_ratio=reward_ratio)
+    exp_alloc = boss._allocate_exact(reward_values["exp_pool"], {"u1": 50, "u2": 30})
+    points_alloc = boss._allocate_exact(reward_values["points_pool"], {"u1": 50, "u2": 30})
+
+    assert changed is True
+    assert "world_boss" not in group["rpg"]
+    assert group["users"]["u1"]["exp"] == reward_values["exp_fixed"] + exp_alloc["u1"]
+    assert group["users"]["u2"]["exp"] == reward_values["exp_fixed"] + exp_alloc["u2"]
+    assert group["users"]["u1"]["points"] == reward_values["points_fixed"] + points_alloc["u1"]
+    assert group["users"]["u2"]["points"] == reward_values["points_fixed"] + points_alloc["u2"]
+    assert any("已经离场" in line for line in lines)
+
+
 def test_world_boss_does_not_spawn_when_recent_active_under_min():
     class _SpawnRng:
         def random(self):
@@ -1281,6 +1330,24 @@ async def test_world_boss_status_no_active_boss(monkeypatch):
         await boss.world_boss_cmd.handlers[0](Event(group_id=1001, user_id="u1"))
 
     assert "当前没有可挑战的世界BOSS" in str(exc.value.result)
+
+
+@pytest.mark.asyncio
+async def test_world_boss_status_settles_stale_boss_before_reply(monkeypatch):
+    store = {"groups": {"1001": {
+        "users": {"u1": {"exp": 0, "points": 0, "display_name": "阿一"}},
+        "rpg": {"world_boss": _world_boss_record(date="2026-06-21", max_hp=100, hp=70, contributors={"u1": 30})},
+    }}}
+    state = _patch_io(monkeypatch, boss, store=store)
+
+    with pytest.raises(FinishedException) as exc:
+        await boss.world_boss_cmd.handlers[0](Event(group_id=1001, user_id="u1"))
+
+    result = str(exc.value.result)
+    assert "已经离场" in result
+    assert "当前没有可挑战的世界BOSS" in result
+    assert "world_boss" not in state["groups"]["1001"]["rpg"]
+    assert state["groups"]["1001"]["users"]["u1"]["exp"] > 0
 
 
 @pytest.mark.asyncio

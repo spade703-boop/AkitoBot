@@ -24,7 +24,7 @@ from ...core.game_store import (
     _weighted_choice,
 )
 from ..gift import _bond_level
-from .boss import _maybe_spawn_world_boss_lines
+from .boss import _cleanup_stale_world_boss, _maybe_spawn_world_boss_lines
 from .config import _copy, _cfg, _error, _line
 from .hunt import _buff_active, _hunt_result_lines, _settle_coop, _settle_solo
 from .player import _ensure_player, _resolve_group
@@ -144,19 +144,32 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
     async with LOCK:
         data = _load_data()
         group = _get_group(data, group_id)
+        settlement_lines, stale_changed = _cleanup_stale_world_boss(group, today)
         b = _ensure_player(group, initiator, _display_name(event))
 
         if b.get("equip_date") != today:
-            await team_cmd.finish(MessageSegment.reply(event.message_id) + _error("need_equip"))
+            if stale_changed:
+                _save_data(data)
+            lines = [*settlement_lines, _error("need_equip")] if settlement_lines else [_error("need_equip")]
+            await team_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
         if b.get("equip_used") and not is_superuser:
-            await team_cmd.finish(MessageSegment.reply(event.message_id) + _error("equip_broken"))
+            if stale_changed:
+                _save_data(data)
+            lines = [*settlement_lines, _error("equip_broken")] if settlement_lines else [_error("equip_broken")]
+            await team_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
 
         a = _ensure_player(group, target)
         a_name = a.get("display_name") or f"群友{target}"
         if a.get("equip_date") != today:
-            await team_cmd.finish(MessageSegment.reply(event.message_id) + _error("team_target_no_signin"))
+            if stale_changed:
+                _save_data(data)
+            lines = [*settlement_lines, _error("team_target_no_signin")] if settlement_lines else [_error("team_target_no_signin")]
+            await team_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
         if a.get("equip_used"):
-            await team_cmd.finish(MessageSegment.reply(event.message_id) + _error("team_target_broken"))
+            if stale_changed:
+                _save_data(data)
+            lines = [*settlement_lines, _error("team_target_broken")] if settlement_lines else [_error("team_target_broken")]
+            await team_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
 
         bond_level = _bond_level(_get_intimacy(group, initiator, target))["level"]
         success = random.random() < _team_success_rate(bond_level)
@@ -179,6 +192,8 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
             boss_lines = _maybe_spawn_world_boss_lines(group, today, initiator, rng=random)
             _save_data(data)
             msg = _build_fail_broadcast(out, initiator, a_name, _roll_fail_flavor())
+        if settlement_lines:
+            msg = "\n".join(settlement_lines) + "\n" + msg
         if boss_lines:
             msg = msg + "\n" + "\n".join(boss_lines)
 

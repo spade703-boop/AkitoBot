@@ -25,7 +25,7 @@ from ...core.game_store import (
     _today_str,
     _weighted_choice,
 )
-from .boss import _maybe_spawn_world_boss_lines
+from .boss import _cleanup_stale_world_boss, _maybe_spawn_world_boss_lines
 from .config import _cfg, _copy, _error, _line
 from .fortune import _fortune_by_key
 from .inventory import _add_item, _roll_drops
@@ -428,19 +428,28 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
     async with LOCK:
         data = _load_data()
         group = _get_group(data, group_id)
+        settlement_lines, stale_changed = _cleanup_stale_world_boss(group, today)
         user = _ensure_player(group, user_id, _display_name(event))
 
         # 闸门：今日装备未损坏（= 今天签到过且还没打 → 实现每日一次）
         if user.get("equip_date") != today:
-            await hunt_cmd.finish(MessageSegment.reply(event.message_id) + _error("need_equip"))
+            if stale_changed:
+                _save_data(data)
+            lines = [*settlement_lines, _error("need_equip")] if settlement_lines else [_error("need_equip")]
+            await hunt_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
         if user.get("equip_used") and not is_superuser:
-            await hunt_cmd.finish(MessageSegment.reply(event.message_id) + _error("equip_broken"))
+            if stale_changed:
+                _save_data(data)
+            lines = [*settlement_lines, _error("equip_broken")] if settlement_lines else [_error("equip_broken")]
+            await hunt_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
 
         out = _settle_solo(user, today)
         boss_lines = _maybe_spawn_world_boss_lines(group, today, user_id, rng=random)
         _save_data(data)
 
     broadcast = _build_hunt_broadcast(out, user_id)
+    if settlement_lines:
+        broadcast = "\n".join(settlement_lines) + "\n" + broadcast
     if boss_lines:
         broadcast = broadcast + "\n" + "\n".join(boss_lines)
     await hunt_cmd.finish(MessageSegment.reply(event.message_id) + broadcast)

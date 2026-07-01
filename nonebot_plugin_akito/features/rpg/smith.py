@@ -11,7 +11,7 @@ from nonebot.params import CommandArg
 
 from ...core import SUPERUSER_QQ, is_sleeping
 from ...core.game_store import LOCK, _display_name, _get_group, _load_data, _save_data, _today_str
-from .boss import _active_world_boss, _ensure_boss_participant
+from .boss import _active_world_boss, _cleanup_stale_world_boss, _ensure_boss_participant
 from .config import _cfg, _error, _line
 from .player import _ensure_player, _grant_equip, _resolve_group
 
@@ -162,9 +162,13 @@ async def _(event: Event, args: Message = CommandArg()):
     async with LOCK:
         data = _load_data()
         group = _get_group(data, group_id)
+        settlement_lines, changed = _cleanup_stale_world_boss(group, today)
         boss = _active_world_boss(group, today)
         if not boss:
-            await boss_forge_cmd.finish(MessageSegment.reply(event.message_id) + _error("boss_none"))
+            if changed:
+                _save_data(data)
+            lines = [*settlement_lines, _error("boss_none")]
+            await boss_forge_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
         user_id = event.get_user_id()
         user = _ensure_player(group, user_id, _display_name(event))
         ok, result = _forge_world_boss(boss, user_id, user, today, rng=random)

@@ -82,15 +82,13 @@ def _parse_iso_day(text) -> date | None:
         return None
 
 
-def _active_world_boss(group: dict, today: str, *, clear_stale: bool = True) -> dict | None:
+def _active_world_boss(group: dict, today: str) -> dict | None:
     state = _rpg_state(group)
     boss = state.get("world_boss")
     if not isinstance(boss, dict):
         state.pop("world_boss", None)
         return None
     if boss.get("date") != today:
-        if clear_stale:
-            state.pop("world_boss", None)
         return None
     contributors = boss.get("contributors")
     if not isinstance(contributors, dict):
@@ -367,23 +365,36 @@ def _world_boss_reward_cfg() -> dict:
     return rewards if isinstance(rewards, dict) else {}
 
 
-def _world_boss_kill_lines(group: dict, boss: dict) -> list[str]:
-    rewards = _world_boss_reward_cfg()
-    contributors = {
+def _world_boss_contributors(boss: dict) -> dict[str, int]:
+    return {
         str(uid): max(0, int(dmg))
         for uid, dmg in boss.get("contributors", {}).items()
         if int(dmg) > 0
     }
-    lines = [_line("world_boss_kill", monster=boss.get("name", "世界BOSS"))]
-    if not contributors:
-        _rpg_state(group).pop("world_boss", None)
-        return lines
 
+
+def _world_boss_reward_values(boss: dict, *, reward_ratio: float = 1.0) -> dict[str, int]:
+    rewards = _world_boss_reward_cfg()
+    ratio = max(0.0, float(reward_ratio))
     reward_scale_count = max(1, int(boss.get("reward_scale_count", boss.get("scale_count", 1))))
-    exp_pool = max(0, int(rewards.get("exp_pool_per_scale", 60)) * reward_scale_count)
-    points_pool = max(0, int(rewards.get("points_pool_per_scale", 8)) * reward_scale_count)
-    exp_fixed = max(0, int(rewards.get("exp_fixed", 12)))
-    points_fixed = max(0, int(rewards.get("points_fixed", 2)))
+    return {
+        "exp_pool": max(0, round(int(rewards.get("exp_pool_per_scale", 60)) * reward_scale_count * ratio)),
+        "points_pool": max(0, round(int(rewards.get("points_pool_per_scale", 8)) * reward_scale_count * ratio)),
+        "exp_fixed": max(0, round(int(rewards.get("exp_fixed", 12)) * ratio)),
+        "points_fixed": max(0, round(int(rewards.get("points_fixed", 2)) * ratio)),
+    }
+
+
+def _world_boss_reward_lines(
+    group: dict,
+    contributors: dict[str, int],
+    *,
+    exp_pool: int,
+    points_pool: int,
+    exp_fixed: int,
+    points_fixed: int,
+) -> list[str]:
+    lines: list[str] = []
     exp_alloc = _allocate_exact(exp_pool, contributors)
     points_alloc = _allocate_exact(points_pool, contributors)
 
@@ -391,8 +402,8 @@ def _world_boss_kill_lines(group: dict, boss: dict) -> list[str]:
     for uid, damage in ranked:
         user = _ensure_player(group, uid)
         old_level = _level_of(int(user.get("exp", 0)))
-        exp_gain = exp_fixed + int(exp_alloc.get(uid, 0))
-        points_gain = points_fixed + int(points_alloc.get(uid, 0))
+        exp_gain = int(exp_fixed) + int(exp_alloc.get(uid, 0))
+        points_gain = int(points_fixed) + int(points_alloc.get(uid, 0))
         user["exp"] = int(user.get("exp", 0)) + exp_gain
         user["points"] = int(user.get("points", 0)) + points_gain
         new_level = _level_of(int(user.get("exp", 0)))
@@ -408,9 +419,79 @@ def _world_boss_kill_lines(group: dict, boss: dict) -> list[str]:
                 levelup=levelup,
             )
         )
+    return lines
+
+
+def _world_boss_kill_lines(group: dict, boss: dict) -> list[str]:
+    contributors = _world_boss_contributors(boss)
+    lines = [_line("world_boss_kill", monster=boss.get("name", "世界BOSS"))]
+    if not contributors:
+        _rpg_state(group).pop("world_boss", None)
+        return lines
+
+    reward_values = _world_boss_reward_values(boss)
+    lines.extend(
+        _world_boss_reward_lines(
+            group,
+            contributors,
+            exp_pool=reward_values["exp_pool"],
+            points_pool=reward_values["points_pool"],
+            exp_fixed=reward_values["exp_fixed"],
+            points_fixed=reward_values["points_fixed"],
+        )
+    )
 
     _rpg_state(group).pop("world_boss", None)
     return lines
+
+
+def _world_boss_unfinished_lines(group: dict, boss: dict) -> list[str]:
+    contributors = _world_boss_contributors(boss)
+    if not contributors:
+        return []
+
+    reward_cfg = _world_boss_reward_cfg()
+    total_damage = sum(contributors.values())
+    max_hp = max(1, int(boss.get("max_hp", 1)))
+    progress = max(0.0, min(1.0, total_damage / max_hp))
+    reward_ratio = max(0.0, min(1.0, progress * float(reward_cfg.get("unfinished_reward_mult", 0.5))))
+    reward_values = _world_boss_reward_values(boss, reward_ratio=reward_ratio)
+
+    lines = [
+        _line(
+            "world_boss_expired",
+            monster=boss.get("name", "世界BOSS"),
+            progress=round(progress * 100),
+            reward_percent=round(reward_ratio * 100),
+        )
+    ]
+    lines.extend(
+        _world_boss_reward_lines(
+            group,
+            contributors,
+            exp_pool=reward_values["exp_pool"],
+            points_pool=reward_values["points_pool"],
+            exp_fixed=reward_values["exp_fixed"],
+            points_fixed=reward_values["points_fixed"],
+        )
+    )
+    return lines
+
+
+def _cleanup_stale_world_boss(group: dict, today: str) -> tuple[list[str], bool]:
+    state = _rpg_state(group)
+    boss = state.get("world_boss")
+    if not isinstance(boss, dict):
+        changed = "world_boss" in state
+        state.pop("world_boss", None)
+        return [], changed
+    if boss.get("date") == today:
+        return [], False
+    if int(boss.get("hp", 0)) <= 0:
+        return _world_boss_kill_lines(group, boss), True
+    lines = _world_boss_unfinished_lines(group, boss)
+    state.pop("world_boss", None)
+    return lines, True
 
 
 def _world_boss_spawn_lines(boss: dict | None) -> list[str]:
@@ -487,7 +568,10 @@ async def _(event: Event, args: Message = CommandArg()):
     async with LOCK:
         data = _load_data()
         group = _get_group(data, group_id)
-        lines = _world_boss_status_lines(group, today)
+        settlement_lines, changed = _cleanup_stale_world_boss(group, today)
+        if changed:
+            _save_data(data)
+        lines = [*settlement_lines, *_world_boss_status_lines(group, today)]
 
     await world_boss_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
 
@@ -513,9 +597,10 @@ async def _(event: Event, args: Message = CommandArg()):
     async with LOCK:
         data = _load_data()
         group = _get_group(data, group_id)
+        settlement_lines, _changed = _cleanup_stale_world_boss(group, today)
         current = _active_world_boss(group, today)
         if current:
-            lines = [_line("world_boss_force_exists"), *_world_boss_status_lines(group, today)]
+            lines = [*settlement_lines, _line("world_boss_force_exists"), *_world_boss_status_lines(group, today)]
         else:
             spawned = _spawn_world_boss(
                 group,
@@ -525,7 +610,7 @@ async def _(event: Event, args: Message = CommandArg()):
                 snapshot=_force_world_boss_snapshot(group, today),
             )
             _save_data(data)
-            lines = [_line("world_boss_force_opened"), *_world_boss_spawn_lines(spawned)]
+            lines = [*settlement_lines, _line("world_boss_force_opened"), *_world_boss_spawn_lines(spawned)]
     await force_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
 
 
@@ -552,19 +637,28 @@ async def _(event: Event, args: Message = CommandArg()):
     async with LOCK:
         data = _load_data()
         group = _get_group(data, group_id)
-        user = _ensure_player(group, user_id, _display_name(event))
-
-        if user.get("equip_date") != today:
-            await attack_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + _error("need_equip"))
-
+        settlement_lines, changed = _cleanup_stale_world_boss(group, today)
         boss = _active_world_boss(group, today)
         if not boss:
-            await attack_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + _error("boss_none"))
+            if changed:
+                _save_data(data)
+            lines = [*settlement_lines, _error("boss_none")]
+            await attack_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
+
+        user = _ensure_player(group, user_id, _display_name(event))
+        if user.get("equip_date") != today:
+            if changed:
+                _save_data(data)
+            await attack_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + _error("need_equip"))
 
         participant = _ensure_boss_participant(boss, user_id, user, today, rng=random)
         if participant is None:
+            if changed:
+                _save_data(data)
             await attack_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + _error("need_equip"))
         if participant.get("equip_used") and not is_superuser:
+            if changed:
+                _save_data(data)
             await attack_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + _error("boss_already_attacked"))
 
         dealt = _apply_world_boss_damage(
@@ -627,28 +721,44 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
     async with LOCK:
         data = _load_data()
         group = _get_group(data, group_id)
+        settlement_lines, changed = _cleanup_stale_world_boss(group, today)
         boss = _active_world_boss(group, today)
         if not boss:
-            await team_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + _error("boss_none"))
+            if changed:
+                _save_data(data)
+            lines = [*settlement_lines, _error("boss_none")]
+            await team_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
 
         b = _ensure_player(group, initiator, _display_name(event))
         if b.get("equip_date") != today:
+            if changed:
+                _save_data(data)
             await team_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + _error("need_equip"))
 
         a = _ensure_player(group, target)
         a_name = a.get("display_name") or f"群友{target}"
         if a.get("equip_date") != today:
+            if changed:
+                _save_data(data)
             await team_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + _error("team_target_no_signin"))
 
         b_participant = _ensure_boss_participant(boss, initiator, b, today, rng=random)
         a_participant = _ensure_boss_participant(boss, target, a, today, rng=random)
         if b_participant is None:
+            if changed:
+                _save_data(data)
             await team_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + _error("need_equip"))
         if a_participant is None:
+            if changed:
+                _save_data(data)
             await team_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + _error("team_target_no_signin"))
         if b_participant.get("equip_used") and not is_superuser:
+            if changed:
+                _save_data(data)
             await team_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + _error("boss_already_attacked"))
         if a_participant.get("equip_used"):
+            if changed:
+                _save_data(data)
             await team_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + _error("team_target_broken"))
 
         bond_level = _bond_level(_get_intimacy(group, initiator, target))["level"]

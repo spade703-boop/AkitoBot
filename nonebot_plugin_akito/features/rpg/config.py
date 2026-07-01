@@ -116,6 +116,7 @@ DEFAULT_RPG_CONFIG: dict = {
             "exp_pool_per_scale": 60,
             "points_fixed": 2,
             "points_pool_per_scale": 8,
+            "unfinished_reward_mult": 0.5,
         },
         "boss_names": [
             "赤鳞灾龙",
@@ -245,6 +246,7 @@ DEFAULT_RPG_CONFIG: dict = {
         "world_boss_fail_event_out_of_step": ["……两人没能在开战前顺利会合。"],
         "world_boss_team_bonus": ["· 协作加成：本次合击额外提高了 {bonus_total} 点总伤害。"],
         "world_boss_kill": ["🏆 世界BOSS【{monster}】已被击败，开始按贡献结算奖励。"],
+        "world_boss_expired": ["🌫️ 昨天的世界BOSS【{monster}】已经离场。讨伐进度 {progress}% ，本次按 {reward_percent}% 奖励规模发放补偿。"],
         "world_boss_reward": ["· {name}：贡献 {damage}，经验 +{exp}、积分 +{points}{levelup}"],
         "forge_world_boss_ok": ["🔧 世界BOSS装备已强化（已强化 ×{forge}，花费 {cost} 积分）。"],
         # 精英怪遭遇（{a}=真@；{monster}=文本）
