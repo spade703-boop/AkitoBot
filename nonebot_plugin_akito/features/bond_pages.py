@@ -335,6 +335,7 @@ def build_world_boss_rank_page_data(
 
     podium = rows[:3]
     others = rows[3:]
+    participant_count = len(rows)
     last_hit_name = next((row["player"]["name"] for row in rows if row["last_hit"]), "—")
     last_hit_reward = next(
         (
@@ -345,7 +346,7 @@ def build_world_boss_rank_page_data(
         "无",
     )
     if pill is None:
-        pill = f"{monster} 已被击败"
+        pill = f"共 {participant_count} 人参与结算"
 
     return {
         "page_width": 760,
@@ -354,12 +355,13 @@ def build_world_boss_rank_page_data(
         "pill": pill,
         "monster": monster,
         "stats": {
-            "count": len(rows),
+            "count": participant_count,
             "total_damage": sum(row["damage"] for row in rows),
             "total_exp": sum(row["exp"] for row in rows),
             "total_points": sum(row["points"] for row in rows),
             "last_hit_name": last_hit_name,
             "last_hit_reward": last_hit_reward,
+            "headline": f"本次共有 {participant_count} 人参与世界BOSS结算",
         },
         "podium": podium,
         "others": others,

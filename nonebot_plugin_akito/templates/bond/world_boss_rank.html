@@ -35,7 +35,7 @@
   .boss-card,.summary{background:var(--surface);border:1px solid var(--line);border-radius:20px;}
   .boss-card{flex:1 1 0;padding:18px 18px 16px;}
   .boss-card .label{font-size:12px;letter-spacing:.12em;color:var(--muted);}
-  .boss-card .name{margin-top:8px;font-size:28px;font-weight:800;color:var(--gold);}
+  .boss-card .name{margin-top:8px;font-size:26px;font-weight:800;color:var(--gold);line-height:1.3;}
   .boss-card .desc{margin-top:10px;font-size:13px;line-height:1.7;color:rgba(255,255,255,.76);}
   .summary{width:250px;padding:16px;}
   .chips{display:flex;flex-wrap:wrap;gap:8px;}
@@ -49,7 +49,7 @@
   .section-title h2{margin:0;font-size:18px;font-weight:800;letter-spacing:.03em;}
   .section-title span{font-size:12px;color:var(--muted);}
 
-  .podium{display:grid;grid-template-columns:1fr 1.12fr 1fr;gap:12px;align-items:end;}
+  .podium{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;align-items:stretch;}
   .podium-card{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:16px 15px 14px;min-height:208px;}
   .podium-card.rank-1{background:linear-gradient(180deg, rgba(255,207,106,.16), rgba(255,255,255,.05));border-color:rgba(255,220,150,.28);}
   .podium-card.rank-2{background:linear-gradient(180deg, rgba(219,232,255,.14), rgba(255,255,255,.05));border-color:rgba(219,232,255,.26);}
@@ -104,9 +104,9 @@
 
     <div class="hero">
       <div class="boss-card">
-        <div class="label">WORLD BOSS</div>
-        <div class="name">{{ monster }}</div>
-        <div class="desc">讨伐完成后，奖励已按贡献量发放。尾刀奖励只额外发给完成最后一击的玩家。</div>
+        <div class="label">SETTLEMENT OVERVIEW</div>
+        <div class="name">{{ stats.headline }}</div>
+        <div class="desc">这里仅展示本次结算的参与情况与奖励汇总，不再单独展示 BOSS 名称。尾刀奖励只额外发给完成最后一击的玩家。</div>
       </div>
       <div class="summary">
         <div class="chips">
@@ -140,10 +140,10 @@
 
     <div class="section-title">
       <h2>前三名</h2>
-      <span>按伤害贡献排序</span>
+      <span>按冠军、亚军、季军顺序展示</span>
     </div>
     <div class="podium">
-      {% for card in [podium[1] if podium|length > 1 else None, podium[0] if podium|length > 0 else None, podium[2] if podium|length > 2 else None] %}
+      {% for card in podium %}
       {% if card %}
       <div class="podium-card rank-{{ card.rank }}">
         <div class="rank-label">
@@ -170,9 +170,6 @@
         <div class="lvl">尾刀追加：+{{ card.exp_bonus }} 经验 / +{{ card.points_bonus }} 积分</div>
         {% endif %}
       </div>
-      {% else %}
-      <div></div>
-      {% endif %}
       {% endfor %}
     </div>
 
