@@ -490,6 +490,7 @@ def _stub_hunt_rng(monkeypatch, monster, *, event="", drops=None, elite=False, b
     # 遭遇桩：精英默认关、今日增益默认平日 → 既有用例保持确定（数值不被随机精英/增益扰动）
     monkeypatch.setattr(hunt, "_pick_encounter", lambda level, rng=hunt.random: (monster, elite))
     monkeypatch.setattr(hunt, "_roll_hunt_event", lambda margin, rng=hunt.random: event)
+    monkeypatch.setattr(hunt, "_roll_solo_support_scene", lambda win, rng=hunt.random: "")
     monkeypatch.setattr(hunt.random, "uniform", lambda _a, _b: 1.0)
     monkeypatch.setattr(hunt, "_roll_drops", lambda m, rng=hunt.random, mult=1.0: list(drops or []))
     monkeypatch.setattr(hunt, "_today_buff", lambda: buff or _PLAIN_BUFF)
@@ -602,13 +603,28 @@ async def test_status_panel_only_level_and_equip(monkeypatch):
         "u1": {"exp": lv3, "points": 250, "equip_date": "2026-06-22", "equip_used": False,
                "equip_forge": 1, "inventory": {"经验书": 2}}}}}})
     monkeypatch.setattr(character, "_today_str", lambda: "2026-06-22")
-    monkeypatch.setattr(character, "is_sleeping", lambda: False)
     monkeypatch.setattr(character, "_load_data", lambda: deepcopy(state))
     with pytest.raises(FinishedException) as exc:
         await character.status_cmd.handlers[0](Event(group_id=1001, user_id="u1"))
     r = str(exc.value.result)
     assert "Lv3" in r and "今日装备" in r and "已强化" in r and "250" in r
     assert "战力" not in r  # 战力隐藏，不外显
+
+
+@pytest.mark.asyncio
+async def test_status_panel_still_available_while_sleeping(monkeypatch):
+    lv2 = player._cum_exp(2, player._level_base())
+    state = game_store._normalize_data({"groups": {"1001": {"users": {
+        "u1": {"exp": lv2, "equip_date": "2026-06-22", "equip_used": False}
+    }}}})
+    monkeypatch.setattr(character, "_today_str", lambda: "2026-06-22")
+    monkeypatch.setattr(character, "is_sleeping", lambda: True, raising=False)
+    monkeypatch.setattr(character, "_load_data", lambda: deepcopy(state))
+    with pytest.raises(FinishedException) as exc:
+        await character.status_cmd.handlers[0](Event(group_id=1001, user_id="u1"))
+    result = str(exc.value.result)
+    assert "角色档案" in result
+    assert "睡" not in result
 
 
 @pytest.mark.asyncio
@@ -808,6 +824,7 @@ def test_settle_solo_rookie_bonus_only_applies_to_solo(monkeypatch):
     monkeypatch.setattr(hunt, "_pick_encounter", _pick)
     monkeypatch.setattr(hunt.random, "uniform", lambda _a, _b: 1.0)
     monkeypatch.setattr(hunt, "_roll_hunt_event", lambda margin, rng=hunt.random: "")
+    monkeypatch.setattr(hunt, "_roll_solo_support_scene", lambda win, rng=hunt.random: "")
     monkeypatch.setattr(hunt, "_roll_coop_event", lambda rng=hunt.random: "")
     monkeypatch.setattr(hunt, "_today_buff", lambda: _PLAIN_BUFF)
     monkeypatch.setattr(hunt, "resolve_hunt", _resolve)
@@ -832,6 +849,11 @@ def test_team_success_rate_scales_and_clamps():
     assert team._team_success_rate(-1) == pytest.approx(base - 2 * neg_step)
     assert team._team_success_rate(99) == pytest.approx(float(t["max_success"]))   # 封顶
     assert team._team_success_rate(-99) == pytest.approx(float(t["min_success"]))   # 深度负羁绊封底
+
+
+def test_world_boss_team_success_rate_matches_normal_team_formula():
+    for bond_level in (6, 3, 1, 0, -1, -5):
+        assert boss._team_success_rate(bond_level) == pytest.approx(team._team_success_rate(bond_level))
 
 
 def test_team_exp_bonus_scales_and_caps():
@@ -1113,6 +1135,150 @@ async def test_team_fail_by_rng_degrades_to_solo(monkeypatch):
     assert "迟疑" in str(exc.value.result)
 
 
+def test_roll_solo_support_scene_uses_fixed_three_percent_bands():
+    class _SeqRng:
+        def __init__(self, val):
+            self.val = val
+
+        def random(self):
+            return self.val
+
+    assert hunt._roll_solo_support_scene(True, _SeqRng(0.0)) == "akito_success"
+    assert hunt._roll_solo_support_scene(True, _SeqRng(0.04)) == ""
+    assert hunt._roll_solo_support_scene(False, _SeqRng(0.00)) == "akito_fail"
+    assert hunt._roll_solo_support_scene(False, _SeqRng(0.04)) == "toya_rescue"
+    assert hunt._roll_solo_support_scene(False, _SeqRng(0.08)) == "duo_combo"
+    assert hunt._roll_solo_support_scene(False, _SeqRng(0.12)) == ""
+
+
+@pytest.mark.asyncio
+async def test_hunt_support_akito_success_adds_bonus_rewards(monkeypatch):
+    state = _patch_io(monkeypatch, hunt, store={"groups": {"1001": {"users": {"u1": _equipped_user(points=0)}}}})
+    _stub_hunt_rng(monkeypatch, {"name": "史莱姆", "power_req": 1, "drops": []})
+    monkeypatch.setattr(hunt, "_roll_solo_support_scene", lambda win, rng=hunt.random: "akito_success")
+
+    with pytest.raises(FinishedException) as exc:
+        await hunt.hunt_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="u1"))
+
+    user = state["groups"]["1001"]["users"]["u1"]
+    bonus_exp = hunt._support_bonus_exp("akito_success", user, 1)
+    bonus_points = hunt._support_bonus_points("akito_success", user)
+    assert user["exp"] == hunt._challenge_exp(True, 1) + bonus_exp
+    assert user["points"] == hunt._challenge_points(True, user) + bonus_points
+    result = str(exc.value.result)
+    assert "真·龙王烈火斩" in result
+    assert f"额外获得经验 +{bonus_exp}" in result
+
+
+@pytest.mark.asyncio
+async def test_hunt_support_akito_fail_keeps_failure_with_bonus(monkeypatch):
+    state = _patch_io(monkeypatch, hunt, store={"groups": {"1001": {"users": {"u1": _equipped_user(points=0)}}}})
+    _stub_hunt_rng(monkeypatch, {"name": "座狼", "power_req": 999, "drops": []})
+    monkeypatch.setattr(hunt, "_roll_solo_support_scene", lambda win, rng=hunt.random: "akito_fail")
+
+    with pytest.raises(FinishedException) as exc:
+        await hunt.hunt_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="u1"))
+
+    user = state["groups"]["1001"]["users"]["u1"]
+    bonus_exp = hunt._support_bonus_exp("akito_fail", user, 1)
+    bonus_points = hunt._support_bonus_points("akito_fail", user)
+    assert user["exp"] == hunt._challenge_exp(False, 1) + bonus_exp
+    assert user["points"] == hunt._challenge_points(False, user) + bonus_points
+    result = str(exc.value.result)
+    assert "未能击败【座狼】" in result
+    assert "反手补上一剑" in result
+
+
+@pytest.mark.asyncio
+async def test_hunt_support_toya_rescue_turns_loss_into_win(monkeypatch):
+    state = _patch_io(monkeypatch, hunt, store={"groups": {"1001": {"users": {"u1": _equipped_user(points=0)}}}})
+    _stub_hunt_rng(monkeypatch, {"name": "座狼", "power_req": 999, "drops": []})
+    monkeypatch.setattr(hunt, "_roll_solo_support_scene", lambda win, rng=hunt.random: "toya_rescue")
+
+    with pytest.raises(FinishedException) as exc:
+        await hunt.hunt_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="u1"))
+
+    user = state["groups"]["1001"]["users"]["u1"]
+    assert user["exp"] == hunt._challenge_exp(True, 1)
+    assert user["points"] == hunt._challenge_points(True, user)
+    result = str(exc.value.result)
+    assert any(
+        text in result
+        for text in (
+            "转机却在最后一刻出现了",
+            "局势却忽然有了变化",
+            "等来了转机",
+            "一线生机",
+        )
+    )
+    assert "本次挑战转为成功" in result
+    assert "已击败【座狼】" in result
+
+
+@pytest.mark.asyncio
+async def test_hunt_support_duo_combo_turns_loss_into_win_with_bonus(monkeypatch):
+    state = _patch_io(monkeypatch, hunt, store={"groups": {"1001": {"users": {"u1": _equipped_user(points=0)}}}})
+    _stub_hunt_rng(monkeypatch, {"name": "食人魔", "power_req": 999, "drops": []})
+    monkeypatch.setattr(hunt, "_roll_solo_support_scene", lambda win, rng=hunt.random: "duo_combo")
+
+    with pytest.raises(FinishedException) as exc:
+        await hunt.hunt_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="u1"))
+
+    user = state["groups"]["1001"]["users"]["u1"]
+    bonus_exp = hunt._support_bonus_exp("duo_combo", user, 1)
+    bonus_points = hunt._support_bonus_points("duo_combo", user)
+    assert user["exp"] == hunt._challenge_exp(True, 1) + bonus_exp
+    assert user["points"] == hunt._challenge_points(True, user) + bonus_points
+    result = str(exc.value.result)
+    assert any(
+        text in result
+        for text in (
+            "转机却在最后一刻出现了",
+            "局势却忽然有了变化",
+            "等来了转机",
+            "一线生机",
+        )
+    )
+    assert "青柳冬弥施放支援魔法稳住阵型" in result
+    assert "本次挑战转为成功" in result
+
+
+@pytest.mark.asyncio
+async def test_team_fail_rescue_runs_normal_coop_settlement(monkeypatch):
+    store = {"groups": {"1001": {
+        "users": {"u1": _equipped_user(points=0), "u2": _equipped_user(points=0)},
+    }}}
+    state = _patch_io(monkeypatch, team, store=store)
+    monkeypatch.setattr(team, "random", _Rng(0.999))
+    monkeypatch.setattr(team, "_roll_fail_flavor", lambda rng=team.random: "late_reply")
+    monkeypatch.setattr(team, "_roll_team_fail_rescue", lambda rng=team.random: True)
+    _stub_hunt_rng(monkeypatch, {"name": "史莱姆", "power_req": 1, "drops": []})
+    monkeypatch.setattr(hunt, "_roll_coop_event", lambda rng=hunt.random: "")
+
+    with pytest.raises(FinishedException) as exc:
+        await team.team_cmd.handlers[0](_bot(), _team_event("u1", "u2"))
+
+    users = state["groups"]["1001"]["users"]
+    pair = game_store._pair_key("u1", "u2")
+    assert users["u1"]["equip_used"] is True and users["u2"]["equip_used"] is True
+    assert users["u1"]["exp"] > 0 and users["u2"]["exp"] > 0
+    assert state["groups"]["1001"]["intimacy"][pair] == 4
+    result = str(exc.value.result)
+    assert "本次组队成立" in result
+    assert "送到了" in result
+    assert any(
+        text in result
+        for text in (
+            "转机却在最后一刻出现了",
+            "局势忽然有了变化",
+            "等来了转机",
+            "新的变化",
+        )
+    )
+    assert "独自前往" not in result
+    assert "[at:u1]" in result and "[at:u2]" in result
+
+
 @pytest.mark.asyncio
 async def test_team_negative_break_ice_grants_extra_bond(monkeypatch):
     store = {"groups": {"1001": {
@@ -1243,7 +1409,6 @@ async def test_status_panel_shows_title_and_record(monkeypatch):
         "u1": {"exp": lv3, "equip_date": "2026-06-22", "equip_used": False,
                "hunt_total": 5, "hunt_wins": 4}}}}})
     monkeypatch.setattr(character, "_today_str", lambda: "2026-06-22")
-    monkeypatch.setattr(character, "is_sleeping", lambda: False)
     monkeypatch.setattr(character, "_load_data", lambda: deepcopy(state))
     with pytest.raises(FinishedException) as exc:
         await character.status_cmd.handlers[0](Event(group_id=1001, user_id="u1"))

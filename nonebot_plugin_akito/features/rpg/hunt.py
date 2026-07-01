@@ -292,6 +292,71 @@ def _reward_mults(buff: dict, is_elite: bool, win: bool) -> tuple[float, float]:
     return exp_mult, drop_mult
 
 
+def _support_cfg() -> dict:
+    cfg = _cfg("support", {})
+    return cfg if isinstance(cfg, dict) else {}
+
+
+def _support_chance() -> float:
+    return max(0.0, min(1.0, float(_support_cfg().get("chance", 0.03))))
+
+
+def _support_spec(scene: str) -> dict:
+    spec = _support_cfg().get(scene, {})
+    return spec if isinstance(spec, dict) else {}
+
+
+def _roll_solo_support_scene(win: bool, rng=random) -> str:
+    """单刷特判：胜利仅彰人追击；失败时三种场景各占固定 3% 档位。"""
+    chance = _support_chance()
+    if chance <= 0:
+        return ""
+    roll = rng.random()
+    if win:
+        return "akito_success" if roll < chance else ""
+    if roll < chance:
+        return "akito_fail"
+    if roll < chance * 2:
+        return "toya_rescue"
+    if roll < chance * 3:
+        return "duo_combo"
+    return ""
+
+
+def _support_bonus_exp(scene: str, user: dict, level: int) -> int:
+    ratio = float(_support_spec(scene).get("exp_ratio", 0.0))
+    if ratio <= 0:
+        return 0
+    exp = int(_challenge_exp(True, level) * ratio)
+    if user.get("equip_rebought"):
+        exp = int(exp * _rebuy_exp_mult())
+    return max(0, exp)
+
+
+def _support_bonus_points(scene: str, user: dict) -> int:
+    ratio = float(_support_spec(scene).get("points_ratio", 0.0))
+    if ratio <= 0:
+        return 0
+    return max(0, int(_challenge_points(True, user) * ratio))
+
+
+def _apply_support_bonus(user: dict, out: dict) -> None:
+    scene = str(out.get("support_scene", ""))
+    if scene not in {"akito_success", "akito_fail", "duo_combo"}:
+        out["support_exp"] = 0
+        out["support_points"] = 0
+        return
+    bonus_exp = _support_bonus_exp(scene, user, int(out.get("old_level", 1)))
+    bonus_points = _support_bonus_points(scene, user)
+    if bonus_exp:
+        user["exp"] = int(user.get("exp", 0)) + bonus_exp
+    if bonus_points:
+        user["points"] = int(user.get("points", 0)) + bonus_points
+    out["support_exp"] = bonus_exp
+    out["support_points"] = bonus_points
+    out["new_level"] = _level_of(int(user.get("exp", 0)))
+
+
 def _settle_solo(user: dict, today: str) -> dict:
     """单刷完整结算：遭遇(含精英) → 事件 → 胜负（随机系数 + 隐藏运势）→ 发奖（含今日增益）→ 消耗装备。返回 out。"""
     ccfg = _cfg("combat", {})
@@ -306,10 +371,16 @@ def _settle_solo(user: dict, today: str) -> dict:
     power_factor = random.uniform(float(ccfg.get("factor_min", 0.8)), float(ccfg.get("factor_max", 1.2)))
     power_factor *= _rookie_power_factor(level)
     res = resolve_hunt(cp, eff, power_factor=power_factor, fortune_factor=fortune_factor, event=event_key)
+    support_scene = _roll_solo_support_scene(bool(res["win"]))
+    if not res["win"] and support_scene in {"toya_rescue", "duo_combo"}:
+        res["win"] = True
     exp_mult, drop_mult = _reward_mults(buff, is_elite, res["win"])
     rew = _apply_rewards(user, today, win=res["win"], monster=eff, event_key=event_key,
                          exp_mult=exp_mult, drop_mult=drop_mult)
-    return {**res, **rew, "monster": monster, "event": event_key, "elite": is_elite, "buff": buff}
+    out = {**res, **rew, "monster": monster, "event": event_key, "elite": is_elite, "buff": buff,
+           "support_scene": support_scene}
+    _apply_support_bonus(user, out)
+    return out
 
 
 def _settle_coop(
@@ -383,15 +454,21 @@ def _settle_coop(
     }
 
 
-def _hunt_result_lines(out: dict) -> list:
-    """结果行（不含遭遇行）：事件 →（胜负 = 经验 + 积分）→ 双倍 → 掉落 → 升级。供单刷与组队失败单刷复用。"""
+def _hunt_event_line(out: dict) -> str:
+    """事件行：优先用胜负专属文案，缺失时回退通用事件文案。"""
     m = out["monster"]
-    lines: list = []
     if out.get("event"):
         copy_table = _cfg("copy", {})
         result_key = f"event_{out['event']}_{'win' if out['win'] else 'lose'}"
         event_key = result_key if isinstance(copy_table, dict) and copy_table.get(result_key) else f"event_{out['event']}"
-        lines.append(_render_with_ats(random.choice(_copy(event_key)), {"monster": m.get("name", "")}))
+        return _render_with_ats(random.choice(_copy(event_key)), {"monster": m.get("name", "")})
+    return ""
+
+
+def _hunt_reward_lines(out: dict) -> list[str]:
+    """普通结果行：胜负 → 双倍 → 掉落 → 升级 → 今日增益。"""
+    m = out["monster"]
+    lines: list[str] = []
     lines.append(_line("hunt_win" if out["win"] else "hunt_lose",
                        monster=m.get("name", ""), exp=out["exp_gain"], points=out["points_gain"]))
     if out.get("exp_buffed"):
@@ -404,6 +481,49 @@ def _hunt_result_lines(out: dict) -> list:
         lines.append(_line("levelup", level=out["old_level"], newlevel=out["new_level"]))
     if _buff_active(out.get("buff")):  # 今日增益生效才揭示（平时无感）
         lines.append(_line("daily_buff", buff=out["buff"].get("name", "")))
+    return lines
+
+
+def _hunt_support_lines(out: dict) -> list[str]:
+    scene = str(out.get("support_scene", ""))
+    if not scene:
+        return []
+    lines: list[str] = []
+    if scene in {"toya_rescue", "duo_combo"}:
+        turn_line = _line("hunt_fail_turn")
+        if turn_line:
+            lines.append(turn_line)
+    key = {
+        "akito_success": "support_akito_success",
+        "akito_fail": "support_akito_fail",
+        "toya_rescue": "support_toya_rescue",
+        "duo_combo": "support_duo_combo",
+    }.get(scene, "")
+    if not key:
+        return lines
+    line = _line(
+        key,
+        monster=out["monster"].get("name", ""),
+        exp=int(out.get("support_exp", 0)),
+        points=int(out.get("support_points", 0)),
+    )
+    if line:
+        lines.append(line)
+    return lines
+
+
+def _hunt_result_lines(out: dict) -> list:
+    """结果行（不含遭遇行）：事件、特判播报、普通结算按场景顺序拼接。"""
+    lines: list = []
+    event_line = _hunt_event_line(out)
+    if event_line:
+        lines.append(event_line)
+    support_lines = _hunt_support_lines(out)
+    if out.get("support_scene") in {"toya_rescue", "duo_combo"}:
+        lines.extend(support_lines)
+    lines.extend(_hunt_reward_lines(out))
+    if out.get("support_scene") in {"akito_success", "akito_fail"}:
+        lines.extend(support_lines)
     return lines
 
 

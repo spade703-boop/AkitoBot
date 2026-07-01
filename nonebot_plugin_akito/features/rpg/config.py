@@ -116,6 +116,13 @@ DEFAULT_RPG_CONFIG: dict = {
         },
         "fail_flavor": {"hesitate": 4, "late_reply": 3, "out_of_step": 3},
     },
+    # ---- 战斗特判：普通 RPG 战斗专用。单刷胜利 / 单刷失败 / 组队失败都有独立 3% 援护判定 ----
+    "support": {
+        "chance": 0.03,
+        "akito_success": {"exp_ratio": 0.35, "points_ratio": 0.30},
+        "akito_fail": {"exp_ratio": 0.35, "points_ratio": 0.30},
+        "duo_combo": {"exp_ratio": 0.35, "points_ratio": 0.30},
+    },
     # ---- 世界 BOSS：极低概率在常规打怪后出现；强度按近 7 日活跃签到人数缩放 ----
     "world_boss": {
         "spawn_chance": 0.01,
@@ -217,6 +224,12 @@ DEFAULT_RPG_CONFIG: dict = {
         "hunt_win": ["已击败【{monster}】。经验 +{exp}、积分 +{points}（今日装备已损耗）。"],
         "hunt_lose": ["未能击败【{monster}】。经验 +{exp}、积分 +{points}（今日装备已损耗）。"],
         "levelup": ["⬆️ 等级上去了。Lv{level} → Lv{newlevel}。"],
+        "hunt_fail_turn": [
+            "眼看就要败退，转机却在最后一刻出现了。",
+            "原以为这场战斗就要到此为止，局势却忽然有了变化。",
+            "局面已经岌岌可危，没想到最后还是等来了转机。",
+            "胜负几乎已成定局，战场上却忽然出现了一线生机。",
+        ],
         "event_slip": ["💢 行动受阻，这一击没能完全发挥。"],
         "event_slip_win": ["💢 行动受阻，但还是成功击败了【{monster}】。"],
         "event_slip_lose": ["💢 行动受阻，这次没能稳住局面。"],
@@ -263,6 +276,33 @@ DEFAULT_RPG_CONFIG: dict = {
         "team_fail_event_hesitate": ["……{b_name} 似乎迟疑了一下，没能及时加入战斗。"],
         "team_fail_event_late_reply": ["……{b_name} 赶来得稍晚，没能在战斗开始前会合。"],
         "team_fail_event_out_of_step": ["……两人没能顺利会合，这次组队作战失败了。"],
+        "team_fail_turn": [
+            "{a} 原本已经准备独自迎战，转机却在最后一刻出现了。",
+            "{a} 本以为这次只能单独出战，没想到局势忽然有了变化。",
+            "{a} 都已经打算一个人撑下这一战，结果最后还是等来了转机。",
+            "{a} 眼看要改成独自作战，战线那边却突然出现了新的变化。",
+        ],
+        "support_akito_success": [
+            "【追击】橙发的勇者从旁挥剑追上。\n“『真·龙王烈火斩』！……”\n【{monster}】被彻底消灭。\n· 额外获得经验 +{exp}、积分 +{points}"
+        ],
+        "support_akito_fail": [
+            "【追击】橙发的勇者拦在怪物身前，反手补上一剑。\n【{monster}】被这一击逼退。\n· 额外获得经验 +{exp}、积分 +{points}"
+        ],
+        "support_toya_rescue": [
+            "【援护】蓝灰双色发的神官挥动法杖。\n“释放治愈魔法——『神圣治愈』！”\n战局稳住了。\n· 本次挑战转为成功"
+        ],
+        "support_duo_combo": [
+            "【联携】青柳冬弥施放支援魔法稳住阵型，东云彰人挥剑突入追击。\n【{monster}】被一举击破。\n· 本次挑战转为成功\n· 额外获得经验 +{exp}、积分 +{points}"
+        ],
+        "team_support_hesitate": [
+            "【支援】路过的勇者与神官的鼓励重新使{b_name}充满了勇气。\n· 本次组队成立"
+        ],
+        "team_support_late_reply": [
+            "【支援】蓝灰双色发的神官施放传送魔法，将{b_name}送到了{a_name}附近。\n· 本次组队成立"
+        ],
+        "team_support_out_of_step": [
+            "【支援】橙发的勇者先行稳住敌人攻势，{b_name}得以及时加入战场。\n· 本次组队成立"
+        ],
         # 世界 BOSS
         "world_boss_spawn": ["🌍 世界BOSS【{monster}】出现了。"],
         "world_boss_spawn_scale": ["· 这次的强度按近 7 日活跃冒险者规模生成。"],

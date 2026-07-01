@@ -9,7 +9,7 @@ from nonebot.adapters import Event, Message
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageSegment
 from nonebot.params import CommandArg
 
-from ...core import ALLOWED_CHAT_GROUPS, is_sleeping
+from ...core import ALLOWED_CHAT_GROUPS
 from ...core.game_store import LOCK, _display_name, _get_group, _load_data, _save_data, _today_str
 from .boss import _active_world_boss, _cleanup_stale_world_boss, _ensure_boss_participant
 from .config import _error, _line
@@ -35,9 +35,6 @@ async def _(event: Event, args: Message = CommandArg()):
 
     if args and args.extract_plain_text().strip():
         return
-
-    if is_sleeping():
-        await status_cmd.finish(MessageSegment.reply(event.message_id) + _error("sleeping"))
 
     today = _today_str()
     async with LOCK:
@@ -134,8 +131,8 @@ async def _(event: Event, args: Message = CommandArg()):
         "🗺️ 冒险系统\n"
         "━━━━━━━━━━━━━━\n"
         "· 签到 — 领积分、经验和今天这套装备\n"
-        "· 今日打怪 — 用今天的装备出去打一趟，赚经验、积分和掉落\n"
-        "· 组队@某人 — 邀请群友一起作战；羁绊越深越容易组队成功，结队后会有协作加成并小幅增长羁绊；负羁绊会更难磨合，也可能触发额外事件（对方需已签到）\n"
+        "· 今日打怪 — 用今天的装备出去打一趟，赚经验、积分和掉落；偶尔会有追击或援护\n"
+        "· 组队@某人 — 邀请群友一起作战；羁绊越深越容易组队成功，结队后会有协作加成并小幅增长羁绊；失败通常会改单刷，但偶尔也会被援护拉回成立（对方需已签到）\n"
         "· 世界BOSS — 查看当前世界BOSS状态；它会在普通打怪后以极低概率出现，隔天没打完会按贡献补发一笔收尾奖励\n"
         "· 攻击世界BOSS / 组队世界BOSS@某人 — 世界BOSS是独立的群挑战线，签到过的人都能各打一次，击败后按贡献结算\n"
         "· 强化世界BOSS装备 — 世界BOSS出现后，可单独强化这套临时装备，最多3次\n"

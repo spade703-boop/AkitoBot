@@ -52,7 +52,12 @@ def _soft_scale_count(active_count: int, *, base_cap: int, extra_rate: float, ma
 
 def _team_success_rate(bond_level: int) -> float:
     tcfg = _cfg("team", {})
-    rate = float(tcfg.get("base_success", 0.35)) + (int(bond_level) - 1) * float(tcfg.get("per_level", 0.12))
+    level = int(bond_level)
+    base = float(tcfg.get("base_success", 0.35))
+    if level >= 1:
+        rate = base + (level - 1) * float(tcfg.get("per_level", 0.12))
+    else:
+        rate = base + (level - 1) * float(tcfg.get("negative_per_level", tcfg.get("per_level", 0.12)))
     return max(float(tcfg.get("min_success", 0.10)), min(float(tcfg.get("max_success", 0.95)), rate))
 
 

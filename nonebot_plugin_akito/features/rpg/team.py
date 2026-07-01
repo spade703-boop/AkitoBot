@@ -67,6 +67,19 @@ def _team_power_bonus() -> float:
     return max(0.0, float(_cfg("team", {}).get("power_bonus", 0.0)))
 
 
+def _support_chance() -> float:
+    cfg = _cfg("support", {})
+    if not isinstance(cfg, dict):
+        return 0.0
+    return max(0.0, min(1.0, float(cfg.get("chance", 0.03))))
+
+
+def _roll_team_fail_rescue(rng=random) -> bool:
+    """组队失败后的额外援护判定。"""
+    chance = _support_chance()
+    return chance > 0 and rng.random() < chance
+
+
 def _negative_team_cfg() -> dict:
     """负羁绊磨合事件配置。"""
     cfg = _cfg("team", {}).get("negative", {})
@@ -206,6 +219,56 @@ def _build_fail_broadcast(out: dict, b_id: str, a_name: str, fail_event: str = "
     return msg
 
 
+def _build_fail_rescue_broadcast(
+    out: dict,
+    initiator_id: str,
+    target_id: str,
+    initiator_name: str,
+    target_name: str,
+    fail_event: str,
+):
+    """组队失败后被援护拉回：先播特判，再进入正常双人结算。"""
+    key = fail_event or "out_of_step"
+    parts: list[str] = []
+    fail_line = _line(f"team_fail_event_{key}", b_name=target_name)
+    if fail_line:
+        parts.append(fail_line)
+    turn_line = _render_with_ats(random.choice(_copy("team_fail_turn")), {"a": initiator_id, "b_name": target_name})
+    if turn_line:
+        parts.append(str(turn_line))
+    rescue_line = _line(f"team_support_{key}", a_name=initiator_name, b_name=target_name)
+    if rescue_line:
+        parts.append(rescue_line)
+    coop = _build_coop_broadcast(out, initiator_id, target_id, initiator_name, target_name)
+    return coop if not parts else "\n".join(parts) + "\n" + coop
+
+
+def _settle_team_result(group: dict, initiator: str, target: str, b: dict, a: dict, today: str, raw_intimacy: int, bond_level: int) -> dict:
+    """统一的组队结算入口：普通成功与援护拉回后的组队都共用。"""
+    negative_event = _roll_negative_team_event(raw_intimacy, random)
+    negative_spec = _negative_team_event_spec(negative_event)
+    out = _settle_coop(
+        b,
+        a,
+        today,
+        exp_bonus=_team_exp_bonus(bond_level),
+        drop_bonus=_team_drop_bonus(bond_level),
+        extra_power_mult=float(negative_spec.get("power_mult", 1.0)),
+        extra_exp_mult=float(negative_spec.get("exp_mult", 1.0)),
+        extra_drop_mult=float(negative_spec.get("drop_mult", 1.0)),
+    )
+    out["negative_event"] = negative_event
+    out["bond_gain"] = _grant_team_bond(
+        group,
+        initiator,
+        target,
+        today,
+        win=bool(out.get("win")),
+        extra=int(negative_spec.get("bond_bonus", 0)),
+    )
+    return out
+
+
 team_cmd = on_command("组队", priority=5, block=True)
 
 
@@ -267,38 +330,26 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
         raw_intimacy = _get_intimacy(group, initiator, target)
         bond_level = _bond_level(raw_intimacy)["level"]
         success = random.random() < _team_success_rate(bond_level)
+        b_name = b.get("display_name") or f"群友{initiator}"
+        fail_flavor = ""
 
         if success:
-            negative_event = _roll_negative_team_event(raw_intimacy, random)
-            negative_spec = _negative_team_event_spec(negative_event)
-            out = _settle_coop(
-                b,
-                a,
-                today,
-                exp_bonus=_team_exp_bonus(bond_level),
-                drop_bonus=_team_drop_bonus(bond_level),
-                extra_power_mult=float(negative_spec.get("power_mult", 1.0)),
-                extra_exp_mult=float(negative_spec.get("exp_mult", 1.0)),
-                extra_drop_mult=float(negative_spec.get("drop_mult", 1.0)),
-            )
-            out["negative_event"] = negative_event
-            out["bond_gain"] = _grant_team_bond(
-                group,
-                initiator,
-                target,
-                today,
-                win=bool(out.get("win")),
-                extra=int(negative_spec.get("bond_bonus", 0)),
-            )
+            out = _settle_team_result(group, initiator, target, b, a, today, raw_intimacy, bond_level)
             boss_lines = _maybe_spawn_world_boss_lines(group, today, initiator, rng=random)
             _save_data(data)
-            b_name = b.get("display_name") or f"群友{initiator}"
             msg = _build_coop_broadcast(out, initiator, target, b_name, a_name)
         else:
-            out = _settle_solo(b, today)
-            boss_lines = _maybe_spawn_world_boss_lines(group, today, initiator, rng=random)
-            _save_data(data)
-            msg = _build_fail_broadcast(out, initiator, a_name, _roll_fail_flavor())
+            fail_flavor = _roll_fail_flavor()
+            if _roll_team_fail_rescue(random):
+                out = _settle_team_result(group, initiator, target, b, a, today, raw_intimacy, bond_level)
+                boss_lines = _maybe_spawn_world_boss_lines(group, today, initiator, rng=random)
+                _save_data(data)
+                msg = _build_fail_rescue_broadcast(out, initiator, target, b_name, a_name, fail_flavor)
+            else:
+                out = _settle_solo(b, today)
+                boss_lines = _maybe_spawn_world_boss_lines(group, today, initiator, rng=random)
+                _save_data(data)
+                msg = _build_fail_broadcast(out, initiator, a_name, fail_flavor)
         if settlement_lines:
             msg = "\n".join(settlement_lines) + "\n" + msg
         if boss_lines:
