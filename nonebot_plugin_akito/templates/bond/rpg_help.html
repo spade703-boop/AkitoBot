@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=900, initial-scale=1">
+<title>{{ title }}</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    color: #f5efe6;
+    background:
+      radial-gradient(720px 480px at 0% 0%, rgba(255, 153, 82, 0.22), transparent 60%),
+      radial-gradient(760px 520px at 100% 100%, rgba(84, 129, 255, 0.16), transparent 64%),
+      linear-gradient(160deg, #17141d 0%, #151923 54%, #11161c 100%);
+    -webkit-font-smoothing: antialiased;
+  }
+  .page {
+    width: 900px;
+    margin: 0 auto;
+    padding: 28px 30px 30px;
+  }
+  .card {
+    padding: 24px 26px 22px;
+    border-radius: 24px;
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+  }
+  .eyebrow {
+    font-size: 12px;
+    letter-spacing: 0.16em;
+    color: rgba(255, 245, 230, 0.56);
+    font-weight: 700;
+  }
+  h1 {
+    margin: 10px 0 0;
+    font-size: 31px;
+    line-height: 1.2;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+  }
+  .rule {
+    height: 1px;
+    margin: 16px 0 18px;
+    background: linear-gradient(90deg, rgba(255, 153, 82, 0.46), rgba(255, 255, 255, 0.10) 55%, rgba(84, 129, 255, 0.40));
+  }
+  .list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .line {
+    font-size: 18px;
+    line-height: 1.62;
+    color: #f5efe6;
+    word-break: break-word;
+  }
+  .hint {
+    margin-top: 18px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    font-size: 17px;
+    line-height: 1.6;
+    color: rgba(255, 245, 230, 0.88);
+  }
+</style>
+</head>
+<body>
+  <div class="page">
+    <div class="card">
+      <div class="eyebrow">AKITOBOT RPG HELP</div>
+      <h1>{{ title }}</h1>
+      <div class="rule"></div>
+      <div class="list">
+        {% for line in lines %}
+        <div class="line">· {{ line }}</div>
+        {% endfor %}
+      </div>
+      <div class="hint">{{ hint }}</div>
+    </div>
+  </div>
+</body>
+</html>

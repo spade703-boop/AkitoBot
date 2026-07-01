@@ -7,10 +7,12 @@ from __future__ import annotations
 from nonebot import on_command
 from nonebot.adapters import Event, Message
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageSegment
+from nonebot.log import logger
 from nonebot.params import CommandArg
 
 from ...core import ALLOWED_CHAT_GROUPS
 from ...core.game_store import LOCK, _display_name, _get_group, _load_data, _save_data, _today_str
+from ..bond_render import render_bond_page
 from .boss import _active_world_boss, _cleanup_stale_world_boss, _ensure_boss_participant
 from .config import _error, _line
 from .player import (
@@ -120,6 +122,44 @@ async def _(event: Event, args: Message = CommandArg()):
 
 help_cmd = on_command("冒险帮助", aliases={"打怪帮助", "冒险说明"}, priority=5, block=True)
 
+_HELP_TITLE = "🗺️ 冒险系统"
+_HELP_HINT = "💡 平时走个人挑战线，世界BOSS出现时再一起打群挑战。"
+_HELP_LINES = [
+    "签到 — 领积分、经验和今天这套装备",
+    "今日打怪 — 用今天的装备出去打一趟，赚经验、积分和掉落；偶尔会有追击或援护",
+    "组队@某人 — 邀请群友一起作战；羁绊越深越容易组队成功，结队后会有协作加成并小幅增长羁绊；失败通常会改单刷，但偶尔也会被援护拉回成立（对方需已签到）",
+    "世界BOSS — 查看当前世界BOSS状态；它会在普通打怪后以极低概率出现，隔天没打完会按贡献补发一笔收尾奖励",
+    "攻击世界BOSS / 组队世界BOSS@某人 — 世界BOSS是独立的群挑战线，签到过的人都能各打一次，击败后按贡献结算",
+    "强化世界BOSS装备 — 世界BOSS出现后，可单独强化这套临时装备，最多3次",
+    "强化今日装备 — 花积分提战力：第1次30分 / 第2次60分 / 第3次90分，每日限3次",
+    "购买装备 — 装备损坏后花100积分买一套替换装（每天限1次，打怪经验和积分减半）",
+    "我的角色 — 看等级、称号、战绩和装备状态（含世界BOSS）",
+    "群排行榜 — 看本群谁练得最快",
+    "我的背包 / 使用 [道具] — 看道具 / 用掉它；礼物券需 @ 对方",
+]
+
+
+def _help_text() -> str:
+    body = "\n".join(f"· {line}" for line in _HELP_LINES)
+    return f"{_HELP_TITLE}\n━━━━━━━━━━━━━━\n{body}\n\n{_HELP_HINT}"
+
+
+async def _render_help_image() -> bytes | None:
+    try:
+        return await render_bond_page(
+            "rpg_help.html",
+            {
+                "title": _HELP_TITLE,
+                "lines": _HELP_LINES,
+                "hint": _HELP_HINT,
+                "page_width": 900,
+            },
+            viewport_width=900,
+        )
+    except Exception as e:
+        logger.warning(f"rpg help render failed ({e}), falling back to text")
+        return None
+
 
 @help_cmd.handle()
 async def _(event: Event, args: Message = CommandArg()):
@@ -127,24 +167,12 @@ async def _(event: Event, args: Message = CommandArg()):
         return
     if isinstance(event, GroupMessageEvent) and event.group_id not in ALLOWED_CHAT_GROUPS:
         return
-    msg = (
-        "🗺️ 冒险系统\n"
-        "━━━━━━━━━━━━━━\n"
-        "· 签到 — 领积分、经验和今天这套装备\n"
-        "· 今日打怪 — 用今天的装备出去打一趟，赚经验、积分和掉落；偶尔会有追击或援护\n"
-        "· 组队@某人 — 邀请群友一起作战；羁绊越深越容易组队成功，结队后会有协作加成并小幅增长羁绊；失败通常会改单刷，但偶尔也会被援护拉回成立（对方需已签到）\n"
-        "· 世界BOSS — 查看当前世界BOSS状态；它会在普通打怪后以极低概率出现，隔天没打完会按贡献补发一笔收尾奖励\n"
-        "· 攻击世界BOSS / 组队世界BOSS@某人 — 世界BOSS是独立的群挑战线，签到过的人都能各打一次，击败后按贡献结算\n"
-        "· 强化世界BOSS装备 — 世界BOSS出现后，可单独强化这套临时装备，最多3次\n"
-        "· 强化今日装备 — 花积分提战力：第1次30分 / 第2次60分 / 第3次90分，每日限3次\n"
-        "· 购买装备 — 装备损坏后花100积分买一套替换装（每天限1次，打怪经验和积分减半）\n"
-        "· 我的角色 — 看等级、称号、战绩和装备状态（含世界BOSS）\n"
-        "· 群排行榜 — 看本群谁练得最快\n"
-        "· 我的背包 / 使用 [道具] — 看道具 / 用掉它；礼物券需 @ 对方\n"
-        "\n"
-        "💡 平时走个人挑战线，世界BOSS出现时再一起打群挑战。"
-    )
+    img_bytes = await _render_help_image()
+    if img_bytes is not None:
+        if isinstance(event, GroupMessageEvent):
+            await help_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes))
+        await help_cmd.finish(MessageSegment.image(img_bytes))
+    msg = _help_text()
     if isinstance(event, GroupMessageEvent):
         await help_cmd.finish(MessageSegment.reply(event.message_id) + msg)
-    else:
-        await help_cmd.finish(msg)
+    await help_cmd.finish(msg)

@@ -628,6 +628,37 @@ async def test_status_panel_still_available_while_sleeping(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_help_cmd_renders_image(monkeypatch):
+    async def _fake_render():
+        return b"fake-rpg-help-image"
+
+    monkeypatch.setattr(character, "_render_help_image", _fake_render)
+
+    with pytest.raises(FinishedException) as exc:
+        await character.help_cmd.handlers[0](Event(group_id=1001, user_id="u1"))
+
+    result = str(exc.value.result)
+    assert "[image]" in result
+    assert "今日打怪" not in result
+
+
+@pytest.mark.asyncio
+async def test_help_cmd_falls_back_to_text(monkeypatch):
+    async def _fake_render():
+        return None
+
+    monkeypatch.setattr(character, "_render_help_image", _fake_render)
+
+    with pytest.raises(FinishedException) as exc:
+        await character.help_cmd.handlers[0](Event(group_id=1001, user_id="u1"))
+
+    result = str(exc.value.result)
+    assert "冒险系统" in result
+    assert "今日打怪" in result
+    assert "[image]" not in result
+
+
+@pytest.mark.asyncio
 async def test_bag_and_use_book(monkeypatch):
     state = _patch_io(monkeypatch, inventory, store={"groups": {"1001": {"users": {
         "u1": {"exp": 0, "inventory": {"经验书": 1}}}}}})
