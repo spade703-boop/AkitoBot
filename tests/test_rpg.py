@@ -1270,6 +1270,22 @@ async def test_status_panel_shows_world_boss_equip_status(monkeypatch):
     assert "u1" in state["groups"]["1001"]["rpg"]["world_boss"]["participants"]
 
 
+@pytest.mark.asyncio
+async def test_status_panel_shows_world_boss_trophies(monkeypatch):
+    store = {"groups": {"1001": {
+        "users": {"u1": _equipped_user(world_boss_trophies=["赤鳞龙鳞", "焦香披萨块"])},
+    }}}
+    state = _patch_io(monkeypatch, character, store=store)
+
+    with pytest.raises(FinishedException) as exc:
+        await character.status_cmd.handlers[0](Event(group_id=1001, user_id="u1"))
+
+    result = str(exc.value.result)
+    assert "世界BOSS收藏" in result
+    assert "赤鳞龙鳞" in result
+    assert "焦香披萨块" in result
+
+
 # ==================== 世界 BOSS ====================
 
 def test_game_store_normalize_preserves_group_rpg():
@@ -1565,12 +1581,13 @@ async def test_attack_world_boss_still_available_after_normal_hunt(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_team_world_boss_success_uses_explicit_team_power_bonus(monkeypatch):
+    pair = game_store._pair_key("u1", "u2")
     store = {"groups": {"1001": {
         "users": {
             "u1": _equipped_user(points=0),
             "u2": _equipped_user(points=0),
         },
-        "intimacy": {game_store._pair_key("u1", "u2"): 20000},
+        "intimacy": {pair: 20000},
         "rpg": {"world_boss": _world_boss_record(max_hp=200, hp=200)},
     }}}
     state = _patch_io(monkeypatch, boss, store=store)
@@ -1588,6 +1605,8 @@ async def test_team_world_boss_success_uses_explicit_team_power_bonus(monkeypatc
     assert participants["u1"]["equip_used"] is True and participants["u2"]["equip_used"] is True
     assert wb["contributors"]["u1"] == 16 and wb["contributors"]["u2"] == 16
     assert wb["hp"] == 168
+    assert wb["bond_gains"] == {"u1": 1, "u2": 1}
+    assert state["groups"]["1001"]["intimacy"][pair] == 20001
     result = str(exc.value.result)
     assert "16 点" in result and "32 点" in result
     assert "协作加成" in result and "2 点总伤害" in result
@@ -1712,9 +1731,83 @@ async def test_team_world_boss_fail_kill_only_shows_settlement_lines(monkeypatch
 
 
 def test_world_boss_rank_template_renders_flat_top_stats():
-    page_data = bond_pages.build_world_boss_rank_page_data("龙下萨", [row.copy() for row in boss._TEST_WORLD_BOSS_ROWS])
+    page_data = bond_pages.build_world_boss_rank_page_data("赤鳞灾龙", [row.copy() for row in boss._TEST_WORLD_BOSS_ROWS])
     html = bond_render._TEMPLATE_ENV.get_template("world_boss_rank.html").render(**page_data)
 
     assert "本次共有" not in html
     assert "参与人数" in html
+    assert "新增羁绊" in html
+    assert "羁绊 +1" in html
     assert "最终榜单" in html
+
+
+def test_world_boss_kill_settlement_carries_team_bond_gain():
+    pair = game_store._pair_key("u1", "u2")
+    group = game_store._normalize_data({"groups": {"1001": {
+        "users": {
+            "u1": _equipped_user(),
+            "u2": _equipped_user(),
+        },
+        "intimacy": {pair: -40},
+        "rpg": {"world_boss": _world_boss_record(
+            max_hp=20,
+            hp=0,
+            contributors={"u1": 10, "u2": 10},
+            bond_gains={"u1": 2, "u2": 2},
+        )},
+    }}})["groups"]["1001"]
+
+    settlement = boss._world_boss_kill_settlement(
+        group,
+        group["rpg"]["world_boss"],
+        last_hit_uid="u2",
+    )
+
+    rows = {row["uid"]: row for row in settlement["rows"]}
+    assert settlement["total_bond"] == 4
+    assert rows["u1"]["bond"] == 2
+    assert rows["u2"]["bond"] == 2
+    reward_lines = boss._world_boss_reward_lines(settlement["rows"])
+    assert any("羁绊 +2" in line for line in reward_lines)
+
+
+def test_world_boss_special_drop_only_awards_once(monkeypatch):
+    user = _equipped_user(world_boss_trophies=["赤鳞龙鳞"])
+    boss_rec = _world_boss_record(name="赤鳞灾龙")
+
+    monkeypatch.setattr(boss.random, "random", lambda: 0.0)
+
+    assert boss._roll_world_boss_special_drop(user, boss_rec) == ""
+    assert user["world_boss_trophies"] == ["赤鳞龙鳞"]
+
+
+def test_world_boss_special_drop_awards_configured_item(monkeypatch):
+    user = _equipped_user()
+    boss_rec = _world_boss_record(name="断潮魔虾")
+
+    monkeypatch.setattr(boss.random, "random", lambda: 0.0)
+
+    assert boss._roll_world_boss_special_drop(user, boss_rec) == "断潮虾壳"
+    assert user["world_boss_trophies"] == ["断潮虾壳"]
+
+
+def test_cleanup_stale_world_boss_compensation_does_not_award_special_drop(monkeypatch):
+    group = game_store._new_group()
+    group["users"]["u1"] = _equipped_user(display_name="阿一")
+    stale_boss = _world_boss_record(
+        name="赤鳞灾龙",
+        date="2026-06-21",
+        max_hp=200,
+        hp=120,
+        reward_scale_count=3,
+        contributors={"u1": 80},
+    )
+    group["rpg"] = {"world_boss": deepcopy(stale_boss)}
+
+    monkeypatch.setattr(boss.random, "random", lambda: 0.0)
+
+    lines, changed = boss._cleanup_stale_world_boss(group, "2026-06-22")
+
+    assert changed is True
+    assert group["users"]["u1"]["world_boss_trophies"] == []
+    assert all("赤鳞龙鳞" not in line for line in lines)

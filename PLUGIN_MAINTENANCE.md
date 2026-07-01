@@ -525,7 +525,7 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（戳一戳
 | `player.py` | 纯函数：`_level_of(exp)` 经验→等级、`_level_progress(exp)` 进度、`_title_of(level)` 称号分档、`_cum_exp(level)` 升到此级所需累计经验、`_ensure_player(group, uid, name)` 初始化玩家记录；`_combat_power(user)` 计算今日装备隐藏战力；`_resolve_group(event)` 群校验 |
 | `fortune.py` | `on_signin(group, uid, rng, today)` 签到钩子入口（暗掷运势 + 发经验 + 今日装备 + 连签判定含额外经验 + 断签重置）；`_fortune_combat/drop_factor` 为战力/掉落提供运势修正；连签保底机制（连凶天数达阈值自动转大吉） |
 | `hunt.py` | `今日打怪` 指令 + 战斗结算管线：`_encounter_level`（装备等级分段）→ `_pick_encounter`（怪池权重按等级分档 + 精英概率按等级门槛）→ `_settle_solo`（单刷含新手保护 `_rookie_power_factor` + 随机事件 + 运势修正 + 今日增益）→ `_settle_coop`（组队合力，取双方较高等级抽怪）；普通打怪结算后会额外触发一次世界 BOSS 刷出判定 |
-| `boss.py` | 世界 BOSS 逻辑：近 7 日活跃签到人数缩放、群级状态 `group["rpg"]["world_boss"]` 持久化、`世界BOSS` / `攻击世界BOSS` / `组队世界BOSS@某人` / `强制开启世界BOSS` 指令、贡献榜、按贡献发放经验/积分；12 人后血量规模 `scale_count` 会继续软扩容，但奖励规模 `reward_scale_count` 扩容更慢，避免大群秒杀后奖励也同步爆炸；每个已签到玩家在每只 BOSS 上都有独立的 `participants[uid]` 临时装备与 1 次出手机会；若当天未击败，则在隔天首次访问相关状态时按已造成进度折算补偿并清场；`强制开启世界BOSS` 仅超管可用，会跳过概率与活跃人数门槛，但不会覆盖当天已存在的 BOSS；奖励不计入 `hunt_total/hunt_wins` |
+| `boss.py` | 世界 BOSS 逻辑：近 7 日活跃签到人数缩放、群级状态 `group["rpg"]["world_boss"]` 持久化、`世界BOSS` / `攻击世界BOSS` / `组队世界BOSS@某人` / `强制开启世界BOSS` / `test世界排行` 指令、贡献榜、按贡献发放经验/积分；12 人后血量规模 `scale_count` 会继续软扩容，但奖励规模 `reward_scale_count` 扩容更慢，避免大群秒杀后奖励也同步爆炸；每个已签到玩家在每只 BOSS 上都有独立的 `participants[uid]` 临时装备与 1 次出手机会；双人挑战会记录轻量羁绊成长；击杀结算还会按 3% 独立概率发放不重复的世界BOSS专属收藏；若当天未击败，则在隔天首次访问相关状态时按已造成进度折算补偿并清场；`强制开启世界BOSS` 仅超管可用，会跳过概率与活跃人数门槛，但不会覆盖当天已存在的 BOSS；奖励不计入 `hunt_total/hunt_wins` |
 | `team.py` | `组队@某人` 指令：从 `gift._bond_level` 取羁绊→算成功率（正羁绊正常爬升，负羁绊缓降）；对方未签到/装备已损坏 → 直接拒绝（不退化单刷）；成功走 `_settle_coop`（双方各得经验积分掉落、各自装备消耗，并额外结算战力/掉落协作加成）；若 pair 当前是负羁绊，还会按深度概率触发一次摩擦/磨合事件，影响本场战力/经验/掉落或追加破冰羁绊；成功结队后该 pair 每天还会小幅增长一次羁绊；羁绊不够 → 走 `_settle_solo`（只消耗发起人，队友无损）；普通组队结算后同样会触发世界 BOSS 刷出判定 |
 | `smith.py` | `强化今日装备` / `强化世界BOSS装备` / `购买装备` / `重置RPG功能` 指令（积分出口 + 超管测试辅助）：两套强化都走 `forge.costs` 分段收费 `[30,60,90]`；世界 BOSS 强化只作用于该 BOSS 的独立临时装备；购买装备花 100 积分重置已损坏普通装备（每天限 1 次，打上 `equip_rebought` 标记，打怪经验和积分减半）；`重置RPG功能` 仅为今天签到过的人重发普通装备，不改运势、连签和世界 BOSS 状态 |
 | `inventory.py` | `背包` / `使用 [道具名]` 指令 + 道具效果（`exp_buff`/`exp_grant`/`gift` 三种类型）+ 礼物券分支走完整送礼流程（`_settle`/`_build_broadcast`） + `_roll_drops` 掉落判定 + `_add_item` 背包入库 |
@@ -542,7 +542,7 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（戳一戳
 - 野怪基础 `power_req` 这轮不动；是通过 `combat.encounter_brackets` 延后中阶怪出场来匹配更慢的成长曲线。后续若继续改成长节奏，记得连带复核怪物出场分段。
 - 世界 BOSS 只会在普通 `今日打怪` / `组队@某人` 后以 `1%` 概率刷出；若近 7 日活跃签到人数少于 3，就算随机命中也不会生成。
 - 世界 BOSS 强度按近 7 日活跃签到人数缩放，而不是按“今天当前已签到人数”计算，避免早时段触发时血量异常偏小。
-- 世界 BOSS 奖励只有经验和积分；贡献结算会更新玩家 `exp/points`，但不会改普通战绩字段 `hunt_total/hunt_wins`。
+- 世界 BOSS 基础奖励仍只有经验和积分；贡献结算会更新玩家 `exp/points`，但不会改普通战绩字段 `hunt_total/hunt_wins`。额外的世界BOSS专属收藏仅作展示，不带数值。
 - `core/game_store.py` 现在必须保留 `groups[gid]["rpg"]`，否则世界 BOSS 的群级状态会在归一化时丢失。
 
 ---

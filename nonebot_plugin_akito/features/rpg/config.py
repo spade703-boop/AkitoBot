@@ -129,6 +129,20 @@ DEFAULT_RPG_CONFIG: dict = {
         "hp_factor": 0.75,
         "damage_factor_min": 0.92,
         "damage_factor_max": 1.08,
+        "team_bond": {
+            "base": 1,
+            "kill_bonus": 1,
+            "negative_bonus": 1,
+            "daily_limit": 1,
+        },
+        "special_drop": {
+            "chance": 0.03,
+            "items": {
+                "赤鳞灾龙": "赤鳞龙鳞",
+                "断潮魔虾": "断潮虾壳",
+                "焦壳披萨王": "焦香披萨块",
+            },
+        },
         "rewards": {
             "exp_fixed": 12,
             "exp_pool_per_scale": 60,
@@ -277,7 +291,7 @@ DEFAULT_RPG_CONFIG: dict = {
         "world_boss_kill": ["🏆 世界BOSS 已经被成功击杀。"],
         "world_boss_last_hit": ["⚔️ {name} 拿下了尾刀。"],
         "world_boss_expired": ["🌫️ 昨天的世界BOSS【{monster}】已经离场。讨伐进度 {progress}% ，本次按 {reward_percent}% 奖励规模发放补偿。"],
-        "world_boss_reward": ["· {name}：贡献 {damage}，经验 +{exp}、积分 +{points}{levelup}"],
+        "world_boss_reward": ["· {name}：贡献 {damage}，经验 +{exp}、积分 +{points}{bond_part}{drop_part}{levelup}"],
         "forge_world_boss_ok": ["🔧 世界BOSS装备已强化（已强化 ×{forge}，花费 {cost} 积分）。"],
         # 精英怪遭遇（{a}=真@；{monster}=文本）
         "hunt_encounter_elite": [

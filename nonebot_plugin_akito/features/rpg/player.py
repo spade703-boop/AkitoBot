@@ -35,6 +35,7 @@ def _ensure_player(group: dict, user_id, display_name: str = "") -> dict:
     user.setdefault("hunt_wins", 0)           # 累计胜场
     user.setdefault("signin_streak", 0)       # 当前连签天数
     user.setdefault("signin_last_date", "")   # 上次签到日期（算连签）
+    user.setdefault("world_boss_trophies", [])  # 世界BOSS专属收藏（纯展示）
     return user
 
 

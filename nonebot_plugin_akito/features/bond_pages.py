@@ -316,6 +316,8 @@ def build_world_boss_rank_page_data(
         points = int(row.get("points", 0))
         exp_bonus = int(row.get("exp_bonus", 0))
         points_bonus = int(row.get("points_bonus", 0))
+        bond = int(row.get("bond", 0))
+        special_drop = str(row.get("special_drop", ""))
         last_hit = bool(row.get("last_hit"))
         rows.append(
             {
@@ -327,6 +329,8 @@ def build_world_boss_rank_page_data(
                 "points": points,
                 "exp_bonus": exp_bonus,
                 "points_bonus": points_bonus,
+                "bond": bond,
+                "special_drop": special_drop,
                 "last_hit": last_hit,
                 "levelup": bool(row.get("levelup")),
                 "levelup_text": str(row.get("levelup_text", "")),
@@ -359,6 +363,7 @@ def build_world_boss_rank_page_data(
             "total_damage": sum(row["damage"] for row in rows),
             "total_exp": sum(row["exp"] for row in rows),
             "total_points": sum(row["points"] for row in rows),
+            "total_bond": sum(row["bond"] for row in rows),
             "last_hit_name": last_hit_name,
             "last_hit_reward": last_hit_reward,
         },

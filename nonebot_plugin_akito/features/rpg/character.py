@@ -65,6 +65,11 @@ async def _(event: Event, args: Message = CommandArg()):
         title = _title_of(prog["level"])
         bag = sum(int(v) for v in (user.get("inventory") or {}).values())
         wins, total = int(user.get("hunt_wins", 0)), int(user.get("hunt_total", 0))
+        trophies = user.get("world_boss_trophies")
+        if isinstance(trophies, list) and trophies:
+            trophy_line = "· 世界BOSS收藏：" + "、".join(str(item) for item in trophies if str(item))
+        else:
+            trophy_line = "· 世界BOSS收藏：暂无"
         lines = [
             *settlement_lines,
             f"🗡️ 角色档案 · {_display_name(event)}",
@@ -74,6 +79,7 @@ async def _(event: Event, args: Message = CommandArg()):
             boss_line,
             f"· 积分：{int(user.get('points', 0))}",
             f"· 背包：{bag} 件道具",
+            trophy_line,
         ]
     await status_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
 

@@ -15,11 +15,13 @@ from nonebot.params import CommandArg
 from ...core import SUPERUSER_QQ, is_sleeping
 from ...core.game_store import (
     LOCK,
+    _add_intimacy,
     _display_name,
     _first_at_qq,
     _get_group,
     _get_intimacy,
     _load_data,
+    _pair_key,
     _render_with_ats,
     _save_data,
     _today_str,
@@ -384,12 +386,80 @@ def _world_boss_reward_cfg() -> dict:
     return rewards if isinstance(rewards, dict) else {}
 
 
+def _world_boss_team_bond_cfg() -> dict:
+    cfg = _world_boss_cfg().get("team_bond", {})
+    return cfg if isinstance(cfg, dict) else {}
+
+
+def _world_boss_special_drop_cfg() -> dict:
+    cfg = _world_boss_cfg().get("special_drop", {})
+    return cfg if isinstance(cfg, dict) else {}
+
+
 def _world_boss_contributors(boss: dict) -> dict[str, int]:
     return {
         str(uid): max(0, int(dmg))
         for uid, dmg in boss.get("contributors", {}).items()
         if int(dmg) > 0
     }
+
+
+def _world_boss_bond_gains(boss: dict) -> dict[str, int]:
+    gains = boss.get("bond_gains")
+    if not isinstance(gains, dict):
+        gains = {}
+        boss["bond_gains"] = gains
+    return gains
+
+
+def _world_boss_team_bond_daily_pairs(group: dict, today: str) -> dict:
+    rpg = _rpg_state(group)
+    daily = rpg.get("world_boss_team_bond_daily")
+    if not isinstance(daily, dict) or daily.get("date") != today:
+        daily = {"date": today, "pairs": {}}
+        rpg["world_boss_team_bond_daily"] = daily
+    pairs = daily.get("pairs")
+    if not isinstance(pairs, dict):
+        pairs = {}
+        daily["pairs"] = pairs
+    return pairs
+
+
+def _grant_world_boss_team_bond(
+    group: dict,
+    boss: dict,
+    uid1: str,
+    uid2: str,
+    today: str,
+    *,
+    kill: bool,
+    negative: bool,
+) -> int:
+    cfg = _world_boss_team_bond_cfg()
+    limit = max(0, int(cfg.get("daily_limit", 1)))
+    if limit <= 0:
+        return 0
+
+    pairs = _world_boss_team_bond_daily_pairs(group, today)
+    key = _pair_key(uid1, uid2)
+    if int(pairs.get(key, 0)) >= limit:
+        return 0
+
+    gain = max(0, int(cfg.get("base", 1)))
+    if kill:
+        gain += max(0, int(cfg.get("kill_bonus", 0)))
+    if negative:
+        gain += max(0, int(cfg.get("negative_bonus", 0)))
+    if gain <= 0:
+        return 0
+
+    _add_intimacy(group, uid1, uid2, gain)
+    pairs[key] = int(pairs.get(key, 0)) + 1
+
+    bond_gains = _world_boss_bond_gains(boss)
+    bond_gains[str(uid1)] = int(bond_gains.get(str(uid1), 0)) + gain
+    bond_gains[str(uid2)] = int(bond_gains.get(str(uid2), 0)) + gain
+    return gain
 
 
 def _world_boss_reward_values(boss: dict, *, reward_ratio: float = 1.0) -> dict[str, int]:
@@ -404,15 +474,46 @@ def _world_boss_reward_values(boss: dict, *, reward_ratio: float = 1.0) -> dict[
     }
 
 
+def _world_boss_special_drop_name(boss: dict) -> str:
+    cfg = _world_boss_special_drop_cfg()
+    items = cfg.get("items", {})
+    if not isinstance(items, dict):
+        return ""
+    return str(items.get(str(boss.get("name", "")), ""))
+
+
+def _roll_world_boss_special_drop(user: dict, boss: dict, *, rng=random) -> str:
+    item_name = _world_boss_special_drop_name(boss)
+    if not item_name:
+        return ""
+
+    trophies = user.get("world_boss_trophies")
+    if not isinstance(trophies, list):
+        trophies = []
+        user["world_boss_trophies"] = trophies
+    if item_name in trophies:
+        return ""
+
+    chance = float(_world_boss_special_drop_cfg().get("chance", 0.03))
+    if chance <= 0 or rng.random() >= chance:
+        return ""
+
+    trophies.append(item_name)
+    return item_name
+
+
 def _world_boss_reward_results(
     group: dict,
     contributors: dict[str, int],
     *,
+    boss: dict | None = None,
     exp_pool: int,
     points_pool: int,
     exp_fixed: int,
     points_fixed: int,
     last_hit_uid: str | None = None,
+    bond_gains: dict[str, int] | None = None,
+    allow_special_drop: bool = False,
 ) -> list[dict]:
     rows: list[dict] = []
     exp_alloc = _allocate_exact(exp_pool, contributors)
@@ -420,6 +521,11 @@ def _world_boss_reward_results(
     reward_cfg = _world_boss_reward_cfg()
     total_damage = max(1, sum(int(dmg) for dmg in contributors.values()))
     last_hit_uid = str(last_hit_uid) if last_hit_uid is not None else None
+    cleaned_bonds = {
+        str(uid): max(0, int(amount))
+        for uid, amount in (bond_gains or {}).items()
+        if int(amount) > 0
+    }
 
     ranked = sorted(contributors.items(), key=lambda item: (-item[1], item[0]))
     for rank, (uid, damage) in enumerate(ranked, 1):
@@ -428,6 +534,8 @@ def _world_boss_reward_results(
         is_last_hit = last_hit_uid == uid
         exp_bonus = int(reward_cfg.get("last_hit_exp_bonus", 0)) if is_last_hit else 0
         points_bonus = int(reward_cfg.get("last_hit_points_bonus", 0)) if is_last_hit else 0
+        bond_gain = int(cleaned_bonds.get(uid, 0))
+        special_drop = _roll_world_boss_special_drop(user, boss) if allow_special_drop and isinstance(boss, dict) else ""
         exp_gain = int(exp_fixed) + int(exp_alloc.get(uid, 0)) + exp_bonus
         points_gain = int(points_fixed) + int(points_alloc.get(uid, 0)) + points_bonus
         user["exp"] = int(user.get("exp", 0)) + exp_gain
@@ -445,6 +553,8 @@ def _world_boss_reward_results(
                 "points": points_gain,
                 "exp_bonus": exp_bonus,
                 "points_bonus": points_bonus,
+                "bond": bond_gain,
+                "special_drop": special_drop,
                 "old_level": old_level,
                 "new_level": new_level,
                 "levelup": new_level > old_level,
@@ -473,6 +583,8 @@ def _world_boss_reward_lines(rows: list[dict]) -> list[str]:
                 damage=int(row.get("damage", 0)),
                 exp=int(row.get("exp", 0)),
                 points=int(row.get("points", 0)),
+                bond_part=(f"、羁绊 +{int(row.get('bond', 0))}" if int(row.get("bond", 0)) > 0 else ""),
+                drop_part=(f"、获得「{row.get('special_drop', '')}」" if row.get("special_drop") else ""),
                 levelup=(f"，升级 {row['levelup_text']}" if row.get("levelup_text") else ""),
             )
             + extra
@@ -488,6 +600,7 @@ def _world_boss_kill_settlement(group: dict, boss: dict, *, last_hit_uid: str | 
         "last_hit_uid": None,
         "last_hit_name": "",
         "last_hit_reward": {"exp": 0, "points": 0},
+        "total_bond": 0,
         "lines": [],
     }
     if not contributors:
@@ -503,13 +616,17 @@ def _world_boss_kill_settlement(group: dict, boss: dict, *, last_hit_uid: str | 
     rows = _world_boss_reward_results(
         group,
         contributors,
+        boss=boss,
         exp_pool=reward_values["exp_pool"],
         points_pool=reward_values["points_pool"],
         exp_fixed=reward_values["exp_fixed"],
         points_fixed=reward_values["points_fixed"],
         last_hit_uid=normalized_last_hit,
+        bond_gains=_world_boss_bond_gains(boss),
+        allow_special_drop=True,
     )
     result["rows"] = rows
+    result["total_bond"] = sum(int(row.get("bond", 0)) for row in rows)
     result["last_hit_uid"] = normalized_last_hit
     for row in rows:
         if row.get("uid") != normalized_last_hit:
@@ -558,10 +675,12 @@ def _world_boss_unfinished_lines(group: dict, boss: dict) -> list[str]:
     rows = _world_boss_reward_results(
         group,
         contributors,
+        boss=boss,
         exp_pool=reward_values["exp_pool"],
         points_pool=reward_values["points_pool"],
         exp_fixed=reward_values["exp_fixed"],
         points_fixed=reward_values["points_fixed"],
+        bond_gains=_world_boss_bond_gains(boss),
     )
     lines.extend(_world_boss_reward_lines(rows))
     return lines
@@ -664,12 +783,12 @@ def _merge_lines_with_optional_image(lines: list, image_bytes: bytes | None = No
 
 
 _TEST_WORLD_BOSS_ROWS: list[dict] = [
-    {"rank": 1, "uid": "10001", "name": "测试冒险者01", "damage": 1280, "damage_pct": 29, "exp": 126, "points": 15, "exp_bonus": 0, "points_bonus": 0, "old_level": 9, "new_level": 10, "levelup": True, "levelup_text": "Lv9→Lv10", "last_hit": False},
-    {"rank": 2, "uid": "10002", "name": "测试冒险者02", "damage": 1186, "damage_pct": 27, "exp": 118, "points": 14, "exp_bonus": 0, "points_bonus": 0, "old_level": 8, "new_level": 8, "levelup": False, "levelup_text": "", "last_hit": False},
-    {"rank": 3, "uid": "10003", "name": "测试冒险者03", "damage": 1014, "damage_pct": 23, "exp": 111, "points": 15, "exp_bonus": 8, "points_bonus": 2, "old_level": 7, "new_level": 8, "levelup": True, "levelup_text": "Lv7→Lv8", "last_hit": True},
-    {"rank": 4, "uid": "10004", "name": "测试冒险者04", "damage": 462, "damage_pct": 10, "exp": 57, "points": 7, "exp_bonus": 0, "points_bonus": 0, "old_level": 6, "new_level": 6, "levelup": False, "levelup_text": "", "last_hit": False},
-    {"rank": 5, "uid": "10005", "name": "测试冒险者05", "damage": 258, "damage_pct": 6, "exp": 39, "points": 5, "exp_bonus": 0, "points_bonus": 0, "old_level": 5, "new_level": 5, "levelup": False, "levelup_text": "", "last_hit": False},
-    {"rank": 6, "uid": "10006", "name": "测试冒险者06", "damage": 181, "damage_pct": 4, "exp": 31, "points": 4, "exp_bonus": 0, "points_bonus": 0, "old_level": 4, "new_level": 4, "levelup": False, "levelup_text": "", "last_hit": False},
+    {"rank": 1, "uid": "10001", "name": "测试冒险者01", "damage": 1280, "damage_pct": 29, "exp": 126, "points": 15, "exp_bonus": 0, "points_bonus": 0, "bond": 1, "special_drop": "赤鳞龙鳞", "old_level": 9, "new_level": 10, "levelup": True, "levelup_text": "Lv9→Lv10", "last_hit": False},
+    {"rank": 2, "uid": "10002", "name": "测试冒险者02", "damage": 1186, "damage_pct": 27, "exp": 118, "points": 14, "exp_bonus": 0, "points_bonus": 0, "bond": 1, "special_drop": "", "old_level": 8, "new_level": 8, "levelup": False, "levelup_text": "", "last_hit": False},
+    {"rank": 3, "uid": "10003", "name": "测试冒险者03", "damage": 1014, "damage_pct": 23, "exp": 111, "points": 15, "exp_bonus": 8, "points_bonus": 2, "bond": 0, "special_drop": "", "old_level": 7, "new_level": 8, "levelup": True, "levelup_text": "Lv7→Lv8", "last_hit": True},
+    {"rank": 4, "uid": "10004", "name": "测试冒险者04", "damage": 462, "damage_pct": 10, "exp": 57, "points": 7, "exp_bonus": 0, "points_bonus": 0, "bond": 0, "special_drop": "", "old_level": 6, "new_level": 6, "levelup": False, "levelup_text": "", "last_hit": False},
+    {"rank": 5, "uid": "10005", "name": "测试冒险者05", "damage": 258, "damage_pct": 6, "exp": 39, "points": 5, "exp_bonus": 0, "points_bonus": 0, "bond": 1, "special_drop": "断潮虾壳", "old_level": 5, "new_level": 5, "levelup": False, "levelup_text": "", "last_hit": False},
+    {"rank": 6, "uid": "10006", "name": "测试冒险者06", "damage": 181, "damage_pct": 4, "exp": 31, "points": 4, "exp_bonus": 0, "points_bonus": 0, "bond": 1, "special_drop": "", "old_level": 4, "new_level": 4, "levelup": False, "levelup_text": "", "last_hit": False},
 ]
 
 
@@ -935,7 +1054,8 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
                 _save_data(data)
             await team_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + _error("team_target_broken"))
 
-        bond_level = _bond_level(_get_intimacy(group, initiator, target))["level"]
+        raw_intimacy = _get_intimacy(group, initiator, target)
+        bond_level = _bond_level(raw_intimacy)["level"]
         success = random.random() < _team_success_rate(bond_level)
         lines: list = []
 
@@ -948,6 +1068,15 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
             dealt = _apply_world_boss_damage(boss, team_hits)
             _consume_equip(b_participant)
             _consume_equip(a_participant)
+            _grant_world_boss_team_bond(
+                group,
+                boss,
+                initiator,
+                target,
+                today,
+                kill=int(boss.get("hp", 0)) <= 0,
+                negative=raw_intimacy < 0,
+            )
             b_name = b.get("display_name") or f"群友{initiator}"
             last_hit_uid = str(boss.get("last_hit", ""))
             last_hit_name = b_name if last_hit_uid == str(initiator) else a_name

@@ -112,6 +112,10 @@
         <div class="v">{{ "{:,}".format(stats.total_points) }}</div>
       </div>
       <div class="chip">
+        <div class="k">新增羁绊</div>
+        <div class="v">{{ stats.total_bond }}</div>
+      </div>
+      <div class="chip">
         <div class="k">最后一击</div>
         <div class="v">{{ stats.last_hit_name }}</div>
       </div>
@@ -140,6 +144,8 @@
               <span class="badge">{{ card.damage_pct }}% 贡献</span>
               {% if card.last_hit %}<span class="badge last">最后一击</span>{% endif %}
               {% if card.levelup %}<span class="badge">{{ card.levelup_text }}</span>{% endif %}
+              {% if card.bond > 0 %}<span class="badge">羁绊 +{{ card.bond }}</span>{% endif %}
+              {% if card.special_drop %}<span class="badge">{{ card.special_drop }}</span>{% endif %}
             </div>
           </div>
         </div>
@@ -148,8 +154,12 @@
           <div class="num"><div class="k">经验</div><div class="v">+{{ card.exp }}</div></div>
           <div class="num"><div class="k">积分</div><div class="v">+{{ card.points }}</div></div>
         </div>
-        {% if card.exp_bonus > 0 or card.points_bonus > 0 %}
-        <div class="lvl">尾刀追加：+{{ card.exp_bonus }} 经验 / +{{ card.points_bonus }} 积分</div>
+        {% if card.exp_bonus > 0 or card.points_bonus > 0 or card.bond > 0 or card.special_drop %}
+        <div class="lvl">
+          {% if card.exp_bonus > 0 or card.points_bonus > 0 %}尾刀追加：+{{ card.exp_bonus }} 经验 / +{{ card.points_bonus }} 积分{% endif %}
+          {% if card.bond > 0 %}{% if card.exp_bonus > 0 or card.points_bonus > 0 %}<br>{% endif %}并肩作战：羁绊 +{{ card.bond }}{% endif %}
+          {% if card.special_drop %}{% if card.exp_bonus > 0 or card.points_bonus > 0 or card.bond > 0 %}<br>{% endif %}获得收藏：{{ card.special_drop }}{% endif %}
+        </div>
         {% endif %}
       </div>
       {% endfor %}
@@ -168,7 +178,7 @@
           <div class="ava"><div class="inner">{% if row.player.avatar %}<img src="{{ row.player.avatar }}" alt="">{% else %}{{ row.player.initial }}{% endif %}</div></div>
           <div class="name">
             <b>{{ row.player.name }}{% if row.last_hit %}<span class="tail">最后一击</span>{% endif %}</b>
-            <span>{% if row.levelup %}{{ row.levelup_text }}{% else %}稳定结算{% endif %}</span>
+            <span>{% if row.levelup %}{{ row.levelup_text }}{% else %}稳定结算{% endif %}{% if row.bond > 0 %} · 羁绊 +{{ row.bond }}{% endif %}{% if row.special_drop %} · {{ row.special_drop }}{% endif %}</span>
           </div>
         </div>
         <div class="val">
