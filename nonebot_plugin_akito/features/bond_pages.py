@@ -14,6 +14,7 @@ from __future__ import annotations
 from datetime import datetime
 
 FOOTER_BRAND = "AkitoBot · 羁绊系统"
+FOOTER_RPG_BRAND = "AkitoBot · RPG系统"
 
 
 def _now_text() -> str:
@@ -282,6 +283,86 @@ def build_my_bonds_page_data(
         "owner": _person(owner),
         "stats": {"count": count, "shown_count": len(rows), "total": total, "top_level": top_level},
         "rows": rows,
+        "footer_left": footer_left or _now_text(),
+        "footer_right": footer_right,
+    }
+
+
+def build_world_boss_rank_page_data(
+    monster: str,
+    entries: list[dict],
+    *,
+    title: str = "世界BOSS 结算排行",
+    eyebrow_tail: str = "WORLD BOSS RANKING",
+    pill: str | None = None,
+    footer_left: str | None = None,
+    footer_right: str = FOOTER_RPG_BRAND,
+) -> dict:
+    ranked = sorted(
+        entries,
+        key=lambda row: (
+            int(row.get("rank", 0)) if int(row.get("rank", 0)) > 0 else 999999,
+            -int(row.get("damage", 0)),
+            str(row.get("uid", "")),
+        ),
+    )
+
+    rows = []
+    for idx, row in enumerate(ranked, start=1):
+        rank = int(row.get("rank", 0)) or idx
+        damage = int(row.get("damage", 0))
+        damage_pct = int(row.get("damage_pct", 0))
+        exp = int(row.get("exp", 0))
+        points = int(row.get("points", 0))
+        exp_bonus = int(row.get("exp_bonus", 0))
+        points_bonus = int(row.get("points_bonus", 0))
+        last_hit = bool(row.get("last_hit"))
+        rows.append(
+            {
+                "rank": rank,
+                "player": _person({"qq": row.get("uid", ""), "name": row.get("name", ""), "avatar": row.get("avatar")}),
+                "damage": damage,
+                "damage_pct": damage_pct,
+                "exp": exp,
+                "points": points,
+                "exp_bonus": exp_bonus,
+                "points_bonus": points_bonus,
+                "last_hit": last_hit,
+                "levelup": bool(row.get("levelup")),
+                "levelup_text": str(row.get("levelup_text", "")),
+            }
+        )
+
+    podium = rows[:3]
+    others = rows[3:]
+    last_hit_name = next((row["player"]["name"] for row in rows if row["last_hit"]), "—")
+    last_hit_reward = next(
+        (
+            f"+{row['exp_bonus']} 经验 / +{row['points_bonus']} 积分"
+            for row in rows
+            if row["last_hit"] and (row["exp_bonus"] > 0 or row["points_bonus"] > 0)
+        ),
+        "无",
+    )
+    if pill is None:
+        pill = f"{monster} 已被击败"
+
+    return {
+        "page_width": 760,
+        "title": title,
+        "eyebrow_tail": eyebrow_tail,
+        "pill": pill,
+        "monster": monster,
+        "stats": {
+            "count": len(rows),
+            "total_damage": sum(row["damage"] for row in rows),
+            "total_exp": sum(row["exp"] for row in rows),
+            "total_points": sum(row["points"] for row in rows),
+            "last_hit_name": last_hit_name,
+            "last_hit_reward": last_hit_reward,
+        },
+        "podium": podium,
+        "others": others,
         "footer_left": footer_left or _now_text(),
         "footer_right": footer_right,
     }

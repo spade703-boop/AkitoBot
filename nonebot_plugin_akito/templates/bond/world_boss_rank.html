@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=760, initial-scale=1">
+<title>{{ title }}</title>
+<style>
+  :root{
+    --warm:#ff8a3d; --warm-2:#ffc46b; --cool:#4f97ff; --cool-2:#8ec3ff;
+    --gold:#ffe1a3; --silver:#dbe8ff; --bronze:#ffbb8e;
+    --txt:#fffaf2; --muted:rgba(255,250,242,.68); --line:rgba(255,255,255,.10);
+    --surface:rgba(255,255,255,.055); --surface-2:rgba(255,255,255,.075);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;}
+  body{
+    font-family:"PingFang SC","Microsoft YaHei","Noto Sans SC","Hiragino Sans GB",sans-serif;
+    color:var(--txt);
+    background:
+      radial-gradient(880px 540px at 0% -10%, rgba(255,138,61,.20), transparent 62%),
+      radial-gradient(900px 620px at 100% 100%, rgba(79,151,255,.18), transparent 64%),
+      linear-gradient(160deg, #19161f 0%, #141824 55%, #10151d 100%);
+    -webkit-font-smoothing:antialiased;
+  }
+  .page{width:760px;margin:0 auto;padding:30px 34px 28px;}
+  .eyebrow{display:flex;align-items:center;gap:9px;font-size:12px;letter-spacing:.18em;color:var(--muted);font-weight:700;}
+  .eyebrow .dot{width:7px;height:7px;border-radius:50%;background:linear-gradient(135deg,var(--warm),var(--cool));}
+  .eyebrow b{color:rgba(255,255,255,.86);}
+  .title-row{display:flex;align-items:flex-end;justify-content:space-between;margin-top:10px;}
+  h1{margin:0;font-size:30px;font-weight:800;letter-spacing:.04em;}
+  .pill{font-size:13px;color:rgba(255,255,255,.76);background:var(--surface);border:1px solid var(--line);padding:6px 14px;border-radius:999px;}
+  .rule{height:1px;background:linear-gradient(90deg, rgba(255,138,61,.45), rgba(255,255,255,.06) 52%, rgba(79,151,255,.45));margin:16px 0 18px;}
+
+  .hero{display:flex;gap:16px;align-items:stretch;}
+  .boss-card,.summary{background:var(--surface);border:1px solid var(--line);border-radius:20px;}
+  .boss-card{flex:1 1 0;padding:18px 18px 16px;}
+  .boss-card .label{font-size:12px;letter-spacing:.12em;color:var(--muted);}
+  .boss-card .name{margin-top:8px;font-size:28px;font-weight:800;color:var(--gold);}
+  .boss-card .desc{margin-top:10px;font-size:13px;line-height:1.7;color:rgba(255,255,255,.76);}
+  .summary{width:250px;padding:16px;}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;}
+  .chip{min-width:100px;padding:9px 10px;border-radius:14px;background:var(--surface-2);border:1px solid rgba(255,255,255,.08);}
+  .chip .k{font-size:11px;color:var(--muted);}
+  .chip .v{margin-top:4px;font-size:19px;font-weight:800;color:var(--gold);}
+  .chip.wide{width:100%;}
+  .chip.wide .v{font-size:16px;color:var(--txt);}
+
+  .section-title{display:flex;align-items:center;justify-content:space-between;margin:22px 2px 12px;}
+  .section-title h2{margin:0;font-size:18px;font-weight:800;letter-spacing:.03em;}
+  .section-title span{font-size:12px;color:var(--muted);}
+
+  .podium{display:grid;grid-template-columns:1fr 1.12fr 1fr;gap:12px;align-items:end;}
+  .podium-card{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:16px 15px 14px;min-height:208px;}
+  .podium-card.rank-1{background:linear-gradient(180deg, rgba(255,207,106,.16), rgba(255,255,255,.05));border-color:rgba(255,220,150,.28);}
+  .podium-card.rank-2{background:linear-gradient(180deg, rgba(219,232,255,.14), rgba(255,255,255,.05));border-color:rgba(219,232,255,.26);}
+  .podium-card.rank-3{background:linear-gradient(180deg, rgba(255,187,142,.14), rgba(255,255,255,.05));border-color:rgba(255,187,142,.24);}
+  .podium-card .rank-label{display:flex;align-items:center;justify-content:space-between;font-size:12px;letter-spacing:.08em;color:var(--muted);}
+  .medal{font-weight:800;}
+  .rank-1 .medal{color:var(--gold);}
+  .rank-2 .medal{color:var(--silver);}
+  .rank-3 .medal{color:var(--bronze);}
+  .who{display:flex;align-items:center;gap:12px;margin-top:12px;}
+  .ava{width:58px;height:58px;border-radius:50%;padding:3px;background:linear-gradient(145deg,var(--warm),var(--cool));flex:0 0 auto;}
+  .ava .inner{width:100%;height:100%;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;background:linear-gradient(145deg,#2c2935,#1a202d);font-size:24px;font-weight:800;}
+  .ava img{width:100%;height:100%;object-fit:cover;}
+  .who .name{font-size:19px;font-weight:800;line-height:1.25;}
+  .badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px;}
+  .badge{font-size:11px;padding:3px 9px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.10);color:rgba(255,255,255,.78);}
+  .badge.last{background:rgba(255,138,61,.18);border-color:rgba(255,167,99,.35);color:#ffd9ae;}
+  .nums{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px;}
+  .num{padding:9px 10px;border-radius:14px;background:rgba(0,0,0,.18);border:1px solid rgba(255,255,255,.06);}
+  .num .k{font-size:10px;color:var(--muted);}
+  .num .v{margin-top:4px;font-size:17px;font-weight:800;}
+  .lvl{margin-top:11px;font-size:12px;color:rgba(255,255,255,.78);}
+
+  .list{display:flex;flex-direction:column;gap:8px;}
+  .row{display:grid;grid-template-columns:44px 1fr 110px 92px 92px;gap:12px;align-items:center;padding:10px 14px;border-radius:15px;background:var(--surface);border:1px solid var(--line);}
+  .row .idx{font-size:18px;font-weight:800;color:rgba(255,255,255,.42);text-align:center;}
+  .mini{display:flex;align-items:center;gap:10px;min-width:0;}
+  .mini .ava{width:38px;height:38px;padding:2px;}
+  .mini .ava .inner{font-size:15px;}
+  .mini .name{min-width:0;}
+  .mini .name b{display:block;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .mini .name span{display:block;margin-top:3px;font-size:11px;color:var(--muted);}
+  .val{text-align:right;}
+  .val .k{font-size:10px;color:var(--muted);letter-spacing:.06em;}
+  .val .v{margin-top:3px;font-size:16px;font-weight:800;}
+  .tail{display:inline-flex;align-items:center;gap:5px;margin-left:6px;font-size:10px;color:#ffd9ae;background:rgba(255,138,61,.18);border:1px solid rgba(255,167,99,.35);padding:2px 7px;border-radius:999px;vertical-align:middle;}
+  .empty{padding:16px 18px;border-radius:16px;background:var(--surface);border:1px solid var(--line);font-size:13px;color:var(--muted);}
+
+  .footer{display:flex;justify-content:space-between;align-items:center;margin-top:18px;font-size:12px;color:rgba(255,255,255,.42);letter-spacing:.03em;}
+  .footer .brand{display:flex;align-items:center;gap:7px;}
+  .footer .brand .dot{width:6px;height:6px;border-radius:50%;background:linear-gradient(135deg,var(--warm),var(--cool));}
+</style>
+</head>
+<body>
+  <div class="page">
+    <div class="eyebrow"><span class="dot"></span><b>AKITOBOT</b> · {{ eyebrow_tail }}</div>
+    <div class="title-row">
+      <h1>{{ title }}</h1>
+      {% if pill %}<span class="pill">{{ pill }}</span>{% endif %}
+    </div>
+    <div class="rule"></div>
+
+    <div class="hero">
+      <div class="boss-card">
+        <div class="label">WORLD BOSS</div>
+        <div class="name">{{ monster }}</div>
+        <div class="desc">讨伐完成后，奖励已按贡献量发放。尾刀奖励只额外发给完成最后一击的玩家。</div>
+      </div>
+      <div class="summary">
+        <div class="chips">
+          <div class="chip">
+            <div class="k">参与人数</div>
+            <div class="v">{{ stats.count }}</div>
+          </div>
+          <div class="chip">
+            <div class="k">总伤害</div>
+            <div class="v">{{ "{:,}".format(stats.total_damage) }}</div>
+          </div>
+          <div class="chip">
+            <div class="k">发放经验</div>
+            <div class="v">{{ "{:,}".format(stats.total_exp) }}</div>
+          </div>
+          <div class="chip">
+            <div class="k">发放积分</div>
+            <div class="v">{{ "{:,}".format(stats.total_points) }}</div>
+          </div>
+          <div class="chip wide">
+            <div class="k">最后一击</div>
+            <div class="v">{{ stats.last_hit_name }}</div>
+          </div>
+          <div class="chip wide">
+            <div class="k">尾刀额外奖励</div>
+            <div class="v">{{ stats.last_hit_reward }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-title">
+      <h2>前三名</h2>
+      <span>按伤害贡献排序</span>
+    </div>
+    <div class="podium">
+      {% for card in [podium[1] if podium|length > 1 else None, podium[0] if podium|length > 0 else None, podium[2] if podium|length > 2 else None] %}
+      {% if card %}
+      <div class="podium-card rank-{{ card.rank }}">
+        <div class="rank-label">
+          <span>#{{ card.rank }}</span>
+          <span class="medal">{% if card.rank == 1 %}冠军{% elif card.rank == 2 %}亚军{% else %}季军{% endif %}</span>
+        </div>
+        <div class="who">
+          <div class="ava"><div class="inner">{% if card.player.avatar %}<img src="{{ card.player.avatar }}" alt="">{% else %}{{ card.player.initial }}{% endif %}</div></div>
+          <div style="min-width:0;">
+            <div class="name">{{ card.player.name }}</div>
+            <div class="badges">
+              <span class="badge">{{ card.damage_pct }}% 贡献</span>
+              {% if card.last_hit %}<span class="badge last">最后一击</span>{% endif %}
+              {% if card.levelup %}<span class="badge">{{ card.levelup_text }}</span>{% endif %}
+            </div>
+          </div>
+        </div>
+        <div class="nums">
+          <div class="num"><div class="k">伤害</div><div class="v">{{ "{:,}".format(card.damage) }}</div></div>
+          <div class="num"><div class="k">经验</div><div class="v">+{{ card.exp }}</div></div>
+          <div class="num"><div class="k">积分</div><div class="v">+{{ card.points }}</div></div>
+        </div>
+        {% if card.exp_bonus > 0 or card.points_bonus > 0 %}
+        <div class="lvl">尾刀追加：+{{ card.exp_bonus }} 经验 / +{{ card.points_bonus }} 积分</div>
+        {% endif %}
+      </div>
+      {% else %}
+      <div></div>
+      {% endif %}
+      {% endfor %}
+    </div>
+
+    <div class="section-title">
+      <h2>完整排行</h2>
+      <span>其余参与者以精简列表显示</span>
+    </div>
+    {% if others %}
+    <div class="list">
+      {% for row in others %}
+      <div class="row">
+        <div class="idx">{{ row.rank }}</div>
+        <div class="mini">
+          <div class="ava"><div class="inner">{% if row.player.avatar %}<img src="{{ row.player.avatar }}" alt="">{% else %}{{ row.player.initial }}{% endif %}</div></div>
+          <div class="name">
+            <b>{{ row.player.name }}{% if row.last_hit %}<span class="tail">最后一击</span>{% endif %}</b>
+            <span>{% if row.levelup %}{{ row.levelup_text }}{% else %}稳定结算{% endif %}</span>
+          </div>
+        </div>
+        <div class="val">
+          <div class="k">伤害</div>
+          <div class="v">{{ "{:,}".format(row.damage) }}</div>
+        </div>
+        <div class="val">
+          <div class="k">经验</div>
+          <div class="v">+{{ row.exp }}</div>
+        </div>
+        <div class="val">
+          <div class="k">积分</div>
+          <div class="v">+{{ row.points }}</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty">这次参与人数不多，前三名已经展示完了。</div>
+    {% endif %}
+
+    <div class="footer">
+      <span>{{ footer_left }}</span>
+      <span class="brand"><span class="dot"></span>{{ footer_right }}</span>
+    </div>
+  </div>
+</body>
+</html>

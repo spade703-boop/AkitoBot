@@ -134,6 +134,8 @@ DEFAULT_RPG_CONFIG: dict = {
             "exp_pool_per_scale": 60,
             "points_fixed": 2,
             "points_pool_per_scale": 8,
+            "last_hit_exp_bonus": 8,
+            "last_hit_points_bonus": 2,
             "unfinished_reward_mult": 0.5,
         },
         "boss_names": [
@@ -265,14 +267,14 @@ DEFAULT_RPG_CONFIG: dict = {
             "🤝 {a} 与 {b} 联手攻击【{monster}】。{a_name} 造成 {a_damage} 点，{b_name} 造成 {b_damage} 点，总计 {total_damage} 点。剩余生命 {hp}/{max_hp}。"
         ],
         "world_boss_team_kill": [
-            "🤝 {a} 与 {b} 联手攻击【{monster}】。{a_name} 造成 {a_damage} 点，{b_name} 造成 {b_damage} 点，总计 {total_damage} 点，并完成了讨伐。"
+            "🤝 {a} 与 {b} 联手攻击【{monster}】。{a_name} 造成 {a_damage} 点，{b_name} 造成 {b_damage} 点，总计 {total_damage} 点。最后一击由 {last_hit_name} 完成。"
         ],
         "world_boss_team_fail": ["{a} 试着和 {b_name} 一起挑战【{monster}】，没能会合，只能自己先上。"],
         "world_boss_fail_event_hesitate": ["……{b_name} 临时迟疑了一下。"],
         "world_boss_fail_event_late_reply": ["……{b_name} 赶到得慢了半步。"],
         "world_boss_fail_event_out_of_step": ["……两人没能在开战前顺利会合。"],
         "world_boss_team_bonus": ["· 协作加成：本次合击额外提高了 {bonus_total} 点总伤害。"],
-        "world_boss_kill": ["🏆 世界BOSS【{monster}】已被击败，开始按贡献结算奖励。"],
+        "world_boss_kill": ["🏆 世界BOSS【{monster}】已被击败。"],
         "world_boss_expired": ["🌫️ 昨天的世界BOSS【{monster}】已经离场。讨伐进度 {progress}% ，本次按 {reward_percent}% 奖励规模发放补偿。"],
         "world_boss_reward": ["· {name}：贡献 {damage}，经验 +{exp}、积分 +{points}{levelup}"],
         "forge_world_boss_ok": ["🔧 世界BOSS装备已强化（已强化 ×{forge}，花费 {cost} 积分）。"],

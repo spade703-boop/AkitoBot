@@ -9,6 +9,7 @@ import random
 from nonebot import on_command
 from nonebot.adapters import Bot, Event, Message
 from nonebot.adapters.onebot.v11 import MessageSegment
+from nonebot.log import logger
 from nonebot.params import CommandArg
 
 from ...core import SUPERUSER_QQ, is_sleeping
@@ -24,6 +25,8 @@ from ...core.game_store import (
     _today_str,
     _weighted_choice,
 )
+from ..bond_pages import build_world_boss_rank_page_data
+from ..bond_render import render_bond_page
 from ..gift import _bond_level
 from .config import _cfg, _copy, _error, _line
 from .fortune import _fortune_by_key
@@ -355,6 +358,22 @@ def _apply_world_boss_damage(boss: dict, hits: dict[str, int]) -> dict[str, int]
         contributors[uid] = int(contributors.get(uid, 0)) + int(dmg)
     boss["hp"] = current_hp - sum(actual.values())
 
+    remaining = current_hp
+    last_hit_uid = None
+    for uid in hits:
+        uid = str(uid)
+        dealt = int(actual.get(uid, 0))
+        if dealt <= 0:
+            continue
+        if dealt >= remaining:
+            last_hit_uid = uid
+            break
+        remaining -= dealt
+    if int(boss.get("hp", 0)) <= 0 and last_hit_uid is not None:
+        boss["last_hit"] = last_hit_uid
+    else:
+        boss.pop("last_hit", None)
+
     result = {str(uid): 0 for uid in hits}
     result.update(actual)
     return result
@@ -385,7 +404,7 @@ def _world_boss_reward_values(boss: dict, *, reward_ratio: float = 1.0) -> dict[
     }
 
 
-def _world_boss_reward_lines(
+def _world_boss_reward_results(
     group: dict,
     contributors: dict[str, int],
     *,
@@ -393,56 +412,123 @@ def _world_boss_reward_lines(
     points_pool: int,
     exp_fixed: int,
     points_fixed: int,
-) -> list[str]:
-    lines: list[str] = []
+    last_hit_uid: str | None = None,
+) -> list[dict]:
+    rows: list[dict] = []
     exp_alloc = _allocate_exact(exp_pool, contributors)
     points_alloc = _allocate_exact(points_pool, contributors)
+    reward_cfg = _world_boss_reward_cfg()
+    total_damage = max(1, sum(int(dmg) for dmg in contributors.values()))
+    last_hit_uid = str(last_hit_uid) if last_hit_uid is not None else None
 
     ranked = sorted(contributors.items(), key=lambda item: (-item[1], item[0]))
-    for uid, damage in ranked:
+    for rank, (uid, damage) in enumerate(ranked, 1):
         user = _ensure_player(group, uid)
         old_level = _level_of(int(user.get("exp", 0)))
-        exp_gain = int(exp_fixed) + int(exp_alloc.get(uid, 0))
-        points_gain = int(points_fixed) + int(points_alloc.get(uid, 0))
+        is_last_hit = last_hit_uid == uid
+        exp_bonus = int(reward_cfg.get("last_hit_exp_bonus", 0)) if is_last_hit else 0
+        points_bonus = int(reward_cfg.get("last_hit_points_bonus", 0)) if is_last_hit else 0
+        exp_gain = int(exp_fixed) + int(exp_alloc.get(uid, 0)) + exp_bonus
+        points_gain = int(points_fixed) + int(points_alloc.get(uid, 0)) + points_bonus
         user["exp"] = int(user.get("exp", 0)) + exp_gain
         user["points"] = int(user.get("points", 0)) + points_gain
         new_level = _level_of(int(user.get("exp", 0)))
-        levelup = f"，升级 Lv{old_level}→Lv{new_level}" if new_level > old_level else ""
         name = user.get("display_name") or f"用户{uid}"
+        rows.append(
+            {
+                "rank": rank,
+                "uid": uid,
+                "name": name,
+                "damage": int(damage),
+                "damage_pct": round(int(damage) * 100 / total_damage),
+                "exp": exp_gain,
+                "points": points_gain,
+                "exp_bonus": exp_bonus,
+                "points_bonus": points_bonus,
+                "old_level": old_level,
+                "new_level": new_level,
+                "levelup": new_level > old_level,
+                "levelup_text": f"Lv{old_level}→Lv{new_level}" if new_level > old_level else "",
+                "last_hit": is_last_hit,
+            }
+        )
+    return rows
+
+
+def _world_boss_reward_lines(rows: list[dict]) -> list[str]:
+    lines: list[str] = []
+    for row in rows:
+        extra = ""
+        extra_parts: list[str] = []
+        if int(row.get("exp_bonus", 0)) > 0:
+            extra_parts.append(f"经验 +{int(row['exp_bonus'])}")
+        if int(row.get("points_bonus", 0)) > 0:
+            extra_parts.append(f"积分 +{int(row['points_bonus'])}")
+        if extra_parts:
+            extra = f"（尾刀奖励：{'、'.join(extra_parts)}）"
         lines.append(
             _line(
                 "world_boss_reward",
-                name=name,
-                damage=damage,
-                exp=exp_gain,
-                points=points_gain,
-                levelup=levelup,
+                name=row.get("name", ""),
+                damage=int(row.get("damage", 0)),
+                exp=int(row.get("exp", 0)),
+                points=int(row.get("points", 0)),
+                levelup=(f"，升级 {row['levelup_text']}" if row.get("levelup_text") else ""),
             )
+            + extra
         )
     return lines
+
+
+def _world_boss_kill_settlement(group: dict, boss: dict, *, last_hit_uid: str | None = None) -> dict:
+    contributors = _world_boss_contributors(boss)
+    result = {
+        "monster": str(boss.get("name", "世界BOSS")),
+        "rows": [],
+        "last_hit_uid": None,
+        "last_hit_name": "",
+        "last_hit_reward": {"exp": 0, "points": 0},
+        "lines": [_line("world_boss_kill", monster=boss.get("name", "世界BOSS"))],
+    }
+    if not contributors:
+        _rpg_state(group).pop("world_boss", None)
+        return result
+
+    normalized_last_hit = str(last_hit_uid) if last_hit_uid is not None else None
+    if normalized_last_hit not in contributors:
+        normalized_last_hit = None
+
+    reward_values = _world_boss_reward_values(boss)
+    rows = _world_boss_reward_results(
+        group,
+        contributors,
+        exp_pool=reward_values["exp_pool"],
+        points_pool=reward_values["points_pool"],
+        exp_fixed=reward_values["exp_fixed"],
+        points_fixed=reward_values["points_fixed"],
+        last_hit_uid=normalized_last_hit,
+    )
+    result["rows"] = rows
+    result["last_hit_uid"] = normalized_last_hit
+    for row in rows:
+        if row.get("uid") != normalized_last_hit:
+            continue
+        result["last_hit_name"] = str(row.get("name", ""))
+        result["last_hit_reward"] = {
+            "exp": int(row.get("exp_bonus", 0)),
+            "points": int(row.get("points_bonus", 0)),
+        }
+        break
+
+    _rpg_state(group).pop("world_boss", None)
+    return result
 
 
 def _world_boss_kill_lines(group: dict, boss: dict) -> list[str]:
-    contributors = _world_boss_contributors(boss)
-    lines = [_line("world_boss_kill", monster=boss.get("name", "世界BOSS"))]
-    if not contributors:
-        _rpg_state(group).pop("world_boss", None)
-        return lines
-
-    reward_values = _world_boss_reward_values(boss)
-    lines.extend(
-        _world_boss_reward_lines(
-            group,
-            contributors,
-            exp_pool=reward_values["exp_pool"],
-            points_pool=reward_values["points_pool"],
-            exp_fixed=reward_values["exp_fixed"],
-            points_fixed=reward_values["points_fixed"],
-        )
-    )
-
-    _rpg_state(group).pop("world_boss", None)
-    return lines
+    settlement = _world_boss_kill_settlement(group, boss, last_hit_uid=boss.get("last_hit"))
+    if not settlement["rows"]:
+        return settlement["lines"]
+    return [*settlement["lines"], *_world_boss_reward_lines(settlement["rows"])]
 
 
 def _world_boss_unfinished_lines(group: dict, boss: dict) -> list[str]:
@@ -465,16 +551,15 @@ def _world_boss_unfinished_lines(group: dict, boss: dict) -> list[str]:
             reward_percent=round(reward_ratio * 100),
         )
     ]
-    lines.extend(
-        _world_boss_reward_lines(
-            group,
-            contributors,
-            exp_pool=reward_values["exp_pool"],
-            points_pool=reward_values["points_pool"],
-            exp_fixed=reward_values["exp_fixed"],
-            points_fixed=reward_values["points_fixed"],
-        )
+    rows = _world_boss_reward_results(
+        group,
+        contributors,
+        exp_pool=reward_values["exp_pool"],
+        points_pool=reward_values["points_pool"],
+        exp_fixed=reward_values["exp_fixed"],
+        points_fixed=reward_values["points_fixed"],
     )
+    lines.extend(_world_boss_reward_lines(rows))
     return lines
 
 
@@ -550,6 +635,40 @@ def _boss_at_line(key: str, ctx: dict):
     return _render_with_ats(random.choice(_copy(key)), ctx)
 
 
+async def _render_world_boss_settlement_image(settlement: dict) -> bytes | None:
+    rows = settlement.get("rows", [])
+    if not isinstance(rows, list) or not rows:
+        return None
+    try:
+        page_data = build_world_boss_rank_page_data(
+            settlement.get("monster", "世界BOSS"),
+            rows,
+        )
+        return await render_bond_page("world_boss_rank.html", page_data, viewport_width=760)
+    except Exception as e:
+        logger.warning(f"world boss settlement render failed ({e}), falling back to text")
+        return None
+
+
+def _merge_lines_with_optional_image(lines: list, image_bytes: bytes | None = None):
+    msg = lines[0]
+    for line in lines[1:]:
+        msg = msg + "\n" + line
+    if image_bytes is not None:
+        msg = msg + "\n" + MessageSegment.image(image_bytes)
+    return msg
+
+
+_TEST_WORLD_BOSS_ROWS: list[dict] = [
+    {"rank": 1, "uid": "10001", "name": "测试冒险者01", "damage": 1280, "damage_pct": 29, "exp": 126, "points": 15, "exp_bonus": 0, "points_bonus": 0, "old_level": 9, "new_level": 10, "levelup": True, "levelup_text": "Lv9→Lv10", "last_hit": False},
+    {"rank": 2, "uid": "10002", "name": "测试冒险者02", "damage": 1186, "damage_pct": 27, "exp": 118, "points": 14, "exp_bonus": 0, "points_bonus": 0, "old_level": 8, "new_level": 8, "levelup": False, "levelup_text": "", "last_hit": False},
+    {"rank": 3, "uid": "10003", "name": "测试冒险者03", "damage": 1014, "damage_pct": 23, "exp": 111, "points": 15, "exp_bonus": 8, "points_bonus": 2, "old_level": 7, "new_level": 8, "levelup": True, "levelup_text": "Lv7→Lv8", "last_hit": True},
+    {"rank": 4, "uid": "10004", "name": "测试冒险者04", "damage": 462, "damage_pct": 10, "exp": 57, "points": 7, "exp_bonus": 0, "points_bonus": 0, "old_level": 6, "new_level": 6, "levelup": False, "levelup_text": "", "last_hit": False},
+    {"rank": 5, "uid": "10005", "name": "测试冒险者05", "damage": 258, "damage_pct": 6, "exp": 39, "points": 5, "exp_bonus": 0, "points_bonus": 0, "old_level": 5, "new_level": 5, "levelup": False, "levelup_text": "", "last_hit": False},
+    {"rank": 6, "uid": "10006", "name": "测试冒险者06", "damage": 181, "damage_pct": 4, "exp": 31, "points": 4, "exp_bonus": 0, "points_bonus": 0, "old_level": 4, "new_level": 4, "levelup": False, "levelup_text": "", "last_hit": False},
+]
+
+
 world_boss_cmd = on_command("世界BOSS", priority=5, block=True)
 
 
@@ -614,6 +733,45 @@ async def _(event: Event, args: Message = CommandArg()):
     await force_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
 
 
+test_world_rank_cmd = on_command("test世界排行", aliases={"测试世界排行"}, priority=5, block=True)
+
+
+@test_world_rank_cmd.handle()
+async def _(event: Event, args: Message = CommandArg()):
+    if str(event.get_user_id()) != SUPERUSER_QQ:
+        return
+
+    group_id, rejection = _resolve_group(event)
+    if rejection:
+        await test_world_rank_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
+    if group_id is None:
+        return
+    if args and args.extract_plain_text().strip():
+        return
+
+    image_bytes = await _render_world_boss_settlement_image(
+        {
+            "monster": "赤鳞灾龙",
+            "rows": [row.copy() for row in _TEST_WORLD_BOSS_ROWS],
+            "last_hit_uid": "10003",
+            "last_hit_name": "测试冒险者03",
+            "last_hit_reward": {"exp": 8, "points": 2},
+        }
+    )
+    if image_bytes is None:
+        lines = [
+            "测试世界排行图渲染失败，已切回文字预览。",
+            *_world_boss_reward_lines([row.copy() for row in _TEST_WORLD_BOSS_ROWS]),
+        ]
+        await test_world_rank_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
+
+    await test_world_rank_cmd.finish(
+        MessageSegment.reply(event.message_id)
+        + "测试数据：6 名参与者，不写入真实结算。\n"
+        + MessageSegment.image(image_bytes)
+    )
+
+
 attack_world_boss_cmd = on_command("攻击世界BOSS", priority=5, block=True)
 
 
@@ -634,6 +792,7 @@ async def _(event: Event, args: Message = CommandArg()):
         await attack_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + _error("sleeping"))
 
     today = _today_str()
+    settlement = None
     async with LOCK:
         data = _load_data()
         group = _get_group(data, group_id)
@@ -681,12 +840,14 @@ async def _(event: Event, args: Message = CommandArg()):
             )
         ]
         if int(boss.get("hp", 0)) <= 0:
-            lines.extend(_world_boss_kill_lines(group, boss))
+            settlement = _world_boss_kill_settlement(group, boss, last_hit_uid=boss.get("last_hit"))
+            lines.extend(settlement["lines"])
         _save_data(data)
 
-    msg = lines[0]
-    for line in lines[1:]:
-        msg = msg + "\n" + line
+    settlement_image = await _render_world_boss_settlement_image(settlement) if settlement else None
+    if settlement and settlement_image is None:
+        lines.extend(_world_boss_reward_lines(settlement["rows"]))
+    msg = _merge_lines_with_optional_image(lines, settlement_image)
     await attack_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + msg)
 
 
@@ -718,6 +879,7 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
         return
 
     today = _today_str()
+    settlement = None
     async with LOCK:
         data = _load_data()
         group = _get_group(data, group_id)
@@ -775,6 +937,8 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
             _consume_equip(b_participant)
             _consume_equip(a_participant)
             b_name = b.get("display_name") or f"群友{initiator}"
+            last_hit_uid = str(boss.get("last_hit", ""))
+            last_hit_name = b_name if last_hit_uid == str(initiator) else a_name
             head_key = "world_boss_team_kill" if int(boss.get("hp", 0)) <= 0 else "world_boss_team_attack"
             lines.append(
                 _boss_at_line(
@@ -790,10 +954,11 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
                         "total_damage": sum(dealt.values()),
                         "hp": boss.get("hp", 0),
                         "max_hp": boss.get("max_hp", 0),
+                        "last_hit_name": last_hit_name,
                     },
                 )
             )
-            if bonus_total > 0:
+            if bonus_total > 0 and int(boss.get("hp", 0)) > 0:
                 lines.append(_line("world_boss_team_bonus", bonus_total=bonus_total))
         else:
             fail_event = _roll_team_fail_flavor()
@@ -814,24 +979,28 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
                 {initiator: _boss_damage(b_participant, b, today, rng=random)},
             )
             _consume_equip(b_participant)
-            lines.append(
-                _boss_at_line(
-                    "world_boss_attack_kill" if int(boss.get("hp", 0)) <= 0 else "world_boss_attack",
-                    {
-                        "a": initiator,
-                        "monster": boss.get("name", "世界BOSS"),
-                        "damage": dealt.get(str(initiator), 0),
-                        "hp": boss.get("hp", 0),
-                        "max_hp": boss.get("max_hp", 0),
-                    },
-                )
+            attack_line = _boss_at_line(
+                "world_boss_attack_kill" if int(boss.get("hp", 0)) <= 0 else "world_boss_attack",
+                {
+                    "a": initiator,
+                    "monster": boss.get("name", "世界BOSS"),
+                    "damage": dealt.get(str(initiator), 0),
+                    "hp": boss.get("hp", 0),
+                    "max_hp": boss.get("max_hp", 0),
+                },
             )
+            if int(boss.get("hp", 0)) <= 0:
+                lines = [attack_line]
+            else:
+                lines.append(attack_line)
 
         if int(boss.get("hp", 0)) <= 0:
-            lines.extend(_world_boss_kill_lines(group, boss))
+            settlement = _world_boss_kill_settlement(group, boss, last_hit_uid=boss.get("last_hit"))
+            lines.extend(settlement["lines"])
         _save_data(data)
 
-    msg = lines[0]
-    for line in lines[1:]:
-        msg = msg + "\n" + line
+    settlement_image = await _render_world_boss_settlement_image(settlement) if settlement else None
+    if settlement and settlement_image is None:
+        lines.extend(_world_boss_reward_lines(settlement["rows"]))
+    msg = _merge_lines_with_optional_image(lines, settlement_image)
     await team_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + msg)

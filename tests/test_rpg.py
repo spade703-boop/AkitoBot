@@ -1630,6 +1630,9 @@ async def test_world_boss_kill_settlement_preserves_reward_pool_and_battle_stats
     state = _patch_io(monkeypatch, boss, store=store)
     monkeypatch.setattr(boss.random, "randint", lambda _a, _b: 0)
     monkeypatch.setattr(boss.random, "uniform", lambda _a, _b: 1.0)
+    async def _fake_render(_settlement):
+        return b"fake-world-boss-rank"
+    monkeypatch.setattr(boss, "_render_world_boss_settlement_image", _fake_render)
 
     with pytest.raises(FinishedException) as exc:
         await boss.attack_world_boss_cmd.handlers[0](Event(group_id=1001, user_id="u1"))
@@ -1640,12 +1643,34 @@ async def test_world_boss_kill_settlement_preserves_reward_pool_and_battle_stats
     points_pool = int(rewards.get("points_pool_per_scale", 8)) * 3
     exp_fixed = int(rewards.get("exp_fixed", 12))
     points_fixed = int(rewards.get("points_fixed", 2))
+    last_hit_exp_bonus = int(rewards.get("last_hit_exp_bonus", 0))
+    last_hit_points_bonus = int(rewards.get("last_hit_points_bonus", 0))
     alloc = boss._allocate_exact(exp_pool, {"u1": 6, "u2": 6})
     points_alloc = boss._allocate_exact(points_pool, {"u1": 6, "u2": 6})
     assert "world_boss" not in state["groups"]["1001"]["rpg"]
-    assert users["u1"]["exp"] == exp_fixed + alloc["u1"] and users["u2"]["exp"] == exp_fixed + alloc["u2"]
-    assert users["u1"]["points"] == points_fixed + points_alloc["u1"]
+    assert users["u1"]["exp"] == exp_fixed + alloc["u1"] + last_hit_exp_bonus
+    assert users["u2"]["exp"] == exp_fixed + alloc["u2"]
+    assert users["u1"]["points"] == points_fixed + points_alloc["u1"] + last_hit_points_bonus
     assert users["u2"]["points"] == points_fixed + points_alloc["u2"]
     assert users["u1"]["hunt_total"] == 7 and users["u1"]["hunt_wins"] == 3
     assert users["u2"]["hunt_total"] == 2 and users["u2"]["hunt_wins"] == 1
-    assert "按贡献结算奖励" in str(exc.value.result)
+    result = exc.value.result
+    text = str(result)
+    assert "已被击败" in text
+    assert "经验 +" not in text
+    assert "[image]" in text
+
+
+@pytest.mark.asyncio
+async def test_test_world_rank_cmd_renders_image(monkeypatch):
+    async def _fake_render(_settlement):
+        return b"fake-world-boss-rank"
+
+    monkeypatch.setattr(boss, "_render_world_boss_settlement_image", _fake_render)
+
+    with pytest.raises(FinishedException) as exc:
+        await boss.test_world_rank_cmd.handlers[0](Event(group_id=1001, user_id=boss.SUPERUSER_QQ))
+
+    text = str(exc.value.result)
+    assert "测试数据" in text
+    assert "[image]" in text
