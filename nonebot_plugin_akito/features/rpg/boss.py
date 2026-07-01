@@ -488,9 +488,10 @@ def _world_boss_kill_settlement(group: dict, boss: dict, *, last_hit_uid: str | 
         "last_hit_uid": None,
         "last_hit_name": "",
         "last_hit_reward": {"exp": 0, "points": 0},
-        "lines": [_line("world_boss_kill", monster=boss.get("name", "世界BOSS"))],
+        "lines": [],
     }
     if not contributors:
+        result["lines"] = [_line("world_boss_kill")]
         _rpg_state(group).pop("world_boss", None)
         return result
 
@@ -519,6 +520,9 @@ def _world_boss_kill_settlement(group: dict, boss: dict, *, last_hit_uid: str | 
             "points": int(row.get("points_bonus", 0)),
         }
         break
+    result["lines"] = [_line("world_boss_kill")]
+    if result["last_hit_name"]:
+        result["lines"].append(_line("world_boss_last_hit", name=result["last_hit_name"]))
 
     _rpg_state(group).pop("world_boss", None)
     return result
@@ -756,6 +760,10 @@ async def _(event: Event, args: Message = CommandArg()):
             "last_hit_uid": "10003",
             "last_hit_name": "测试冒险者03",
             "last_hit_reward": {"exp": 8, "points": 2},
+            "lines": [
+                _line("world_boss_kill"),
+                _line("world_boss_last_hit", name="测试冒险者03"),
+            ],
         }
     )
     if image_bytes is None:
@@ -765,11 +773,14 @@ async def _(event: Event, args: Message = CommandArg()):
         ]
         await test_world_rank_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
 
-    await test_world_rank_cmd.finish(
-        MessageSegment.reply(event.message_id)
-        + "测试数据：6 名参与者，不写入真实结算。\n"
-        + MessageSegment.image(image_bytes)
+    msg = _merge_lines_with_optional_image(
+        [
+            _line("world_boss_kill"),
+            _line("world_boss_last_hit", name="测试冒险者03"),
+        ],
+        image_bytes,
     )
+    await test_world_rank_cmd.finish(MessageSegment.reply(event.message_id) + msg)
 
 
 attack_world_boss_cmd = on_command("攻击世界BOSS", priority=5, block=True)
@@ -827,21 +838,22 @@ async def _(event: Event, args: Message = CommandArg()):
         _consume_equip(participant)
 
         head_key = "world_boss_attack_kill" if int(boss.get("hp", 0)) <= 0 else "world_boss_attack"
-        lines = [
-            _boss_at_line(
-                head_key,
-                {
-                    "a": user_id,
-                    "monster": boss.get("name", "世界BOSS"),
-                    "damage": dealt,
-                    "hp": boss.get("hp", 0),
-                    "max_hp": boss.get("max_hp", 0),
-                },
-            )
-        ]
         if int(boss.get("hp", 0)) <= 0:
             settlement = _world_boss_kill_settlement(group, boss, last_hit_uid=boss.get("last_hit"))
-            lines.extend(settlement["lines"])
+            lines = list(settlement["lines"])
+        else:
+            lines = [
+                _boss_at_line(
+                    head_key,
+                    {
+                        "a": user_id,
+                        "monster": boss.get("name", "世界BOSS"),
+                        "damage": dealt,
+                        "hp": boss.get("hp", 0),
+                        "max_hp": boss.get("max_hp", 0),
+                    },
+                )
+            ]
         _save_data(data)
 
     settlement_image = await _render_world_boss_settlement_image(settlement) if settlement else None
@@ -940,24 +952,27 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
             last_hit_uid = str(boss.get("last_hit", ""))
             last_hit_name = b_name if last_hit_uid == str(initiator) else a_name
             head_key = "world_boss_team_kill" if int(boss.get("hp", 0)) <= 0 else "world_boss_team_attack"
-            lines.append(
-                _boss_at_line(
-                    head_key,
-                    {
-                        "a": initiator,
-                        "b": target,
-                        "monster": boss.get("name", "世界BOSS"),
-                        "a_name": b_name,
-                        "b_name": a_name,
-                        "a_damage": dealt.get(str(initiator), 0),
-                        "b_damage": dealt.get(str(target), 0),
-                        "total_damage": sum(dealt.values()),
-                        "hp": boss.get("hp", 0),
-                        "max_hp": boss.get("max_hp", 0),
-                        "last_hit_name": last_hit_name,
-                    },
+            if int(boss.get("hp", 0)) <= 0:
+                lines = []
+            else:
+                lines.append(
+                    _boss_at_line(
+                        head_key,
+                        {
+                            "a": initiator,
+                            "b": target,
+                            "monster": boss.get("name", "世界BOSS"),
+                            "a_name": b_name,
+                            "b_name": a_name,
+                            "a_damage": dealt.get(str(initiator), 0),
+                            "b_damage": dealt.get(str(target), 0),
+                            "total_damage": sum(dealt.values()),
+                            "hp": boss.get("hp", 0),
+                            "max_hp": boss.get("max_hp", 0),
+                            "last_hit_name": last_hit_name,
+                        },
+                    )
                 )
-            )
             if bonus_total > 0 and int(boss.get("hp", 0)) > 0:
                 lines.append(_line("world_boss_team_bonus", bonus_total=bonus_total))
         else:
@@ -996,7 +1011,7 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
 
         if int(boss.get("hp", 0)) <= 0:
             settlement = _world_boss_kill_settlement(group, boss, last_hit_uid=boss.get("last_hit"))
-            lines.extend(settlement["lines"])
+            lines = list(settlement["lines"])
         _save_data(data)
 
     settlement_image = await _render_world_boss_settlement_image(settlement) if settlement else None

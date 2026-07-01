@@ -31,18 +31,10 @@
   .pill{font-size:13px;color:rgba(255,255,255,.76);background:var(--surface);border:1px solid var(--line);padding:6px 14px;border-radius:999px;}
   .rule{height:1px;background:linear-gradient(90deg, rgba(255,138,61,.45), rgba(255,255,255,.06) 52%, rgba(79,151,255,.45));margin:16px 0 18px;}
 
-  .hero{display:flex;gap:16px;align-items:stretch;}
-  .boss-card,.summary{background:var(--surface);border:1px solid var(--line);border-radius:20px;}
-  .boss-card{flex:1 1 0;padding:18px 18px 16px;}
-  .boss-card .label{font-size:12px;letter-spacing:.12em;color:var(--muted);}
-  .boss-card .name{margin-top:8px;font-size:26px;font-weight:800;color:var(--gold);line-height:1.3;}
-  .boss-card .desc{margin-top:10px;font-size:13px;line-height:1.7;color:rgba(255,255,255,.76);}
-  .summary{width:250px;padding:16px;}
-  .chips{display:flex;flex-wrap:wrap;gap:8px;}
-  .chip{min-width:100px;padding:9px 10px;border-radius:14px;background:var(--surface-2);border:1px solid rgba(255,255,255,.08);}
+  .chips{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:4px;}
+  .chip{min-width:0;padding:10px 11px;border-radius:14px;background:var(--surface-2);border:1px solid rgba(255,255,255,.08);}
   .chip .k{font-size:11px;color:var(--muted);}
   .chip .v{margin-top:4px;font-size:19px;font-weight:800;color:var(--gold);}
-  .chip.wide{width:100%;}
   .chip.wide .v{font-size:16px;color:var(--txt);}
 
   .section-title{display:flex;align-items:center;justify-content:space-between;margin:22px 2px 12px;}
@@ -102,39 +94,30 @@
     </div>
     <div class="rule"></div>
 
-    <div class="hero">
-      <div class="boss-card">
-        <div class="label">SETTLEMENT OVERVIEW</div>
-        <div class="name">{{ stats.headline }}</div>
-        <div class="desc">这里仅展示本次结算的参与情况与奖励汇总，不再单独展示 BOSS 名称。尾刀奖励只额外发给完成最后一击的玩家。</div>
+    <div class="chips">
+      <div class="chip">
+        <div class="k">参与人数</div>
+        <div class="v">{{ stats.count }}</div>
       </div>
-      <div class="summary">
-        <div class="chips">
-          <div class="chip">
-            <div class="k">参与人数</div>
-            <div class="v">{{ stats.count }}</div>
-          </div>
-          <div class="chip">
-            <div class="k">总伤害</div>
-            <div class="v">{{ "{:,}".format(stats.total_damage) }}</div>
-          </div>
-          <div class="chip">
-            <div class="k">发放经验</div>
-            <div class="v">{{ "{:,}".format(stats.total_exp) }}</div>
-          </div>
-          <div class="chip">
-            <div class="k">发放积分</div>
-            <div class="v">{{ "{:,}".format(stats.total_points) }}</div>
-          </div>
-          <div class="chip wide">
-            <div class="k">最后一击</div>
-            <div class="v">{{ stats.last_hit_name }}</div>
-          </div>
-          <div class="chip wide">
-            <div class="k">尾刀额外奖励</div>
-            <div class="v">{{ stats.last_hit_reward }}</div>
-          </div>
-        </div>
+      <div class="chip">
+        <div class="k">总伤害</div>
+        <div class="v">{{ "{:,}".format(stats.total_damage) }}</div>
+      </div>
+      <div class="chip">
+        <div class="k">发放经验</div>
+        <div class="v">{{ "{:,}".format(stats.total_exp) }}</div>
+      </div>
+      <div class="chip">
+        <div class="k">发放积分</div>
+        <div class="v">{{ "{:,}".format(stats.total_points) }}</div>
+      </div>
+      <div class="chip">
+        <div class="k">最后一击</div>
+        <div class="v">{{ stats.last_hit_name }}</div>
+      </div>
+      <div class="chip">
+        <div class="k">尾刀额外奖励</div>
+        <div class="v">{{ stats.last_hit_reward }}</div>
       </div>
     </div>
 

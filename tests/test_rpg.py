@@ -17,6 +17,8 @@ from nonebot_plugin_akito.core import game_store
 
 # 导入子包即触发命令注册与签到钩子注册
 import nonebot_plugin_akito.features.rpg.boss as boss
+import nonebot_plugin_akito.features.bond_pages as bond_pages
+import nonebot_plugin_akito.features.bond_render as bond_render
 import nonebot_plugin_akito.features.rpg.character as character
 import nonebot_plugin_akito.features.rpg.config as rpg_config
 import nonebot_plugin_akito.features.rpg.fortune as fortune
@@ -1656,7 +1658,9 @@ async def test_world_boss_kill_settlement_preserves_reward_pool_and_battle_stats
     assert users["u2"]["hunt_total"] == 2 and users["u2"]["hunt_wins"] == 1
     result = exc.value.result
     text = str(result)
-    assert "已被击败" in text
+    assert "世界BOSS 已经被成功击杀" in text
+    assert "拿下了尾刀" in text
+    assert "造成了" not in text
     assert "经验 +" not in text
     assert "[image]" in text
 
@@ -1672,5 +1676,45 @@ async def test_test_world_rank_cmd_renders_image(monkeypatch):
         await boss.test_world_rank_cmd.handlers[0](Event(group_id=1001, user_id=boss.SUPERUSER_QQ))
 
     text = str(exc.value.result)
-    assert "测试数据" in text
+    assert "世界BOSS 已经被成功击杀" in text
+    assert "测试冒险者03 拿下了尾刀" in text
     assert "[image]" in text
+
+
+@pytest.mark.asyncio
+async def test_team_world_boss_fail_kill_only_shows_settlement_lines(monkeypatch):
+    store = {"groups": {"1001": {
+        "users": {
+            "u1": _equipped_user(points=0),
+            "u2": _equipped_user(points=0),
+        },
+        "rpg": {"world_boss": _world_boss_record(max_hp=15, hp=15)},
+    }}}
+    state = _patch_io(monkeypatch, boss, store=store)
+    monkeypatch.setattr(boss.random, "random", lambda: 0.999)
+    monkeypatch.setattr(boss.random, "randint", lambda _a, _b: 0)
+    monkeypatch.setattr(boss.random, "uniform", lambda _a, _b: 1.0)
+    monkeypatch.setattr(boss, "_roll_team_fail_flavor", lambda rng=boss.random: "hesitate")
+    async def _fake_render(_settlement):
+        return b"fake-world-boss-rank"
+    monkeypatch.setattr(boss, "_render_world_boss_settlement_image", _fake_render)
+
+    with pytest.raises(FinishedException) as exc:
+        await boss.team_world_boss_cmd.handlers[0](_bot(), _team_event("u1", "u2"))
+
+    text = str(exc.value.result)
+    assert "世界BOSS 已经被成功击杀" in text
+    assert "拿下了尾刀" in text
+    assert "没能会合" not in text
+    assert "造成了 15 点伤害" not in text
+    assert "[image]" in text
+    assert "world_boss" not in state["groups"]["1001"]["rpg"]
+
+
+def test_world_boss_rank_template_renders_flat_top_stats():
+    page_data = bond_pages.build_world_boss_rank_page_data("龙下萨", [row.copy() for row in boss._TEST_WORLD_BOSS_ROWS])
+    html = bond_render._TEMPLATE_ENV.get_template("world_boss_rank.html").render(**page_data)
+
+    assert "本次共有" not in html
+    assert "参与人数" in html
+    assert "最终榜单" in html

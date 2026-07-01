@@ -689,7 +689,10 @@
       "· 协作加成：本次合击额外提高了 {bonus_total} 点总伤害。"
     ],
     "world_boss_kill": [
-      "🏆 世界BOSS【{monster}】已被击败。"
+      "🏆 世界BOSS 已经被成功击杀。"
+    ],
+    "world_boss_last_hit": [
+      "⚔️ {name} 拿下了尾刀。"
     ],
     "world_boss_expired": [
       "🌫️ 昨天的世界BOSS【{monster}】已经离场。讨伐进度 {progress}% ，本次按 {reward_percent}% 奖励规模发放补偿。"
