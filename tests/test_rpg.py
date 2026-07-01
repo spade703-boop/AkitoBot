@@ -818,15 +818,18 @@ def test_settle_solo_rookie_bonus_only_applies_to_solo(monkeypatch):
     assert factors[1] == pytest.approx(1.0 + float(rpg_config._cfg("team", {}).get("power_bonus", 0.0)))
 
 
-# ==================== 纯逻辑：组队成功率 / 经验加成 ====================
+# ==================== 纯逻辑：组队成功率 / 协作收益 ====================
 
 def test_team_success_rate_scales_and_clamps():
     t = rpg_config._cfg("team", {})
     base, step = float(t["base_success"]), float(t["per_level"])
+    neg_step = float(t["negative_per_level"])
     assert team._team_success_rate(1) == pytest.approx(base)              # Lv1 = base
     assert team._team_success_rate(3) == pytest.approx(base + 2 * step)   # 随羁绊等级爬升
+    assert team._team_success_rate(0) == pytest.approx(base - neg_step)   # 轻度负羁绊缓降
+    assert team._team_success_rate(-1) == pytest.approx(base - 2 * neg_step)
     assert team._team_success_rate(99) == pytest.approx(float(t["max_success"]))   # 封顶
-    assert team._team_success_rate(-5) == pytest.approx(float(t["min_success"]))   # 封底（负档硬拉）
+    assert team._team_success_rate(-99) == pytest.approx(float(t["min_success"]))   # 深度负羁绊封底
 
 
 def test_team_exp_bonus_scales_and_caps():
@@ -835,6 +838,29 @@ def test_team_exp_bonus_scales_and_caps():
     assert team._team_exp_bonus(1) == 0.0                       # Lv1 无加成
     assert team._team_exp_bonus(3) == pytest.approx(2 * per)
     assert team._team_exp_bonus(9999) == pytest.approx(cap)     # 封顶
+
+
+def test_negative_team_event_chance_tiers():
+    neg = rpg_config._cfg("team", {}).get("negative", {})
+    assert team._negative_team_event_chance(0) == 0.0
+    assert team._negative_team_event_chance(-1) == pytest.approx(float(neg["chance_mild"]))
+    assert team._negative_team_event_chance(int(neg["mild_threshold"])) == pytest.approx(float(neg["chance_medium"]))
+    assert team._negative_team_event_chance(int(neg["deep_threshold"])) == pytest.approx(float(neg["chance_deep"]))
+
+
+def test_team_bond_gain_respects_daily_limit_and_break_ice_bonus():
+    group = game_store._new_group()
+    today = "2026-06-22"
+    bonus = int(team._negative_team_event_spec("break_ice").get("bond_bonus", 0))
+
+    gain1 = team._grant_team_bond(group, "u1", "u2", today, win=True, extra=bonus)
+    gain2 = team._grant_team_bond(group, "u1", "u2", today, win=True, extra=bonus)
+    gain3 = team._grant_team_bond(group, "u1", "u2", "2026-06-23", win=False)
+
+    assert gain1 == 6
+    assert gain2 == 0
+    assert gain3 == 2
+    assert game_store._get_intimacy(group, "u1", "u2") == 8
 
 
 # ==================== 指令：组队 ====================
@@ -877,8 +903,10 @@ async def test_team_success_both_rewarded(monkeypatch):
     win_pts = int(rpg_config._cfg("challenge", {})["win_points"])
     assert g["u1"]["points"] == win_pts and g["u2"]["points"] == win_pts      # 双方各得积分
     assert g["u1"]["exp"] > 0 and g["u2"]["exp"] > 0
+    assert state["groups"]["1001"]["intimacy"][game_store._pair_key("u1", "u2")] == 20004
     assert "协作加成" in str(exc.value.result)
     r = str(exc.value.result)
+    assert "同好羁绊 +4" in r
     assert "[at:u1]" in r and "[at:u2]" in r                                   # @ 双方
 
 
@@ -995,6 +1023,50 @@ def test_settle_coop_applies_team_event_and_drop_bonus(
         assert kwargs["drop_mult"] == pytest.approx(expected_drop_mult)
 
 
+def test_settle_coop_applies_extra_negative_multipliers(monkeypatch):
+    captured: dict = {"reward_kwargs": []}
+    monster = {"name": "slime", "power_req": 1, "drops": []}
+    reward = {"exp_gain": 0, "exp_buffed": False, "drops": [], "points_gain": 0, "old_level": 1, "new_level": 1}
+
+    monkeypatch.setattr(hunt, "_pick_encounter", lambda level, rng=hunt.random: (monster, False))
+    monkeypatch.setattr(hunt.random, "uniform", lambda _a, _b: 1.0)
+    monkeypatch.setattr(hunt, "_roll_coop_event", lambda rng=hunt.random: "")
+    monkeypatch.setattr(hunt, "_today_buff", lambda: _PLAIN_BUFF)
+    monkeypatch.setattr(
+        hunt,
+        "resolve_hunt",
+        lambda combat_power, eff_monster, *, power_factor, fortune_factor=1.0, event=None:
+        (captured.update({"power_factor": power_factor}) or {
+            "win": True,
+            "effective": int(combat_power * power_factor * fortune_factor),
+            "event": event or "",
+            "monster": eff_monster,
+        }),
+    )
+
+    def _apply_rewards(*args, **kwargs):
+        captured["reward_kwargs"].append(kwargs)
+        return dict(reward)
+
+    monkeypatch.setattr(hunt, "_apply_rewards", _apply_rewards)
+
+    hunt._settle_coop(
+        _equipped_user(),
+        _equipped_user(),
+        "D",
+        extra_power_mult=0.92,
+        extra_exp_mult=0.93,
+        extra_drop_mult=0.85,
+    )
+
+    expected_power = (1.0 + float(rpg_config._cfg("team", {}).get("power_bonus", 0.0))) * 0.92
+    assert captured["power_factor"] == pytest.approx(expected_power)
+    assert len(captured["reward_kwargs"]) == 2
+    for kwargs in captured["reward_kwargs"]:
+        assert kwargs["exp_mult"] == pytest.approx(0.93)
+        assert kwargs["drop_mult"] == pytest.approx(0.85)
+
+
 @pytest.mark.asyncio
 async def test_team_rejects_target_no_signin(monkeypatch):
     # 对方今天未签到 → 硬性拒绝，不退化单刷
@@ -1037,6 +1109,27 @@ async def test_team_fail_by_rng_degrades_to_solo(monkeypatch):
     assert g["u2"]["exp"] == 0 and g["u2"]["points"] == 0
     assert "独自前往" in str(exc.value.result)
     assert "迟疑" in str(exc.value.result)
+
+
+@pytest.mark.asyncio
+async def test_team_negative_break_ice_grants_extra_bond(monkeypatch):
+    store = {"groups": {"1001": {
+        "users": {"u1": _equipped_user(points=0), "u2": _equipped_user(points=0)},
+        "intimacy": {game_store._pair_key("u1", "u2"): -60},
+    }}}
+    state = _patch_io(monkeypatch, team, store=store)
+    monkeypatch.setattr(team, "random", _Rng(0.0))
+    monkeypatch.setattr(team, "_roll_negative_team_event", lambda intimacy, rng=team.random: "break_ice")
+    _stub_hunt_rng(monkeypatch, {"name": "史莱姆", "power_req": 1, "drops": []})
+    monkeypatch.setattr(hunt, "_roll_coop_event", lambda rng=hunt.random: "")
+
+    with pytest.raises(FinishedException) as exc:
+        await team.team_cmd.handlers[0](_bot(), _team_event("u1", "u2"))
+
+    assert state["groups"]["1001"]["intimacy"][game_store._pair_key("u1", "u2")] == -54
+    result = str(exc.value.result)
+    assert "气氛似乎缓和了一点" in result
+    assert "同好羁绊 +6" in result
 
 
 # ==================== 称号 / 连签 / 战绩 ====================

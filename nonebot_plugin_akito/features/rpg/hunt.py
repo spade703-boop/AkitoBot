@@ -312,11 +312,22 @@ def _settle_solo(user: dict, today: str) -> dict:
     return {**res, **rew, "monster": monster, "event": event_key, "elite": is_elite, "buff": buff}
 
 
-def _settle_coop(b: dict, a: dict, today: str, *, exp_bonus: float = 0.0, drop_bonus: float = 0.0) -> dict:
+def _settle_coop(
+    b: dict,
+    a: dict,
+    today: str,
+    *,
+    exp_bonus: float = 0.0,
+    drop_bonus: float = 0.0,
+    extra_power_mult: float = 1.0,
+    extra_exp_mult: float = 1.0,
+    extra_drop_mult: float = 1.0,
+) -> dict:
     """组队合力结算：合力战力（B+A）打一只怪（含精英）、胜负共享；双方各按自身等级/运势/今日增益发奖、各自消耗装备。
 
     返回 {win, monster, elite, buff, team_event, exp_bonus, drop_bonus, b, a}。
     组队会额外结算平均运势、协作事件，以及随羁绊提升的经验/掉落加成。
+    `extra_*` 预留给外层组队关系事件做二次修正。
     """
     ccfg = _cfg("combat", {})
     buff = _today_buff()
@@ -333,12 +344,15 @@ def _settle_coop(b: dict, a: dict, today: str, *, exp_bonus: float = 0.0, drop_b
     power_factor *= 1.0 + power_bonus
     if margin > 0 and event_spec.get("power_mult") is not None:
         power_factor *= float(event_spec.get("power_mult", 1.0))
+    power_factor *= float(extra_power_mult)
     res = resolve_hunt(cp, eff, power_factor=power_factor, fortune_factor=fortune_factor)
     win = res["win"]
     exp_mult, drop_mult = _reward_mults(buff, is_elite, win)
     exp_mult *= float(event_spec.get("exp_mult", 1.0))
+    exp_mult *= float(extra_exp_mult)
     drop_mult *= float(event_spec.get("drop_mult", 1.0))
     drop_mult *= 1.0 + float(drop_bonus)
+    drop_mult *= float(extra_drop_mult)
     return {
         "win": win,
         "monster": monster,

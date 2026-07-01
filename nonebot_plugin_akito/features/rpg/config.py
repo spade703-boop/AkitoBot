@@ -23,7 +23,7 @@ DEFAULT_RPG_CONFIG: dict = {
     # ---- 连续签到：连签递增额外经验 bonus = min(streak*per_day, cap)，断签重置 ----
     "signin_streak": {"per_day": 10, "cap": 100},
     # ---- 等级曲线：升到 L 级累计需 base*(L-1)*L/2 经验 ----
-    "level_curve": {"base": 100},
+    "level_curve": {"base": 135},
     # ---- 今日装备：战力 = base + 等级*per_level + rand(0,var) + 强化次数*forge.step（战力为隐藏值，不外显）----
     "equip": {
         "base": 10,
@@ -68,9 +68,11 @@ DEFAULT_RPG_CONFIG: dict = {
         # ---- 低等级先少撞高难怪；默认 6 档分段，若缺失/非法则回退到 monsters[*].weight ----
         "encounter_brackets": [
             {"max_level": 2, "weights": [55, 45, 0, 0, 0, 0]},
-            {"max_level": 4, "weights": [45, 35, 20, 0, 0, 0]},
-            {"max_level": 7, "weights": [35, 30, 20, 15, 0, 0]},
-            {"max_level": 10, "weights": [30, 25, 20, 15, 10, 0]},
+            {"max_level": 4, "weights": [55, 45, 0, 0, 0, 0]},
+            {"max_level": 6, "weights": [40, 35, 25, 0, 0, 0]},
+            {"max_level": 9, "weights": [30, 28, 22, 20, 0, 0]},
+            {"max_level": 13, "weights": [25, 22, 20, 18, 15, 0]},
+            {"max_level": 16, "weights": [22, 20, 20, 18, 20, 0]},
             {"max_level": None, "weights": [25, 20, 20, 15, 10, 10]},
         ],
         # ---- 精英怪：遭遇时小概率升级，更难打（power_req×）但胜则更肥（经验/掉落×）。藏着不外显，撞上才知道 ----
@@ -78,23 +80,39 @@ DEFAULT_RPG_CONFIG: dict = {
     },
     # ---- 打怪奖励：经验按等级（胜/负不同），掉落系数，少量积分（串起送礼经济）----
     "challenge": {
-        "win_exp_base": 60, "win_exp_per_level": 10,
-        "lose_exp_base": 18, "lose_exp_per_level": 3,
+        "win_exp_base": 55, "win_exp_per_level": 7,
+        "lose_exp_base": 22, "lose_exp_per_level": 3,
         "win_drop_mult": 1.0, "lose_drop_mult": 0.3,
         "win_points": 15, "lose_points": 5,
     },
-    # ---- 组队：成功率随羁绊等级爬升（Lv6 顶级羁绊≈封顶必成）；失败退化为发起人单刷 ----
+    # ---- 组队：正羁绊提成功率与掉落；负羁绊会更难拉动，但下探幅度比正向增幅更缓 ----
     "team": {
         "base_success": 0.50, "per_level": 0.10,   # Lv1=50%，每升一级 +10%，Lv6 封顶 95%
-        "min_success": 0.10, "max_success": 0.95,   # 封底（含负档硬拉）/ 封顶
-        "exp_bonus_per_level": 0.05, "exp_bonus_max": 0.50,  # 组队经验加成：每级 +5%，封顶 +50%
+        "negative_per_level": 0.05,                # 负羁绊每档只额外 -5%，别一下子降得太狠
+        "min_success": 0.25, "max_success": 0.95,   # 封底（深度负羁绊）/ 封顶
+        "power_bonus": 0.08,  # 组队基础战力加成：固定 +8%
+        "exp_bonus_per_level": 0.00, "exp_bonus_max": 0.00,  # 角色经验不再因组队额外抬高
         "drop_bonus_per_level": 0.08, "drop_bonus_max": 0.40,  # 组队掉落加成：每级 +8%，封顶 +40%
+        "bond_gain_base": 2, "bond_gain_win_bonus": 2, "bond_gain_daily_limit": 1,  # 成功组队后的小额羁绊增长
         "no_event_weight": 45,
         "events": {
             "focus_fire": {"weight": 18, "power_mult": 1.10, "exp_mult": 1.10},
             "cover_route": {"weight": 16, "drop_mult": 1.35},
             "follow_up": {"weight": 14, "exp_mult": 1.20},
             "missed_beat": {"weight": 12, "power_mult": 0.90},
+        },
+        "negative": {
+            "mild_threshold": -50,
+            "deep_threshold": -300,
+            "chance_mild": 0.35,
+            "chance_medium": 0.55,
+            "chance_deep": 0.75,
+            "events": {
+                "friction": {"weight": 18, "power_mult": 0.92},
+                "misread": {"weight": 16, "exp_mult": 0.92},
+                "loose_guard": {"weight": 14, "drop_mult": 0.85},
+                "break_ice": {"weight": 12, "bond_bonus": 2},
+            },
         },
         "fail_flavor": {"hesitate": 4, "late_reply": 3, "out_of_step": 3},
     },
@@ -127,12 +145,16 @@ DEFAULT_RPG_CONFIG: dict = {
     # ---- 称号：累计经验→等级→称号（纯派生、零存储，仿羁绊取档）。显示在「我的角色」与排行榜 ----
     "titles": [
         {"min_level": 1,  "name": "见习冒险者"},
-        {"min_level": 3,  "name": "萌新猎人"},
-        {"min_level": 6,  "name": "熟练打野人"},
+        {"min_level": 2,  "name": "启程旅者"},
+        {"min_level": 4,  "name": "新锐猎手"},
+        {"min_level": 6,  "name": "熟练冒险者"},
+        {"min_level": 8,  "name": "资深探索者"},
         {"min_level": 10, "name": "老练讨伐者"},
-        {"min_level": 15, "name": "区域强者"},
-        {"min_level": 20, "name": "传说猎手"},
-        {"min_level": 30, "name": "殿堂级冒险家"},
+        {"min_level": 13, "name": "高阶开拓者"},
+        {"min_level": 16, "name": "杰出冒险家"},
+        {"min_level": 20, "name": "精英猎手"},
+        {"min_level": 24, "name": "传奇冒险者"},
+        {"min_level": 30, "name": "殿堂开拓者"},
     ],
     # ---- 今日增益：按日期决定、全群一致、不预告；仅生效时打怪播报补一行（藏着不外显）----
     "daily_buffs": {
@@ -205,11 +227,16 @@ DEFAULT_RPG_CONFIG: dict = {
             "🤝 {a} 与 {b} 联手挑战【{monster}】，最终还是败下阵来。",
             "🤝 {a} 和 {b} 协力作战，但这次没能拿下【{monster}】。",
         ],
-        "team_bonus": ["✨ 协作加成：经验 +{exp_pct}% / 掉落 +{drop_pct}%。"],
+        "team_bonus": ["✨ 协作加成：{parts}。"],
         "team_event_focus_fire": ["⚔️ 两人的攻击集中在一处，造成了更有效的打击。"],
         "team_event_cover_route": ["🧭 一人牵制、一人搜索，额外带回了更多战利品。"],
         "team_event_follow_up": ["🔁 前后配合顺利，追加攻击打得很完整。"],
         "team_event_missed_beat": ["😵 配合出现偏差，这一轮没能完全发挥实力。"],
+        "team_negative_event_friction": ["⚠️ 两人还没磨合好，这一轮的配合明显迟滞了。"],
+        "team_negative_event_misread": ["⚠️ 两人的判断出现偏差，这次进攻没能完全展开。"],
+        "team_negative_event_loose_guard": ["⚠️ 配合还不够稳定，搜索与掩护都慢了一步。"],
+        "team_negative_event_break_ice": ["🫱 并肩打完这一战后，两人之间的气氛似乎缓和了一点。"],
+        "team_bond_gain": ["💞 同好羁绊 +{amount}。"],
         "team_member": ["· {name}：经验 +{exp}、积分 +{points}{loot}{levelup}"],
         "team_fail": [
             "{a} 试着邀请 {b_name} 一起出战，但没能组队成功，只好独自前往。",

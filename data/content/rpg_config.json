@@ -7,7 +7,7 @@
     "cap": 100
   },
   "level_curve": {
-    "base": 100
+    "base": 135
   },
   "equip": {
     "base": 10,
@@ -112,33 +112,53 @@
       {
         "max_level": 4,
         "weights": [
+          55,
           45,
-          35,
-          20,
           0,
           0,
           0
         ]
       },
       {
-        "max_level": 7,
+        "max_level": 6,
         "weights": [
+          40,
           35,
-          30,
-          20,
-          15,
-          0,
-          0
-        ]
-      },
-      {
-        "max_level": 10,
-        "weights": [
-          30,
           25,
+          0,
+          0
+        ]
+      },
+      {
+        "max_level": 9,
+        "weights": [
+          30,
+          28,
+          22,
           20,
+          0,
+          0
+        ]
+      },
+      {
+        "max_level": 13,
+        "weights": [
+          25,
+          22,
+          20,
+          18,
           15,
-          10,
+          0
+        ]
+      },
+      {
+        "max_level": 16,
+        "weights": [
+          22,
+          20,
+          20,
+          18,
+          20,
           0
         ]
       },
@@ -162,9 +182,9 @@
     }
   },
   "challenge": {
-    "win_exp_base": 60,
-    "win_exp_per_level": 10,
-    "lose_exp_base": 18,
+    "win_exp_base": 55,
+    "win_exp_per_level": 7,
+    "lose_exp_base": 22,
     "lose_exp_per_level": 3,
     "win_drop_mult": 1.0,
     "lose_drop_mult": 0.3,
@@ -174,13 +194,17 @@
   "team": {
     "base_success": 0.5,
     "per_level": 0.1,
-    "min_success": 0.1,
+    "negative_per_level": 0.05,
+    "min_success": 0.25,
     "max_success": 0.95,
     "power_bonus": 0.08,
-    "exp_bonus_per_level": 0.05,
-    "exp_bonus_max": 0.5,
+    "exp_bonus_per_level": 0.0,
+    "exp_bonus_max": 0.0,
     "drop_bonus_per_level": 0.08,
     "drop_bonus_max": 0.4,
+    "bond_gain_base": 2,
+    "bond_gain_win_bonus": 2,
+    "bond_gain_daily_limit": 1,
     "no_event_weight": 45,
     "events": {
       "focus_fire": {
@@ -199,6 +223,31 @@
       "missed_beat": {
         "weight": 12,
         "power_mult": 0.9
+      }
+    },
+    "negative": {
+      "mild_threshold": -50,
+      "deep_threshold": -300,
+      "chance_mild": 0.35,
+      "chance_medium": 0.55,
+      "chance_deep": 0.75,
+      "events": {
+        "friction": {
+          "weight": 18,
+          "power_mult": 0.92
+        },
+        "misread": {
+          "weight": 16,
+          "exp_mult": 0.92
+        },
+        "loose_guard": {
+          "weight": 14,
+          "drop_mult": 0.85
+        },
+        "break_ice": {
+          "weight": 12,
+          "bond_bonus": 2
+        }
       }
     },
     "fail_flavor": {
@@ -238,28 +287,44 @@
       "name": "见习冒险者"
     },
     {
-      "min_level": 3,
-      "name": "萌新猎人"
+      "min_level": 2,
+      "name": "启程旅者"
+    },
+    {
+      "min_level": 4,
+      "name": "新锐猎手"
     },
     {
       "min_level": 6,
-      "name": "熟练打野人"
+      "name": "熟练冒险者"
+    },
+    {
+      "min_level": 8,
+      "name": "资深探索者"
     },
     {
       "min_level": 10,
       "name": "老练讨伐者"
     },
     {
-      "min_level": 15,
-      "name": "区域强者"
+      "min_level": 13,
+      "name": "高阶开拓者"
+    },
+    {
+      "min_level": 16,
+      "name": "杰出冒险家"
     },
     {
       "min_level": 20,
-      "name": "传说猎手"
+      "name": "精英猎手"
+    },
+    {
+      "min_level": 24,
+      "name": "传奇冒险者"
     },
     {
       "min_level": 30,
-      "name": "殿堂级冒险家"
+      "name": "殿堂开拓者"
     }
   ],
   "daily_buffs": {
@@ -514,7 +579,7 @@
       "🤝 {a} 和 {b} 协力作战，但这次没能拿下【{monster}】。"
     ],
     "team_bonus": [
-      "✨ 协作加成：经验 +{exp_pct}% / 掉落 +{drop_pct}%。"
+      "✨ 协作加成：{parts}。"
     ],
     "team_event_focus_fire": [
       "⚔️ 两人的攻击集中在一处，造成了更有效的打击。"
@@ -527,6 +592,21 @@
     ],
     "team_event_missed_beat": [
       "😵 配合出现偏差，这一轮没能完全发挥实力。"
+    ],
+    "team_negative_event_friction": [
+      "⚠️ 两人还没磨合好，这一轮的配合明显迟滞了。"
+    ],
+    "team_negative_event_misread": [
+      "⚠️ 两人的判断出现偏差，这次进攻没能完全展开。"
+    ],
+    "team_negative_event_loose_guard": [
+      "⚠️ 配合还不够稳定，搜索与掩护都慢了一步。"
+    ],
+    "team_negative_event_break_ice": [
+      "🫱 并肩打完这一战后，两人之间的气氛似乎缓和了一点。"
+    ],
+    "team_bond_gain": [
+      "💞 同好羁绊 +{amount}。"
     ],
     "team_member": [
       "· {name}：经验 +{exp}、积分 +{points}{loot}{levelup}"

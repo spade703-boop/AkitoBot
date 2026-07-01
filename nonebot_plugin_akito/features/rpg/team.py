@@ -13,11 +13,13 @@ from nonebot.params import CommandArg
 from ...core import SUPERUSER_QQ, is_sleeping
 from ...core.game_store import (
     LOCK,
+    _add_intimacy,
     _display_name,
     _first_at_qq,
     _get_group,
     _get_intimacy,
     _load_data,
+    _pair_key,
     _render_with_ats,
     _save_data,
     _today_str,
@@ -31,9 +33,14 @@ from .player import _ensure_player, _resolve_group
 
 
 def _team_success_rate(bond_level: int) -> float:
-    """组队成功率：base + (羁绊等级-1)*step，并钳在 [min, max]。"""
+    """组队成功率：正羁绊提速，负羁绊缓降，并钳在 [min, max]。"""
     t = _cfg("team", {})
-    rate = float(t.get("base_success", 0.35)) + (int(bond_level) - 1) * float(t.get("per_level", 0.12))
+    level = int(bond_level)
+    base = float(t.get("base_success", 0.35))
+    if level >= 1:
+        rate = base + (level - 1) * float(t.get("per_level", 0.12))
+    else:
+        rate = base + (level - 1) * float(t.get("negative_per_level", t.get("per_level", 0.12)))
     return max(float(t.get("min_success", 0.10)), min(float(t.get("max_success", 0.95)), rate))
 
 
@@ -58,6 +65,85 @@ def _team_drop_bonus(bond_level: int) -> float:
 def _team_power_bonus() -> float:
     """组队成功时的基础战力协作加成。"""
     return max(0.0, float(_cfg("team", {}).get("power_bonus", 0.0)))
+
+
+def _negative_team_cfg() -> dict:
+    """负羁绊磨合事件配置。"""
+    cfg = _cfg("team", {}).get("negative", {})
+    return cfg if isinstance(cfg, dict) else {}
+
+
+def _negative_team_event_spec(event_key: str) -> dict:
+    """读取负羁绊事件配置。"""
+    events = _negative_team_cfg().get("events", {})
+    if not isinstance(events, dict):
+        return {}
+    spec = events.get(event_key, {})
+    return spec if isinstance(spec, dict) else {}
+
+
+def _negative_team_event_chance(intimacy: int) -> float:
+    """负羁绊越深，越容易触发额外磨合事件。"""
+    value = int(intimacy)
+    if value >= 0:
+        return 0.0
+    cfg = _negative_team_cfg()
+    mild = int(cfg.get("mild_threshold", -50))
+    deep = int(cfg.get("deep_threshold", -300))
+    if value <= deep:
+        return float(cfg.get("chance_deep", 0.75))
+    if value <= mild:
+        return float(cfg.get("chance_medium", 0.55))
+    return float(cfg.get("chance_mild", 0.35))
+
+
+def _roll_negative_team_event(intimacy: int, rng=random) -> str:
+    """负羁绊组队时，额外抽一次磨合/摩擦事件。"""
+    chance = _negative_team_event_chance(intimacy)
+    if chance <= 0 or rng.random() >= chance:
+        return ""
+    events = _negative_team_cfg().get("events", {})
+    if not isinstance(events, dict):
+        return ""
+    cands = {key: int(spec.get("weight", 0)) for key, spec in events.items() if isinstance(spec, dict)}
+    if sum(cands.values()) <= 0:
+        return ""
+    return _weighted_choice(cands, rng)
+
+
+def _team_bond_daily_pairs(group: dict, today: str) -> dict:
+    """按天记录每对群友的组队羁绊增长次数，避免刷取。"""
+    rpg = group.setdefault("rpg", {})
+    daily = rpg.get("team_bond_daily")
+    if not isinstance(daily, dict) or daily.get("date") != today:
+        daily = {"date": today, "pairs": {}}
+        rpg["team_bond_daily"] = daily
+    pairs = daily.get("pairs")
+    if not isinstance(pairs, dict):
+        pairs = {}
+        daily["pairs"] = pairs
+    return pairs
+
+
+def _grant_team_bond(group: dict, uid1: str, uid2: str, today: str, *, win: bool, extra: int = 0) -> int:
+    """成功组队后，按天给该 pair 小幅增长羁绊。"""
+    t = _cfg("team", {})
+    limit = max(0, int(t.get("bond_gain_daily_limit", 1)))
+    if limit <= 0:
+        return 0
+    pairs = _team_bond_daily_pairs(group, today)
+    key = _pair_key(uid1, uid2)
+    if int(pairs.get(key, 0)) >= limit:
+        return 0
+    gain = max(0, int(t.get("bond_gain_base", 0)))
+    if win:
+        gain += max(0, int(t.get("bond_gain_win_bonus", 0)))
+    gain += max(0, int(extra))
+    if gain <= 0:
+        return 0
+    _add_intimacy(group, uid1, uid2, gain)
+    pairs[key] = int(pairs.get(key, 0)) + 1
+    return gain
 
 
 def _roll_fail_flavor(rng=random) -> str:
@@ -89,12 +175,19 @@ def _build_coop_broadcast(out: dict, b_id: str, a_id: str, b_name: str, a_name: 
     msg = _render_with_ats(head, {"a": b_id, "b": a_id, "monster": name})
     if out.get("team_event"):
         msg = msg + "\n" + _line(f"team_event_{out['team_event']}")
-    if out.get("power_bonus") or out.get("exp_bonus") or out.get("drop_bonus"):
-        msg = msg + "\n" + (
-            f"✅ 协作加成：战力 +{int(round(float(out.get('power_bonus', 0.0)) * 100))}% / "
-            f"经验 +{int(round(float(out.get('exp_bonus', 0.0)) * 100))}% / "
-            f"掉落 +{int(round(float(out.get('drop_bonus', 0.0)) * 100))}%。"
-        )
+    if out.get("negative_event"):
+        msg = msg + "\n" + _line(f"team_negative_event_{out['negative_event']}")
+    bonus_parts: list[str] = []
+    if float(out.get("power_bonus", 0.0)) > 0:
+        bonus_parts.append(f"战力 +{int(round(float(out.get('power_bonus', 0.0)) * 100))}%")
+    if float(out.get("exp_bonus", 0.0)) > 0:
+        bonus_parts.append(f"经验 +{int(round(float(out.get('exp_bonus', 0.0)) * 100))}%")
+    if float(out.get("drop_bonus", 0.0)) > 0:
+        bonus_parts.append(f"掉落 +{int(round(float(out.get('drop_bonus', 0.0)) * 100))}%")
+    if bonus_parts:
+        msg = msg + "\n" + _line("team_bonus", parts=" / ".join(bonus_parts))
+    if int(out.get("bond_gain", 0)) > 0:
+        msg = msg + "\n" + _line("team_bond_gain", amount=int(out["bond_gain"]))
     msg = msg + "\n" + _member_line(out["b"], b_name)
     msg = msg + "\n" + _member_line(out["a"], a_name)
     if _buff_active(out.get("buff")):
@@ -171,18 +264,32 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
             lines = [*settlement_lines, _error("team_target_broken")] if settlement_lines else [_error("team_target_broken")]
             await team_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
 
-        bond_level = _bond_level(_get_intimacy(group, initiator, target))["level"]
+        raw_intimacy = _get_intimacy(group, initiator, target)
+        bond_level = _bond_level(raw_intimacy)["level"]
         success = random.random() < _team_success_rate(bond_level)
 
         if success:
+            negative_event = _roll_negative_team_event(raw_intimacy, random)
+            negative_spec = _negative_team_event_spec(negative_event)
             out = _settle_coop(
                 b,
                 a,
                 today,
                 exp_bonus=_team_exp_bonus(bond_level),
                 drop_bonus=_team_drop_bonus(bond_level),
+                extra_power_mult=float(negative_spec.get("power_mult", 1.0)),
+                extra_exp_mult=float(negative_spec.get("exp_mult", 1.0)),
+                extra_drop_mult=float(negative_spec.get("drop_mult", 1.0)),
             )
-            out["power_bonus"] = _team_power_bonus()
+            out["negative_event"] = negative_event
+            out["bond_gain"] = _grant_team_bond(
+                group,
+                initiator,
+                target,
+                today,
+                win=bool(out.get("win")),
+                extra=int(negative_spec.get("bond_bonus", 0)),
+            )
             boss_lines = _maybe_spawn_world_boss_lines(group, today, initiator, rng=random)
             _save_data(data)
             b_name = b.get("display_name") or f"群友{initiator}"
