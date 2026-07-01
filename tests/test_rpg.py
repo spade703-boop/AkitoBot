@@ -1211,7 +1211,9 @@ def test_world_boss_snapshot_uses_recent_active_not_today():
     assert snapshot["recent_active_count"] == 8
     assert snapshot["scale_count"] == 8
     assert snapshot["reward_scale_count"] == 8
-    assert snapshot["max_hp"] == boss._expected_daily_power({}) * 8
+    assert snapshot["max_hp"] == round(
+        boss._expected_daily_power({}) * 8 * float(rpg_config._cfg("world_boss", {}).get("hp_factor", 1.0))
+    )
 
 
 def test_world_boss_snapshot_soft_scales_large_group():
