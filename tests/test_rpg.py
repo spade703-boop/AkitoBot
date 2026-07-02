@@ -1270,7 +1270,7 @@ async def test_hunt_support_duo_combo_turns_loss_into_win_with_bonus(monkeypatch
             "一线生机",
         )
     )
-    assert "青柳冬弥施放支援魔法稳住阵型" in result
+    assert "双色发神官在远处施放了支援魔法稳住阵型" in result
     assert "本次挑战转为成功" in result
 
 
