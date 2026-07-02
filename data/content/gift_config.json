@@ -207,10 +207,32 @@
     "protect_minutes": 60,
     "caught_penalty": 15,
     "reversal_amount": 10,
-    "bond_flat": 20,
-    "bond_ratio": 0.1,
-    "bond_neg_min": 10,
-    "bond_neg_max": 30,
+    "bond_loss": {
+      "success": {
+        "base": 8,
+        "amount_ratio": 0.55,
+        "positive_bond_ratio": 0.004,
+        "positive_bond_cap": 6
+      },
+      "caught": {
+        "base": 6,
+        "amount_ratio": 0.35,
+        "positive_bond_ratio": 0.002,
+        "positive_bond_cap": 4
+      },
+      "whiff": {
+        "base": 4,
+        "amount_ratio": 0.0,
+        "positive_bond_ratio": 0.001,
+        "positive_bond_cap": 2
+      },
+      "reversal": {
+        "base": 10,
+        "amount_ratio": 0.6,
+        "positive_bond_ratio": 0.003,
+        "positive_bond_cap": 5
+      }
+    },
     "bond_floor": -1000,
     "weights": {
       "success": 5,
@@ -309,20 +331,20 @@
       "{a} 向 {b} 递出【彰冬婚礼邀请函】，要把这段同好情谊焊成一辈子，羁绊 +{amount}。"
     ],
     "steal_success": [
-      "{a} 瞅准空子，顺走了 {b} {amount} 积分，溜了溜了～（羁绊 -{bond}）",
-      "{a} 趁 {b} 不注意摸走了 {amount} 积分，得手！（羁绊 -{bond}）"
+      "{a} 趁 {b} 没留神，顺走了 {amount} 积分，转身就跑。（羁绊 -{bond}）",
+      "{a} 从 {b} 那里摸走了 {amount} 积分，手脚倒是利索。（羁绊 -{bond}）"
     ],
     "steal_caught": [
-      "{a} 刚把手伸向 {b} 的钱包就被逮个正着，赔了 {amount} 积分赔罪（羁绊 -{bond}）",
-      "{a} 偷 {b} 失了风，当场社死，倒贴 {amount} 积分息事宁人（羁绊 -{bond}）"
+      "{a} 刚想对 {b} 下手就被发现了，只好当场赔上 {amount} 积分收场。（羁绊 -{bond}）",
+      "{a} 偷 {b} 没偷成，被逮了个正着，只能赔 {amount} 积分认栽。（羁绊 -{bond}）"
     ],
     "steal_whiff": [
-      "{a} 摸了半天 {b} 的口袋，扑了个空，啥也没捞着（羁绊 -{bond}）",
-      "{a} 想顺 {b} 一笔，结果对方兜比脸还干净，无功而返（羁绊 -{bond}）"
+      "{a} 在 {b} 那边翻了半天，最后什么也没摸到。（羁绊 -{bond}）",
+      "{a} 本想从 {b} 那里顺点积分，结果只能空手而归。（羁绊 -{bond}）"
     ],
     "steal_reversal": [
-      "{a} 偷鸡不成蚀把米，反被 {b} 顺走了 {amount} 积分，笑死（羁绊 -{bond}）",
-      "{a} 想偷 {b}，反倒被将一军，倒搭 {amount} 积分（羁绊 -{bond}）"
+      "{a} 本想偷 {b}，结果被对方反手顺走了 {amount} 积分。（羁绊 -{bond}）",
+      "{a} 去偷 {b} 没得手，反倒让 {b} 拿走了 {amount} 积分。（羁绊 -{bond}）"
     ]
   },
   "errors": {

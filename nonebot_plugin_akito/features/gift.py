@@ -124,12 +124,18 @@ DEFAULT_GIFT_CONFIG: dict = {
         "ratio": 0.1,              # 得手时拿走对方余额比例
         "cap": 40,                 # 得手封顶
         "protect_minutes": 60,     # 签到后保护期（分钟）
-        "caught_penalty": 15,      # 被抓时倒赔对方
-        "reversal_amount": 10,     # 反被顺走的额度
-        "bond_flat": 20,           # 偷一次的羁绊基础代价（羁绊>0 时按比例）
-        "bond_ratio": 0.1,         # 额外按当前羁绊比例扣（偷越亲近掉越多）
-        "bond_neg_min": 10,        # 羁绊≤0 时改随机扣：下限
-        "bond_neg_max": 30,        # 羁绊≤0 时改随机扣：上限
+        "caught_penalty": 15,      # 被抓时倒赔对方（赔得更重）
+        "reversal_amount": 10,     # 反被顺走的额度（赔分较轻，但更伤羁绊）
+        "bond_loss": {             # 羁绊损耗：主要看结果类型和实际积分数，正羁绊只额外轻微放大
+            "success": {"base": 8, "amount_ratio": 0.55, "positive_bond_ratio": 0.004, "positive_bond_cap": 6},
+            "caught": {"base": 6, "amount_ratio": 0.35, "positive_bond_ratio": 0.002, "positive_bond_cap": 4},
+            "whiff": {"base": 4, "amount_ratio": 0.0, "positive_bond_ratio": 0.001, "positive_bond_cap": 2},
+            "reversal": {"base": 10, "amount_ratio": 0.6, "positive_bond_ratio": 0.003, "positive_bond_cap": 5},
+        },
+        "bond_flat": 20,           # 旧版兼容：未配置 bond_loss 时回退
+        "bond_ratio": 0.1,         # 旧版兼容：未配置 bond_loss 时回退
+        "bond_neg_min": 10,        # 旧版兼容：未配置 bond_loss 时回退
+        "bond_neg_max": 30,        # 旧版兼容：未配置 bond_loss 时回退
         "bond_floor": -1000,       # 羁绊下限（结怨封底）
         "weights": {"success": 5, "caught": 3, "whiff": 2, "reversal": 1},
     },
@@ -228,20 +234,20 @@ DEFAULT_GIFT_CONFIG: dict = {
         ],
         # 偷：四种结果（{amount} 积分、{bond} 掉的羁绊）
         "steal_success": [
-            "{a} 瞅准空子，顺走了 {b} {amount} 积分，溜了溜了～（羁绊 -{bond}）",
-            "{a} 趁 {b} 不注意摸走了 {amount} 积分，得手！（羁绊 -{bond}）",
+            "{a} 趁 {b} 没留神，顺走了 {amount} 积分，转身就跑。（羁绊 -{bond}）",
+            "{a} 从 {b} 那里摸走了 {amount} 积分，手脚倒是利索。（羁绊 -{bond}）",
         ],
         "steal_caught": [
-            "{a} 刚把手伸向 {b} 的钱包就被逮个正着，赔了 {amount} 积分赔罪（羁绊 -{bond}）",
-            "{a} 偷 {b} 失了风，当场社死，倒贴 {amount} 积分息事宁人（羁绊 -{bond}）",
+            "{a} 刚想对 {b} 下手就被发现了，只好当场赔上 {amount} 积分收场。（羁绊 -{bond}）",
+            "{a} 偷 {b} 没偷成，被逮了个正着，只能赔 {amount} 积分认栽。（羁绊 -{bond}）",
         ],
         "steal_whiff": [
-            "{a} 摸了半天 {b} 的口袋，扑了个空，啥也没捞着（羁绊 -{bond}）",
-            "{a} 想顺 {b} 一笔，结果对方兜比脸还干净，无功而返（羁绊 -{bond}）",
+            "{a} 在 {b} 那边翻了半天，最后什么也没摸到。（羁绊 -{bond}）",
+            "{a} 本想从 {b} 那里顺点积分，结果只能空手而归。（羁绊 -{bond}）",
         ],
         "steal_reversal": [
-            "{a} 偷鸡不成蚀把米，反被 {b} 顺走了 {amount} 积分，笑死（羁绊 -{bond}）",
-            "{a} 想偷 {b}，反倒被将一军，倒搭 {amount} 积分（羁绊 -{bond}）",
+            "{a} 本想偷 {b}，结果被对方反手顺走了 {amount} 积分。（羁绊 -{bond}）",
+            "{a} 去偷 {b} 没得手，反倒让 {b} 拿走了 {amount} 积分。（羁绊 -{bond}）",
         ],
     },
     # 边界/错误提示（纯文本，可含 {cost}{total}{name}）
@@ -546,21 +552,37 @@ def _steal_outcome(rng=random) -> str:
     return _weighted_choice(_steal_cfg().get("weights", {}), rng)
 
 
+def _steal_bond_loss(cfg: dict, outcome: str, amount: int, bond: int, rng=random) -> int:
+    table = cfg.get("bond_loss", {})
+    spec = table.get(outcome) if isinstance(table, dict) else None
+    if isinstance(spec, dict) and spec:
+        base = max(0, int(spec.get("base", 0)))
+        amount_ratio = max(0.0, float(spec.get("amount_ratio", 0.0)))
+        positive_ratio = max(0.0, float(spec.get("positive_bond_ratio", 0.0)))
+        positive_cap = max(0, int(spec.get("positive_bond_cap", 0)))
+        extra = 0
+        if bond > 0 and positive_ratio > 0:
+            extra = int(bond * positive_ratio)
+            if positive_cap > 0:
+                extra = min(extra, positive_cap)
+        return max(0, base + int(int(amount) * amount_ratio) + extra)
+
+    # 旧版兼容：未配置新版 outcome-based 规则时，回退到老公式。
+    if bond > 0:
+        return int(int(cfg.get("bond_flat", 20)) + float(cfg.get("bond_ratio", 0.1)) * bond)
+    return rng.randint(int(cfg.get("bond_neg_min", 10)), int(cfg.get("bond_neg_max", 30)))
+
+
 def _settle_steal(group: dict, thief_id: str, victim_id: str, outcome: str, rng=random) -> dict:
     """按已抽定的偷窃结果结算（改 group：积分/羁绊），返回播报数据。不做 IO，便于单测。
 
-    每次偷都付羁绊代价：羁绊>0 按比例扣（去封底、可跨负）；羁绊≤0 改随机区间扣；统一封底 bond_floor。
+    羁绊损耗优先按 outcome + 实际积分数结算；若外部仍使用旧配置，则回退到老公式。统一封底 bond_floor。
     """
     cfg = _steal_cfg()
     thief = _get_user(group, thief_id)
     victim = _get_user(group, victim_id)
     bond = _get_intimacy(group, thief_id, victim_id)
-    if bond > 0:
-        drop = int(int(cfg.get("bond_flat", 20)) + float(cfg.get("bond_ratio", 0.1)) * bond)
-    else:
-        drop = rng.randint(int(cfg.get("bond_neg_min", 10)), int(cfg.get("bond_neg_max", 30)))
-    new_bond = max(int(cfg.get("bond_floor", -1000)), bond - drop)
-    out = {"outcome": outcome, "amount": 0, "bond": bond - new_bond}
+    out = {"outcome": outcome, "amount": 0, "bond": 0}
 
     if outcome == "success":
         vp = int(victim.get("points", 0))
@@ -580,6 +602,9 @@ def _settle_steal(group: dict, thief_id: str, victim_id: str, outcome: str, rng=
         out["amount"] = amt
     # whiff：积分不动
 
+    drop = _steal_bond_loss(cfg, outcome, int(out["amount"]), bond, rng)
+    new_bond = max(int(cfg.get("bond_floor", -1000)), bond - drop)
+    out["bond"] = bond - new_bond
     _add_intimacy(group, thief_id, victim_id, new_bond - bond)
     return out
 

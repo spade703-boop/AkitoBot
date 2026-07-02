@@ -681,36 +681,50 @@ def test_settle_steal_whiff_keeps_points():
     assert gift._get_user(group, "V")["points"] == 200
 
 
-def test_settle_steal_bond_positive_scales():
+def test_settle_steal_success_bond_scales_with_amount():
+    group_small = _steal_group(victim_pts=80, bond=0)
+    out_small = gift._settle_steal(group_small, "T", "V", "success")
+    group_big = _steal_group(victim_pts=1000, bond=0)
+    out_big = gift._settle_steal(group_big, "T", "V", "success")
+    assert out_big["amount"] > out_small["amount"]
+    assert out_big["bond"] > out_small["bond"]
+
+
+def test_settle_steal_whiff_bond_loss_is_light():
     cfg = gift._steal_cfg()
+    spec = cfg["bond_loss"]["whiff"]
     group = _steal_group(bond=1000)
     out = gift._settle_steal(group, "T", "V", "whiff")
-    assert out["bond"] == int(cfg["bond_flat"] + cfg["bond_ratio"] * 1000)
-    assert gift._get_intimacy(group, "T", "V") == 1000 - out["bond"]
+    expected = int(spec["base"]) + min(int(1000 * float(spec["positive_bond_ratio"])), int(spec["positive_bond_cap"]))
+    assert out["bond"] == expected
+    assert gift._get_intimacy(group, "T", "V") == 1000 - expected
 
 
-def test_settle_steal_bond_crosses_into_negative():
+def test_settle_steal_reversal_hurts_bond_more_than_caught():
     cfg = gift._steal_cfg()
-    group = _steal_group(bond=5)  # 低正羁绊一步跨负（不再封底 0）
+    group_caught = _steal_group(thief_pts=100, victim_pts=200, bond=200)
+    out_caught = gift._settle_steal(group_caught, "T", "V", "caught")
+    group_reversal = _steal_group(thief_pts=100, victim_pts=200, bond=200)
+    out_reversal = gift._settle_steal(group_reversal, "T", "V", "reversal")
+    assert out_caught["amount"] == cfg["caught_penalty"]
+    assert out_reversal["amount"] == cfg["reversal_amount"]
+    assert out_caught["amount"] > out_reversal["amount"]
+    assert out_reversal["bond"] > out_caught["bond"]
+
+
+def test_settle_steal_low_or_zero_amount_no_longer_drops_huge_bond():
+    group = _steal_group(bond=-100)
     out = gift._settle_steal(group, "T", "V", "whiff")
-    drop = int(cfg["bond_flat"] + cfg["bond_ratio"] * 5)
-    assert out["bond"] == drop
-    assert gift._get_intimacy(group, "T", "V") == 5 - drop < 0
-
-
-def test_settle_steal_bond_negative_uses_random():
-    group = _steal_group(bond=-100)  # 羁绊≤0 改随机区间扣（注入定值 rng）
-    out = gift._settle_steal(group, "T", "V", "whiff", rng=_FixedRNG(20))
-    assert out["bond"] == 20
-    assert gift._get_intimacy(group, "T", "V") == -120
+    assert out["bond"] == gift._steal_cfg()["bond_loss"]["whiff"]["base"]
+    assert gift._get_intimacy(group, "T", "V") == -100 - out["bond"]
 
 
 def test_settle_steal_bond_floor():
     floor = gift._steal_cfg()["bond_floor"]
-    group = _steal_group(bond=floor + 5)  # 接近下限
-    out = gift._settle_steal(group, "T", "V", "whiff", rng=_FixedRNG(30))
+    group = _steal_group(bond=floor + 3)  # 接近下限
+    out = gift._settle_steal(group, "T", "V", "whiff")
     assert gift._get_intimacy(group, "T", "V") == floor  # 封底，不再下探
-    assert out["bond"] == 5  # 实际只掉到下限的幅度
+    assert out["bond"] == 3  # 实际只掉到下限的幅度
 
 
 @pytest.mark.asyncio
