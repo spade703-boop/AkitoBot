@@ -219,6 +219,15 @@ def _build_fail_broadcast(out: dict, b_id: str, a_name: str, fail_event: str = "
     return msg
 
 
+def _join_broadcast_lines(lines: list):
+    msg = None
+    for line in lines:
+        if not line:
+            continue
+        msg = line if msg is None else msg + "\n" + line
+    return msg if msg is not None else ""
+
+
 def _build_fail_rescue_broadcast(
     out: dict,
     initiator_id: str,
@@ -229,18 +238,11 @@ def _build_fail_rescue_broadcast(
 ):
     """组队失败后被援护拉回：先播特判，再进入正常双人结算。"""
     key = fail_event or "out_of_step"
-    parts: list[str] = []
     fail_line = _line(f"team_fail_event_{key}", b_name=target_name)
-    if fail_line:
-        parts.append(fail_line)
     turn_line = _render_with_ats(random.choice(_copy("team_fail_turn")), {"a": initiator_id, "b_name": target_name})
-    if turn_line:
-        parts.append(str(turn_line))
     rescue_line = _line(f"team_support_{key}", a_name=initiator_name, b_name=target_name)
-    if rescue_line:
-        parts.append(rescue_line)
     coop = _build_coop_broadcast(out, initiator_id, target_id, initiator_name, target_name)
-    return coop if not parts else "\n".join(parts) + "\n" + coop
+    return _join_broadcast_lines([fail_line, turn_line, rescue_line, coop])
 
 
 def _settle_team_result(group: dict, initiator: str, target: str, b: dict, a: dict, today: str, raw_intimacy: int, bond_level: int) -> dict:

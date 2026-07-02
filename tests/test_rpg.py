@@ -1306,6 +1306,7 @@ async def test_team_fail_rescue_runs_normal_coop_settlement(monkeypatch):
             "新的变化",
         )
     )
+    assert "[CQ:at" not in result
     assert "独自前往" not in result
     assert "[at:u1]" in result and "[at:u2]" in result
 
