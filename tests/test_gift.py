@@ -641,7 +641,7 @@ def _steal_group(thief_pts=0, victim_pts=200, bond=0):
 
 def test_steal_outcome_in_weights():
     keys = set(gift._steal_cfg()["weights"])
-    assert keys == {"success", "caught", "whiff", "reversal"}
+    assert keys == {"success", "minor_success", "caught", "whiff", "reversal"}
     assert gift._steal_outcome() in keys
 
 
@@ -653,6 +653,17 @@ def test_settle_steal_success_capped_and_moves_points():
     assert out["amount"] == amt == cfg["cap"]  # 封顶生效
     assert gift._get_user(group, "T")["points"] == amt
     assert gift._get_user(group, "V")["points"] == 1000 - amt
+
+
+def test_settle_steal_minor_success_moves_small_points():
+    cfg = gift._steal_cfg()
+    group = _steal_group(thief_pts=0, victim_pts=500)
+    out = gift._settle_steal(group, "T", "V", "minor_success")
+    amt = max(int(cfg["minor_min_amount"]), int(500 * float(cfg["minor_ratio"])))
+    amt = min(amt, int(cfg["minor_cap"]), 500)
+    assert out["amount"] == amt == cfg["minor_cap"]
+    assert gift._get_user(group, "T")["points"] == amt
+    assert gift._get_user(group, "V")["points"] == 500 - amt
 
 
 def test_settle_steal_caught_pays_victim():
@@ -925,3 +936,74 @@ async def test_reset_signin_cmd_reports_when_nobody_blocked(monkeypatch):
     with pytest.raises(FinishedException) as exc:
         await gift.reset_signin_cmd.handlers[0](Event(group_id=1001, user_id=su))
     assert "还没人被签到闸门卡住" in str(exc.value.result)
+
+
+@pytest.mark.asyncio
+async def test_reset_steal_cmd_clears_only_today_gate(monkeypatch):
+    su = gift.SUPERUSER_QQ
+    state = _patch_runtime(
+        monkeypatch,
+        store={"groups": {"1001": {"users": {
+            "10001": {
+                "points": 88,
+                "steal_date": "2026-06-22",
+                "steal_used": 2,
+                "robbed_date": "2026-06-22",
+                "robbed_count": 1,
+                "protect_until": 9999.0,
+                "last_sign_in": "2026-06-22",
+            },
+            "10002": {
+                "points": 30,
+                "steal_date": "2026-06-21",
+                "steal_used": 1,
+                "robbed_date": "2026-06-22",
+                "robbed_count": 3,
+            },
+            "10003": {"points": 20},
+        }, "intimacy": {}}}},
+    )
+    with pytest.raises(FinishedException) as exc:
+        await gift.reset_steal_cmd.handlers[0](Event(group_id=1001, user_id=su))
+
+    assert "已放开 2 人" in str(exc.value.result)
+    users = state["groups"]["1001"]["users"]
+    assert users["10001"]["steal_date"] == ""
+    assert users["10001"]["steal_used"] == 0
+    assert users["10001"]["robbed_date"] == ""
+    assert users["10001"]["robbed_count"] == 0
+    assert users["10002"]["steal_date"] == "2026-06-21"
+    assert users["10002"]["steal_used"] == 1
+    assert users["10002"]["robbed_date"] == ""
+    assert users["10002"]["robbed_count"] == 0
+    assert users["10001"]["protect_until"] == 9999.0
+    assert users["10001"]["last_sign_in"] == "2026-06-22"
+
+
+@pytest.mark.asyncio
+async def test_reset_steal_cmd_silent_for_non_superuser(monkeypatch):
+    state = _patch_runtime(
+        monkeypatch,
+        store={"groups": {"1001": {"users": {
+            "10001": {"steal_date": "2026-06-22", "steal_used": 2},
+        }, "intimacy": {}}}},
+    )
+    result = await gift.reset_steal_cmd.handlers[0](Event(group_id=1001, user_id="10001"))
+    assert result is None
+    assert state["groups"]["1001"]["users"]["10001"]["steal_date"] == "2026-06-22"
+    assert state["groups"]["1001"]["users"]["10001"]["steal_used"] == 2
+
+
+@pytest.mark.asyncio
+async def test_reset_steal_cmd_reports_when_nobody_blocked(monkeypatch):
+    su = gift.SUPERUSER_QQ
+    _patch_runtime(
+        monkeypatch,
+        store={"groups": {"1001": {"users": {
+            "10001": {"steal_date": "2026-06-21", "steal_used": 2},
+            "10002": {"points": 5},
+        }, "intimacy": {}}}},
+    )
+    with pytest.raises(FinishedException) as exc:
+        await gift.reset_steal_cmd.handlers[0](Event(group_id=1001, user_id=su))
+    assert "还没人被偷积分次数卡住" in str(exc.value.result)

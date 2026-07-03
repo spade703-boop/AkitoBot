@@ -123,11 +123,15 @@ DEFAULT_GIFT_CONFIG: dict = {
         "min_target_points": 50,   # 对方低于此分免疫（不踩穷人）
         "ratio": 0.1,              # 得手时拿走对方余额比例
         "cap": 40,                 # 得手封顶
+        "minor_ratio": 0.04,       # 小得手时拿走对方余额比例
+        "minor_min_amount": 6,     # 小得手保底
+        "minor_cap": 12,           # 小得手封顶
         "protect_minutes": 60,     # 签到后保护期（分钟）
         "caught_penalty": 15,      # 被抓时倒赔对方（赔得更重）
         "reversal_amount": 10,     # 反被顺走的额度（赔分较轻，但更伤羁绊）
         "bond_loss": {             # 羁绊损耗：主要看结果类型和实际积分数，正羁绊只额外轻微放大
             "success": {"base": 8, "amount_ratio": 0.55, "positive_bond_ratio": 0.004, "positive_bond_cap": 6},
+            "minor_success": {"base": 5, "amount_ratio": 0.4, "positive_bond_ratio": 0.003, "positive_bond_cap": 3},
             "caught": {"base": 6, "amount_ratio": 0.35, "positive_bond_ratio": 0.002, "positive_bond_cap": 4},
             "whiff": {"base": 4, "amount_ratio": 0.0, "positive_bond_ratio": 0.001, "positive_bond_cap": 2},
             "reversal": {"base": 10, "amount_ratio": 0.6, "positive_bond_ratio": 0.003, "positive_bond_cap": 5},
@@ -137,7 +141,7 @@ DEFAULT_GIFT_CONFIG: dict = {
         "bond_neg_min": 10,        # 旧版兼容：未配置 bond_loss 时回退
         "bond_neg_max": 30,        # 旧版兼容：未配置 bond_loss 时回退
         "bond_floor": -1000,       # 羁绊下限（结怨封底）
-        "weights": {"success": 5, "caught": 3, "whiff": 2, "reversal": 1},
+        "weights": {"success": 3, "minor_success": 2, "whiff": 1, "caught": 2, "reversal": 2},
     },
     # 播报文案（平和同好口吻，每类多条随机选用）。占位符：
     #   {a}{b} → 真 @；{gift}{return_gift}{amount}{total}{cost}{refund}{name} → 文本
@@ -232,10 +236,14 @@ DEFAULT_GIFT_CONFIG: dict = {
             "{a} 郑重地把【彰冬婚礼邀请函】递到 {b} 手里，邀请 {b} 去参加这对橙蓝给子的婚礼，羁绊 +{amount}（一生一世）。",
             "{a} 向 {b} 递出【彰冬婚礼邀请函】，要把这段同好情谊焊成一辈子，羁绊 +{amount}。",
         ],
-        # 偷：四种结果（{amount} 积分、{bond} 掉的羁绊）
+        # 偷：五种结果（{amount} 积分、{bond} 掉的羁绊）
         "steal_success": [
             "{a} 趁 {b} 没留神，顺走了 {amount} 积分，转身就跑。（羁绊 -{bond}）",
             "{a} 从 {b} 那里摸走了 {amount} 积分，手脚倒是利索。（羁绊 -{bond}）",
+        ],
+        "steal_minor_success": [
+            "{a} 从 {b} 那里顺到一点积分，见好就收。（羁绊 -{bond}）",
+            "{a} 在 {b} 身上摸到一点积分，不多，但也算得手了。（羁绊 -{bond}）",
         ],
         "steal_caught": [
             "{a} 刚想对 {b} 下手就被发现了，只好当场赔上 {amount} 积分收场。（羁绊 -{bond}）",
@@ -590,6 +598,16 @@ def _settle_steal(group: dict, thief_id: str, victim_id: str, outcome: str, rng=
         victim["points"] = vp - amt
         thief["points"] = int(thief.get("points", 0)) + amt
         out["amount"] = amt
+    elif outcome == "minor_success":
+        vp = int(victim.get("points", 0))
+        amt = max(int(cfg.get("minor_min_amount", 6)), int(vp * float(cfg.get("minor_ratio", 0.04))))
+        minor_cap = int(cfg.get("minor_cap", 12))
+        if minor_cap > 0:
+            amt = min(amt, minor_cap)
+        amt = min(amt, vp)
+        victim["points"] = vp - amt
+        thief["points"] = int(thief.get("points", 0)) + amt
+        out["amount"] = amt
     elif outcome == "caught":
         pen = min(int(cfg.get("caught_penalty", 15)), int(thief.get("points", 0)))
         thief["points"] = int(thief.get("points", 0)) - pen
@@ -651,6 +669,26 @@ def _reset_today_signins(group: dict, today: str) -> int:
     for user in group.get("users", {}).values():
         if isinstance(user, dict) and user.get("last_sign_in") == today:
             user["last_sign_in"] = ""
+            cleared += 1
+    return cleared
+
+
+def _reset_today_steals(group: dict, today: str) -> int:
+    """仅清掉本群用户当日偷积分次数/被偷次数闸门；不改其他状态。"""
+    cleared = 0
+    for user in group.get("users", {}).values():
+        if not isinstance(user, dict):
+            continue
+        touched = False
+        if user.get("steal_date") == today:
+            user["steal_date"] = ""
+            user["steal_used"] = 0
+            touched = True
+        if user.get("robbed_date") == today:
+            user["robbed_date"] = ""
+            user["robbed_count"] = 0
+            touched = True
+        if touched:
             cleared += 1
     return cleared
 
@@ -1156,6 +1194,36 @@ async def _(event: Event):
     else:
         msg = "本群今天还没人被签到闸门卡住。"
     await reset_signin_cmd.finish(MessageSegment.reply(event.message_id) + msg)
+
+
+# ==================== 指令：重置偷群友（超管） ====================
+
+reset_steal_cmd = on_command("重置偷群友", priority=5, block=True)
+
+
+@reset_steal_cmd.handle()
+async def _(event: Event):
+    if str(event.get_user_id()) != SUPERUSER_QQ:
+        return
+
+    group_id, rejection = _resolve_group(event)
+    if rejection:
+        await reset_steal_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
+    if group_id is None:
+        return
+
+    today = _today_str()
+    async with _GIFT_LOCK:
+        data = _load_data()
+        group = _get_group(data, group_id)
+        cleared = _reset_today_steals(group, today)
+        _save_data(data)
+
+    if cleared:
+        msg = f"本群今日偷群友次数已重置，已放开 {cleared} 人的偷取/被偷闸门。"
+    else:
+        msg = "本群今天还没人被偷积分次数卡住。"
+    await reset_steal_cmd.finish(MessageSegment.reply(event.message_id) + msg)
 
 
 # ==================== 指令：送礼功能帮助 ====================

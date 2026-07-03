@@ -204,6 +204,9 @@
     "min_target_points": 50,
     "ratio": 0.1,
     "cap": 40,
+    "minor_ratio": 0.04,
+    "minor_min_amount": 6,
+    "minor_cap": 12,
     "protect_minutes": 60,
     "caught_penalty": 15,
     "reversal_amount": 10,
@@ -213,6 +216,12 @@
         "amount_ratio": 0.55,
         "positive_bond_ratio": 0.004,
         "positive_bond_cap": 6
+      },
+      "minor_success": {
+        "base": 5,
+        "amount_ratio": 0.4,
+        "positive_bond_ratio": 0.003,
+        "positive_bond_cap": 3
       },
       "caught": {
         "base": 6,
@@ -235,10 +244,11 @@
     },
     "bond_floor": -1000,
     "weights": {
-      "success": 5,
-      "caught": 3,
-      "whiff": 2,
-      "reversal": 1
+      "success": 3,
+      "minor_success": 2,
+      "whiff": 1,
+      "caught": 2,
+      "reversal": 2
     }
   },
   "copy": {
@@ -333,6 +343,10 @@
     "steal_success": [
       "{a} 趁 {b} 没留神，顺走了 {amount} 积分，转身就跑。（羁绊 -{bond}）",
       "{a} 从 {b} 那里摸走了 {amount} 积分，手脚倒是利索。（羁绊 -{bond}）"
+    ],
+    "steal_minor_success": [
+      "{a} 从 {b} 那里顺到一点积分，见好就收。（羁绊 -{bond}）",
+      "{a} 在 {b} 身上摸到一点积分，不多，但也算得手了。（羁绊 -{bond}）"
     ],
     "steal_caught": [
       "{a} 刚想对 {b} 下手就被发现了，只好当场赔上 {amount} 积分收场。（羁绊 -{bond}）",
