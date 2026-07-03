@@ -1,11 +1,23 @@
-"""Compatibility wrapper for the bond page renderer."""
+"""HTML render helpers for bond (羁绊) pages.
+
+Mirrors random_paro_render.py: loads a Jinja2 template from templates/bond/,
+renders it with the given data dict, and rasterizes via headless Chromium.
+"""
 
 from __future__ import annotations
 
-from .gift.render import TEMPLATE_DIR, _RENDER_SEM, _TEMPLATE_ENV
-from .gift.render import html_to_pic as _html_to_pic
+import asyncio
+from pathlib import Path
 
-html_to_pic = _html_to_pic
+from jinja2 import Environment, FileSystemLoader, select_autoescape
+from nonebot_plugin_htmlrender import html_to_pic
+
+TEMPLATE_DIR = Path(__file__).resolve().parents[2] / "templates" / "bond"
+_TEMPLATE_ENV = Environment(
+    loader=FileSystemLoader(str(TEMPLATE_DIR)),
+    autoescape=select_autoescape(("html", "xml")),
+)
+_RENDER_SEM = asyncio.Semaphore(2)
 
 
 async def render_bond_page(template_name: str, data: dict, *, viewport_width: int = 680) -> bytes:

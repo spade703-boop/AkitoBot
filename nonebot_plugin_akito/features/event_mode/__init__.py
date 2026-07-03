@@ -3,7 +3,7 @@
 from nonebot import on_command
 from nonebot.adapters import Event
 
-from ..core import ALLOWED_CHAT_GROUPS, SUPERUSER_QQ, get_memory_key, get_user_memory, load_prompt_template, save_memory
+from ...core import ALLOWED_CHAT_GROUPS, SUPERUSER_QQ, get_memory_key, get_user_memory, load_prompt_template, save_memory
 
 
 def _is_allowed_wl2_event(event: Event) -> bool:

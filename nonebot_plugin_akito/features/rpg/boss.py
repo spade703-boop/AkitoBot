@@ -27,9 +27,9 @@ from ...core.game_store import (
     _today_str,
     _weighted_choice,
 )
-from ..bond_pages import build_world_boss_rank_page_data
-from ..bond_render import render_bond_page
 from ..gift import _bond_level
+from ..gift.pages import build_world_boss_rank_page_data
+from ..gift.render import render_bond_page
 from .config import _cfg, _copy, _error, _line
 from .fortune import _fortune_by_key
 from .player import _consume_equip, _ensure_player, _equip_power, _level_of, _resolve_group

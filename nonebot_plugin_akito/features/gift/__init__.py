@@ -8,7 +8,7 @@
 - `偷@对方`：每天 2 次，小概率顺走对方少量积分（强保护 + 偷必掉羁绊，偷越亲近掉越多）。
 - `我的积分` / `礼物列表` / `亲密度` / `群羁绊排行` 查询；`重置送礼`（超管）清空本群数据。
 
-数据与套路对照 features/random_keyword.py：按群存储、每日按日期重置、原子读写、文件优先+缺省兜底配置。
+数据与套路对照 features/random_keyword/：按群存储、每日按日期重置、原子读写、文件优先+缺省兜底配置。
 """
 
 from __future__ import annotations
@@ -25,13 +25,13 @@ from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageSegment
 from nonebot.log import logger
 from nonebot.params import CommandArg
 
-from ..core import (
+from ...core import (
     ALLOWED_CHAT_GROUPS,
     SUPERUSER_QQ,
     is_sleeping,
     load_json_file,
 )
-from ..core.game_store import (
+from ...core.game_store import (
     LOCK,
     SCHEMA_VERSION,  # noqa: F401  仅供 tests/test_gift.py 引用 gift.SCHEMA_VERSION
     _add_intimacy,
@@ -52,8 +52,8 @@ from ..core.game_store import (
     resolve_group_id,
     run_signin_hooks,
 )
-from .bond_pages import build_bond_page_data, build_bond_rank_page_data, build_my_bonds_page_data
-from .bond_render import render_bond_page
+from .pages import build_bond_page_data, build_bond_rank_page_data, build_my_bonds_page_data
+from .render import render_bond_page
 
 GIFT_USE_HTML_RENDER = os.environ.get("GIFT_USE_HTML_RENDER", "1").strip() not in {"0", "false", "False"}
 

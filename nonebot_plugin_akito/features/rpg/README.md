@@ -67,9 +67,9 @@ features/rpg/
 └── character.py              `我的角色` 面板（含称号/战绩）+ `群排行榜`（等级榜）+ `冒险帮助`
 ```
 
-**依赖方向**：`features/gift.py` 与 `features/rpg/*` 都依赖 `core/game_store.py`。
+**依赖方向**：`features/gift/` 与 `features/rpg/*` 都依赖 `core/game_store.py`。
 签到的衔接走 **钩子注册表**解耦：`fortune.on_signin` 在 import 时 `register_signin_hook` 注册；
-送礼系统的 `签到` 结算时调用 `run_signin_hooks(...)` 回调它（**`gift.py` 不依赖 rpg**）。
+送礼系统的 `签到` 结算时调用 `run_signin_hooks(...)` 回调它（**`gift/` 不依赖 rpg**）。
 组队和双人世界 BOSS 都要消费「羁绊等级」，故 `team.py` 与 `boss.py` 都有 **rpg→gift 单向依赖**（`from ..gift import _bond_level`，消费 gift 拥有的羁绊体系）；`inventory.py` 里的礼物券也会回调 gift 的送礼结算；gift 仍不反向依赖 rpg，无环。
 
 **数据流**：

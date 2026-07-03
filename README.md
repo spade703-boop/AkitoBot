@@ -4,7 +4,7 @@
 
 - **CP 立场**：彰冬（不拆不逆）
 - **AI 后端**：DeepSeek API（对话）/ 智谱 GLM-4V（图片识别）/ Tavily（联网搜索）
-- **当前版本**：0.3.2
+- **当前版本**：0.3.3
 
 ---
 
@@ -270,16 +270,20 @@ akito_bot/
 │   │   ├── chat.py                 # 主对话引擎（ReAct Agent）
 │   │   ├── commands.py             # 记忆管理指令
 │   │   └── reactions.py            # 戳一戳 / 自我监控
-│   └── features/                   # 独立功能模块
-│       ├── impression.py           # 群印象 & 随机插嘴
-│       ├── gallery.py              # 相册图库
-│       ├── random_paro.py          # 派生抽取器
-│       ├── random_keyword.py       # 今日关键词
-│       ├── verify.py               # 新人审核管理
-│       ├── scheduled.py            # 定时任务
-│       ├── event_mode.py           # WL2 世界线开关
-│       ├── director.py             # 导演骰子（可安全删除，删除后主对话自动降级）
-│       ├── gift.py                 # 送礼系统（积分/送礼/偷分/羁绊/签到闸门）
+│   └── features/                   # 独立功能模块（按功能分包）
+│       ├── _shared/                # 共享资源 / helper（含渲染字体）
+│       ├── impression/             # 群印象 & 随机插嘴
+│       ├── gallery/                # 相册图库
+│       ├── random_paro/            # 派生抽取器
+│       ├── random_keyword/         # 今日关键词
+│       ├── verify/                 # 新人审核管理
+│       ├── scheduled/              # 定时任务
+│       ├── event_mode/             # WL2 世界线开关
+│       ├── director/               # 导演骰子（可安全删除，删除后主对话自动降级）
+│       ├── gift/                   # 送礼系统（积分/送礼/偷分/羁绊/签到闸门）
+│       ├── bond_pages.py           # gift.pages 兼容导出
+│       ├── bond_render.py          # gift.render 兼容导出
+│       ├── random_paro_render.py   # random_paro.render 兼容导出
 │       └── rpg/                    # RPG 子包：签到/打怪/世界BOSS/组队/强化/背包/群排行榜
 │           ├── __init__.py
 │           ├── config.py           # 全部数值/文案/配置（可被 rpg_config.json 热更新）
@@ -333,15 +337,15 @@ pytest tests/test_rpg.py -q
 - 改 `handlers/chat.py` → 先跑 `pytest tests/test_chat_helpers.py -q`
 - 改 `handlers/commands.py` → 先跑 `pytest tests/test_commands_helpers.py -q`
 - 改 `handlers/reactions.py` → 先跑 `pytest tests/test_reactions_helpers.py -q`
-- 改 `features/impression.py` → 先跑 `pytest tests/test_impression_helpers.py tests/test_impression_rescue_regression.py -q`
-- 改 `features/verify.py` → 先跑 `pytest tests/test_verify_helpers.py -q`
-- 改 `features/gallery.py` → 先跑 `pytest tests/test_gallery_helpers.py -q`
-- 改 `features/random_paro.py` → 先跑 `pytest tests/test_random_paro_helpers.py -q`
-- 改 `features/random_keyword.py` → 先跑 `pytest tests/test_random_keyword_helpers.py -q`
-- 改 `features/director.py` → 先跑 `pytest tests/test_director.py -q`
-- 改 `features/event_mode.py` → 先跑 `pytest tests/test_event_mode_helpers.py -q`
-- 改 `features/scheduled.py` → 先跑 `pytest tests/test_scheduled_helpers.py -q`
-- 改 `features/gift.py` → 先跑 `pytest tests/test_gift.py -q`
+- 改 `features/impression/` → 先跑 `pytest tests/test_impression_helpers.py tests/test_impression_rescue_regression.py -q`
+- 改 `features/verify/` → 先跑 `pytest tests/test_verify_helpers.py -q`
+- 改 `features/gallery/` → 先跑 `pytest tests/test_gallery_helpers.py -q`
+- 改 `features/random_paro/` → 先跑 `pytest tests/test_random_paro_helpers.py -q`
+- 改 `features/random_keyword/` → 先跑 `pytest tests/test_random_keyword_helpers.py -q`
+- 改 `features/director/` → 先跑 `pytest tests/test_director.py -q`
+- 改 `features/event_mode/` → 先跑 `pytest tests/test_event_mode_helpers.py -q`
+- 改 `features/scheduled/` → 先跑 `pytest tests/test_scheduled_helpers.py -q`
+- 改 `features/gift/` → 先跑 `pytest tests/test_gift.py -q`
 - 改 `features/rpg/` → 先跑 `pytest tests/test_rpg.py -q`
 - 改 `core/data.py` → 先跑 `pytest tests/test_data.py -q`
 - 改 `core/` 里的共享底层，或一次改了多块联动逻辑 → 直接补跑 `pytest -q`

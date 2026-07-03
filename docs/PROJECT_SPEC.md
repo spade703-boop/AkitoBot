@@ -28,7 +28,7 @@
 nonebot_plugin_akito/
 ├── core/         基础层：API 封装、数据加载、状态机、记忆、时间感知、语义检索
 ├── handlers/     消息处理层：主对话引擎、管理指令、被动反应
-└── features/     独立功能模块：8 个（director 可安全删除，scheduled 为定时基础设施）
+└── features/     独立功能模块：按功能分包（director 可安全删除，scheduled 为定时基础设施）
 ```
 
 依赖方向：`features/` → `core/` ← `handlers/`，三层默认单向依赖。
@@ -37,7 +37,7 @@ nonebot_plugin_akito/
 
 **已知的合理例外**（不视为违规，刻意保留）：
 
-- `handlers/chat.py` 通过 `try/except` **惰性导入**可选功能 `features/director.py`，以保证该模块可被一键删除；
+- `handlers/chat.py` 通过 `try/except` **惰性导入**可选功能 `features/director/`，以保证该模块可被一键删除；
 - `core/data.py` 的 `reload_assets()` 惰性导入各 feature 的热重载钩子（注册式刷新，非启动期依赖）；
 - `core/retrieval.py` 与 `core/data.py` 互为惰性导入（函数内 import，规避循环依赖）；core 子模块之间允许直接引用兄弟模块的内部工具（如 `_DATA_SEARCH_DIRS`），不必经过包入口。
   （历史例外已收敛：features 层现统一走公共 `find_data_path` / `get_data_dir`，不再直引 core 内部工具。）
@@ -89,16 +89,20 @@ gemini_bot/
     │   ├── chat.py               # 主对话引擎
     │   ├── commands.py           # 管理指令
     │   └── reactions.py          # 被动反应
-    └── features/                 # 独立功能模块
-        ├── director.py           # 导演骰子（可安全删除）
-        ├── event_mode.py         # WL2 世界线
-        ├── gallery.py            # 图库
-        ├── impression.py         # 群印象 + 随机插嘴
-        ├── random_keyword.py     # 今日关键词
-        ├── random_paro.py        # 抽派生
-        ├── scheduled.py          # 定时任务
-        ├── verify.py             # 加群审核
-        └── msyhbd.ttc            # 渲染字体（random_paro / random_keyword 共用）
+    └── features/                 # 独立功能模块（按功能分包）
+        ├── _shared/              # 共享资源 / helper（含渲染字体）
+        ├── director/             # 导演骰子（可安全删除）
+        ├── event_mode/           # WL2 世界线
+        ├── gallery/              # 图库
+        ├── gift/                 # 送礼系统
+        ├── impression/           # 群印象 + 随机插嘴
+        ├── random_keyword/       # 今日关键词
+        ├── random_paro/          # 抽派生
+        ├── scheduled/            # 定时任务
+        ├── verify/               # 加群审核
+        ├── bond_pages.py         # gift.pages 兼容导出
+        ├── bond_render.py        # gift.render 兼容导出
+        └── random_paro_render.py # random_paro.render 兼容导出
 ```
 
 ---

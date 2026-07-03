@@ -1,11 +1,19 @@
-"""Compatibility wrapper for random_paro HTML rendering."""
+"""HTML render helpers for random_paro pages."""
 
 from __future__ import annotations
 
-from .random_paro.render import TEMPLATE_DIR, _RENDER_SEM, _TEMPLATE_ENV
-from .random_paro.render import html_to_pic as _html_to_pic
+import asyncio
+from pathlib import Path
 
-html_to_pic = _html_to_pic
+from jinja2 import Environment, FileSystemLoader, select_autoescape
+from nonebot_plugin_htmlrender import html_to_pic
+
+TEMPLATE_DIR = Path(__file__).resolve().parents[2] / "templates" / "random_paro"
+_TEMPLATE_ENV = Environment(
+    loader=FileSystemLoader(str(TEMPLATE_DIR)),
+    autoescape=select_autoescape(("html", "xml")),
+)
+_RENDER_SEM = asyncio.Semaphore(2)
 
 
 async def render_random_paro_page(template_name: str, data: dict, *, viewport_width: int = 760) -> bytes:

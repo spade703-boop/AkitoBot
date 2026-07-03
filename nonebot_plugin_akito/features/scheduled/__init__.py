@@ -10,7 +10,7 @@ from nonebot.log import logger
 require("nonebot_plugin_apscheduler")
 from nonebot_plugin_apscheduler import scheduler  # noqa: E402
 
-from ..core import MEMORY_DB, REACTIONS_DB, TARGET_GROUPS, TZ_CN, grant_safety_pass, save_memory  # noqa: E402
+from ...core import MEMORY_DB, REACTIONS_DB, TARGET_GROUPS, TZ_CN, grant_safety_pass, save_memory  # noqa: E402
 
 # ==============================================================================
 # 定时任务模块 (SCHEDULED TASKS)

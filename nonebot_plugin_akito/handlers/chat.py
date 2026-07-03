@@ -585,7 +585,7 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage()):
         long_term_facts = user_mem.get("long_term_facts", [])
         long_term_memory_text = "\n".join(long_term_facts) if long_term_facts else "（暂无特殊记忆）"
 
-        # build_director_note 来自 features/director.py（可一键删除该模块）
+        # build_director_note 来自 features/director/（可一键删除该模块）
         _d = build_director_note(plain_text_content, is_toya_context, long_term_memory_text, PROMPTS_DB, DIRECTOR_DB) if build_director_note else {}
         is_physical_or_drama = _d.get("is_physical_or_drama", False)
 
@@ -658,7 +658,7 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage()):
             tagged_user_msg_for_llm += f"\n\n📱 [系统旁白：你瞥了一眼对方发来的图片，画面内容是：{current_image_identity}]\n{role_force}"
             tagged_user_msg_for_history += f"\n[看了一眼图片: {current_image_identity}]"
 
-        # format_breaker 由 features/director.py 生成（模块不存在时为空字符串）
+        # format_breaker 由 features/director/ 生成（模块不存在时为空字符串）
         format_breaker = _d.get("format_breaker", "")
 
         if format_breaker:

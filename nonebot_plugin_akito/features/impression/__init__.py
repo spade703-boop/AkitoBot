@@ -12,7 +12,7 @@ from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, MessageSegment
 from nonebot.exception import FinishedException
 from nonebot.log import logger
 
-from ..core import (
+from ...core import (
     ALLOWED_CP_GROUPS,
     DB_PATH,
     PROMPTS_DB,

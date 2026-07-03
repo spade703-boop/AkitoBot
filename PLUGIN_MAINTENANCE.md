@@ -28,17 +28,21 @@ nonebot_plugin_akito/
 │   ├── chat.py               # 主对话引擎（ReAct Agent 循环 + Python 端 MVVM 排版）
 │   ├── commands.py           # 记忆管理指令（查看/植入/清除/遗忘/重置/热更新）
 │   └── reactions.py          # 被动反应（戳一戳 / 深夜自言自语）
-└── features/                 # 独立功能模块
+└── features/                 # 独立功能模块（按功能分包）
     ├── __init__.py
-    ├── impression.py         # 群印象 + 随机插嘴（AutoChat）
-    ├── gallery.py            # 相册图库指令
-    ├── director.py           # Galgame 级导演骰子（可安全删除）
-    ├── verify.py             # 新人审核名单管理
-    ├── random_paro.py        # 派生抽取器（CP 同人灵感配对）
-    ├── random_keyword.py     # 今日关键词（同人写作灵感关键词）
-    ├── scheduled.py          # 定时任务（早晚安 / 过期记忆清理）
-    ├── event_mode.py         # WL2 世界线剧情模式开关
-    ├── gift.py               # 送礼系统（积分/送礼/偷分/羁绊/签到闸门/超管重置）
+    ├── _shared/              # 共享资源 / helper（含渲染字体）
+    ├── impression/           # 群印象 + 随机插嘴（AutoChat）
+    ├── gallery/              # 相册图库指令
+    ├── director/             # Galgame 级导演骰子（可安全删除）
+    ├── verify/               # 新人审核名单管理
+    ├── random_paro/          # 派生抽取器（CP 同人灵感配对）
+    ├── random_keyword/       # 今日关键词（同人写作灵感关键词）
+    ├── scheduled/            # 定时任务（早晚安 / 过期记忆清理）
+    ├── event_mode/           # WL2 世界线剧情模式开关
+    ├── gift/                 # 送礼系统（积分/送礼/偷分/羁绊/签到闸门/超管重置）
+    ├── bond_pages.py         # gift.pages 兼容导出
+    ├── bond_render.py        # gift.render 兼容导出
+    ├── random_paro_render.py # random_paro.render 兼容导出
     └── rpg/                  # RPG 子包：签到/打怪/世界BOSS/组队/强化/背包/群排行榜（详见 rpg/README.md）
                                    ├── __init__.py
                                    ├── config.py         # 全部数值/文案/配置（可被 rpg_config.json 热更新）
@@ -78,8 +82,8 @@ game_store.py  (← __init__；gift/rpg 共用存储层)         │
 - `core/` 子模块只能用相对导入 `.` 访问同层文件，**严禁**向上引用 `handlers/` 或 `features/`
 - `handlers/` 和 `features/` 均使用 `from ..core import ...`（两个点 = 上一级包）
 - `handlers/` 和 `features/` 之间**无互相引用**（唯一例外：`rpg/team.py` → `gift._bond_level`，单向消费 gift 的羁绊体系——gift 不反向依赖 rpg，无环）
-- `features/verify.py` 无任何内部依赖，完全独立
-- `features/director.py` 仅被 `handlers/chat.py` 调用，可整体删除（chat.py 有安全降级）
+- `features/verify/` 无任何内部依赖，完全独立
+- `features/director/` 仅被 `handlers/chat.py` 调用，可整体删除（chat.py 有安全降级）
 
 ---
 
@@ -439,7 +443,7 @@ Galgame 级导演骰子，由 `chat.py` 调用 `build_director_note()`。
 群组配置：`data/verify_config.json` → `{"TARGET_GROUP_ID": "...", "ADMIN_GROUP_ID": "..."}`
 （该文件必须存在且两个 key 齐全，否则审核系统整体静默停用并在启动日志告警——群号不在代码内兜底。）
 
-### random_paro.py
+### random_paro/
 
 服务于固定 CP 的派生抽取器。从两个独立身份池随机抽取配对。
 
@@ -450,7 +454,7 @@ Galgame 级导演骰子，由 `chat.py` 调用 `build_director_note()`。
 - 模糊匹配：`_fuzzy_match()` 三级匹配（精确 → 前缀 → 包含），大小写不敏感；歧义时列出候选
 - 数据文件：`data/paro_pools.json`，已接入 `reload_assets()` 热重载
 
-### random_keyword.py
+### random_keyword/
 
 同人写作灵感关键词抽取器。从单一关键词池随机抽取 1-3 个意象/情境/关系张力短语。
 
@@ -462,7 +466,7 @@ Galgame 级导演骰子，由 `chat.py` 调用 `build_director_note()`。
 - 模糊匹配：`_fuzzy_match()` 三级匹配（精确 → 前缀 → 包含），大小写不敏感；歧义时列出候选
 - PIL 渲染：`_render_keyword_result()` 卡片式输出（序号 + 关键词），`_render_pool_image()` 三列网格展示全池
 - 数据文件：`data/fanfic_keywords.json`（关键词池）、`data/keyword_draws.json`（每日抽取记录），已接入 `reload_assets()` 热重载
-- 字体：复用 `features/msyhbd.ttc`
+- 字体：复用 `features/_shared/msyhbd.ttc`
 
 ### scheduled.py
 
@@ -485,7 +489,7 @@ Galgame 级导演骰子，由 `chat.py` 调用 `build_director_note()`。
 
 WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（戳一戳）、chat.py（`get_toya_anchor` 同框锚定门控跳过，避免与决裂世界线冲突）。
 
-### gift.py
+### gift/
 
 彰冬同人圈主题的群友互送小游戏。完全自包含（不依赖其他 feature 模块），通过 `core/game_store.py` 共享存储层与 RPG 子系统共用玩家数据。
 
@@ -507,7 +511,7 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（戳一戳
 
 **架构关系**：
 - 存储层：`core/game_store.py`（`gift_data.json`，含 `LOCK`/积分/亲密度/每日重置/签到钩子注册）
-- 签到衔接：`gift.py` 的签到持锁后调用 `run_signin_hooks`，RPG 的 `fortune.on_signin` 通过 `register_signin_hook` 注册订阅；gift 不反向依赖 rpg
+- 签到衔接：`gift/` 的签到持锁后调用 `run_signin_hooks`，RPG 的 `fortune.on_signin` 通过 `register_signin_hook` 注册订阅；gift 不反向依赖 rpg
 - 配置热更：通过 `data/content/gift_config.json` 覆盖默认值；`reload_assets()` 调用 `gift.reload_gift_config()` 热更新
 - 数据文件：`data/gift_data.json`（玩家数据，含积分/送礼/偷/羁绊/RPG 字段）、`data/content/gift_config.json`（配置覆盖）、`data/content/intimacy_tiers.json`（羁绊梯定义）
 
@@ -531,7 +535,7 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（戳一戳
 | `inventory.py` | `背包` / `使用 [道具名]` 指令 + 道具效果（`exp_buff`/`exp_grant`/`gift` 三种类型）+ 礼物券分支走完整送礼流程（`_settle`/`_build_broadcast`） + `_roll_drops` 掉落判定 + `_add_item` 背包入库 |
 | `character.py` | `我的角色` 面板（含称号 `_title_of`/战绩/普通装备状态/世界BOSS状态/积分/背包）+ `群排行榜`（本群 exp>0 的人按经验降序 Top 10，纯文字不 @）+ `冒险帮助`（含世界 BOSS 指令） |
 
-**依赖方向**（design constraint）：`features/gift.py` 与 `features/rpg/*` 都依赖 `core/game_store.py`；签到走钩子表解耦（gift → `run_signin_hooks` → `fortune.on_signin`，gift 不依赖 rpg）；三条 rpg→gift 单向依赖：`rpg/team.py` / `rpg/boss.py` → `gift._bond_level`（消费羁绊）、`rpg/inventory.py` → `gift._pick_gift_by_name`/`_settle`/`_build_broadcast` 等（礼物券消费走完整送礼流程）；gift 不反向依赖 rpg，无环。
+**依赖方向**（design constraint）：`features/gift/` 与 `features/rpg/*` 都依赖 `core/game_store.py`；签到走钩子表解耦（gift → `run_signin_hooks` → `fortune.on_signin`，gift 不依赖 rpg）；三条 rpg→gift 单向依赖：`rpg/team.py` / `rpg/boss.py` → `gift._bond_level`（消费羁绊）、`rpg/inventory.py` → `gift._pick_gift_by_name`/`_settle`/`_build_broadcast` 等（礼物券消费走完整送礼流程）；gift 不反向依赖 rpg，无环。
 
 **配置热更**：修改 `data/content/rpg_config.json` → 群内 `重载配置 assets` → `reload_assets()` → `rpg_config.reload_rpg_config()`，无需重启。
 
@@ -595,7 +599,7 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（戳一戳
 | `data/pending_verify.json` / `bond_verify.json` / `hold_verify.json` | 读写 | 待审核 / 待刷羁绊 / 特殊挂起名单 |
 | `data/verify_config.json` | 只读 | 审核系统群号配置 |
 | `data/images/<category>/`、`paro_avatars/彰人\|冬弥/` | 读写 / 只读 | 本地图库 / 派生头像素材 |
-| `features/msyhbd.ttc` | 只读 | random_paro / random_keyword 渲染加粗字体 |
+| `features/_shared/msyhbd.ttc` | 只读 | random_paro / random_keyword 渲染加粗字体 |
 
 ---
 
@@ -641,15 +645,15 @@ pytest tests/test_rpg.py -q
 - `handlers/chat.py` → `pytest tests/test_chat_helpers.py -q`
 - `handlers/commands.py` → `pytest tests/test_commands_helpers.py -q`
 - `handlers/reactions.py` → `pytest tests/test_reactions_helpers.py -q`
-- `features/impression.py` → `pytest tests/test_impression_helpers.py tests/test_impression_rescue_regression.py -q`
-- `features/verify.py` → `pytest tests/test_verify_helpers.py -q`
-- `features/gallery.py` → `pytest tests/test_gallery_helpers.py -q`
-- `features/random_paro.py` → `pytest tests/test_random_paro_helpers.py -q`
-- `features/random_keyword.py` → `pytest tests/test_random_keyword_helpers.py -q`
-- `features/director.py` → `pytest tests/test_director.py -q`
-- `features/event_mode.py` → `pytest tests/test_event_mode_helpers.py -q`
-- `features/scheduled.py` → `pytest tests/test_scheduled_helpers.py -q`
-- `features/gift.py` → `pytest tests/test_gift.py -q`
+- `features/impression/` → `pytest tests/test_impression_helpers.py tests/test_impression_rescue_regression.py -q`
+- `features/verify/` → `pytest tests/test_verify_helpers.py -q`
+- `features/gallery/` → `pytest tests/test_gallery_helpers.py -q`
+- `features/random_paro/` → `pytest tests/test_random_paro_helpers.py -q`
+- `features/random_keyword/` → `pytest tests/test_random_keyword_helpers.py -q`
+- `features/director/` → `pytest tests/test_director.py -q`
+- `features/event_mode/` → `pytest tests/test_event_mode_helpers.py -q`
+- `features/scheduled/` → `pytest tests/test_scheduled_helpers.py -q`
+- `features/gift/` → `pytest tests/test_gift.py -q`
 - `features/rpg/` → `pytest tests/test_rpg.py -q`
 - `core/api.py` → `pytest tests/test_api.py -q`
 - `core/context.py` → `pytest tests/test_context.py -q`
@@ -663,7 +667,7 @@ pytest tests/test_rpg.py -q
 当前这套本地测试的设计目标不是“模拟整台云服务器”，而是“假平台 + 真业务逻辑”：
 
 - `tests/conftest.py` 启动时会把 `tests/fixtures/test_data/` 复制到临时目录。
-- 通过 `AKITO_DATA_DIR` 把 `core/data.py`、`memory.py`、`verify.py` 等读写路径统一重定向到临时测试数据。
+- 通过 `AKITO_DATA_DIR` 把 `core/data.py`、`memory.py`、`features/verify/` 等读写路径统一重定向到临时测试数据。
 - 通过 `AKITO_SKIP_PLUGIN_LOAD=1` 跳过真实插件加载，避免测试时拉起完整 NoneBot 插件栈。
 - `nonebot`、`onebot`、`openai`、`aiohttp`、`nonebot_plugin_htmlrender` 等外部边界都在 `tests/conftest.py` 中替换成 fake / mock。
 
@@ -831,10 +835,10 @@ py tools/eval_retrieval.py rerank 0.2  # 用指定阈值试跑精排臂
    > ⚠️ 缺少这一行则模块静默不生效，不会报错。
 
 ### 修改定时任务时间
-编辑 `features/scheduled.py` 中 `@scheduler.scheduled_job("cron", ...)` 的 `hour`/`minute` 参数。
+编辑 `features/scheduled/__init__.py` 中 `@scheduler.scheduled_job("cron", ...)` 的 `hour`/`minute` 参数。
 
 ### 调整随机插嘴概率
-`features/impression.py` 顶部的 `CHAT_PROBABILITY = 0.03`（当前 3%）。
+`features/impression/__init__.py` 顶部的 `CHAT_PROBABILITY = 0.03`（当前 3%）。
 
 ---
 
@@ -858,7 +862,7 @@ py tools/eval_retrieval.py rerank 0.2  # 用指定阈值试跑精排臂
 
 9. **handler 注册时机**：`on_command`/`on_message` 在模块被 import 时立即注册。`features/__init__.py` 中缺少某行 `from . import xxx`，对应功能会完全静默失效，不报任何错误。
 
-10. **渲染字体路径**：`random_paro.py` / `random_keyword.py` 用 `os.path.join(os.path.dirname(__file__), "msyhbd.ttc")` 定位字体，`msyhbd.ttc` 必须与模块同目录（`features/`）。
+10. **渲染字体路径**：`features/random_paro/` 与 `features/random_keyword/` 统一通过 `features/_shared/__init__.py` 的 `load_msyhbd_font()` 取字体，`msyhbd.ttc` 固定放在 `features/_shared/`。
 
 11. **冬弥去向 = 当前 routine 派生 + 连贯锁，单一大脑收敛到 chat.py**：曾有两套「冬弥在哪」逻辑（reactions.py 的 `冬弥呢` 指令 + chat.py 的窄触发片段），推断规则重复且主对话路径无连贯锁，导致队友去向跨轮自相矛盾（如先说去买咖啡、再说请假）。现统一为 `core.life_state.get_toya_anchor()`：读当前缓存 routine（`get_daily_activity` 已置热），同框时段/文本含「冬弥」判定在场，否则给自洽推断规则，并恒附「本轮已述事实不得自相矛盾」连贯锁；chat.py 在涉冬弥话题且非 WL2 时注入到「物理现实」段。独立的 `冬弥呢` 指令与 `toya_radar.json` 已退役。
 

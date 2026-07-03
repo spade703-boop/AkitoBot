@@ -12,7 +12,7 @@ from nonebot.params import CommandArg
 
 from ...core import ALLOWED_CHAT_GROUPS
 from ...core.game_store import LOCK, _display_name, _get_group, _load_data, _save_data, _today_str
-from ..bond_render import render_bond_page
+from ..gift.render import render_bond_page
 from .boss import _active_world_boss, _cleanup_stale_world_boss, _ensure_boss_participant
 from .config import _error, _line
 from .player import (

@@ -16,9 +16,9 @@ from nonebot.adapters import Event, Message
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageSegment
 from nonebot.log import logger
 from nonebot.params import CommandArg
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
-from ..core import (
+from ...core import (
     ALLOWED_CHAT_GROUPS,
     IMAGE_BASE_PATH,
     SUPERUSER_QQ,
@@ -27,7 +27,8 @@ from ..core import (
     get_data_dir,
     load_json_file,
 )
-from .random_paro_render import render_random_paro_page
+from .._shared import load_msyhbd_font
+from .render import render_random_paro_page
 
 DATA_FILE = "paro_pools.json"
 STATS_FILE = "paro_stats.json"
@@ -256,12 +257,7 @@ def reload_paro_data() -> None:
 # ==================== 图片渲染 ====================
 
 def _load_font(size: int):
-    try:
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        font_path = os.path.join(current_dir, "msyhbd.ttc")
-        return ImageFont.truetype(font_path, size)
-    except Exception:
-        return ImageFont.load_default()
+    return load_msyhbd_font(size)
 
 
 def _render_pool_image(title: str, pool: list) -> bytes:

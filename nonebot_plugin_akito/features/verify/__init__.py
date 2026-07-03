@@ -11,7 +11,7 @@ from nonebot.adapters.onebot.v11 import Bot, GroupDecreaseNoticeEvent, GroupIncr
 from nonebot.log import logger
 from nonebot.params import CommandArg
 
-from ..core import find_data_path, get_data_dir
+from ...core import find_data_path, get_data_dir
 
 # ==============================================================================
 # 1. 配置与数据加载区

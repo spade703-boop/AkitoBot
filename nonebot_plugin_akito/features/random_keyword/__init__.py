@@ -15,9 +15,10 @@ from nonebot.adapters import Event, Message
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageSegment
 from nonebot.log import logger
 from nonebot.params import CommandArg
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
-from ..core import ALLOWED_CHAT_GROUPS, SUPERUSER_QQ, TZ_CN, find_data_path, get_data_dir, load_json_file
+from ...core import ALLOWED_CHAT_GROUPS, SUPERUSER_QQ, TZ_CN, find_data_path, get_data_dir, load_json_file
+from .._shared import load_msyhbd_font
 
 DATA_FILE = "fanfic_keywords.json"
 DRAWS_FILE = "keyword_draws.json"
@@ -185,12 +186,7 @@ def _get_non_empty_categories() -> list[tuple[str, list]]:
 # ==================== 图片渲染 ====================
 
 def _load_font(size: int):
-    try:
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        font_path = os.path.join(current_dir, "msyhbd.ttc")
-        return ImageFont.truetype(font_path, size)
-    except Exception:
-        return ImageFont.load_default()
+    return load_msyhbd_font(size)
 
 
 SEQS = ["①", "②", "③"]

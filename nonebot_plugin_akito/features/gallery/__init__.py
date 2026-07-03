@@ -19,7 +19,7 @@ from nonebot.params import CommandArg
 from nonebot_plugin_htmlrender import html_to_pic
 from PIL import Image as PILImage
 
-from ..core import (
+from ...core import (
     GROUP_IMAGE_PERMISSIONS,
     IMAGE_BASE_PATH,
     REACTIONS_DB,
