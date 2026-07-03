@@ -183,6 +183,7 @@ def test_resolve_hunt_slip_and_desperate_flip():
 
 def test_hunt_result_lines_prefers_result_specific_event_copy_and_falls_back(monkeypatch):
     copy_table = {
+        "event_slip": ["slip-generic {monster}"],
         "event_slip_win": ["slip-win {monster}"],
         "event_insight": ["insight-generic {monster}"],
     }
@@ -218,6 +219,36 @@ def test_hunt_result_lines_prefers_result_specific_event_copy_and_falls_back(mon
 
     assert slip_lines[0] == "slip-win slime"
     assert insight_lines[0] == "insight-generic goblin"
+
+
+def test_hunt_result_lines_rescue_flip_uses_generic_event_copy(monkeypatch):
+    copy_table = {
+        "event_desperate": ["desperate-generic"],
+        "event_desperate_win": ["desperate-win"],
+    }
+    orig_cfg = hunt._cfg
+    monkeypatch.setattr(hunt, "_cfg", lambda key, default=None: copy_table if key == "copy" else orig_cfg(key, default))
+    monkeypatch.setattr(hunt, "_copy", lambda key: copy_table.get(key, [key]))
+    monkeypatch.setattr(hunt.random, "choice", lambda seq: seq[0])
+
+    lines = hunt._hunt_result_lines({
+        "monster": {"name": "ogre"},
+        "event": "desperate",
+        "win": True,
+        "base_win": False,
+        "support_scene": "toya_rescue",
+        "exp_gain": 1,
+        "points_gain": 1,
+        "exp_buffed": False,
+        "drops": [],
+        "old_level": 1,
+        "new_level": 1,
+        "buff": _PLAIN_BUFF,
+        "support_exp": 0,
+        "support_points": 0,
+    })
+
+    assert lines[0] == "desperate-generic"
 
 
 def test_challenge_exp_scales_with_level():
@@ -1224,6 +1255,7 @@ async def test_hunt_support_akito_fail_keeps_failure_with_bonus(monkeypatch):
 async def test_hunt_support_toya_rescue_turns_loss_into_win(monkeypatch):
     state = _patch_io(monkeypatch, hunt, store={"groups": {"1001": {"users": {"u1": _equipped_user(points=0)}}}})
     _stub_hunt_rng(monkeypatch, {"name": "座狼", "power_req": 999, "drops": []})
+    monkeypatch.setattr(hunt, "_roll_hunt_event", lambda margin, rng=hunt.random: "desperate")
     monkeypatch.setattr(hunt, "_roll_solo_support_scene", lambda win, rng=hunt.random: "toya_rescue")
 
     with pytest.raises(FinishedException) as exc:
@@ -1244,12 +1276,14 @@ async def test_hunt_support_toya_rescue_turns_loss_into_win(monkeypatch):
     )
     assert "本次挑战转为成功" in result
     assert "已击败【座狼】" in result
+    assert "成功反败为胜" not in result
 
 
 @pytest.mark.asyncio
 async def test_hunt_support_duo_combo_turns_loss_into_win_with_bonus(monkeypatch):
     state = _patch_io(monkeypatch, hunt, store={"groups": {"1001": {"users": {"u1": _equipped_user(points=0)}}}})
     _stub_hunt_rng(monkeypatch, {"name": "食人魔", "power_req": 999, "drops": []})
+    monkeypatch.setattr(hunt, "_roll_hunt_event", lambda margin, rng=hunt.random: "desperate")
     monkeypatch.setattr(hunt, "_roll_solo_support_scene", lambda win, rng=hunt.random: "duo_combo")
 
     with pytest.raises(FinishedException) as exc:
@@ -1272,6 +1306,7 @@ async def test_hunt_support_duo_combo_turns_loss_into_win_with_bonus(monkeypatch
     )
     assert "双色发神官在远处施放了支援魔法稳住阵型" in result
     assert "本次挑战转为成功" in result
+    assert "成功反败为胜" not in result
 
 
 @pytest.mark.asyncio

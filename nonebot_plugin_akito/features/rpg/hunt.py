@@ -371,6 +371,7 @@ def _settle_solo(user: dict, today: str) -> dict:
     power_factor = random.uniform(float(ccfg.get("factor_min", 0.8)), float(ccfg.get("factor_max", 1.2)))
     power_factor *= _rookie_power_factor(level)
     res = resolve_hunt(cp, eff, power_factor=power_factor, fortune_factor=fortune_factor, event=event_key)
+    base_win = bool(res["win"])
     support_scene = _roll_solo_support_scene(bool(res["win"]))
     if not res["win"] and support_scene in {"toya_rescue", "duo_combo"}:
         res["win"] = True
@@ -378,7 +379,7 @@ def _settle_solo(user: dict, today: str) -> dict:
     rew = _apply_rewards(user, today, win=res["win"], monster=eff, event_key=event_key,
                          exp_mult=exp_mult, drop_mult=drop_mult)
     out = {**res, **rew, "monster": monster, "event": event_key, "elite": is_elite, "buff": buff,
-           "support_scene": support_scene}
+           "support_scene": support_scene, "base_win": base_win}
     _apply_support_bonus(user, out)
     return out
 
@@ -459,8 +460,17 @@ def _hunt_event_line(out: dict) -> str:
     m = out["monster"]
     if out.get("event"):
         copy_table = _cfg("copy", {})
+        support_scene = str(out.get("support_scene", ""))
+        flipped_by_support = (
+            support_scene in {"toya_rescue", "duo_combo"}
+            and not bool(out.get("base_win", out.get("win")))
+            and bool(out.get("win"))
+        )
         result_key = f"event_{out['event']}_{'win' if out['win'] else 'lose'}"
-        event_key = result_key if isinstance(copy_table, dict) and copy_table.get(result_key) else f"event_{out['event']}"
+        if flipped_by_support:
+            event_key = f"event_{out['event']}"
+        else:
+            event_key = result_key if isinstance(copy_table, dict) and copy_table.get(result_key) else f"event_{out['event']}"
         return _render_with_ats(random.choice(_copy(event_key)), {"monster": m.get("name", "")})
     return ""
 
