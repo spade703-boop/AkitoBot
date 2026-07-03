@@ -1,0 +1,341 @@
+"""送礼配置与礼物/事件规则。"""
+
+from __future__ import annotations
+
+import copy
+import random
+
+from nonebot.log import logger
+
+from ...core import load_json_file
+
+CONFIG_FILE = "gift_config.json"
+
+
+DEFAULT_GIFT_CONFIG: dict = {
+    # 礼物按「心意/稀有度」递增：买来的 → 自己产的。消耗积分与基础亲密度同步递增。
+    "gifts": [
+        {"name": "彰冬无料", "cost": 50, "intimacy": 12},
+        {"name": "彰冬谷子", "cost": 100, "intimacy": 28},
+        {"name": "彰冬豆豆眼", "cost": 200, "intimacy": 60},
+        {"name": "彰冬亚克力立牌", "cost": 270, "intimacy": 85},
+        {"name": "彰冬同人本", "cost": 350, "intimacy": 115},
+        {"name": "彰冬画集", "cost": 450, "intimacy": 155},
+        {"name": "彰冬约稿点图", "cost": 525, "intimacy": 200},
+        {"name": "彰冬手办", "cost": 648, "intimacy": 255},
+        # special=true 必定惊喜升级（不暴击不失败，固定取自身 intimacy）；copy 指定专属文案
+        {"name": "自己产的彰冬饭", "cost": 819, "intimacy": 520, "special": True, "copy": "special_meal"},
+        {"name": "彰冬婚礼邀请函", "cost": 1112, "intimacy": 1314, "special": True, "copy": "special_wedding"},
+    ],
+    # 回礼回赠物：键控加权表（仿 mishaps）。name 回赠物 / bonus 在 base 之上额外加的羁绊 /
+    #   refund_ratio 按所送礼物 cost 退还比例 / weight 稀有度。可增删调、热重载。
+    "return_gifts": {
+        "guzi":     {"name": "彰冬谷子",         "bonus": 6,  "refund_ratio": 0.0,  "weight": 6},
+        "card":     {"name": "彰冬手绘小卡",     "bonus": 14, "refund_ratio": 0.0,  "weight": 4},
+        "doujin":   {"name": "彰冬同人本",       "bonus": 24, "refund_ratio": 0.15, "weight": 3},
+        "rareguzi": {"name": "彰冬稀有谷子",     "bonus": 32, "refund_ratio": 0.0,  "weight": 2},
+        "jouhan":   {"name": "彰冬场贩限定本子", "bonus": 52, "refund_ratio": 0.25, "weight": 1},
+    },
+    "sign_in": {"min": 50, "max": 100},
+    "sign_delay_sec": {"min": 3, "max": 5},
+    "crit_multiplier": 2,
+    "fail_refund_ratio": 0.3,
+    "event_weights": {"normal": 55, "crit": 16, "return": 12, "fail": 7, "mishap": 10},
+    "mishaps": {
+        "damaged":     {"intimacy": 8,  "ratio": 0.3,  "refund_ratio": 0.5, "weight": 3},
+        "freebie":     {"intimacy": 28, "ratio": 1.0,  "refund_ratio": 0.0, "weight": 2},
+        "rare":        {"intimacy": 24, "ratio": 0.9,  "refund_ratio": 0.0, "weight": 2},
+        "handwritten": {"intimacy": 20, "ratio": 0.8,  "refund_ratio": 0.0, "weight": 2},
+        "praised":     {"intimacy": 22, "ratio": 0.85, "refund_ratio": 0.0, "weight": 2},
+        "overboard":   {"intimacy": 30, "ratio": 1.1,  "refund_ratio": 0.0, "weight": 1},
+        "delayed":     {"intimacy": 12, "ratio": 0.5,  "refund_ratio": 0.0, "weight": 2},
+        "dupe":        {"intimacy": 6,  "ratio": 0.25, "refund_ratio": 0.3, "weight": 2},
+        "lost":        {"intimacy": 0,  "ratio": 0.0,  "refund_ratio": 1.0, "weight": 1},
+    },
+    "bond_levels": [
+        {"min": -1000, "name": "宿敌"},
+        {"min": -300, "name": "结了梁子"},
+        {"min": -50, "name": "有过节"},
+        {"min": 0, "name": "Hot Dogs"},
+        {"min": 100, "name": "大麦克风"},
+        {"min": 400, "name": "能信赖的搭档"},
+        {"min": 1000, "name": "云与柳的大头贴"},
+        {"min": 2500, "name": "想与你并肩而行"},
+        {"min": 6000, "name": "从今往后直到永远"},
+    ],
+    "steal": {
+        "daily_limit": 2,
+        "victim_daily_limit": 3,
+        "min_target_points": 50,
+        "ratio": 0.1,
+        "cap": 40,
+        "minor_ratio": 0.04,
+        "minor_min_amount": 6,
+        "minor_cap": 12,
+        "protect_minutes": 60,
+        "caught_penalty": 15,
+        "reversal_amount": 10,
+        "bond_loss": {
+            "success": {"base": 8, "amount_ratio": 0.55, "positive_bond_ratio": 0.004, "positive_bond_cap": 6},
+            "minor_success": {"base": 5, "amount_ratio": 0.4, "positive_bond_ratio": 0.003, "positive_bond_cap": 3},
+            "caught": {"base": 6, "amount_ratio": 0.35, "positive_bond_ratio": 0.002, "positive_bond_cap": 4},
+            "whiff": {"base": 4, "amount_ratio": 0.0, "positive_bond_ratio": 0.001, "positive_bond_cap": 2},
+            "reversal": {"base": 10, "amount_ratio": 0.6, "positive_bond_ratio": 0.003, "positive_bond_cap": 5},
+        },
+        "bond_flat": 20,
+        "bond_ratio": 0.1,
+        "bond_neg_min": 10,
+        "bond_neg_max": 30,
+        "bond_floor": -1000,
+        "weights": {"success": 3, "minor_success": 2, "whiff": 1, "caught": 2, "reversal": 2},
+    },
+    "copy": {
+        "sign_in": [
+            "{a} 签到完成，今天领到 {amount} 积分，攒着慢慢送礼吧（当前 {total}）。",
+            "{a} 来打卡了，+{amount} 积分到账（当前 {total}）。",
+            "{a} 今天的签到积分 +{amount}，离心仪的礼物又近了点（当前 {total}）。",
+        ],
+        "normal": [
+            "{a} 给 {b} 投喂了一份【{gift}】，同好羁绊 +{amount}。",
+            "{a} 送了 {b} 一份【{gift}】，两个人的羁绊 +{amount}。",
+            "{a} 把【{gift}】送给了 {b}，羁绊默默 +{amount}。",
+        ],
+        "crit": [
+            "{a} 送的【{gift}】正好戳中 {b}，有点上头，羁绊翻倍 +{amount}。",
+            "{a} 这份【{gift}】送到 {b} 心坎上了，羁绊翻倍 +{amount}。",
+            "{a} 送的【{gift}】很对 {b} 的胃口，羁绊直接翻倍 +{amount}。",
+        ],
+        "return": [
+            "{a} 送了【{gift}】，{b} 也回赠了一份【{return_gift}】，礼尚往来，羁绊 +{amount}。",
+            "{a} 给 {b} 送了【{gift}】，{b} 顺手回了份【{return_gift}】，羁绊 +{amount}。",
+        ],
+        "return_guzi": [
+            "{a} 送了【{gift}】，{b} 也回赠了一份【{return_gift}】，礼尚往来，羁绊 +{amount}。",
+            "{a} 给 {b} 送了【{gift}】，{b} 顺手回了份【{return_gift}】，羁绊 +{amount}。",
+        ],
+        "return_card": [
+            "{a} 送了【{gift}】，{b} 回赠了一张【{return_gift}】，还在角落悄悄画了只小彰冬，羁绊 +{amount}。",
+            "{a} 的【{gift}】送到，{b} 翻出珍藏的【{return_gift}】回赠，心意加倍，羁绊 +{amount}。",
+        ],
+        "return_doujin": [
+            "{a} 送了【{gift}】，{b} 回赠了一本【{return_gift}】，还退了 {refund} 积分当回礼茶水费，羁绊 +{amount}。",
+            "{a} 给 {b} 送【{gift}】，{b} 大方回赠一本【{return_gift}】，顺带塞回 {refund} 积分，羁绊 +{amount}。",
+        ],
+        "return_rareguzi": [
+            "{a} 送了【{gift}】，{b} 翻出压箱底的【{return_gift}】回赠，可遇不可求，羁绊 +{amount}。",
+            "{a} 的【{gift}】刚到，{b} 就回赠了一份绝版【{return_gift}】，{a} 乐开了花，羁绊 +{amount}。",
+        ],
+        "return_jouhan": [
+            "{a} 送了【{gift}】，{b} 竟回赠珍藏的【{return_gift}】！还附 {refund} 积分大红包，全场同好齐刷「这什么神仙礼尚往来」，羁绊 +{amount}。",
+            "{a} 给 {b} 送【{gift}】，{b} 大手一挥回赠一本【{return_gift}】外加 {refund} 积分，把 {a} 砸得当场愣住，羁绊 +{amount}。",
+        ],
+        "fail": [
+            "{a} 送的【{gift}】没太对上 {b} 的眼缘，{b} 不好意思收下，退回 {refund} 积分，羁绊没变化。",
+            "{a} 送出【{gift}】，{b} 反应平平、心意没太传到，退还 {refund} 积分，羁绊原地踏步。",
+            "{a} 送的【{gift}】好像没戳中 {b}，{b} 客气地退回 {refund} 积分，这次羁绊没怎么动。",
+        ],
+        "mishap_damaged": [
+            "{a} 寄的【{gift}】路上有点压坏了，两个人一起心疼了一下，反而更亲近，羁绊各 +{amount}，返还 {refund} 积分。",
+            "{a} 的【{gift}】运输途中磕了一下，{b} 陪着一起惋惜，羁绊各 +{amount}，退还 {refund} 积分。",
+        ],
+        "mishap_freebie": [
+            "{a} 送 {b} 的【{gift}】，卖家居然多塞了份赠品小卡，意外加料，羁绊 +{amount}。",
+            "{a} 给 {b} 的【{gift}】里附了点小周边，{b} 拆开惊喜了一下，羁绊 +{amount}。",
+        ],
+        "mishap_rare": [
+            "{a} 送 {b} 的这份【{gift}】正好是早绝版的稀有款，可遇不可求，羁绊 +{amount}。",
+            "{a} 给 {b} 淘来的【{gift}】是限定稀有版，运气爆棚，羁绊 +{amount}。",
+        ],
+        "mishap_handwritten": [
+            "{a} 随【{gift}】夹了张手写小卡，{b} 看完心头一暖，羁绊 +{amount}。",
+            "{a} 在【{gift}】里塞了句手写留言，{b} 反复看了好几遍，羁绊 +{amount}。",
+        ],
+        "mishap_praised": [
+            "{a} 送 {b} 的【{gift}】被群里同好刷屏夸「这对好甜」，公开撒糖加成，羁绊 +{amount}。",
+            "{a} 这份送给 {b} 的【{gift}】当众撒了把糖，同好们齐刷「磕到了」，羁绊 +{amount}。",
+        ],
+        "mishap_overboard": [
+            "{a} 一时上头，给【{gift}】又默默加了码，{b} 哭笑不得地收下，羁绊 +{amount}。",
+            "{a} 送【{gift}】送上了头，硬是多添了点，{b} 拗不过只好收下，羁绊 +{amount}。",
+        ],
+        "mishap_delayed": [
+            "{a} 送 {b} 的【{gift}】物流慢了半拍，但心意照样送到，羁绊 +{amount}。",
+            "{a} 的【{gift}】在路上磨蹭了几天才到，{b} 还是乐呵呵收下，羁绊 +{amount}。",
+        ],
+        "mishap_dupe": [
+            "{a} 送的【{gift}】，{b} 居然早就有同款了，两个人笑作一团，羁绊 +{amount}，返还 {refund} 积分。",
+            "{a} 送来【{gift}】，{b} 翻出自己那份同款，俩人乐了半天，羁绊 +{amount}，退还 {refund} 积分。",
+        ],
+        "mishap_lost": [
+            "{a} 寄给 {b} 的【{gift}】半路寄丢了，心意还在，积分全额退回 {refund}。",
+            "{a} 的【{gift}】在物流里弄丢了，{b} 说心意领了就好，积分如数退还 {refund}。",
+        ],
+        "special_meal": [
+            "{a} 送的彰冬饭非常合 {b} 的胃口，羁绊 +{amount}。",
+            "{a} 送的彰冬饭正好是 {b} 最喜欢的那个派生，羁绊 +{amount}。",
+        ],
+        "special_wedding": [
+            "{a} 郑重地把【彰冬婚礼邀请函】递到 {b} 手里，邀请 {b} 去参加这对橙蓝给子的婚礼，羁绊 +{amount}（一生一世）。",
+            "{a} 向 {b} 递出【彰冬婚礼邀请函】，要把这段同好情谊焊成一辈子，羁绊 +{amount}。",
+        ],
+        "steal_success": [
+            "{a} 趁 {b} 没留神，顺走了 {amount} 积分，转身就跑。（羁绊 -{bond}）",
+            "{a} 从 {b} 那里摸走了 {amount} 积分，手脚倒是利索。（羁绊 -{bond}）",
+        ],
+        "steal_minor_success": [
+            "{a} 从 {b} 那里顺到一点积分，见好就收。（羁绊 -{bond}）",
+            "{a} 在 {b} 身上摸到一点积分，不多，但也算得手了。（羁绊 -{bond}）",
+        ],
+        "steal_caught": [
+            "{a} 刚想对 {b} 下手就被发现了，只好当场赔上 {amount} 积分收场。（羁绊 -{bond}）",
+            "{a} 偷 {b} 没偷成，被逮了个正着，只能赔 {amount} 积分认栽。（羁绊 -{bond}）",
+        ],
+        "steal_whiff": [
+            "{a} 在 {b} 那边翻了半天，最后什么也没摸到。（羁绊 -{bond}）",
+            "{a} 本想从 {b} 那里顺点积分，结果只能空手而归。（羁绊 -{bond}）",
+        ],
+        "steal_reversal": [
+            "{a} 本想偷 {b}，结果被对方反手顺走了 {amount} 积分。（羁绊 -{bond}）",
+            "{a} 去偷 {b} 没得手，反倒让 {b} 拿走了 {amount} 积分。（羁绊 -{bond}）",
+        ],
+    },
+    "errors": {
+        "private_only": "送礼系统在群里才能玩哦。",
+        "sleeping": "💤 这会儿小彰睡着了，等 6 点天亮以后再来吧……",
+        "already_gifted": "今天的礼已经送过了，明天再来吧。",
+        "need_target": "送礼要 @一位群友 哦，系统会随机送出一份礼物。比如：送礼@某人。",
+        "self_target": "给自己送礼就没什么意思啦，去 @一个群友吧。",
+        "bot_target": "小彰拒绝了你的礼物。",
+        "insufficient": "积分还不太够，最便宜的【{name}】也要 {cost}，你现在有 {total}，先去签到攒一攒吧。",
+        "steal_need_target": "偷要 @一个目标 才行，比如：偷@某人。",
+        "steal_self": "偷自己？图啥呀。",
+        "steal_bot": "偷到小彰头上来了，胆子不小——不给。",
+        "steal_limit": "你今天的手气用完了，明天再来当大盗吧。",
+        "steal_protected": "现在偷不了 ta（刚签到受保护，或今天被偷太多次了），换个目标吧。",
+        "steal_too_poor": "对方兜里比脸还干净（不足 {min} 积分），没什么好偷的。",
+    },
+}
+
+
+def _load_config() -> dict:
+    """加载送礼配置；失败时回落到默认配置的深拷贝。"""
+    loaded = load_json_file(CONFIG_FILE, None)
+    return loaded if isinstance(loaded, dict) else copy.deepcopy(DEFAULT_GIFT_CONFIG)
+
+
+GIFT_CONFIG: dict = _load_config()
+
+
+def _cfg(key: str, default=None):
+    if key in GIFT_CONFIG:
+        return GIFT_CONFIG[key]
+    return DEFAULT_GIFT_CONFIG.get(key, default)
+
+
+def _copy(key: str) -> list[str]:
+    table = _cfg("copy", {})
+    if isinstance(table, dict) and table.get(key):
+        return table[key]
+    return DEFAULT_GIFT_CONFIG["copy"].get(key, [""])
+
+
+def _error(key: str, **fmt) -> str:
+    table = _cfg("errors", {})
+    template = table.get(key) if isinstance(table, dict) else None
+    if not template:
+        template = DEFAULT_GIFT_CONFIG["errors"].get(key, "")
+    try:
+        return template.format(**fmt)
+    except (KeyError, IndexError):
+        return template
+
+
+def reload_gift_config() -> None:
+    GIFT_CONFIG.clear()
+    GIFT_CONFIG.update(_load_config())
+    logger.info("🔄 送礼配置已热重载")
+
+
+def _gift_list() -> list[dict]:
+    gifts = _cfg("gifts", [])
+    return gifts if isinstance(gifts, list) else []
+
+
+def _pick_gift_by_name(name: str) -> dict | None:
+    for gift in _gift_list():
+        if gift.get("name") == name:
+            return gift
+    return None
+
+
+def _affordable_gifts(points: int) -> list[dict]:
+    return [gift for gift in _gift_list() if int(gift.get("cost", 0)) <= int(points)]
+
+
+def _pick_gift(points: int, rng=random) -> dict | None:
+    pool = _affordable_gifts(points)
+    if not pool:
+        return None
+    weights = list(range(1, len(pool) + 1))
+    return rng.choices(pool, weights=weights, k=1)[0]
+
+
+def _cheapest_gift() -> dict | None:
+    gifts = _gift_list()
+    return min(gifts, key=lambda gift: int(gift.get("cost", 0))) if gifts else None
+
+
+def _bond_levels() -> list[dict]:
+    levels = _cfg("bond_levels", [])
+    return levels if isinstance(levels, list) and levels else DEFAULT_GIFT_CONFIG["bond_levels"]
+
+
+def _mishaps() -> dict:
+    mishaps = _cfg("mishaps", {})
+    return mishaps if isinstance(mishaps, dict) and mishaps else DEFAULT_GIFT_CONFIG["mishaps"]
+
+
+def _mishap_spec(key: str) -> dict:
+    return _mishaps().get(key) or DEFAULT_GIFT_CONFIG["mishaps"].get(key, {})
+
+
+def _return_gifts() -> dict:
+    return_gifts = _cfg("return_gifts", {})
+    return (
+        return_gifts
+        if isinstance(return_gifts, dict) and return_gifts
+        else DEFAULT_GIFT_CONFIG["return_gifts"]
+    )
+
+
+def _return_spec(key: str) -> dict:
+    return _return_gifts().get(key) or DEFAULT_GIFT_CONFIG["return_gifts"].get(key, {})
+
+
+def _roll_main_event(rng=random) -> str:
+    from . import _weighted_choice
+
+    return _weighted_choice(_cfg("event_weights", {}), rng)
+
+
+def _roll_mishap(rng=random) -> str:
+    from . import _weighted_choice
+
+    weights = {key: int(value.get("weight", 0)) for key, value in _mishaps().items()}
+    return _weighted_choice(weights, rng)
+
+
+def _roll_return_gift(rng=random) -> str:
+    from . import _weighted_choice
+
+    weights = {key: int(value.get("weight", 0)) for key, value in _return_gifts().items()}
+    return _weighted_choice(weights, rng)
+
+
+def _is_special_gift(gift: dict) -> bool:
+    return bool(gift.get("special"))
+
+
+def _steal_cfg() -> dict:
+    steal = _cfg("steal", {})
+    return steal if isinstance(steal, dict) and steal else DEFAULT_GIFT_CONFIG["steal"]
