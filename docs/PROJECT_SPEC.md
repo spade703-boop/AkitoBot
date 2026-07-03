@@ -68,9 +68,13 @@ gemini_bot/
 │   ├── *.txt                     # 人设文本
 │   └── images/                   # 图库素材
 │
-├── tests/                        # 测试代码
+├── tests/                        # 测试代码（按源码功能分目录）
+│   ├── README.md                 # 测试入口说明（目录映射 / 命令 / 沙箱策略）
 │   ├── conftest.py
-│   └── test_*.py
+│   ├── fixtures/test_data/
+│   ├── core/
+│   ├── handlers/
+│   └── features/
 │
 ├── tools/                        # 维护工具脚本（剧本分类 / LLM 富集 / 向量库构建 / 检索评测）
 │

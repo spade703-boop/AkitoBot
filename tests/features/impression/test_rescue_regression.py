@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import nonebot_plugin_akito.features.impression as impression
 from nonebot_plugin_akito.core.api import rescue_field
+import nonebot_plugin_akito.features.impression as impression
 
 
 def test_rescue_impression_reply_handles_eof_truncation():

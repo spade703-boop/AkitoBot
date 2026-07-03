@@ -607,83 +607,17 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（戳一戳
 
 ### 测试与沙箱策略
 
-- 编辑文件后**不会自动触发 pytest**。只有手动执行命令才会跑测试。
-- `pytest -q` = 全量回归。
-- 测试文件按模块拆分，日常维护优先跑对应文件，而不是每次全量。
-- 默认执行顺序：**先按改动范围跑对应测试，再视风险决定是否补全量**。
+- 测试结构、目录映射、执行命令、沙箱与 fake 平台约束，统一维护在 `tests/README.md`。
+- 这里仅保留维护层策略，不重复列测试文件路径，避免目录调整后出现多份过期说明。
 
-常用命令：
+维护时默认遵循这四条：
 
-```bash
-ruff check .
-pytest -q
-pytest tests/test_chat_helpers.py -q
-pytest tests/test_commands_helpers.py -q
-pytest tests/test_reactions_helpers.py -q
-pytest tests/test_impression_helpers.py tests/test_impression_rescue_regression.py -q
-pytest tests/test_verify_helpers.py -q
-pytest tests/test_gallery_helpers.py -q
-pytest tests/test_random_paro_helpers.py -q
-pytest tests/test_random_keyword_helpers.py -q
-pytest tests/test_data.py -q
-pytest tests/test_director.py -q
-pytest tests/test_event_mode_helpers.py -q
-pytest tests/test_scheduled_helpers.py -q
-pytest tests/test_gift.py -q
-pytest tests/test_rpg.py -q
-```
+1. 编辑文件后不会自动跑测试，必须手动执行。
+2. 先按改动范围跑对应的测试子目录或单文件。
+3. 改到 `core/`、`tests/conftest.py`、共享 helper、跨模块逻辑时，补跑 `pytest -q`。
+4. 准备提交、合并、发版前，原则上完成一次全量回归。
 
-推荐给后续 AI 的执行规则：
-
-1. 先看本次改动落在哪些文件。
-2. 只改了单个功能模块时，先跑对应的 `tests/test_xxx.py` 或 `tests/test_xxx_helpers.py`。
-3. 如果改到 `core/`、`tests/conftest.py`、多模块共用函数，或一次改了多个功能模块，就补跑 `pytest -q`。
-4. 准备提交、合并、交付前，仍建议再跑一次 `pytest -q` 做整体验证。
-
-当前常用对应关系：
-
-- `handlers/chat.py` → `pytest tests/test_chat_helpers.py -q`
-- `handlers/commands.py` → `pytest tests/test_commands_helpers.py -q`
-- `handlers/reactions.py` → `pytest tests/test_reactions_helpers.py -q`
-- `features/impression/` → `pytest tests/test_impression_helpers.py tests/test_impression_rescue_regression.py -q`
-- `features/verify/` → `pytest tests/test_verify_helpers.py -q`
-- `features/gallery/` → `pytest tests/test_gallery_helpers.py -q`
-- `features/random_paro/` → `pytest tests/test_random_paro_helpers.py -q`
-- `features/random_keyword/` → `pytest tests/test_random_keyword_helpers.py -q`
-- `features/director/` → `pytest tests/test_director.py -q`
-- `features/event_mode/` → `pytest tests/test_event_mode_helpers.py -q`
-- `features/scheduled/` → `pytest tests/test_scheduled_helpers.py -q`
-- `features/gift/` → `pytest tests/test_gift.py -q`
-- `features/rpg/` → `pytest tests/test_rpg.py -q`
-- `core/api.py` → `pytest tests/test_api.py -q`
-- `core/context.py` → `pytest tests/test_context.py -q`
-- `core/data.py` → `pytest tests/test_data.py -q`
-- `core/life_state.py` → `pytest tests/test_life_state.py -q`
-- `core/memory.py` → `pytest tests/test_memory.py -q`
-- `core/retrieval.py` → `pytest tests/test_retrieval.py -q`
-- `core/time_awareness.py` → `pytest tests/test_time_awareness.py -q`
-- 数据路径 / 测试数据重定向逻辑 → `pytest tests/test_paths.py -q`
-
-当前这套本地测试的设计目标不是“模拟整台云服务器”，而是“假平台 + 真业务逻辑”：
-
-- `tests/conftest.py` 启动时会把 `tests/fixtures/test_data/` 复制到临时目录。
-- 通过 `AKITO_DATA_DIR` 把 `core/data.py`、`memory.py`、`features/verify/` 等读写路径统一重定向到临时测试数据。
-- 通过 `AKITO_SKIP_PLUGIN_LOAD=1` 跳过真实插件加载，避免测试时拉起完整 NoneBot 插件栈。
-- `nonebot`、`onebot`、`openai`、`aiohttp`、`nonebot_plugin_htmlrender` 等外部边界都在 `tests/conftest.py` 中替换成 fake / mock。
-
-因此，本地测试能稳定覆盖：
-
-- 纯辅助函数和参数解析
-- 名单、记忆、路径、检索等核心逻辑
-- “会不会写错文件 / 写到哪儿去”这类数据层问题
-
-但默认不直接覆盖：
-
-- 云端 `/data` 的实时聊天数据
-- 真实 QQ 收发链路
-- 外部 API 的在线响应
-
-新增或重构功能时，建议优先把可抽离的判断逻辑做成纯函数，然后为它单独补一个 `tests/test_xxx_helpers.py`。这样本地沙箱也能测到核心部件，不会被平台环境卡住。
+如果要补测试，优先让测试目录继续跟源码功能结构保持一致；不要恢复成根层大而平的 `tests/test_xxx.py` 布局。
 
 ### 修改 API Key 或管理员 QQ
 编辑 `.env` → 重启生效。无需改代码。

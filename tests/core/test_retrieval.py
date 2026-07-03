@@ -560,7 +560,6 @@ async def test_get_relevant_examples_expansion_disabled_skips():
 
     fake_db = [{"type": "home", "context": "ctx", "dialogue": "dl"}]
     captured_query = []
-    expand_called = []
 
     async def fake_retrieve_result(corpus, query, num, ctx=None):
         captured_query.append(query)

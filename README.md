@@ -252,7 +252,7 @@ akito_bot/
 │   ├── build_embeddings.py         # 语义向量库构建（scripts/pjsk/all）
 │   ├── eval_retrieval.py           # 检索精度评测（cosine 基线 vs bge-reranker 精排）
 │   └── eval_set.json               # 评测黄金考题集（纯文本可直接编辑）
-├── tests/                          # 关键路径测试（pytest）
+├── tests/                          # 测试目录（pytest，详见 tests/README.md）
 ├── nonebot_plugin_akito/
 │   ├── __init__.py                 # 插件入口
 │   ├── core/                       # 基础层（无副作用，可被任意模块导入）
@@ -304,70 +304,20 @@ akito_bot/
 
 ## 本地测试
 
-这套测试是给“本地沙箱里先测核心逻辑”准备的，不会去碰云服务器上的实时聊天数据。
+测试目录已经按源码功能拆分，不再维护旧的扁平 `tests/test_*.py` 路径说明。
 
-- 改代码后**不会自动跑测试**。只有你手动执行 `pytest`，测试才会开始。
-- `pytest -q` 会跑**整套测试**。
-- 测试按模块拆成独立文件，可以只跑某一块，不需要每次全量回归。
-- 更实用的做法是：**AI 改了哪块，就先跑哪块对应的测试文件**；只有改到共享底层、跨多个模块，或者准备统一提交前，再跑一次全量。
+- 测试入口文档：`tests/README.md`
+- 全量回归：`pytest -q`
+- 仅检查测试代码风格：`ruff check tests`
 
-常用命令：
+`tests/README.md` 集中维护以下内容：
 
-```bash
-ruff check .
-pytest -q
-pytest tests/test_chat_helpers.py -q
-pytest tests/test_commands_helpers.py -q
-pytest tests/test_reactions_helpers.py -q
-pytest tests/test_impression_helpers.py tests/test_impression_rescue_regression.py -q
-pytest tests/test_verify_helpers.py -q
-pytest tests/test_gallery_helpers.py -q
-pytest tests/test_random_paro_helpers.py -q
-pytest tests/test_random_keyword_helpers.py -q
-pytest tests/test_data.py -q
-pytest tests/test_director.py -q
-pytest tests/test_event_mode_helpers.py -q
-pytest tests/test_scheduled_helpers.py -q
-pytest tests/test_gift.py -q
-pytest tests/test_rpg.py -q
-```
+- 测试目录结构和源码目录映射
+- 按改动范围选择子目录 / 单文件测试的命令
+- `tests/conftest.py` 的沙箱、假平台与测试数据重定向策略
+- 新增测试时的放置规则
 
-常见对应关系：
-
-- 改 `handlers/chat.py` → 先跑 `pytest tests/test_chat_helpers.py -q`
-- 改 `handlers/commands.py` → 先跑 `pytest tests/test_commands_helpers.py -q`
-- 改 `handlers/reactions.py` → 先跑 `pytest tests/test_reactions_helpers.py -q`
-- 改 `features/impression/` → 先跑 `pytest tests/test_impression_helpers.py tests/test_impression_rescue_regression.py -q`
-- 改 `features/verify/` → 先跑 `pytest tests/test_verify_helpers.py -q`
-- 改 `features/gallery/` → 先跑 `pytest tests/test_gallery_helpers.py -q`
-- 改 `features/random_paro/` → 先跑 `pytest tests/test_random_paro_helpers.py -q`
-- 改 `features/random_keyword/` → 先跑 `pytest tests/test_random_keyword_helpers.py -q`
-- 改 `features/director/` → 先跑 `pytest tests/test_director.py -q`
-- 改 `features/event_mode/` → 先跑 `pytest tests/test_event_mode_helpers.py -q`
-- 改 `features/scheduled/` → 先跑 `pytest tests/test_scheduled_helpers.py -q`
-- 改 `features/gift/` → 先跑 `pytest tests/test_gift.py -q`
-- 改 `features/rpg/` → 先跑 `pytest tests/test_rpg.py -q`
-- 改 `core/data.py` → 先跑 `pytest tests/test_data.py -q`
-- 改 `core/` 里的共享底层，或一次改了多块联动逻辑 → 直接补跑 `pytest -q`
-
-本地测试怎么绕开真实运行环境：
-
-- `tests/conftest.py` 会把 `tests/fixtures/test_data/` 复制到临时目录。
-- 然后通过环境变量 `AKITO_DATA_DIR` 把代码里的读写路径指向这个临时目录，不碰你真实的 `data/`。
-- `AKITO_SKIP_PLUGIN_LOAD=1` 会跳过真实插件加载。
-- NoneBot、OneBot、OpenAI、HTML 渲染、网络请求这些边界都换成了假对象，所以本地能测“真业务逻辑 + 假平台外壳”。
-
-这意味着本地最适合测的是：
-
-- 指令参数解析
-- 名单/记忆/路径这类数据处理
-- 不依赖真实 QQ 收发的核心判断逻辑
-
-不适合直接在本地测的是：
-
-- 云端 `/data` 里的实时聊天记录
-- 真实 QQ 发消息行为
-- 外部 API 的真实返回
+发布、部署、Git 推送和生产环境维护不在这里展开，统一看根目录 `PLUGIN_MAINTENANCE.md`。
 
 ---
 
@@ -432,6 +382,7 @@ GROUP_IMAGE_PERMISSIONS={"群号1":["all"],"群号2":["toya","self"]}
 | `README.md` | 用户 | 项目介绍、功能、部署（本文件） |
 | `PLUGIN_MAINTENANCE.md` | 维护者 | 模块地图、每文件接口、数据清单、维护操作、AI 风险点 |
 | `docs/PROJECT_SPEC.md` | 开发者 | 编码规范、命名、类型注解 / docstring、版本号与 Commit、安全规则 |
+| `tests/README.md` | AI / 维护者 | 测试目录映射、执行命令、沙箱约束、补测试规则 |
 
 ---
 

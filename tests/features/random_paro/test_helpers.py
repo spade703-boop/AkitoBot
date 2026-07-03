@@ -39,7 +39,7 @@ import nonebot_plugin_akito.features.random_paro as random_paro
     (彰人_向日葵, 冬弥_向日葵),
 ]
 
-真实头像目录 = Path(__file__).resolve().parents[1] / "data" / "images" / "paro_avatars"
+真实头像目录 = Path(__file__).resolve().parents[3] / "data" / "images" / "paro_avatars"
 
 
 def test_解析抽派生参数_可识别次数和定向():
