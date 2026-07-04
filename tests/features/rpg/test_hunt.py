@@ -157,6 +157,20 @@ def test_pick_encounter_uses_stage_weights_and_elite_gate():
     assert elite is True
 
 
+def test_default_encounter_brackets_match_monster_pool_length():
+    monsters = rpg_config._cfg("monsters", [])
+    brackets = rpg_config._cfg("combat", {}).get("encounter_brackets", [])
+    assert monsters and brackets
+    assert all(len(bracket["weights"]) == len(monsters) for bracket in brackets)
+
+
+def test_default_encounter_brackets_hold_dragon_until_level_seventeen():
+    monsters = rpg_config._cfg("monsters", [])
+    dragon_index = next(i for i, monster in enumerate(monsters) if monster.get("name") == "龙")
+    assert hunt._encounter_weights(16, len(monsters))[dragon_index] == 0
+    assert hunt._encounter_weights(17, len(monsters))[dragon_index] > 0
+
+
 def test_pick_monster_uses_brackets_for_non_six_monster_pool(monkeypatch):
     class _CaptureRng:
         def __init__(self):
