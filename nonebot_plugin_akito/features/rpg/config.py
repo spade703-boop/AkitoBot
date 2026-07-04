@@ -85,6 +85,39 @@ DEFAULT_RPG_CONFIG: dict = {
         "win_drop_mult": 1.0, "lose_drop_mult": 0.3,
         "win_points": 15, "lose_points": 5,
     },
+    # ---- 小奇遇：普通单刷与成功组成的双人战斗结算后，低概率补一点旅途感与轻奖励 ----
+    "minor_encounters": {
+        "chance": 0.06,
+        "team_chance": 0.04,
+        "events": {
+            "supply_cache": {"weight": 32, "when": "any", "exp": 10, "points": 1},
+            "campfire": {"weight": 24, "when": "lose", "exp": 14},
+            "worn_chest": {
+                "weight": 24,
+                "when": "win",
+                "rewards": [
+                    {"type": "points", "amount": 5, "label": "破旧积分卡", "weight": 4},
+                    {"type": "exp", "amount": 10, "label": "破旧经验券", "weight": 4},
+                    {"type": "item", "name": "彰冬无料券", "amount": 1, "weight": 2},
+                ],
+            },
+            "lost_pouch": {"weight": 20, "when": "win", "points": 3},
+        },
+        "team_events": {
+            "supply_cache": {"weight": 32, "when": "any", "exp": 10, "points": 2},
+            "campfire": {"weight": 24, "when": "lose", "exp": 14},
+            "worn_chest": {
+                "weight": 24,
+                "when": "win",
+                "rewards": [
+                    {"type": "points", "amount": 5, "label": "破旧积分卡", "weight": 4},
+                    {"type": "exp", "amount": 10, "label": "破旧经验券", "weight": 4},
+                    {"type": "item", "name": "彰冬无料券", "amount": 1, "weight": 2},
+                ],
+            },
+            "lost_pouch": {"weight": 20, "when": "win", "points": 4},
+        },
+    },
     # ---- 主动单刷补偿：只在直接使用「今日打怪」时生效；不影响组队失败后退化单刷 ----
     "solo": {
         "power_bonus": 0.06,
@@ -260,6 +293,19 @@ DEFAULT_RPG_CONFIG: dict = {
         "event_desperate_lose": ["🔥 即使强撑住阵脚，也还是没能扭转战局。"],
         "hunt_exp_buffed": ["✨ 双倍经验卡起效，这次经验翻倍。"],
         "hunt_loot": ["📦 掉落到手：{loot}。"],
+        "minor_encounter_supply_cache": ["【奇遇】路边翻出一袋还没被雨淋透的补给。"],
+        "minor_encounter_campfire": ["【奇遇】撤出战场时，在路边的营火旁稍微歇了口气。"],
+        "minor_encounter_worn_chest": ["【奇遇】战斗结束后，在废墟旁翻出了一个没上锁的小箱子。"],
+        "minor_encounter_lost_pouch": ["【奇遇】清点战场时，顺手捡到一个被人遗落的小钱袋。"],
+        "minor_encounter_reward": ["· 额外收获：{parts}。"],
+        "minor_encounter_levelup": ["⬆️ 旅途中又长了点见识。Lv{level} → Lv{newlevel}。"],
+        "minor_encounter_team_supply_cache": ["【奇遇】两人在路边翻出一袋还没被雨淋透的补给。"],
+        "minor_encounter_team_campfire": ["【奇遇】撤出战场后，两人在路边的营火旁稍微歇了口气。"],
+        "minor_encounter_team_worn_chest": ["【奇遇】战斗结束后，两人在废墟旁翻出了一个没上锁的小箱子。"],
+        "minor_encounter_team_lost_pouch": ["【奇遇】清点战场时，两人顺手捡到一个被人遗落的小钱袋。"],
+        "minor_encounter_team_reward": ["· 两人各自额外获得：{parts}。"],
+        "minor_encounter_team_member_reward": ["· {name}：额外获得 {parts}。"],
+        "minor_encounter_team_member_levelup": ["· {name}：升级 Lv{level}→Lv{newlevel}。"],
         "forge_ok": ["🔨 强化好了。今日装备更稳了（已强化 ×{forge}，花费 {cost} 积分）。"],
         "rebuy_ok": ["🛡️ 替换装备已就位，花了 {cost} 积分。不过这套是临时凑的，打怪经验和积分都会减半。"],
         "use_exp_buff": ["📖 【{name}】用了。下次打怪经验 ×{mult}。"],

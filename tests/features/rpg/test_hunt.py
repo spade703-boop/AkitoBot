@@ -296,6 +296,46 @@ async def test_hunt_loot_into_bag(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_hunt_minor_encounter_grants_extra_rewards(monkeypatch):
+    state = _patch_io(monkeypatch, hunt, store={"groups": {"1001": {"users": {"u1": _equipped_user(points=0)}}}})
+    _stub_hunt_rng(
+        monkeypatch,
+        {"name": "史莱姆", "power_req": 1, "drops": []},
+        minor_event="supply_cache",
+    )
+
+    with pytest.raises(FinishedException) as exc:
+        await hunt.hunt_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="u1"))
+
+    spec = hunt._minor_event_spec("supply_cache")
+    user = state["groups"]["1001"]["users"]["u1"]
+    assert user["exp"] == _direct_solo_exp(True, 1) + int(spec.get("exp", 0))
+    assert user["points"] == hunt._challenge_points(True, user) + int(spec.get("points", 0))
+    result = str(exc.value.result)
+    assert "补给" in result
+    assert f"经验 +{int(spec.get('exp', 0))}" in result
+    assert f"积分 +{int(spec.get('points', 0))}" in result
+
+
+@pytest.mark.asyncio
+async def test_hunt_minor_encounter_worn_chest_item_adds_inventory(monkeypatch):
+    state = _patch_io(monkeypatch, hunt, store={"groups": {"1001": {"users": {"u1": _equipped_user(points=0)}}}})
+    _stub_hunt_rng(
+        monkeypatch,
+        {"name": "史莱姆", "power_req": 1, "drops": []},
+        minor_event="worn_chest",
+        minor_reward={"type": "item", "name": "彰冬无料券", "amount": 1},
+    )
+
+    with pytest.raises(FinishedException) as exc:
+        await hunt.hunt_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="u1"))
+
+    user = state["groups"]["1001"]["users"]["u1"]
+    assert user["inventory"]["彰冬无料券"] == 1
+    assert "彰冬无料券 ×1" in str(exc.value.result)
+
+
+@pytest.mark.asyncio
 async def test_hunt_grants_points(monkeypatch):
     state = _patch_io(monkeypatch, hunt, store={"groups": {"1001": {"users": {
         "u1": _equipped_user(points=0)}}}})

@@ -228,6 +228,94 @@
     "win_points": 15,
     "lose_points": 5
   },
+  "minor_encounters": {
+    "chance": 0.06,
+    "team_chance": 0.04,
+    "events": {
+      "supply_cache": {
+        "weight": 32,
+        "when": "any",
+        "exp": 10,
+        "points": 1
+      },
+      "campfire": {
+        "weight": 24,
+        "when": "lose",
+        "exp": 14
+      },
+      "worn_chest": {
+        "weight": 24,
+        "when": "win",
+        "rewards": [
+          {
+            "type": "points",
+            "amount": 5,
+            "label": "破旧积分卡",
+            "weight": 4
+          },
+          {
+            "type": "exp",
+            "amount": 10,
+            "label": "破旧经验券",
+            "weight": 4
+          },
+          {
+            "type": "item",
+            "name": "彰冬无料券",
+            "amount": 1,
+            "weight": 2
+          }
+        ]
+      },
+      "lost_pouch": {
+        "weight": 20,
+        "when": "win",
+        "points": 3
+      }
+    },
+    "team_events": {
+      "supply_cache": {
+        "weight": 32,
+        "when": "any",
+        "exp": 10,
+        "points": 2
+      },
+      "campfire": {
+        "weight": 24,
+        "when": "lose",
+        "exp": 14
+      },
+      "worn_chest": {
+        "weight": 24,
+        "when": "win",
+        "rewards": [
+          {
+            "type": "points",
+            "amount": 5,
+            "label": "破旧积分卡",
+            "weight": 4
+          },
+          {
+            "type": "exp",
+            "amount": 10,
+            "label": "破旧经验券",
+            "weight": 4
+          },
+          {
+            "type": "item",
+            "name": "彰冬无料券",
+            "amount": 1,
+            "weight": 2
+          }
+        ]
+      },
+      "lost_pouch": {
+        "weight": 20,
+        "when": "win",
+        "points": 4
+      }
+    }
+  },
   "solo": {
     "power_bonus": 0.06,
     "win_exp_bonus": 0.12,
@@ -727,6 +815,45 @@
     ],
     "hunt_loot": [
       "📦 掉落到手：{loot}。"
+    ],
+    "minor_encounter_supply_cache": [
+      "【奇遇】路边翻出一袋还没被雨淋透的补给。"
+    ],
+    "minor_encounter_campfire": [
+      "【奇遇】撤出战场时，在路边的营火旁稍微歇了口气。"
+    ],
+    "minor_encounter_worn_chest": [
+      "【奇遇】战斗结束后，在废墟旁翻出了一个没上锁的小箱子。"
+    ],
+    "minor_encounter_lost_pouch": [
+      "【奇遇】清点战场时，顺手捡到一个被人遗落的小钱袋。"
+    ],
+    "minor_encounter_reward": [
+      "· 额外收获：{parts}。"
+    ],
+    "minor_encounter_levelup": [
+      "⬆️ 旅途中又长了点见识。Lv{level} → Lv{newlevel}。"
+    ],
+    "minor_encounter_team_supply_cache": [
+      "【奇遇】两人在路边翻出一袋还没被雨淋透的补给。"
+    ],
+    "minor_encounter_team_campfire": [
+      "【奇遇】撤出战场后，两人在路边的营火旁稍微歇了口气。"
+    ],
+    "minor_encounter_team_worn_chest": [
+      "【奇遇】战斗结束后，两人在废墟旁翻出了一个没上锁的小箱子。"
+    ],
+    "minor_encounter_team_lost_pouch": [
+      "【奇遇】清点战场时，两人顺手捡到一个被人遗落的小钱袋。"
+    ],
+    "minor_encounter_team_reward": [
+      "· 两人各自额外获得：{parts}。"
+    ],
+    "minor_encounter_team_member_reward": [
+      "· {name}：额外获得 {parts}。"
+    ],
+    "minor_encounter_team_member_levelup": [
+      "· {name}：升级 Lv{level}→Lv{newlevel}。"
     ],
     "forge_ok": [
       "🔨 强化好了。今日装备更稳了（已强化 ×{forge}，花费 {cost} 积分）。"

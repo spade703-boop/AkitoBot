@@ -371,6 +371,87 @@ async def test_team_negative_break_ice_grants_extra_bond(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_team_success_minor_encounter_splits_numeric_rewards(monkeypatch):
+    store = {"groups": {"1001": {
+        "users": {"u1": _equipped_user(points=0), "u2": _equipped_user(points=0)},
+        "intimacy": {game_store._pair_key("u1", "u2"): 20000},
+    }}}
+    state = _patch_io(monkeypatch, team, store=store)
+    monkeypatch.setattr(team, "random", _Rng(0.0))
+    _stub_hunt_rng(
+        monkeypatch,
+        {"name": "史莱姆", "power_req": 1, "drops": []},
+        minor_event="supply_cache",
+    )
+    monkeypatch.setattr(hunt, "_roll_coop_event", lambda rng=hunt.random: "")
+
+    with pytest.raises(FinishedException) as exc:
+        await team.team_cmd.handlers[0](_bot(), _team_event("u1", "u2"))
+
+    spec = hunt._minor_event_spec("supply_cache", team=True)
+    user1 = state["groups"]["1001"]["users"]["u1"]
+    user2 = state["groups"]["1001"]["users"]["u2"]
+    assert user1["exp"] == hunt._challenge_exp(True, 1) + int(spec.get("exp", 0)) // 2
+    assert user2["exp"] == hunt._challenge_exp(True, 1) + int(spec.get("exp", 0)) // 2
+    assert user1["points"] == hunt._challenge_points(True, user1) + int(spec.get("points", 0)) // 2
+    assert user2["points"] == hunt._challenge_points(True, user2) + int(spec.get("points", 0)) // 2
+    result = str(exc.value.result)
+    assert "两人在路边翻出一袋还没被雨淋透的补给" in result
+    assert f"经验 +{int(spec.get('exp', 0)) // 2}" in result
+    assert f"积分 +{int(spec.get('points', 0)) // 2}" in result
+
+
+@pytest.mark.asyncio
+async def test_team_success_minor_encounter_item_rewards_duplicate(monkeypatch):
+    store = {"groups": {"1001": {
+        "users": {"u1": _equipped_user(points=0), "u2": _equipped_user(points=0)},
+        "intimacy": {game_store._pair_key("u1", "u2"): 20000},
+    }}}
+    state = _patch_io(monkeypatch, team, store=store)
+    monkeypatch.setattr(team, "random", _Rng(0.0))
+    _stub_hunt_rng(
+        monkeypatch,
+        {"name": "史莱姆", "power_req": 1, "drops": []},
+        minor_event="worn_chest",
+        minor_reward={"type": "item", "name": "彰冬无料券", "amount": 1},
+    )
+    monkeypatch.setattr(hunt, "_roll_coop_event", lambda rng=hunt.random: "")
+
+    with pytest.raises(FinishedException) as exc:
+        await team.team_cmd.handlers[0](_bot(), _team_event("u1", "u2"))
+
+    user1 = state["groups"]["1001"]["users"]["u1"]
+    user2 = state["groups"]["1001"]["users"]["u2"]
+    assert user1["inventory"]["彰冬无料券"] == 1
+    assert user2["inventory"]["彰冬无料券"] == 1
+    result = str(exc.value.result)
+    assert "小箱子" in result
+    assert "彰冬无料券 ×1" in result
+
+
+@pytest.mark.asyncio
+async def test_team_fail_fallback_solo_does_not_trigger_minor_encounter(monkeypatch):
+    store = {"groups": {"1001": {"users": {"u1": _equipped_user(points=0), "u2": _equipped_user(points=0)}}}}
+    state = _patch_io(monkeypatch, team, store=store)
+    monkeypatch.setattr(team, "random", _Rng(0.999))
+    monkeypatch.setattr(team, "_roll_fail_flavor", lambda rng=team.random: "hesitate")
+    monkeypatch.setattr(team, "_roll_team_fail_rescue", lambda rng=team.random: False)
+    _stub_hunt_rng(
+        monkeypatch,
+        {"name": "史莱姆", "power_req": 1, "drops": []},
+        minor_event="supply_cache",
+    )
+
+    with pytest.raises(FinishedException) as exc:
+        await team.team_cmd.handlers[0](_bot(), _team_event("u1", "u2"))
+
+    user = state["groups"]["1001"]["users"]["u1"]
+    assert user["exp"] == hunt._challenge_exp(True, 1)
+    assert user["points"] == hunt._challenge_points(True, user)
+    assert "【奇遇】" not in str(exc.value.result)
+
+
+@pytest.mark.asyncio
 async def test_team_appends_world_boss_spawn_lines(monkeypatch):
     store = {"groups": {"1001": {
         "users": {"u1": _equipped_user(points=0), "u2": _equipped_user(points=0)},

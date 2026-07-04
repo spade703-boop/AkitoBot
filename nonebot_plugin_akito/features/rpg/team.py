@@ -28,7 +28,7 @@ from ...core.game_store import (
 from ..gift import _bond_level
 from .boss import _cleanup_stale_world_boss, _maybe_spawn_world_boss_lines
 from .config import _copy, _cfg, _error, _line
-from .hunt import _buff_active, _hunt_result_lines, _settle_coop, _settle_solo
+from .hunt import _apply_team_minor_encounter, _buff_active, _hunt_result_lines, _settle_coop, _settle_solo, _team_minor_lines
 from .player import _ensure_player, _resolve_group
 
 
@@ -205,6 +205,8 @@ def _build_coop_broadcast(out: dict, b_id: str, a_id: str, b_name: str, a_name: 
     msg = msg + "\n" + _member_line(out["a"], a_name)
     if _buff_active(out.get("buff")):
         msg = msg + "\n" + _line("daily_buff", buff=out["buff"].get("name", ""))
+    for line in _team_minor_lines(out, b_name, a_name):
+        msg = msg + "\n" + line
     return msg
 
 
@@ -268,6 +270,7 @@ def _settle_team_result(group: dict, initiator: str, target: str, b: dict, a: di
         win=bool(out.get("win")),
         extra=int(negative_spec.get("bond_bonus", 0)),
     )
+    _apply_team_minor_encounter(b, a, out)
     return out
 
 

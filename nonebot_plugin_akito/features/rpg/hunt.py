@@ -228,6 +228,10 @@ def _rebuy_exp_mult() -> float:
     return float(ecfg.get("rebuy_exp_mult", ecfg.get("rebuy_points_mult", 0.5)))
 
 
+def _rebuy_points_mult() -> float:
+    return float(_cfg("equip", {}).get("rebuy_points_mult", 0.5))
+
+
 def _solo_cfg() -> dict:
     cfg = _cfg("solo", {})
     return cfg if isinstance(cfg, dict) else {}
@@ -240,6 +244,86 @@ def _solo_power_bonus() -> float:
 def _solo_exp_bonus(win: bool) -> float:
     key = "win_exp_bonus" if win else "lose_exp_bonus"
     return max(0.0, float(_solo_cfg().get(key, 0.0)))
+
+
+def _minor_cfg() -> dict:
+    cfg = _cfg("minor_encounters", {})
+    return cfg if isinstance(cfg, dict) else {}
+
+
+def _minor_chance(*, team: bool = False) -> float:
+    key = "team_chance" if team else "chance"
+    return max(0.0, min(1.0, float(_minor_cfg().get(key, 0.0))))
+
+
+def _minor_event_spec(event_key: str, *, team: bool = False) -> dict:
+    key = "team_events" if team else "events"
+    events = _minor_cfg().get(key, {})
+    if not isinstance(events, dict):
+        return {}
+    spec = events.get(event_key, {})
+    return spec if isinstance(spec, dict) else {}
+
+
+def _minor_event_allowed(spec: dict, win: bool) -> bool:
+    when = str(spec.get("when", "any"))
+    if when == "win":
+        return bool(win)
+    if when == "lose":
+        return not bool(win)
+    return True
+
+
+def _roll_minor_encounter(win: bool, *, team: bool = False, rng=random) -> str:
+    chance = _minor_chance(team=team)
+    if chance <= 0 or rng.random() >= chance:
+        return ""
+    key = "team_events" if team else "events"
+    events = _minor_cfg().get(key, {})
+    if not isinstance(events, dict):
+        return ""
+    cands = {
+        event_key: int(spec.get("weight", 0))
+        for event_key, spec in events.items()
+        if isinstance(spec, dict) and _minor_event_allowed(spec, win)
+    }
+    if sum(cands.values()) <= 0:
+        return ""
+    return _weighted_choice(cands, rng)
+
+
+def _roll_minor_reward(spec: dict, rng=random) -> dict:
+    rewards = spec.get("rewards", [])
+    if not isinstance(rewards, list):
+        return {}
+    cands = {
+        str(idx): int(reward.get("weight", 0))
+        for idx, reward in enumerate(rewards)
+        if isinstance(reward, dict)
+    }
+    if sum(cands.values()) <= 0:
+        return {}
+    picked = _weighted_choice(cands, rng)
+    try:
+        reward = rewards[int(picked)]
+    except (TypeError, ValueError, IndexError):
+        return {}
+    return reward if isinstance(reward, dict) else {}
+
+
+def _apply_extra_rewards(user: dict, *, exp: int = 0, points: int = 0) -> tuple[int, int, int, int]:
+    level_before = _level_of(int(user.get("exp", 0)))
+    exp_gain = max(0, int(exp))
+    points_gain = max(0, int(points))
+    if user.get("equip_rebought"):
+        exp_gain = int(exp_gain * _rebuy_exp_mult())
+        points_gain = int(points_gain * _rebuy_points_mult())
+    if exp_gain:
+        user["exp"] = int(user.get("exp", 0)) + exp_gain
+    if points_gain:
+        user["points"] = int(user.get("points", 0)) + points_gain
+    level_after = _level_of(int(user.get("exp", 0)))
+    return exp_gain, points_gain, level_before, level_after
 
 
 def _apply_rewards(user: dict, today: str, *, win: bool, monster: dict, event_key: str = "",
@@ -371,6 +455,149 @@ def _apply_support_bonus(user: dict, out: dict) -> None:
     out["new_level"] = _level_of(int(user.get("exp", 0)))
 
 
+def _apply_minor_encounter(user: dict, out: dict, *, rng=random) -> None:
+    out["minor_event"] = ""
+    out["minor_reward_parts"] = []
+    out["minor_old_level"] = int(out.get("new_level", out.get("old_level", 1)))
+    out["minor_new_level"] = int(out.get("new_level", out.get("old_level", 1)))
+    if not out.get("direct_solo"):
+        return
+    event_key = _roll_minor_encounter(bool(out.get("win")), rng=rng)
+    if not event_key:
+        return
+    spec = _minor_event_spec(event_key)
+    parts: list[str] = []
+    exp_gain, points_gain, level_before, level_after = _apply_extra_rewards(
+        user,
+        exp=int(spec.get("exp", 0)),
+        points=int(spec.get("points", 0)),
+    )
+    if exp_gain:
+        parts.append(f"经验 +{exp_gain}")
+    if points_gain:
+        parts.append(f"积分 +{points_gain}")
+    reward = _roll_minor_reward(spec, rng=rng) if spec.get("rewards") else {}
+    if reward:
+        amount = max(0, int(reward.get("amount", 1)))
+        rtype = str(reward.get("type", ""))
+        if rtype == "item":
+            name = str(reward.get("name", ""))
+            if name and amount > 0:
+                _add_item(user, name, amount)
+                parts.append(f"{name} ×{amount}")
+        elif rtype == "exp":
+            label = str(reward.get("label", "额外经验"))
+            extra_exp, _pts, _old, level_after = _apply_extra_rewards(user, exp=amount)
+            level_before = min(level_before, _old)
+            parts.append(f"{label}（经验 +{extra_exp}）")
+        elif rtype == "points":
+            label = str(reward.get("label", "额外积分"))
+            _exp, extra_points, _old, level_after = _apply_extra_rewards(user, points=amount)
+            level_before = min(level_before, _old)
+            parts.append(f"{label}（积分 +{extra_points}）")
+    out["minor_event"] = event_key
+    out["minor_reward_parts"] = parts
+    out["minor_old_level"] = level_before
+    out["minor_new_level"] = level_after
+    out["new_level"] = level_after
+
+
+def _apply_team_minor_encounter(b: dict, a: dict, out: dict, *, rng=random) -> None:
+    out["team_minor_event"] = ""
+    out["team_minor_parts"] = []
+    out["team_minor_b_parts"] = []
+    out["team_minor_a_parts"] = []
+    out["team_minor_b"] = {}
+    out["team_minor_a"] = {}
+    event_key = _roll_minor_encounter(bool(out.get("win")), team=True, rng=rng)
+    if not event_key:
+        return
+    spec = _minor_event_spec(event_key, team=True)
+    b_old = _level_of(int(b.get("exp", 0)))
+    a_old = _level_of(int(a.get("exp", 0)))
+    b_parts: list[str] = []
+    a_parts: list[str] = []
+    b_total_exp = 0
+    b_total_points = 0
+    a_total_exp = 0
+    a_total_points = 0
+
+    base_exp = int(spec.get("exp", 0)) // 2
+    base_points = int(spec.get("points", 0)) // 2
+    b_exp, b_points, _b_before, _b_after = _apply_extra_rewards(
+        b,
+        exp=base_exp,
+        points=base_points,
+    )
+    a_exp, a_points, _a_before, _a_after = _apply_extra_rewards(
+        a,
+        exp=base_exp,
+        points=base_points,
+    )
+    if b_exp:
+        b_total_exp += b_exp
+        b_parts.append(f"经验 +{b_exp}")
+    if a_exp:
+        a_total_exp += a_exp
+        a_parts.append(f"经验 +{a_exp}")
+    if b_points:
+        b_total_points += b_points
+        b_parts.append(f"积分 +{b_points}")
+    if a_points:
+        a_total_points += a_points
+        a_parts.append(f"积分 +{a_points}")
+    reward = _roll_minor_reward(spec, rng=rng) if spec.get("rewards") else {}
+    if reward:
+        amount = max(0, int(reward.get("amount", 1)))
+        rtype = str(reward.get("type", ""))
+        if rtype == "item":
+            name = str(reward.get("name", ""))
+            if name and amount > 0:
+                _add_item(b, name, amount)
+                _add_item(a, name, amount)
+                part = f"{name} ×{amount}"
+                b_parts.append(part)
+                a_parts.append(part)
+        elif rtype == "exp":
+            label = str(reward.get("label", "额外经验"))
+            split_amount = amount // 2
+            b_extra, _b_pts, _b_before, _b_after = _apply_extra_rewards(b, exp=split_amount)
+            a_extra, _a_pts, _a_before, _a_after = _apply_extra_rewards(a, exp=split_amount)
+            if b_extra:
+                b_total_exp += b_extra
+                b_parts.append(f"{label}（经验 +{b_extra}）")
+            if a_extra:
+                a_total_exp += a_extra
+                a_parts.append(f"{label}（经验 +{a_extra}）")
+        elif rtype == "points":
+            label = str(reward.get("label", "额外积分"))
+            split_amount = amount // 2
+            _b_exp, b_extra, _b_before, _b_after = _apply_extra_rewards(b, points=split_amount)
+            _a_exp, a_extra, _a_before, _a_after = _apply_extra_rewards(a, points=split_amount)
+            if b_extra:
+                b_total_points += b_extra
+                b_parts.append(f"{label}（积分 +{b_extra}）")
+            if a_extra:
+                a_total_points += a_extra
+                a_parts.append(f"{label}（积分 +{a_extra}）")
+    out["team_minor_event"] = event_key
+    out["team_minor_parts"] = list(b_parts) if b_parts == a_parts else []
+    out["team_minor_b_parts"] = b_parts
+    out["team_minor_a_parts"] = a_parts
+    out["team_minor_b"] = {
+        "exp_gain": b_total_exp,
+        "points_gain": b_total_points,
+        "old_level": b_old,
+        "new_level": _level_of(int(b.get("exp", 0))),
+    }
+    out["team_minor_a"] = {
+        "exp_gain": a_total_exp,
+        "points_gain": a_total_points,
+        "old_level": a_old,
+        "new_level": _level_of(int(a.get("exp", 0))),
+    }
+
+
 def _settle_solo(user: dict, today: str, *, direct: bool = False) -> dict:
     """单刷完整结算：遭遇(含精英) → 事件 → 胜负（随机系数 + 隐藏运势）→ 发奖（含今日增益）→ 消耗装备。
 
@@ -402,6 +629,8 @@ def _settle_solo(user: dict, today: str, *, direct: bool = False) -> dict:
     out = {**res, **rew, "monster": monster, "event": event_key, "elite": is_elite, "buff": buff,
            "support_scene": support_scene, "base_win": base_win, "direct_solo": direct}
     _apply_support_bonus(user, out)
+    out["reward_new_level"] = int(out.get("new_level", out.get("old_level", 1)))
+    _apply_minor_encounter(user, out)
     return out
 
 
@@ -500,6 +729,7 @@ def _hunt_reward_lines(out: dict) -> list[str]:
     """普通结果行：胜负 → 双倍 → 掉落 → 升级 → 今日增益。"""
     m = out["monster"]
     lines: list[str] = []
+    reward_new_level = int(out.get("reward_new_level", out.get("new_level", out.get("old_level", 1))))
     lines.append(_line("hunt_win" if out["win"] else "hunt_lose",
                        monster=m.get("name", ""), exp=out["exp_gain"], points=out["points_gain"]))
     if out.get("exp_buffed"):
@@ -508,8 +738,8 @@ def _hunt_reward_lines(out: dict) -> list[str]:
     if drops:
         summary = "、".join(f"{n} ×{c}" for n, c in Counter(drops).items())
         lines.append(_line("hunt_loot", loot=summary))
-    if out["new_level"] > out["old_level"]:
-        lines.append(_line("levelup", level=out["old_level"], newlevel=out["new_level"]))
+    if reward_new_level > out["old_level"]:
+        lines.append(_line("levelup", level=out["old_level"], newlevel=reward_new_level))
     if _buff_active(out.get("buff")):  # 今日增益生效才揭示（平时无感）
         lines.append(_line("daily_buff", buff=out["buff"].get("name", "")))
     return lines
@@ -543,6 +773,53 @@ def _hunt_support_lines(out: dict) -> list[str]:
     return lines
 
 
+def _hunt_minor_lines(out: dict) -> list[str]:
+    scene = str(out.get("minor_event", ""))
+    if not scene:
+        return []
+    lines = [_line(f"minor_encounter_{scene}")]
+    parts = out.get("minor_reward_parts") or []
+    if parts:
+        lines.append(_line("minor_encounter_reward", parts="、".join(str(part) for part in parts)))
+    if int(out.get("minor_new_level", 0)) > int(out.get("minor_old_level", 0)):
+        lines.append(
+            _line(
+                "minor_encounter_levelup",
+                level=int(out.get("minor_old_level", 0)),
+                newlevel=int(out.get("minor_new_level", 0)),
+            )
+        )
+    return [line for line in lines if line]
+
+
+def _team_minor_lines(out: dict, b_name: str, a_name: str) -> list[str]:
+    scene = str(out.get("team_minor_event", ""))
+    if not scene:
+        return []
+    lines = [_line(f"minor_encounter_team_{scene}")]
+    shared_parts = out.get("team_minor_parts") or []
+    b_parts = out.get("team_minor_b_parts") or []
+    a_parts = out.get("team_minor_a_parts") or []
+    if shared_parts:
+        lines.append(_line("minor_encounter_team_reward", parts="、".join(str(part) for part in shared_parts)))
+    else:
+        if b_parts:
+            lines.append(_line("minor_encounter_team_member_reward", name=b_name, parts="、".join(str(part) for part in b_parts)))
+        if a_parts:
+            lines.append(_line("minor_encounter_team_member_reward", name=a_name, parts="、".join(str(part) for part in a_parts)))
+    for info, name in ((out.get("team_minor_b") or {}, b_name), (out.get("team_minor_a") or {}, a_name)):
+        if int(info.get("new_level", 0)) > int(info.get("old_level", 0)):
+            lines.append(
+                _line(
+                    "minor_encounter_team_member_levelup",
+                    name=name,
+                    level=int(info.get("old_level", 0)),
+                    newlevel=int(info.get("new_level", 0)),
+                )
+            )
+    return [line for line in lines if line]
+
+
 def _hunt_result_lines(out: dict) -> list:
     """结果行（不含遭遇行）：事件、特判播报、普通结算按场景顺序拼接。"""
     lines: list = []
@@ -555,6 +832,7 @@ def _hunt_result_lines(out: dict) -> list:
     lines.extend(_hunt_reward_lines(out))
     if out.get("support_scene") in {"akito_success", "akito_fail"}:
         lines.extend(support_lines)
+    lines.extend(_hunt_minor_lines(out))
     return lines
 
 
