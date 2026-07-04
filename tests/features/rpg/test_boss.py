@@ -298,15 +298,17 @@ async def test_team_world_boss_success_uses_explicit_team_power_bonus(monkeypatc
     users = state["groups"]["1001"]["users"]
     wb = state["groups"]["1001"]["rpg"]["world_boss"]
     participants = wb["participants"]
+    base_hit = boss._boss_damage(participants["u1"], users["u1"], "2026-06-22", rng=boss.random)
+    expected_hits, expected_bonus_total = boss._apply_team_bonus({"u1": base_hit, "u2": base_hit})
     assert users["u1"]["equip_used"] is False and users["u2"]["equip_used"] is False
     assert participants["u1"]["equip_used"] is True and participants["u2"]["equip_used"] is True
-    assert wb["contributors"]["u1"] == 16 and wb["contributors"]["u2"] == 16
-    assert wb["hp"] == 168
+    assert wb["contributors"] == expected_hits
+    assert wb["hp"] == 200 - sum(expected_hits.values())
     assert wb["bond_gains"] == {"u1": 1, "u2": 1}
     assert state["groups"]["1001"]["intimacy"][pair] == 20001
     result = str(exc.value.result)
-    assert "16 点" in result and "32 点" in result
-    assert "协作加成" in result and "2 点总伤害" in result
+    assert f"{expected_hits['u1']} 点" in result and f"{sum(expected_hits.values())} 点" in result
+    assert "协作加成" in result and f"{expected_bonus_total} 点总伤害" in result
 
 
 @pytest.mark.asyncio

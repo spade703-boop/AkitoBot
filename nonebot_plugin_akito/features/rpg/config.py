@@ -85,14 +85,20 @@ DEFAULT_RPG_CONFIG: dict = {
         "win_drop_mult": 1.0, "lose_drop_mult": 0.3,
         "win_points": 15, "lose_points": 5,
     },
+    # ---- 主动单刷补偿：只在直接使用「今日打怪」时生效；不影响组队失败后退化单刷 ----
+    "solo": {
+        "power_bonus": 0.06,
+        "win_exp_bonus": 0.12,
+        "lose_exp_bonus": 0.08,
+    },
     # ---- 组队：正羁绊提成功率与掉落；负羁绊会更难拉动，但下探幅度比正向增幅更缓 ----
     "team": {
         "base_success": 0.50, "per_level": 0.10,   # Lv1=50%，每升一级 +10%，Lv6 封顶 95%
         "negative_per_level": 0.05,                # 负羁绊每档只额外 -5%，别一下子降得太狠
         "min_success": 0.25, "max_success": 0.95,   # 封底（深度负羁绊）/ 封顶
-        "power_bonus": 0.08,  # 组队基础战力加成：固定 +8%
+        "power_bonus": 0.05,  # 组队基础战力加成：固定 +5%
         "exp_bonus_per_level": 0.00, "exp_bonus_max": 0.00,  # 角色经验不再因组队额外抬高
-        "drop_bonus_per_level": 0.08, "drop_bonus_max": 0.40,  # 组队掉落加成：每级 +8%，封顶 +40%
+        "drop_bonus_per_level": 0.04, "drop_bonus_max": 0.20,  # 组队掉落加成：每级 +4%，封顶 +20%
         "bond_gain_base": 2, "bond_gain_win_bonus": 2, "bond_gain_daily_limit": 1,  # 成功组队后的小额羁绊增长
         "no_event_weight": 45,
         "events": {

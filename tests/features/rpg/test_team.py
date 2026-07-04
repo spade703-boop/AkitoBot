@@ -305,6 +305,8 @@ async def test_team_fail_by_rng_degrades_to_solo(monkeypatch):
         await team.team_cmd.handlers[0](_bot(), _team_event("u1", "u2"))
     g = state["groups"]["1001"]["users"]
     assert g["u1"]["equip_used"] is True and g["u2"]["equip_used"] is False
+    assert g["u1"]["exp"] == hunt._challenge_exp(True, 1)
+    assert g["u1"]["points"] == hunt._challenge_points(True, g["u1"])
     assert g["u2"]["exp"] == 0 and g["u2"]["points"] == 0
     assert "独自前往" in str(exc.value.result)
     assert "迟疑" in str(exc.value.result)

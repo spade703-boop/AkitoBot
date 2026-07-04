@@ -228,9 +228,23 @@ def _rebuy_exp_mult() -> float:
     return float(ecfg.get("rebuy_exp_mult", ecfg.get("rebuy_points_mult", 0.5)))
 
 
+def _solo_cfg() -> dict:
+    cfg = _cfg("solo", {})
+    return cfg if isinstance(cfg, dict) else {}
+
+
+def _solo_power_bonus() -> float:
+    return max(0.0, float(_solo_cfg().get("power_bonus", 0.0)))
+
+
+def _solo_exp_bonus(win: bool) -> float:
+    key = "win_exp_bonus" if win else "lose_exp_bonus"
+    return max(0.0, float(_solo_cfg().get(key, 0.0)))
+
+
 def _apply_rewards(user: dict, today: str, *, win: bool, monster: dict, event_key: str = "",
                    exp_bonus: float = 0.0, exp_mult: float = 1.0, drop_mult: float = 1.0) -> dict:
-    """给单个玩家结算（经验[含看破/双倍卡/组队加成/精英/今日增益] + 掉落 + 积分）并消耗其今日装备，记一次战绩。
+    """给单个玩家结算（经验[含看破/单刷或组队额外加成/双倍卡/精英/今日增益] + 掉落 + 积分）并消耗其今日装备，记一次战绩。
 
     `exp_mult`/`drop_mult` 由调用方算好（精英 × 今日增益）传入。
     返回奖励明细 {exp_gain, exp_buffed, drops, points_gain, old_level, new_level}（不含播报）。
@@ -243,7 +257,7 @@ def _apply_rewards(user: dict, today: str, *, win: bool, monster: dict, event_ke
     if win and event_key == "insight":
         exp_gain = int(exp_gain * float(ccfg.get("events", {}).get("insight", {}).get("exp_mult", 1.5)))
     if exp_bonus:
-        exp_gain = int(exp_gain * (1.0 + float(exp_bonus)))  # 组队羁绊加成
+        exp_gain = int(exp_gain * (1.0 + float(exp_bonus)))  # 额外经验加成（单刷补偿 / 组队加成）
     if exp_mult != 1.0:
         exp_gain = int(exp_gain * float(exp_mult))           # 精英 × 今日增益
     buffed = False
@@ -357,8 +371,12 @@ def _apply_support_bonus(user: dict, out: dict) -> None:
     out["new_level"] = _level_of(int(user.get("exp", 0)))
 
 
-def _settle_solo(user: dict, today: str) -> dict:
-    """单刷完整结算：遭遇(含精英) → 事件 → 胜负（随机系数 + 隐藏运势）→ 发奖（含今日增益）→ 消耗装备。返回 out。"""
+def _settle_solo(user: dict, today: str, *, direct: bool = False) -> dict:
+    """单刷完整结算：遭遇(含精英) → 事件 → 胜负（随机系数 + 隐藏运势）→ 发奖（含今日增益）→ 消耗装备。
+
+    `direct=True` 仅用于直接执行「今日打怪」的主动单人线，吃到小额稳定性与经验补偿；
+    组队失败后退化成单刷时保持 False，不额外吃这层补偿。
+    """
     ccfg = _cfg("combat", {})
     buff = _today_buff()
     level = _encounter_level(user)
@@ -370,16 +388,19 @@ def _settle_solo(user: dict, today: str) -> dict:
     fortune_factor = _fortune_combat_factor(user, today)
     power_factor = random.uniform(float(ccfg.get("factor_min", 0.8)), float(ccfg.get("factor_max", 1.2)))
     power_factor *= _rookie_power_factor(level)
+    if direct:
+        power_factor *= 1.0 + _solo_power_bonus()
     res = resolve_hunt(cp, eff, power_factor=power_factor, fortune_factor=fortune_factor, event=event_key)
     base_win = bool(res["win"])
     support_scene = _roll_solo_support_scene(bool(res["win"]))
     if not res["win"] and support_scene in {"toya_rescue", "duo_combo"}:
         res["win"] = True
     exp_mult, drop_mult = _reward_mults(buff, is_elite, res["win"])
+    exp_bonus = _solo_exp_bonus(bool(res["win"])) if direct else 0.0
     rew = _apply_rewards(user, today, win=res["win"], monster=eff, event_key=event_key,
-                         exp_mult=exp_mult, drop_mult=drop_mult)
+                         exp_bonus=exp_bonus, exp_mult=exp_mult, drop_mult=drop_mult)
     out = {**res, **rew, "monster": monster, "event": event_key, "elite": is_elite, "buff": buff,
-           "support_scene": support_scene, "base_win": base_win}
+           "support_scene": support_scene, "base_win": base_win, "direct_solo": direct}
     _apply_support_bonus(user, out)
     return out
 
@@ -587,7 +608,7 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
             lines = [*settlement_lines, _error("equip_broken")] if settlement_lines else [_error("equip_broken")]
             await hunt_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
 
-        out = _settle_solo(user, today)
+        out = _settle_solo(user, today, direct=True)
         boss_lines = _maybe_spawn_world_boss_lines(group, today, user_id, rng=random)
         _save_data(data)
 

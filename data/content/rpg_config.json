@@ -191,17 +191,22 @@
     "win_points": 15,
     "lose_points": 5
   },
+  "solo": {
+    "power_bonus": 0.06,
+    "win_exp_bonus": 0.12,
+    "lose_exp_bonus": 0.08
+  },
   "team": {
     "base_success": 0.5,
     "per_level": 0.1,
     "negative_per_level": 0.05,
     "min_success": 0.25,
     "max_success": 0.95,
-    "power_bonus": 0.08,
+    "power_bonus": 0.05,
     "exp_bonus_per_level": 0.0,
     "exp_bonus_max": 0.0,
-    "drop_bonus_per_level": 0.08,
-    "drop_bonus_max": 0.4,
+    "drop_bonus_per_level": 0.04,
+    "drop_bonus_max": 0.2,
     "bond_gain_base": 2,
     "bond_gain_win_bonus": 2,
     "bond_gain_daily_limit": 1,

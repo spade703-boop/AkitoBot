@@ -11,6 +11,11 @@ import nonebot_plugin_akito.features.rpg.hunt as hunt
 from .helpers import _PLAIN_BUFF, _bot, _equipped_user, _patch_io, _stub_hunt_rng
 
 
+def _direct_solo_exp(win: bool, level: int = 1) -> int:
+    bonus = hunt._solo_exp_bonus(win)
+    return int(hunt._challenge_exp(win, level) * (1.0 + bonus))
+
+
 def test_resolve_hunt_win_lose():
     m = {"name": "史", "power_req": 20}
     assert hunt.resolve_hunt(25, m, power_factor=1.0)["win"] is True
@@ -231,7 +236,7 @@ async def test_hunt_happy_consumes_equip_and_grants_exp(monkeypatch):
         await hunt.hunt_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="u1"))
     user = state["groups"]["1001"]["users"]["u1"]
     assert user["equip_used"] is True                       # 今日装备损坏
-    assert user["exp"] == hunt._challenge_exp(True, 1)      # 胜（战力 15 ≥ 1）
+    assert user["exp"] == _direct_solo_exp(True, 1)         # 主动单刷吃单人经验补偿
     assert "[at:u1]" in str(exc.value.result) and "史莱姆" in str(exc.value.result)
 
 
@@ -260,7 +265,7 @@ async def test_hunt_exp_buff_doubles(monkeypatch):
     with pytest.raises(FinishedException) as exc:
         await hunt.hunt_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="u1"))
     user = state["groups"]["1001"]["users"]["u1"]
-    assert user["exp"] == hunt._challenge_exp(True, 1) * 2 and user["exp_buff_uses"] == 0
+    assert user["exp"] == _direct_solo_exp(True, 1) * 2 and user["exp_buff_uses"] == 0
     assert "翻倍" in str(exc.value.result)
 
 
@@ -310,6 +315,7 @@ def test_apply_rewards_halves_exp_for_rebought_equip():
 
 def test_settle_solo_rookie_bonus_only_applies_to_solo(monkeypatch):
     factors: list[float] = []
+    reward_kwargs: list[dict] = []
     monster = {"name": "史莱姆", "power_req": 1, "drops": []}
 
     def _pick(level, rng=hunt.random):
@@ -328,13 +334,23 @@ def test_settle_solo_rookie_bonus_only_applies_to_solo(monkeypatch):
     monkeypatch.setattr(hunt, "_roll_coop_event", lambda rng=hunt.random: "")
     monkeypatch.setattr(hunt, "_today_buff", lambda: _PLAIN_BUFF)
     monkeypatch.setattr(hunt, "resolve_hunt", _resolve)
-    monkeypatch.setattr(hunt, "_apply_rewards", lambda *args, **kwargs: dict(reward))
+    monkeypatch.setattr(
+        hunt,
+        "_apply_rewards",
+        lambda *args, **kwargs: (reward_kwargs.append(dict(kwargs)) or dict(reward)),
+    )
 
+    hunt._settle_solo(_equipped_user(exp=0, equip_level=1), "D", direct=True)
     hunt._settle_solo(_equipped_user(exp=0, equip_level=1), "D")
     hunt._settle_coop(_equipped_user(exp=0, equip_level=1), _equipped_user(exp=0, equip_level=1), "D")
 
-    assert factors[0] == pytest.approx(1.08)
-    assert factors[1] == pytest.approx(1.0 + float(rpg_config._cfg("team", {}).get("power_bonus", 0.0)))
+    assert factors[0] == pytest.approx(1.08 * (1.0 + float(rpg_config._cfg("solo", {}).get("power_bonus", 0.0))))
+    assert factors[1] == pytest.approx(1.08)
+    assert factors[2] == pytest.approx(1.0 + float(rpg_config._cfg("team", {}).get("power_bonus", 0.0)))
+    assert reward_kwargs[0]["exp_bonus"] == pytest.approx(float(rpg_config._cfg("solo", {}).get("win_exp_bonus", 0.0)))
+    assert reward_kwargs[1]["exp_bonus"] == pytest.approx(0.0)
+    assert reward_kwargs[2]["exp_bonus"] == pytest.approx(0.0)
+    assert reward_kwargs[3]["exp_bonus"] == pytest.approx(0.0)
 
 
 def test_roll_solo_support_scene_uses_fixed_three_percent_bands():
@@ -365,7 +381,7 @@ async def test_hunt_support_akito_success_adds_bonus_rewards(monkeypatch):
     user = state["groups"]["1001"]["users"]["u1"]
     bonus_exp = hunt._support_bonus_exp("akito_success", user, 1)
     bonus_points = hunt._support_bonus_points("akito_success", user)
-    assert user["exp"] == hunt._challenge_exp(True, 1) + bonus_exp
+    assert user["exp"] == _direct_solo_exp(True, 1) + bonus_exp
     assert user["points"] == hunt._challenge_points(True, user) + bonus_points
     result = str(exc.value.result)
     assert "真·龙王烈火斩" in result
@@ -384,7 +400,7 @@ async def test_hunt_support_akito_fail_keeps_failure_with_bonus(monkeypatch):
     user = state["groups"]["1001"]["users"]["u1"]
     bonus_exp = hunt._support_bonus_exp("akito_fail", user, 1)
     bonus_points = hunt._support_bonus_points("akito_fail", user)
-    assert user["exp"] == hunt._challenge_exp(False, 1) + bonus_exp
+    assert user["exp"] == _direct_solo_exp(False, 1) + bonus_exp
     assert user["points"] == hunt._challenge_points(False, user) + bonus_points
     result = str(exc.value.result)
     assert "未能击败【座狼】" in result
@@ -402,7 +418,7 @@ async def test_hunt_support_toya_rescue_turns_loss_into_win(monkeypatch):
         await hunt.hunt_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="u1"))
 
     user = state["groups"]["1001"]["users"]["u1"]
-    assert user["exp"] == hunt._challenge_exp(True, 1)
+    assert user["exp"] == _direct_solo_exp(True, 1)
     assert user["points"] == hunt._challenge_points(True, user)
     result = str(exc.value.result)
     assert any(
@@ -432,7 +448,7 @@ async def test_hunt_support_duo_combo_turns_loss_into_win_with_bonus(monkeypatch
     user = state["groups"]["1001"]["users"]["u1"]
     bonus_exp = hunt._support_bonus_exp("duo_combo", user, 1)
     bonus_points = hunt._support_bonus_points("duo_combo", user)
-    assert user["exp"] == hunt._challenge_exp(True, 1) + bonus_exp
+    assert user["exp"] == _direct_solo_exp(True, 1) + bonus_exp
     assert user["points"] == hunt._challenge_points(True, user) + bonus_points
     result = str(exc.value.result)
     assert any(
@@ -467,7 +483,7 @@ async def test_hunt_elite_boosts_rewards_and_reveals(monkeypatch):
         await hunt.hunt_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="u1"))
     user = state["groups"]["1001"]["users"]["u1"]
     elite_mult = float(rpg_config._cfg("combat", {})["elite"]["exp_mult"])
-    assert user["exp"] == int(hunt._challenge_exp(True, 1) * elite_mult)  # 精英胜则经验 ×elite.exp_mult
+    assert user["exp"] == int(_direct_solo_exp(True, 1) * elite_mult)  # 主动单刷补偿后再吃精英倍率
     assert "精英" in str(exc.value.result)
 
 
@@ -485,7 +501,7 @@ async def test_hunt_daily_buff_exp_applies(monkeypatch):
     with pytest.raises(FinishedException) as exc:
         await hunt.hunt_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="u1"))
     user = state["groups"]["1001"]["users"]["u1"]
-    assert user["exp"] == int(hunt._challenge_exp(True, 1) * 1.5)            # 经验涌动日 ×1.5
+    assert user["exp"] == int(_direct_solo_exp(True, 1) * 1.5)               # 主动单刷补偿后再吃今日增益
     assert "经验涌动日" in str(exc.value.result)
 
 
