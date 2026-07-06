@@ -53,9 +53,11 @@ def _bond_level(value: int) -> dict:
     zero_i = next((i for i, level in enumerate(levels) if int(level.get("min", 0)) == 0), 0)
     current = levels[idx]
     next_level = levels[idx + 1] if idx + 1 < len(levels) else None
+    display_level = idx - zero_i + 1
     return {
         "idx": idx,
-        "level": idx - zero_i + 1,
+        "level": display_level,
+        "team_level": int(current.get("team_level", display_level)),
         "name": str(current.get("name", "")),
         "cur_min": int(current.get("min", 0)),
         "next_name": str(next_level.get("name", "")) if next_level else None,

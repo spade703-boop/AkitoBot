@@ -402,7 +402,7 @@
     }
   },
   "world_boss": {
-    "spawn_chance": 0.01,
+    "spawn_chance": 0.03,
     "activity_window_days": 7,
     "activity_min_users": 3,
     "activity_scale_cap": 12,

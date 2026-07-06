@@ -164,7 +164,7 @@ DEFAULT_RPG_CONFIG: dict = {
     },
     # ---- 世界 BOSS：极低概率在常规打怪后出现；强度按近 7 日活跃签到人数缩放 ----
     "world_boss": {
-        "spawn_chance": 0.01,
+        "spawn_chance": 0.03,
         "activity_window_days": 7,
         "activity_min_users": 3,
         "activity_scale_cap": 12,

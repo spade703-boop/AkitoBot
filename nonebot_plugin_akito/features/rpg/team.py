@@ -333,7 +333,7 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
             await team_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
 
         raw_intimacy = _get_intimacy(group, initiator, target)
-        bond_level = _bond_level(raw_intimacy)["level"]
+        bond_level = _bond_level(raw_intimacy)["team_level"]
         success = random.random() < _team_success_rate(bond_level)
         b_name = b.get("display_name") or f"群友{initiator}"
         fail_flavor = ""

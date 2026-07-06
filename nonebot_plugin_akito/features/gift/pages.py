@@ -210,9 +210,12 @@ def build_bond_rank_page_data(
 def _default_levels() -> list[dict]:
     """内置默认等级表（当调用方未传入 levels 时使用）。"""
     return [
-        {"min": -1000, "name": "宿敌"},
-        {"min": -300, "name": "结了梁子"},
-        {"min": -50, "name": "有过节"},
+        {"min": -1000, "name": "宿敌", "team_level": -2},
+        {"min": -650, "name": "势同水火", "team_level": -2},
+        {"min": -300, "name": "结了梁子", "team_level": -1},
+        {"min": -180, "name": "有过节", "team_level": -1},
+        {"min": -100, "name": "看不顺眼", "team_level": -1},
+        {"min": -50, "name": "闹别扭", "team_level": 0},
         {"min": 0, "name": "Hot Dogs"},
         {"min": 100, "name": "大麦克风"},
         {"min": 400, "name": "能信赖的搭档"},

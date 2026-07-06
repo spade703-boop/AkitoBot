@@ -1072,7 +1072,7 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
             await team_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + _error("team_target_broken"))
 
         raw_intimacy = _get_intimacy(group, initiator, target)
-        bond_level = _bond_level(raw_intimacy)["level"]
+        bond_level = _bond_level(raw_intimacy)["team_level"]
         success = random.random() < _team_success_rate(bond_level)
         lines: list = []
 

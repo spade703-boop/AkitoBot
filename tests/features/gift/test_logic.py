@@ -97,11 +97,20 @@ def test_bond_level_progress_and_maxed():
 def test_bond_level_negative_tiers():
     assert gift._bond_level(0)["name"] == "Hot Dogs"
     assert gift._bond_level(0)["level"] == 1
-    assert gift._bond_level(-1)["name"] == "有过节"
-    assert gift._bond_level(-50)["name"] == "有过节"
-    assert gift._bond_level(-51)["name"] == "结了梁子"
+    assert gift._bond_level(-1)["name"] == "闹别扭"
+    assert gift._bond_level(-50)["name"] == "闹别扭"
+    assert gift._bond_level(-50)["team_level"] == 0
+    assert gift._bond_level(-51)["name"] == "看不顺眼"
+    assert gift._bond_level(-51)["team_level"] == -1
+    assert gift._bond_level(-100)["name"] == "看不顺眼"
+    assert gift._bond_level(-101)["name"] == "有过节"
+    assert gift._bond_level(-180)["name"] == "有过节"
+    assert gift._bond_level(-181)["name"] == "结了梁子"
     assert gift._bond_level(-300)["name"] == "结了梁子"
-    assert gift._bond_level(-301)["name"] == "宿敌"
+    assert gift._bond_level(-301)["name"] == "势同水火"
+    assert gift._bond_level(-301)["team_level"] == -2
+    assert gift._bond_level(-650)["name"] == "势同水火"
+    assert gift._bond_level(-651)["name"] == "宿敌"
     assert gift._bond_level(-99999)["name"] == "宿敌"  # 兜底到最低档
     assert gift._bond_level(-10)["level"] <= 0  # 负档不挂 Lv
 

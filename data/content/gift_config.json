@@ -163,15 +163,33 @@
   "bond_levels": [
     {
       "min": -1000,
-      "name": "宿敌"
+      "name": "宿敌",
+      "team_level": -2
+    },
+    {
+      "min": -650,
+      "name": "势同水火",
+      "team_level": -2
     },
     {
       "min": -300,
-      "name": "结了梁子"
+      "name": "结了梁子",
+      "team_level": -1
+    },
+    {
+      "min": -180,
+      "name": "有过节",
+      "team_level": -1
+    },
+    {
+      "min": -100,
+      "name": "看不顺眼",
+      "team_level": -1
     },
     {
       "min": -50,
-      "name": "有过节"
+      "name": "闹别扭",
+      "team_level": 0
     },
     {
       "min": 0,
