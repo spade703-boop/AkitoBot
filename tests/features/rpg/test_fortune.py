@@ -30,12 +30,15 @@ def test_on_signin_grants_exp_equip_fortune(monkeypatch):
     line = fortune.on_signin(group, "u1", _FixedRand(0))
     user = group["users"]["u1"]
     scfg = rpg_config._cfg("signin_streak", {})
-    day1_bonus = min(1 * int(scfg["per_day"]), int(scfg["cap"]))  # 首签连签 1 天的额外经验
+    day1_bonus = min(0 * int(scfg["per_day"]), int(scfg["cap"]))  # 首签只吃基础签到经验
     assert user["exp"] == int(rpg_config._cfg("signin", {})["exp"]) + day1_bonus
     assert user["signin_streak"] == 1 and user["signin_last_date"] == "2026-06-22"
     assert user["fortune"] == "daji" and user["fortune_date"] == "2026-06-22"  # 运势暗掷
     assert user["equip_date"] == "2026-06-22" and user["equip_used"] is False  # 发今日装备
-    assert "经验" in line and "Lv" in line and "连签" in line
+    if day1_bonus > 0:
+        assert "经验" in line and "Lv" in line and "连签" in line
+    else:
+        assert "经验" in line and "Lv" in line and "连签" not in line
     assert "大吉" not in line  # 运势不外显
 
 
@@ -71,5 +74,12 @@ def test_signin_streak_bonus_scales(monkeypatch):
     fortune.on_signin(group, "u1", _FixedRand(0))
     u = group["users"]["u1"]
     assert u["signin_streak"] == 5
-    bonus = min(5 * int(scfg["per_day"]), int(scfg["cap"]))
+    bonus = min(4 * int(scfg["per_day"]), int(scfg["cap"]))
     assert u["exp"] == int(rpg_config._cfg("signin", {})["exp"]) + bonus
+
+
+def test_default_signin_background_exp_has_visible_floor():
+    assert int(rpg_config._cfg("signin", {})["exp"]) == 10
+    scfg = rpg_config._cfg("signin_streak", {})
+    assert int(scfg["per_day"]) == 2
+    assert int(scfg["cap"]) == 10

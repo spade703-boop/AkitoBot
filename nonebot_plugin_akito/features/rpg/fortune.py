@@ -1,7 +1,7 @@
 """隐藏运势 + 签到钩子。
 
 运势是隐藏值：签到时暗掷（不外显），仅在打怪时影响胜负（combat_factor）与掉落（drop_factor）。
-签到钩子 on_signin：暗掷运势 + 发经验（基础 + 连签递增）+ 发今日装备；通过 game_store 钩子表被 gift 的签到回调（gift 包本身不依赖 rpg）。
+签到钩子 on_signin：暗掷运势 + 发轻量经验 + 发今日装备；连签会把签到经验从 10 逐步抬到 20。通过 game_store 钩子表被 gift 的签到回调（gift 包本身不依赖 rpg）。
 """
 
 from __future__ import annotations
@@ -62,7 +62,7 @@ def _bump_streak(user: dict, today: str) -> int:
 
 
 def on_signin(group: dict, user_id: str, rng=random) -> str:
-    """签到结算：暗掷运势 + 发经验（基础 + 连签递增）+ 发今日装备。返回追加播报行（当天已签到则返回空串）。"""
+    """签到结算：暗掷运势 + 发经验（基础 + 可选连签补偿）+ 发今日装备。返回追加播报行（当天已签到则返回空串）。"""
     user = _ensure_player(group, user_id)
     today = _today_str()
     if user.get("fortune_date") == today:
@@ -75,10 +75,10 @@ def on_signin(group: dict, user_id: str, rng=random) -> str:
     user["fortune"] = key
     user["fortune_date"] = today
 
-    # 连续签到：递增额外经验 bonus = min(streak*per_day, cap)
+    # 连续签到：从第二天起递增额外经验 bonus = min((streak-1)*per_day, cap)
     streak = _bump_streak(user, today)
     scfg = _cfg("signin_streak", {})
-    streak_bonus = min(streak * int(scfg.get("per_day", 10)), int(scfg.get("cap", 100)))
+    streak_bonus = min(max(streak - 1, 0) * int(scfg.get("per_day", 10)), int(scfg.get("cap", 100)))
 
     base_exp = int(_cfg("signin", {}).get("exp", 50))
     user["exp"] = int(user.get("exp", 0)) + base_exp + streak_bonus

@@ -164,11 +164,11 @@ def test_default_encounter_brackets_match_monster_pool_length():
     assert all(len(bracket["weights"]) == len(monsters) for bracket in brackets)
 
 
-def test_default_encounter_brackets_hold_dragon_until_level_seventeen():
+def test_default_encounter_brackets_hold_dragon_until_level_ten_and_then_release():
     monsters = rpg_config._cfg("monsters", [])
     dragon_index = next(i for i, monster in enumerate(monsters) if monster.get("name") == "龙")
-    assert hunt._encounter_weights(16, len(monsters))[dragon_index] == 0
-    assert hunt._encounter_weights(17, len(monsters))[dragon_index] > 0
+    assert hunt._encounter_weights(10, len(monsters))[dragon_index] == 0
+    assert hunt._encounter_weights(13, len(monsters))[dragon_index] > 0
 
 
 def test_pick_monster_uses_brackets_for_non_six_monster_pool(monkeypatch):

@@ -18,10 +18,10 @@ CONFIG_FILE = "rpg_config.json"
 # ==================== 默认配置（可被 data/content/rpg_config.json 覆盖） ====================
 
 DEFAULT_RPG_CONFIG: dict = {
-    # ---- 签到：基础经验（积分由 gift 的签到发放；连签额外经验见下方 signin_streak）----
-    "signin": {"exp": 50},
-    # ---- 连续签到：连签递增额外经验 bonus = min(streak*per_day, cap)，断签重置 ----
-    "signin_streak": {"per_day": 10, "cap": 100},
+    # ---- 签到：保留轻量背景经验（积分由 gift 的签到发放；主成长仍靠打怪）----
+    "signin": {"exp": 10},
+    # ---- 连续签到：从第二天起每天多给一点，默认把签到经验从 10 逐步抬到 20；断签重置 ----
+    "signin_streak": {"per_day": 2, "cap": 10},
     # ---- 等级曲线：升到 L 级累计需 base*(L-1)*L/2 经验 ----
     "level_curve": {"base": 135},
     # ---- 今日装备：战力 = base + 等级*per_level + rand(0,var) + 强化次数*forge.step（战力为隐藏值，不外显）----
@@ -65,15 +65,16 @@ DEFAULT_RPG_CONFIG: dict = {
             "insight":   {"weight": 22, "exp_mult": 1.6},     # 弱点看破：胜则经验 ×1.6
             "desperate": {"weight": 28, "power_mult": 1.60},  # 绝境爆发：有效战力 ×1.60 可翻盘
         },
-        # ---- 遭遇分段：低等级先少撞高难怪；每档 weights 长度都必须与 monsters 池一致 ----
+        # ---- 遭遇分段：前 30 天尽量留在低阶池；中后段逐步抬高强怪占比，把半年线压回目标区间 ----
         "encounter_brackets": [
-            {"max_level": 2, "weights": [58, 30, 12, 0, 0, 0, 0, 0, 0, 0, 0]},
-            {"max_level": 4, "weights": [32, 28, 24, 16, 0, 0, 0, 0, 0, 0, 0]},
-            {"max_level": 6, "weights": [18, 20, 22, 20, 20, 0, 0, 0, 0, 0, 0]},
-            {"max_level": 9, "weights": [10, 12, 14, 16, 18, 16, 14, 0, 0, 0, 0]},
-            {"max_level": 13, "weights": [4, 6, 8, 10, 12, 16, 16, 14, 14, 0, 0]},
-            {"max_level": 16, "weights": [0, 2, 4, 6, 10, 14, 16, 16, 16, 16, 0]},
-            {"max_level": None, "weights": [0, 0, 3, 5, 8, 11, 13, 15, 16, 15, 14]},
+            {"max_level": 2, "weights": [36, 32, 20, 12, 0, 0, 0, 0, 0, 0, 0]},
+            {"max_level": 4, "weights": [20, 24, 28, 28, 0, 0, 0, 0, 0, 0, 0]},
+            {"max_level": 6, "weights": [10, 14, 20, 24, 18, 14, 0, 0, 0, 0, 0]},
+            {"max_level": 8, "weights": [4, 8, 12, 16, 18, 18, 14, 10, 0, 0, 0]},
+            {"max_level": 10, "weights": [0, 0, 2, 6, 10, 14, 18, 18, 18, 14, 0]},
+            {"max_level": 13, "weights": [0, 0, 0, 2, 8, 12, 16, 18, 18, 20, 6]},
+            {"max_level": 15, "weights": [0, 0, 0, 0, 2, 8, 12, 16, 18, 20, 24]},
+            {"max_level": None, "weights": [0, 0, 0, 0, 0, 2, 8, 12, 18, 24, 36]},
         ],
         # ---- 精英怪：遭遇时小概率升级，更难打（power_req×）但胜则更肥（经验/掉落×）。藏着不外显，撞上才知道 ----
         "elite": {"chance": 0.12, "power_mult": 1.6, "exp_mult": 1.8, "drop_mult": 2.0},
