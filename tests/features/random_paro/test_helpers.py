@@ -18,9 +18,12 @@ import nonebot_plugin_akito.features.random_paro as random_paro
 彰人_WL2 = "WL2彰"
 彰人_Callboy = "Callboy彰"
 彰人_白恶魔 = "白恶魔"
+彰人_厨子 = "厨子"
+彰人_蛇彰 = "蛇彰"
 彰人_向日葵 = "向日葵彰"
 彰人_法师 = "法师彰"
 
+冬弥_烈火 = "烈火"
 冬弥_王子 = "王子冬"
 冬弥_黑骑 = "黑骑"
 冬弥_白百合 = "白百合"
@@ -109,34 +112,22 @@ def test_限频辅助函数_可裁剪历史并返回提示():
 
 
 @pytest.fixture()
-def 隔离派生统计():
+def 隔离派生统计(tmp_path, monkeypatch):
     统计快照 = copy.deepcopy(random_paro.PARO_STATS)
-    统计文件 = random_paro._stats_path()
-    彩蛋日志文件 = random_paro._egg_log_path()
-    统计文本 = 统计文件.read_text(encoding="utf-8") if 统计文件.exists() else None
-    彩蛋日志文本 = 彩蛋日志文件.read_text(encoding="utf-8") if 彩蛋日志文件.exists() else None
+    统计文件 = tmp_path / "paro_stats.json"
+    彩蛋日志文件 = tmp_path / "paro_egg_log.jsonl"
+    monkeypatch.setattr(random_paro, "_stats_path", lambda: 统计文件)
+    monkeypatch.setattr(random_paro, "_egg_log_path", lambda: 彩蛋日志文件)
+    monkeypatch.setitem(random_paro._save_stats.__globals__, "_stats_path", lambda: 统计文件)
+    monkeypatch.setitem(random_paro._save_stats.__globals__, "_egg_log_path", lambda: 彩蛋日志文件)
 
     random_paro.PARO_STATS.clear()
     random_paro.PARO_STATS.update(random_paro._new_stats_state())
-    if 统计文件.exists():
-        统计文件.unlink()
-    if 彩蛋日志文件.exists():
-        彩蛋日志文件.unlink()
 
     yield
 
     random_paro.PARO_STATS.clear()
     random_paro.PARO_STATS.update(统计快照)
-    if 统计文本 is None:
-        if 统计文件.exists():
-            统计文件.unlink()
-    else:
-        统计文件.write_text(统计文本, encoding="utf-8")
-    if 彩蛋日志文本 is None:
-        if 彩蛋日志文件.exists():
-            彩蛋日志文件.unlink()
-    else:
-        彩蛋日志文件.write_text(彩蛋日志文本, encoding="utf-8")
 
 
 @pytest.fixture()
@@ -160,6 +151,50 @@ def test_每日统计翻页只重置日桶(隔离派生统计):
     assert 群统计["daily"]["date"] == "2026-06-11"
     assert 群统计["daily"]["total_draws"] == 0
     assert 群统计["history"]["total_draws"] == 9
+
+
+def test_读取群统计时会自动回补旧历史口径(隔离派生统计):
+    random_paro.PARO_STATS["groups"]["1001"] = {
+        "profiles": {"42": "测试用户"},
+        "users": {
+            "42": {
+                "draw_count": 5,
+                "egg_count": 1,
+                "foxbun_count": 1,
+                "akito_hits": {彰人_蛇彰: 4, 彰人_厨子: 1},
+                "toya_hits": {冬弥_烈火: 3, 冬弥_黑骑: 2},
+                "pair_hits": {},
+                "akito_last_hit_seq": {彰人_厨子: 4, 彰人_蛇彰: 5},
+                "toya_last_hit_seq": {冬弥_烈火: 3, 冬弥_黑骑: 5},
+                "pair_last_hit_seq": {},
+                "_seq": 5,
+            }
+        },
+        "daily": random_paro._new_period_stats(date="2026-06-10"),
+        "history": {
+            "total_draws": 5,
+            "user_draw_counts": {"42": 5},
+            "akito_hits": {彰人_厨子: 1},
+            "toya_hits": {冬弥_烈火: 3},
+            "akito_last_hit_seq": {彰人_厨子: 7},
+            "toya_last_hit_seq": {冬弥_烈火: 8},
+            "egg_user_counts": {"42": 1},
+            "foxrabbit_total": 0,
+            "foxbun_total": 0,
+            "fox_total": 0,
+            "rabbit_total": 0,
+            "_seq": 8,
+        },
+    }
+
+    群统计, 已修正 = random_paro._get_or_create_group_stats("1001", "2026-06-10")
+
+    assert 已修正 is True
+    assert 群统计["history"]["akito_hits"] == {彰人_厨子: 1, 彰人_蛇彰: 4}
+    assert 群统计["history"]["toya_hits"] == {冬弥_烈火: 3, 冬弥_黑骑: 2}
+    assert 群统计["history"]["egg_user_counts"] == {"42": 2}
+    assert 群统计["history"]["foxbun_total"] == 1
+    assert 群统计["history"]["akito_last_hit_seq"] == {彰人_厨子: 1, 彰人_蛇彰: 2}
 
 
 def test_阶段统计_固定彰人时仍累计双方命中和真实彩蛋():

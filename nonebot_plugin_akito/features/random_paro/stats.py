@@ -102,9 +102,10 @@ def _get_or_create_group_stats(group_id: str, today_str: str) -> tuple[dict, boo
         return group_stats, True
 
     normalized = pkg._normalize_group_stats(group_stats, today_str)
+    normalized_changed = normalized != group_stats
     groups[group_id] = normalized
     rolled = _roll_daily_stats(normalized, today_str)
-    return normalized, rolled
+    return normalized, normalized_changed or rolled
 
 
 def _record_draw_stats_for_period(

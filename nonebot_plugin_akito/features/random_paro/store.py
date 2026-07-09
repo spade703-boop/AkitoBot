@@ -153,6 +153,50 @@ def _normalize_user_stats(raw: object) -> dict:
     return stats
 
 
+def _bump_counter(counter: dict[str, int], key: str, amount: int = 1) -> None:
+    if amount <= 0:
+        return
+    counter[key] = counter.get(key, 0) + amount
+
+
+def _rebuild_history_counters_from_users(history: dict, users: dict[str, dict]) -> None:
+    akito_hits: dict[str, int] = {}
+    toya_hits: dict[str, int] = {}
+    user_draw_counts: dict[str, int] = {}
+    egg_user_counts: dict[str, int] = {}
+    foxbun_total = 0
+
+    for user_id, user_stats in users.items():
+        draw_count = max(0, _safe_int(user_stats.get("draw_count")))
+        if draw_count > 0:
+            user_draw_counts[user_id] = draw_count
+
+        egg_count = max(0, _safe_int(user_stats.get("egg_count")))
+        foxbun_count = max(0, _safe_int(user_stats.get("foxbun_count")))
+        if egg_count or foxbun_count:
+            egg_user_counts[user_id] = egg_count + foxbun_count
+        foxbun_total += foxbun_count
+
+        for key, count in user_stats.get("akito_hits", {}).items():
+            _bump_counter(akito_hits, key, max(0, _safe_int(count)))
+        for key, count in user_stats.get("toya_hits", {}).items():
+            _bump_counter(toya_hits, key, max(0, _safe_int(count)))
+
+    old_akito_order = _normalize_counter(history.get("akito_last_hit_seq"))
+    old_toya_order = _normalize_counter(history.get("toya_last_hit_seq"))
+    akito_names = sorted(akito_hits, key=lambda name: (old_akito_order.get(name, 10**9), name))
+    toya_names = sorted(toya_hits, key=lambda name: (old_toya_order.get(name, 10**9), name))
+
+    history["akito_hits"] = {key: akito_hits[key] for key in sorted(akito_hits)}
+    history["toya_hits"] = {key: toya_hits[key] for key in sorted(toya_hits)}
+    history["user_draw_counts"] = {key: user_draw_counts[key] for key in sorted(user_draw_counts)}
+    history["egg_user_counts"] = {key: egg_user_counts[key] for key in sorted(egg_user_counts)}
+    history["total_draws"] = sum(user_draw_counts.values())
+    history["foxbun_total"] = foxbun_total
+    history["akito_last_hit_seq"] = {name: index for index, name in enumerate(akito_names, 1)}
+    history["toya_last_hit_seq"] = {name: index for index, name in enumerate(toya_names, 1)}
+
+
 def _normalize_group_stats(raw: object, today_str: str) -> dict:
     stats = _new_group_stats(today_str)
     if not isinstance(raw, dict):
@@ -171,6 +215,8 @@ def _normalize_group_stats(raw: object, today_str: str) -> dict:
         }
     stats["daily"] = _normalize_period_stats(raw.get("daily"), date=today_str)
     stats["history"] = _normalize_period_stats(raw.get("history"))
+    if stats["users"]:
+        _rebuild_history_counters_from_users(stats["history"], stats["users"])
     return stats
 
 

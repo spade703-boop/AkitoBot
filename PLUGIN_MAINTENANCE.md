@@ -453,6 +453,7 @@ Galgame 级导演骰子，由 `chat.py` 调用 `build_director_note()`。
 - 头像拼合：从 `data/images/paro_avatars/彰人/` 和 `data/images/paro_avatars/冬弥/` 按派生名匹配
 - 限频：30 分钟内 3 次，`asyncio.Lock` 防并发穿透
 - 统计口径：个人页与群级派生角色榜统一按“最终展示结果”累计；定向抽取会计入被固定一侧与随机一侧，狐狸 / 兔子 / 狐兔 / 狐兔饭这类未展示正常角色的结果不计入角色榜
+- 运行时缓存：`PARO_STATS` 在模块导入时载入内存；手动替换 `data/paro_stats.json` 后，必须执行 `重载配置 assets` 或重启进程，群里看到的排行才会切到新文件
 - 模糊匹配：`_fuzzy_match()` 三级匹配（精确 → 前缀 → 包含），大小写不敏感；歧义时列出候选
 - 数据文件：`data/paro_pools.json`（池子）、`data/paro_stats.json`（限频 + 个人/群排行累计）、`data/paro_egg_log.jsonl`（个人做饭/狐兔饭历史）；已接入 `reload_assets()` 热重载
 
@@ -618,6 +619,7 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（戳一戳
 
 ### random_paro 历史统计回补
 
+- 当前运行时会在读取群统计时，按 `groups[].users[*].akito_hits/toya_hits/draw_count/egg_count/foxbun_count` 自动回补旧版 `history` 桶；因此旧口径文件在完成 `重载配置 assets` / 重启后，面板读数会直接按个人累计纠正，不依赖 HTML 层单独修补。
 - 若线上旧版 `data/paro_stats.json` 仍存在“个人页已计入定向抽取、群级历史角色榜未计入”的历史口径，可运行 `python -X utf8 tools/backfill_paro_stats.py data/paro_stats.json` 一次性按 `groups[].users[*].akito_hits/toya_hits` 重建 `history` 桶。
 - 脚本会先生成同目录 `.bak` 备份；`--dry-run` 只打印变更摘要，不落盘。
 

@@ -110,6 +110,8 @@ python bot.py        # 或：nb run
 - 30 分钟内最多抽取 3 次
 - 3% 概率触发做饭彩蛋
 - 定向抽取与随机抽取统一计入个人累计和全群派生角色榜累计
+- 兼容旧统计口径：加载旧版 `paro_stats.json` 时，会按 `groups[].users[*]` 的个人累计自动回补全群历史角色榜
+- 手动替换 `data/paro_stats.json` 后，需要执行 `重载配置 assets` 或重启进程；运行中的 `PARO_STATS` 不会自动感知磁盘文件变化
 - 模糊匹配：输入支持大小写不敏感、前缀 / 包含匹配（如 `wl` → `WL2彰`，`黑百` → `黑百合`）；多个匹配时列出候选
 - 头像拼合：将 `data/images/paro_avatars/彰人/` 和 `data/images/paro_avatars/冬弥/` 下的对应图片自动拼合输出
 
