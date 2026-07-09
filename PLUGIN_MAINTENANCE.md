@@ -448,11 +448,13 @@ Galgame 级导演骰子，由 `chat.py` 调用 `build_director_note()`。
 服务于固定 CP 的派生抽取器。从两个独立身份池随机抽取配对。
 
 - `抽派生` — 受 `ALLOWED_CHAT_GROUPS` 白名单控制
+- `派生帮助` — 列出普通用户可用的派生相关指令；仅精确匹配这四个字，带额外参数 / 别名 / 私聊均静默
 - 添加/删除指令 — 受 `SUPERUSER_QQ` 权限控制
 - 头像拼合：从 `data/images/paro_avatars/彰人/` 和 `data/images/paro_avatars/冬弥/` 按派生名匹配
 - 限频：30 分钟内 3 次，`asyncio.Lock` 防并发穿透
+- 统计口径：个人页与群级派生角色榜统一按“最终展示结果”累计；定向抽取会计入被固定一侧与随机一侧，狐狸 / 兔子 / 狐兔 / 狐兔饭这类未展示正常角色的结果不计入角色榜
 - 模糊匹配：`_fuzzy_match()` 三级匹配（精确 → 前缀 → 包含），大小写不敏感；歧义时列出候选
-- 数据文件：`data/paro_pools.json`，已接入 `reload_assets()` 热重载
+- 数据文件：`data/paro_pools.json`（池子）、`data/paro_stats.json`（限频 + 个人/群排行累计）、`data/paro_egg_log.jsonl`（个人做饭/狐兔饭历史）；已接入 `reload_assets()` 热重载
 
 ### random_keyword/
 
@@ -596,6 +598,8 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（戳一戳
 | `data/last_interactions.json` | 读写 | 各群最后互动时间戳和 routine 快照（time_awareness.py） |
 | `data/impression_history.db` | 读写 | 群消息 SQLite（impression.py 独占） |
 | `data/paro_pools.json` | 读写 | 派生抽取器池子数据（彰人池 / 冬弥池） |
+| `data/paro_stats.json` | 读写 | 派生抽取限频、个人累计与群级排行统计 |
+| `data/paro_egg_log.jsonl` | 读写 | 派生做饭 / 狐兔饭历史明细（供个人页回放） |
 | `data/fanfic_keywords.json` | 读写 | 今日关键词池子数据 |
 | `data/keyword_draws.json` | 读写 | 今日关键词每日抽取记录 |
 | `data/pending_verify.json` / `bond_verify.json` / `hold_verify.json` | 读写 | 待审核 / 待刷羁绊 / 特殊挂起名单 |
@@ -611,6 +615,11 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（戳一戳
 
 - 测试结构、目录映射、执行命令、沙箱与 fake 平台约束，统一维护在 `tests/README.md`。
 - 这里仅保留维护层策略，不重复列测试文件路径，避免目录调整后出现多份过期说明。
+
+### random_paro 历史统计回补
+
+- 若线上旧版 `data/paro_stats.json` 仍存在“个人页已计入定向抽取、群级历史角色榜未计入”的历史口径，可运行 `python -X utf8 tools/backfill_paro_stats.py data/paro_stats.json` 一次性按 `groups[].users[*].akito_hits/toya_hits` 重建 `history` 桶。
+- 脚本会先生成同目录 `.bak` 备份；`--dry-run` 只打印变更摘要，不落盘。
 
 维护时默认遵循这四条：
 

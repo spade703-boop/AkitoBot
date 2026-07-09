@@ -1442,6 +1442,19 @@ async def _render_draw_result_preview_image(
 _DRAW_LOCKS: dict[str, asyncio.Lock] = {}
 _DRAW_LIMIT = 3
 _DRAW_WINDOW = 1800  # 30 分钟
+_PARO_HELP_TEXT = (
+    "🎲 派生抽取器\n"
+    "━━━━━━━━━━━━━━\n"
+    "· 抽派生 — 双方随机抽取\n"
+    "· 抽派生 彰人 [派生名] — 固定彰人，冬弥随机\n"
+    "· 抽派生 冬弥 [派生名] — 固定冬弥，彰人随机\n"
+    "· 我的派生 — 查看个人累计抽取、做饭次数和个人派生 TOP 3\n"
+    "· 每日排行 / 历史排行 — 查看本群派生抽取排行\n"
+    "· 每日做饭排行 / 历史做饭排行 — 查看本群做饭彩蛋排行\n"
+    "· 查看彰人派生 / 查看冬弥派生 — 查看当前派生池\n"
+    "\n"
+    "💡 30 分钟内最多抽 3 次；定向抽取也会计入个人累计和全群派生角色榜累计。"
+)
 
 
 def _resolve_group_command(event: Event) -> tuple[int | None, str | None]:
@@ -1460,6 +1473,19 @@ def _event_display_name(event: Event) -> str:
         if isinstance(display_name, str) and display_name.strip():
             return display_name
     return f"用户{event.get_user_id()}"
+
+
+help_cmd = on_command("派生帮助", priority=5, block=True)
+
+
+@help_cmd.handle()
+async def _(event: Event, args: Message = CommandArg()):
+    if args and args.extract_plain_text().strip():
+        return
+    group_id = getattr(event, "group_id", None)
+    if group_id is None or group_id not in ALLOWED_CHAT_GROUPS:
+        return
+    await help_cmd.finish(MessageSegment.reply(event.message_id) + _PARO_HELP_TEXT)
 
 
 draw_cmd = on_command("抽派生", priority=5, block=True)

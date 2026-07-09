@@ -162,7 +162,7 @@ def test_每日统计翻页只重置日桶(隔离派生统计):
     assert 群统计["history"]["total_draws"] == 9
 
 
-def test_阶段统计_固定彰人时只累计冬弥命中和真实彩蛋():
+def test_阶段统计_固定彰人时仍累计双方命中和真实彩蛋():
     阶段统计 = random_paro._new_period_stats()
     结果 = [
         (彰人_黑百合, 冬弥_王子, False, None),
@@ -182,14 +182,15 @@ def test_阶段统计_固定彰人时只累计冬弥命中和真实彩蛋():
 
     assert 阶段统计["total_draws"] == 6
     assert 阶段统计["user_draw_counts"] == {"42": 6}
-    assert 阶段统计["akito_hits"] == {}
+    assert 阶段统计["akito_hits"] == {彰人_黑百合: 1, 彰人_白骑: 1}
     assert 阶段统计["toya_hits"] == {冬弥_王子: 1, 冬弥_黑骑: 1}
     assert 阶段统计["egg_user_counts"] == {"42": 2}
     assert 阶段统计["fox_total"] == 1
     assert 阶段统计["rabbit_total"] == 1
     assert 阶段统计["foxrabbit_total"] == 1
     assert 阶段统计["foxbun_total"] == 1
-    assert 阶段统计["toya_last_hit_seq"] == {冬弥_王子: 1, 冬弥_黑骑: 2}
+    assert 阶段统计["akito_last_hit_seq"] == {彰人_黑百合: 1, 彰人_白骑: 3}
+    assert 阶段统计["toya_last_hit_seq"] == {冬弥_王子: 2, 冬弥_黑骑: 4}
 
 
 def test_角色排行行_同名次只显示前三并省略剩余():
@@ -288,7 +289,8 @@ def test_个人历史_固定一侧时仍记录可见派生(隔离派生统计):
     群统计 = random_paro.PARO_STATS["groups"]["1001"]
     用户统计 = 群统计["users"]["42"]
 
-    assert 群统计["history"]["akito_hits"] == {}
+    assert 群统计["history"]["akito_hits"] == {彰人_白骑: 2}
+    assert 群统计["history"]["toya_hits"] == {冬弥_王子: 1, 冬弥_黑骑: 1}
     assert 用户统计["akito_hits"] == {彰人_白骑: 2}
     assert 用户统计["toya_hits"] == {冬弥_王子: 1, 冬弥_黑骑: 1}
     assert 用户统计["pair_hits"] == {
@@ -390,6 +392,37 @@ async def test_抽派生指令_私聊会被拒绝():
         await random_paro.draw_cmd.handlers[0](事件, 事件.message)
 
     assert "该指令仅支持群聊使用" in str(异常.value.result)
+
+
+@pytest.mark.asyncio
+async def test_派生帮助指令_私聊会静默():
+    事件 = Event()
+
+    assert await random_paro.help_cmd.handlers[0](事件) is None
+
+
+@pytest.mark.asyncio
+async def test_派生帮助指令_会列出普通用户功能():
+    事件 = Event(group_id=1001, user_id="42")
+
+    with pytest.raises(FinishedException) as 异常:
+        await random_paro.help_cmd.handlers[0](事件)
+
+    结果 = str(异常.value.result)
+    assert "抽派生 — 双方随机抽取" in 结果
+    assert "我的派生" in 结果
+    assert "每日排行 / 历史排行" in 结果
+    assert "每日做饭排行 / 历史做饭排行" in 结果
+    assert "查看彰人派生 / 查看冬弥派生" in 结果
+    assert "添加彰人派生" not in 结果
+    assert "测试每日排行" not in 结果
+
+
+@pytest.mark.asyncio
+async def test_派生帮助指令_带额外参数时静默():
+    事件 = Event("派生帮助 看看", group_id=1001, user_id="42")
+
+    assert await random_paro.help_cmd.handlers[0](事件, 事件.message) is None
 
 
 @pytest.mark.asyncio

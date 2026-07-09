@@ -120,10 +120,10 @@ def _record_draw_stats_for_period(
 
     for akito_name, toya_name, is_egg, fox_type in results:
         if fox_type is None:
-            if fixed_side != "akito":
-                _record_period_hit(period_stats, "akito_hits", "akito_last_hit_seq", akito_name)
-            if fixed_side != "toya":
-                _record_period_hit(period_stats, "toya_hits", "toya_last_hit_seq", toya_name)
+            # Keep group rankings aligned with personal stats: directional draws
+            # still count as seeing the fixed-side paro in the final result.
+            _record_period_hit(period_stats, "akito_hits", "akito_last_hit_seq", akito_name)
+            _record_period_hit(period_stats, "toya_hits", "toya_last_hit_seq", toya_name)
 
         if is_egg or fox_type == "foxbun":
             _bump_counter(period_stats["egg_user_counts"], user_id)
