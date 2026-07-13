@@ -25,8 +25,16 @@ DEFAULT_GIFT_CONFIG: dict = {
         {"name": "彰冬手办", "cost": 648, "intimacy": 255},
         # special=true 必定惊喜升级（不暴击不失败，固定取自身 intimacy）；copy 指定专属文案
         {"name": "自己产的彰冬饭", "cost": 819, "intimacy": 520, "special": True, "copy": "special_meal"},
-        {"name": "彰冬婚礼邀请函", "cost": 1112, "intimacy": 1314, "special": True, "copy": "special_wedding"},
+        {"name": "彰冬婚礼邀请函", "cost": 1112, "intimacy": 819, "special": True, "copy": "special_wedding"},
     ],
+    "wedding_invitation": {
+        "gift_name": "彰冬婚礼邀请函",
+        "first_sender_bonus": 495,
+        "historical_records": [
+            {"sender_id": "2833120053", "recipient_id": "630778039"},
+            {"sender_id": "3541957542", "recipient_id": "3534610836"},
+        ],
+    },
     # 回礼回赠物：键控加权表（仿 mishaps）。name 回赠物 / bonus 在 base 之上额外加的羁绊 /
     #   refund_ratio 按所送礼物 cost 退还比例 / weight 稀有度。可增删调、热重载。
     "return_gifts": {
@@ -178,8 +186,11 @@ DEFAULT_GIFT_CONFIG: dict = {
             "{a} 送的彰冬饭正好是 {b} 最喜欢的那个派生，羁绊 +{amount}。",
         ],
         "special_wedding": [
-            "{a} 郑重地把【彰冬婚礼邀请函】递到 {b} 手里，邀请 {b} 去参加这对橙蓝给子的婚礼，羁绊 +{amount}（一生一世）。",
+            "{a} 郑重地把【彰冬婚礼邀请函】递到 {b} 手里，邀请 {b} 去参加这对橙蓝给子的婚礼，羁绊 +{amount}。",
             "{a} 向 {b} 递出【彰冬婚礼邀请函】，要把这段同好情谊焊成一辈子，羁绊 +{amount}。",
+        ],
+        "special_wedding_first_bonus": [
+            "· 首次送出纪念加成 +{bonus}，已计入本次羁绊。",
         ],
         "steal_success": [
             "{a} 趁 {b} 没留神，顺走了 {amount} 积分，转身就跑。（羁绊 -{bond}）",
@@ -271,12 +282,17 @@ def _pick_gift_by_name(name: str) -> dict | None:
     return None
 
 
-def _affordable_gifts(points: int) -> list[dict]:
-    return [gift for gift in _gift_list() if int(gift.get("cost", 0)) <= int(points)]
+def _affordable_gifts(points: int, excluded_names: set[str] | None = None) -> list[dict]:
+    excluded = excluded_names or set()
+    return [
+        gift
+        for gift in _gift_list()
+        if int(gift.get("cost", 0)) <= int(points) and str(gift.get("name", "")) not in excluded
+    ]
 
 
-def _pick_gift(points: int, rng=random) -> dict | None:
-    pool = _affordable_gifts(points)
+def _pick_gift(points: int, rng=random, *, excluded_names: set[str] | None = None) -> dict | None:
+    pool = _affordable_gifts(points, excluded_names)
     if not pool:
         return None
     weights = list(range(1, len(pool) + 1))
@@ -342,3 +358,8 @@ def _is_special_gift(gift: dict) -> bool:
 def _steal_cfg() -> dict:
     steal = _cfg("steal", {})
     return steal if isinstance(steal, dict) and steal else DEFAULT_GIFT_CONFIG["steal"]
+
+
+def _wedding_cfg() -> dict:
+    wedding = _cfg("wedding_invitation", {})
+    return wedding if isinstance(wedding, dict) and wedding else DEFAULT_GIFT_CONFIG["wedding_invitation"]

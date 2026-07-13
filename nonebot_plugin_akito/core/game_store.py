@@ -1,6 +1,7 @@
 """共享玩家存储层：积分 / 亲密度 / 每日数据的统一读写，供 gift、rpg 等社交小游戏模块复用。
 
-抽自 features/gift.py，行为保持一致：按群存储、每日按日期重置、原子读写、文件优先 + 缺省兜底。
+抽自 features/gift.py。玩家档案与社交关系按 QQ 全局共享，群记录只保留成员索引与群级 RPG 状态；
+每日闸门仍按日期重置，读写保持原子化、文件优先 + 缺省兜底。
 所有玩法模块读写**同一份 gift_data.json**、共用**同一把 LOCK**，避免多模块并发写产生竞态。
 
 依赖方向：本模块属 core 基础层，只依赖 core 常量与 onebot 适配器；不反向依赖任何 features 模块。
@@ -23,7 +24,8 @@ from .paths import find_data_path, get_data_dir
 
 # 物理文件沿用 gift_data.json：现已是 gift + rpg 共享的玩家库，改名会让线上既有数据失联，故保持不变。
 DATA_FILE = "gift_data.json"
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 3
+GLOBAL_PROFILE_SOURCE_GROUP = os.environ.get("GLOBAL_PROFILE_SOURCE_GROUP", "691188576").strip()
 
 # 多模块共用一把锁，串行化对 DATA_FILE 的并发读写。
 LOCK = asyncio.Lock()
@@ -38,37 +40,130 @@ def _today_str() -> str:
 # ==================== 数据骨架与归一化 ====================
 
 def _new_data() -> dict:
-    return {"schema_version": SCHEMA_VERSION, "groups": {}}
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "users": {},
+        "intimacy": {},
+        "counts": {},
+        "wedding_invitations": {},
+        "groups": {},
+    }
 
 
 def _new_group() -> dict:
-    return {"users": {}, "intimacy": {}, "counts": {}, "rpg": {}}
+    return {
+        "user_ids": [],
+        "users": {},
+        "intimacy": {},
+        "counts": {},
+        "wedding_invitations": {},
+        "rpg": {},
+    }
+
+
+def _clean_users(value: object) -> dict:
+    if not isinstance(value, dict):
+        return {}
+    return {str(uid): dict(rec) for uid, rec in value.items() if isinstance(rec, dict)}
+
+
+def _clean_int_map(value: object) -> dict:
+    if not isinstance(value, dict):
+        return {}
+    return {str(key): int(amount) for key, amount in value.items() if isinstance(amount, (int, float))}
+
+
+def _clean_record_map(value: object) -> dict:
+    if not isinstance(value, dict):
+        return {}
+    return {str(key): dict(rec) for key, rec in value.items() if isinstance(rec, dict)}
+
+
+def _ordered_groups(groups: dict) -> list[tuple[object, dict]]:
+    items = [(gid, group) for gid, group in groups.items() if isinstance(group, dict)]
+    return sorted(items, key=lambda item: str(item[0]) != GLOBAL_PROFILE_SOURCE_GROUP)
+
+
+def _attach_group_views(data: dict, group: dict) -> dict:
+    global_users = data.setdefault("users", {})
+    user_ids = [str(uid) for uid in group.get("user_ids", []) if str(uid)]
+    local_users = _clean_users(group.get("users"))
+    for uid, rec in local_users.items():
+        if uid not in global_users:
+            global_users[uid] = rec
+        if uid not in user_ids:
+            user_ids.append(uid)
+
+    group["user_ids"] = user_ids
+    group["_global_users"] = global_users
+    group["users"] = {uid: global_users[uid] for uid in user_ids if uid in global_users}
+    group["intimacy"] = data.setdefault("intimacy", {})
+    group["counts"] = data.setdefault("counts", {})
+    group["wedding_invitations"] = data.setdefault("wedding_invitations", {})
+    group.setdefault("rpg", {})
+    return group
 
 
 def _normalize_data(raw: object) -> dict:
-    """容错归一：丢弃非法结构，保证 groups[gid] = {users, intimacy, counts, rpg}。
-
-    user 记录整条原样保留 —— gift 的偷窃字段、rpg 的经验/精力等都挂在 user 内，天然持久化。
-    """
+    """容错归一并迁移旧结构：玩家档案和社交关系提升为全局状态。"""
     data = _new_data()
     if not isinstance(raw, dict):
         return data
-    groups = raw.get("groups")
-    if isinstance(groups, dict):
-        for gid, group in groups.items():
-            if not isinstance(group, dict):
-                continue
-            users = group.get("users") if isinstance(group.get("users"), dict) else {}
-            intimacy = group.get("intimacy") if isinstance(group.get("intimacy"), dict) else {}
-            counts = group.get("counts") if isinstance(group.get("counts"), dict) else {}
-            rpg = group.get("rpg") if isinstance(group.get("rpg"), dict) else {}
-            data["groups"][str(gid)] = {
-                "users": {str(uid): rec for uid, rec in users.items() if isinstance(rec, dict)},
-                "intimacy": {str(k): int(v) for k, v in intimacy.items() if isinstance(v, (int, float))},
-                "counts": {str(k): int(v) for k, v in counts.items() if isinstance(v, (int, float))},
-                "rpg": rpg,
-            }
+    groups = raw.get("groups") if isinstance(raw.get("groups"), dict) else {}
+    ordered_groups = _ordered_groups(groups)
+
+    data["users"] = _clean_users(raw.get("users"))
+    data["intimacy"] = _clean_int_map(raw.get("intimacy"))
+    data["counts"] = _clean_int_map(raw.get("counts"))
+    data["wedding_invitations"] = _clean_record_map(raw.get("wedding_invitations"))
+
+    for _gid, group in ordered_groups:
+        for uid, rec in _clean_users(group.get("users")).items():
+            if uid not in data["users"]:
+                data["users"][uid] = rec
+            else:
+                for key, value in rec.items():
+                    data["users"][uid].setdefault(key, value)
+        for key, value in _clean_int_map(group.get("intimacy")).items():
+            data["intimacy"].setdefault(key, value)
+        for key, value in _clean_int_map(group.get("counts")).items():
+            data["counts"].setdefault(key, value)
+        for key, value in _clean_record_map(group.get("wedding_invitations")).items():
+            data["wedding_invitations"].setdefault(key, value)
+
+    for gid, group in groups.items():
+        if not isinstance(group, dict):
+            continue
+        user_ids = [str(uid) for uid in group.get("user_ids", []) if str(uid)]
+        for uid in _clean_users(group.get("users")):
+            if uid not in user_ids:
+                user_ids.append(uid)
+        data["groups"][str(gid)] = {
+            "user_ids": user_ids,
+            "rpg": group.get("rpg") if isinstance(group.get("rpg"), dict) else {},
+        }
+
+    for group in data["groups"].values():
+        _attach_group_views(data, group)
     return data
+
+
+def _serializable_data(data: object) -> dict:
+    normalized = _normalize_data(data)
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "users": normalized["users"],
+        "intimacy": normalized["intimacy"],
+        "counts": normalized["counts"],
+        "wedding_invitations": normalized["wedding_invitations"],
+        "groups": {
+            str(gid): {
+                "user_ids": list(group.get("user_ids", [])),
+                "rpg": group.get("rpg", {}),
+            }
+            for gid, group in normalized["groups"].items()
+        },
+    }
 
 
 def _load_data() -> dict:
@@ -93,7 +188,7 @@ def _save_data(data: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
     with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(_normalize_data(data), f, ensure_ascii=False, indent=2)
+        json.dump(_serializable_data(data), f, ensure_ascii=False, indent=2)
     os.replace(tmp, path)
 
 
@@ -103,13 +198,9 @@ def _get_group(data: dict, group_id) -> dict:
     groups = data.setdefault("groups", {})
     group = groups.get(str(group_id))
     if not isinstance(group, dict):
-        group = _new_group()
+        group = {"user_ids": [], "rpg": {}}
         groups[str(group_id)] = group
-    group.setdefault("users", {})
-    group.setdefault("intimacy", {})
-    group.setdefault("counts", {})
-    group.setdefault("rpg", {})
-    return group
+    return _attach_group_views(data, group)
 
 
 def get_user(group: dict, user_id, display_name: str = "") -> dict:
@@ -118,11 +209,17 @@ def get_user(group: dict, user_id, display_name: str = "") -> dict:
     各玩法模块在此基础上自行 setdefault 专属字段（gift 的偷窃字段、rpg 的经验/精力等），
     互不污染。返回的就是存在 group["users"][uid] 里的同一个 dict，可直接原地改。
     """
-    users = group.setdefault("users", {})
+    global_users = group.get("_global_users")
+    users = global_users if isinstance(global_users, dict) else group.setdefault("users", {})
     user = users.get(str(user_id))
     if not isinstance(user, dict):
         user = {}
         users[str(user_id)] = user
+    if isinstance(global_users, dict):
+        group.setdefault("users", {})[str(user_id)] = user
+        user_ids = group.setdefault("user_ids", [])
+        if str(user_id) not in user_ids:
+            user_ids.append(str(user_id))
     user.setdefault("points", 0)
     user.setdefault("display_name", "")
     if display_name:

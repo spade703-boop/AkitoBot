@@ -50,11 +50,25 @@
     {
       "name": "彰冬婚礼邀请函",
       "cost": 1112,
-      "intimacy": 1314,
+      "intimacy": 819,
       "special": true,
       "copy": "special_wedding"
     }
   ],
+  "wedding_invitation": {
+    "gift_name": "彰冬婚礼邀请函",
+    "first_sender_bonus": 495,
+    "historical_records": [
+      {
+        "sender_id": "2833120053",
+        "recipient_id": "630778039"
+      },
+      {
+        "sender_id": "3541957542",
+        "recipient_id": "3534610836"
+      }
+    ]
+  },
   "return_gifts": {
     "guzi": {
       "name": "彰冬谷子",
@@ -355,8 +369,11 @@
       "{a} 送的彰冬饭正好是 {b} 最喜欢的那个派生，羁绊 +{amount}。"
     ],
     "special_wedding": [
-      "{a} 郑重地把【彰冬婚礼邀请函】递到 {b} 手里，邀请 {b} 去参加这对橙蓝给子的婚礼，羁绊 +{amount}（一生一世）。",
+      "{a} 郑重地把【彰冬婚礼邀请函】递到 {b} 手里，邀请 {b} 去参加这对橙蓝给子的婚礼，羁绊 +{amount}。",
       "{a} 向 {b} 递出【彰冬婚礼邀请函】，要把这段同好情谊焊成一辈子，羁绊 +{amount}。"
+    ],
+    "special_wedding_first_bonus": [
+      "· 首次送出纪念加成 +{bonus}，已计入本次羁绊。"
     ],
     "steal_success": [
       "{a} 趁 {b} 没留神，顺走了 {amount} 积分，转身就跑。（羁绊 -{bond}）",

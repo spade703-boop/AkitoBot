@@ -99,6 +99,7 @@ ZHIPU_API_KEY=xxx
 
 SUPERUSER_QQ=123456789    # 重置对话 / WL2 模式的授权 QQ
 TOYA_QQ_ID=987654321      # 冬弥本人的 QQ，影响 CP 模式触发
+GLOBAL_PROFILE_SOURCE_GROUP=691188576  # gift_data v2→v3 合并时的优先来源群
 ```
 
 > ⚠️ **修改密钥或管理员 QQ 只需改 `.env`，无需动代码。重启后生效。**
@@ -129,6 +130,7 @@ TOYA_QQ_ID=987654321      # 冬弥本人的 QQ，影响 CP 模式触发
 | `ALLOWED_CP_GROUPS` | `.env` | 允许 CP 相关功能的群列表（逗号分隔） |
 | `ALLOWED_MEMORY_GROUPS` | `.env` | 允许使用记忆指令的群列表（逗号分隔） |
 | `TARGET_GROUPS` | `.env` | 定时推送目标群列表（逗号分隔） |
+| `GLOBAL_PROFILE_SOURCE_GROUP` | `.env` | 旧版分群玩家数据升级为全局档案时的优先来源群；默认 `691188576` |
 | `GROUP_IMAGE_PERMISSIONS` | `.env` | 各群的图库分类权限（JSON 格式） |
 
 ### memory.py
@@ -494,27 +496,27 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（戳一戳
 
 ### gift/
 
-彰冬同人圈主题的群友互送小游戏。完全自包含（不依赖其他 feature 模块），通过 `core/game_store.py` 共享存储层与 RPG 子系统共用玩家数据。
+彰冬同人圈主题的群友互送小游戏。通过 `core/game_store.py` 与 RPG 共用全局玩家档案；同一 QQ 的积分、每日闸门、羁绊和 RPG 用户字段跨群共享，群记录只保留成员索引与世界 BOSS 等群级状态。
 
 游戏闭环：`签到` 赚积分 → `送礼@对方` 送随机礼物、累积两人亲密度（同好羁绊）→ `偷@对方` 顺走少量积分（反效果：偷必掉羁绊）→ 循环。6 档羁绊梯（从「初识」到「从今往后直到永远」=Lv6），羁绊越高送礼暴击/共识收益越大，偷的惩罚也越大。被偷保护机制（protect_until + 硬上限）防止泛滥。
 
 | 指令 | 权限 | 说明 |
 |------|------|------|
 | `签到` | 普通用户 | 每日 1 次领积分 + 搭车 RPG 签到钩子（暗掷运势 + 发经验 + 发今日装备）；签到前随机延迟错开其他 bot |
-| `送礼@对方` | 普通用户 | 每日 1 次，系统从「你当前积分买得起的礼物」中随机送；按权重抽事件（普通/暴击/回礼/失败/意外）；顶档「自己产的彰冬饭」触发惊喜升级固定结算 |
+| `送礼@对方` | 普通用户 | 每日 1 次，系统从「你当前积分买得起的礼物」中随机送；按权重抽事件（普通/暴击/回礼/失败/意外）；婚礼邀请函基础 +819、送出者首份另加 +495，同一无方向关系仅出现一次，已使用关系自动排除该礼物后重抽 |
 | `偷@对方` | 普通用户 | 每日 2 次，小概率顺走对方少量积分；强保护 + 偷必掉羁绊 |
 | `我的积分` | 普通用户 | 查看当前积分余额 |
 | `礼物列表` | 普通用户 | 查看所用礼池中各档位的礼物清单 |
 | `我的羁绊` | 普通用户 | 查看与指定群友的亲密度等级/进度 |
-| `群羁绊排行` | 普通用户 | 本群所有有羁绊记录的亲密度排行（按最近送礼时间排序） |
+| `群羁绊排行` | 普通用户 | 全局所有羁绊关系排行 |
 | `测试我的羁绊` | 普通用户 | 渲染「我的羁绊」HTML 卡片预览 |
 | `送礼功能帮助` / `送礼帮助` / `送礼说明` | 普通用户 | 指令帮助 |
-| `重置送礼` | **SUPERUSER_QQ** | 清空本群全部送礼/积分/羁绊数据 |
-| `重置本群签到` / `重置全群签到` / `重置签到次数` | **SUPERUSER_QQ** | 仅清掉本群今日签到闸门（`last_sign_in`=today → ""），不改 RPG 连签/装备/运势状态 |
-| `重置偷群友` | **SUPERUSER_QQ** | 仅重置本群今日偷积分次数、被偷次数与保护闸门，不改积分与羁绊 |
+| `重置送礼` | **SUPERUSER_QQ** | 清空全局送礼/积分/羁绊/RPG 玩家数据及群级状态 |
+| `重置本群签到` / `重置全群签到` / `重置签到次数` | **SUPERUSER_QQ** | 清掉当前群成员的全局签到闸门，不改 RPG 连签/装备/运势状态 |
+| `重置偷群友` | **SUPERUSER_QQ** | 重置当前群成员的全局偷积分次数、被偷次数与保护闸门，不改积分与羁绊 |
 
 **架构关系**：
-- 存储层：`core/game_store.py`（`gift_data.json`，含 `LOCK`/积分/亲密度/每日重置/签到钩子注册）
+- 存储层：`core/game_store.py`（`gift_data.json` schema v3；全局 users/intimacy/counts/wedding_invitations + 群级成员索引/rpg）
 - 签到衔接：`gift/` 的签到持锁后调用 `run_signin_hooks`，RPG 的 `fortune.on_signin` 通过 `register_signin_hook` 注册订阅；gift 不反向依赖 rpg
 - 配置热更：通过 `data/content/gift_config.json` 覆盖默认值；`reload_assets()` 调用 `gift.reload_gift_config()` 热更新
 - 数据文件：`data/gift_data.json`（玩家数据，含积分/送礼/偷/羁绊/RPG 字段）、`data/content/gift_config.json`（配置覆盖）、`data/content/intimacy_tiers.json`（羁绊梯定义）
@@ -552,7 +554,7 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（戳一戳
 - 世界 BOSS 只会在普通 `今日打怪` / `组队@某人` 后以 `3%` 概率刷出；若近 7 日活跃签到人数少于 3，就算随机命中也不会生成。
 - 世界 BOSS 强度按近 7 日活跃签到人数缩放，而不是按“今天当前已签到人数”计算，避免早时段触发时血量异常偏小。
 - 世界 BOSS 基础奖励仍只有经验和积分；贡献结算会更新玩家 `exp/points`，但不会改普通战绩字段 `hunt_total/hunt_wins`。额外的世界BOSS专属收藏仅作展示，不带数值。
-- `core/game_store.py` 现在必须保留 `groups[gid]["rpg"]`，否则世界 BOSS 的群级状态会在归一化时丢失。
+- `core/game_store.py` 必须同时保留顶层全局玩家/社交状态与 `groups[gid]["rpg"]`；旧群数据升级时默认以 `691188576` 为重复用户和重复羁绊的优先来源。
 
 ---
 
@@ -594,7 +596,7 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（戳一戳
 
 | 路径 | 读写 | 说明 |
 |------|------|------|
-| `data/gift_data.json` | 读写 | gift + rpg 共享玩家数据；`groups[*].users[*]` 保存积分/送礼/偷/羁绊/RPG 经验/装备/运势/背包/连签，`groups[*].rpg` 保存世界 BOSS 等群级 RPG 状态 |
+| `data/gift_data.json` | 读写 | gift + rpg 共享数据；顶层 `users[*]` 保存全局玩家档案，顶层 `intimacy/counts/wedding_invitations` 保存全局社交状态，`groups[*].user_ids` 保存群成员索引，`groups[*].rpg` 保存世界 BOSS 等群级状态 |
 | `data/akito_memories.json` | 读写 | 核心记忆库（启动时加载，记忆变更时写入） |
 | `data/last_interactions.json` | 读写 | 各群最后互动时间戳和 routine 快照（time_awareness.py） |
 | `data/impression_history.db` | 读写 | 群消息 SQLite（impression.py 独占） |

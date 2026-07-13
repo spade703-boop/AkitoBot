@@ -171,6 +171,27 @@ async def test_steal_cmd_daily_limit_blocks(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_steal_cmd_daily_limit_is_shared_across_groups(monkeypatch):
+    limit = gift._steal_cfg()["daily_limit"]
+    _patch_runtime(
+        monkeypatch,
+        store={"groups": {
+            "1001": {"users": {
+                "10001": {"points": 100, "steal_date": "2026-06-22", "steal_used": limit},
+            }},
+            "1002": {"users": {"10001": {"points": 999}, "10002": {"points": 500}}},
+        }},
+    )
+    monkeypatch.setattr(gift.time, "time", lambda: 0.0)
+    event = Event(group_id=1002, user_id="10001", original_message=[_at("10002")])
+
+    with pytest.raises(FinishedException) as exc:
+        await gift.steal_cmd.handlers[0](_bot(), event)
+
+    assert "手气用完" in str(exc.value.result)
+
+
+@pytest.mark.asyncio
 async def test_steal_cmd_blocked_by_signin_protection(monkeypatch):
     _patch_runtime(
         monkeypatch,

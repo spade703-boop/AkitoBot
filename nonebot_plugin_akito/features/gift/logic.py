@@ -41,6 +41,79 @@ def _get_count(group: dict, frm, to) -> int:
     return int(group.get("counts", {}).get(_count_key(frm, to), 0))
 
 
+def _wedding_pair_used(group: dict, sender_id: str, recipient_id: str) -> bool:
+    records = group.get("wedding_invitations", {})
+    return isinstance(records, dict) and _pkg()._pair_key(sender_id, recipient_id) in records
+
+
+def _record_wedding_invitation(
+    group: dict,
+    sender_id: str,
+    recipient_id: str,
+    date: str = "",
+    *,
+    historical: bool = False,
+) -> None:
+    records = group.setdefault("wedding_invitations", {})
+    key = _pkg()._pair_key(sender_id, recipient_id)
+    records.setdefault(key, {
+        "sender_id": str(sender_id),
+        "recipient_id": str(recipient_id),
+        "date": str(date),
+        "historical": bool(historical),
+    })
+
+
+def _global_user(group: dict, user_id: str) -> dict:
+    users = group.get("_global_users")
+    if not isinstance(users, dict):
+        return _get_user(group, user_id)
+    user = users.setdefault(str(user_id), {})
+    user.setdefault("points", 0)
+    user.setdefault("display_name", "")
+    return user
+
+
+def _apply_historical_wedding_records(group: dict) -> int:
+    cfg = _pkg()._wedding_cfg()
+    records = cfg.get("historical_records", [])
+    if not isinstance(records, list):
+        return 0
+    applied = 0
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        sender_id = str(record.get("sender_id", ""))
+        recipient_id = str(record.get("recipient_id", ""))
+        if not sender_id or not recipient_id:
+            continue
+        if not _wedding_pair_used(group, sender_id, recipient_id):
+            _record_wedding_invitation(group, sender_id, recipient_id, historical=True)
+            applied += 1
+        _global_user(group, sender_id)["wedding_first_bonus_claimed"] = True
+    return applied
+
+
+def _settle_wedding_invitation(
+    group: dict,
+    sender_id: str,
+    recipient_id: str,
+    out: dict,
+    date: str,
+) -> dict:
+    sender = _get_user(group, sender_id)
+    bonus = 0
+    if not bool(sender.get("wedding_first_bonus_claimed", False)):
+        bonus = max(0, int(_pkg()._wedding_cfg().get("first_sender_bonus", 0)))
+        if bonus:
+            _pkg()._add_intimacy(group, sender_id, recipient_id, bonus)
+            out["amount"] = int(out.get("amount", 0)) + bonus
+    sender["wedding_first_bonus_claimed"] = True
+    out["wedding_bonus"] = bonus
+    _record_wedding_invitation(group, sender_id, recipient_id, date)
+    return out
+
+
 def _bond_level(value: int) -> dict:
     levels = _pkg()._bond_levels()
     value = int(value)
@@ -236,7 +309,13 @@ def _build_broadcast(out: dict, sender_id: str, target_id: str, rng=random):
         "refund": out.get("refund", 0),
         "return_gift": out.get("return_gift") or "",
     }
-    return pkg._render_with_ats(template, ctx)
+    message = pkg._render_with_ats(template, ctx)
+    wedding_bonus = int(out.get("wedding_bonus", 0))
+    if wedding_bonus > 0:
+        bonus_template = rng.choice(pkg._copy("special_wedding_first_bonus"))
+        bonus_line = pkg._render_with_ats(bonus_template, {"bonus": wedding_bonus})
+        message = message + "\n" + bonus_line
+    return message
 
 
 def _resolve_group(event: Event) -> tuple[str | None, str | None]:
@@ -295,7 +374,10 @@ def _top_partners(group: dict, user_id: str, limit: int = 5) -> list[tuple[str, 
 
 
 def _name_of(group: dict, user_id: str) -> str:
-    user = group.get("users", {}).get(str(user_id))
+    users = group.get("_global_users")
+    if not isinstance(users, dict):
+        users = group.get("users", {})
+    user = users.get(str(user_id)) if isinstance(users, dict) else None
     if isinstance(user, dict) and user.get("display_name"):
         return user["display_name"]
     return f"用户{user_id}"

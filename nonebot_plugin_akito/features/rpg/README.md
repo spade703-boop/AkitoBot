@@ -9,7 +9,7 @@
 - **世界 BOSS**（低频）→ 常规打怪后极低概率刷出全群共享目标；走独立群挑战线，单人或双人挑战，按贡献结算经验和积分，并有低概率掉落专属收藏
 - **攀比层** → `群排行榜` 看等级榜、`我的角色` 显示**称号 + 战绩**（都按需查询、不刷屏）
 
-角色对外只有「等级」一个数值；战力是今日装备的隐藏值；运势/今日增益是隐藏值（只暗中影响打怪）。
+角色对外只有「等级」一个数值；战力是今日装备的隐藏值；运势/今日增益是隐藏值（只暗中影响打怪）。同一 QQ 的角色档案与普通战斗状态跨群共享，世界 BOSS 状态仍按群隔离。
 
 ---
 
@@ -79,12 +79,13 @@ features/rpg/
 - 世界 BOSS：`boss` 读取 `group["rpg"]["world_boss"]` → 近 7 日活跃人数先映射成血量规模 `scale_count`，再单独映射成奖励规模 `reward_scale_count` → 为参与者懒创建独立临时装备记录 `participants[uid]` → 单人或双人计算本次伤害 → 更新贡献榜和剩余生命 → 击杀时按贡献发经验 / 积分，并结算世界BOSS羁绊展示与专属收藏掉落，然后清掉群级状态。
 
 **玩家与群数据**（存于 `gift_data.json`，与送礼共用）：
-- 共享：`points`（积分）、`display_name` 等（送礼系统维护）。
-- RPG：`exp`（经验，→等级）、`inventory`（背包）、`fortune/fortune_date/last_fortune/no_lucky_streak`（隐藏运势）、
+- 全局玩家：顶层 `users[uid]` 保存 `points`、`display_name`、`exp`、`inventory`、`fortune/fortune_date/last_fortune/no_lucky_streak` 等字段，同一 QQ 跨群共用。
+- RPG 用户字段：
   `equip_date/equip_level/equip_roll/equip_forge/equip_used`（今日装备）、`exp_buff_uses/exp_buff_mult`（双倍经验卡）、
   `hunt_total/hunt_wins`（战绩，喂排行榜/面板）、`signin_streak/signin_last_date`（连续签到）、`world_boss_trophies`（世界BOSS收藏展示）。
+- 全局社交：顶层 `intimacy/counts/wedding_invitations` 保存羁绊、送礼次数和婚礼邀请函关系锁。
 - 群级 RPG 状态：`groups[gid]["rpg"]["world_boss"]` 保存当日世界 BOSS 的名字、剩余生命、贡献榜、活跃人数快照，以及 `participants[uid]` 这套独立临时装备记录。
-- 称号（按等级派生）与今日增益（按日期算）**不落库**。用户字段挂在 `users[uid]`，群级 BOSS 状态挂在 `groups[gid]["rpg"]`；`game_store._normalize_data` 必须保留这两层结构。
+- 称号（按等级派生）与今日增益（按日期算）**不落库**。`game_store._normalize_data` 必须同时保留全局玩家层和群级 RPG 层。
 
 ---
 

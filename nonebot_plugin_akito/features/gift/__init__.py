@@ -4,11 +4,13 @@
 - `签到`：每天 1 次领取积分（赚取入口）。
 - `送礼@对方`：每天 1 次，系统从「你当前积分买得起的礼物」里随机送一份给对方，按权重抽随机事件
   （普通/暴击/回礼/失败/意外），累积两个群友之间的「亲密度（同好羁绊）」。
-  顶档「自己产的彰冬饭」一旦抽中，必定触发「惊喜升级」固定结算。
+  高档保证礼「自己产的彰冬饭」「彰冬婚礼邀请函」一旦抽中，必定触发「惊喜升级」固定结算；
+  婚礼邀请函同一对关系只会出现一次，且每位送出者的首份邀请函带一次纪念加成。
 - `偷@对方`：每天 2 次，小概率顺走对方少量积分（强保护 + 偷必掉羁绊，偷越亲近掉越多）。
-- `我的积分` / `礼物列表` / `亲密度` / `群羁绊排行` 查询；`重置送礼`（超管）清空本群数据。
+- `我的积分` / `礼物列表` / `亲密度` / `群羁绊排行` 查询；玩家档案与羁绊跨群共享；
+  `重置送礼`（超管）清空全局玩家数据。
 
-数据与套路对照 features/random_keyword/：按群存储、每日按日期重置、原子读写、文件优先+缺省兜底配置。
+数据与套路对照 features/random_keyword/：按 QQ 绑定玩家状态、每日按日期重置、原子读写、文件优先+缺省兜底配置。
 """
 
 from __future__ import annotations
@@ -38,6 +40,7 @@ from ...core.game_store import (
     _get_group,
     _get_intimacy,
     _load_data,
+    _new_data,
     _new_group,
     _normalize_data,  # noqa: F401  仅供 tests/test_gift.py 引用 gift._normalize_data
     _pair_key,  # noqa: F401  仅供 tests/test_gift.py 引用 gift._pair_key
@@ -70,9 +73,11 @@ from .config import (
     _roll_mishap,
     _roll_return_gift,
     _steal_cfg,
+    _wedding_cfg,
     reload_gift_config,
 )
 from .logic import (
+    _apply_historical_wedding_records,
     _bond_card,
     _bond_level,
     _build_broadcast,
@@ -84,13 +89,16 @@ from .logic import (
     _outcome_copy_key,
     _reset_today_signins,
     _reset_today_steals,
+    _record_wedding_invitation,
     _resolve_group,
     _settle,
+    _settle_wedding_invitation,
     _settle_steal,
     _sign_in_delay,
     _steal_bond_loss,
     _steal_outcome,
     _top_partners,
+    _wedding_pair_used,
 )
 from .pages import build_bond_page_data, build_bond_rank_page_data, build_my_bonds_page_data
 from .render import render_bond_page
@@ -130,6 +138,7 @@ async def _(event: Event):
         user = _get_user(group, user_id, _display_name(event))
 
         if not is_superuser and user.get("last_sign_in") == today:
+            _save_data(data)  # 全局已签过仍记录当前群成员索引，保持群榜/活跃统计完整
             return  # 重复签到静默：群里另有签到 bot 应答，避免双重刷屏
 
         sign_cfg = _cfg("sign_in", {})
@@ -185,6 +194,7 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
     async with _GIFT_LOCK:
         data = _load_data()
         group = _get_group(data, group_id)
+        _apply_historical_wedding_records(group)
         sender = _get_user(group, sender_id, _display_name(event))
         _get_user(group, target_qq)  # 确保被送者入册（用于排行/亲密度查询）
 
@@ -194,7 +204,10 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
             )
 
         points = int(sender.get("points", 0))
-        gift = _pick_gift(points)
+        excluded_names: set[str] = set()
+        if _wedding_pair_used(group, sender_id, target_qq):
+            excluded_names.add(str(_wedding_cfg().get("gift_name", "彰冬婚礼邀请函")))
+        gift = _pick_gift(points, excluded_names=excluded_names)
         if gift is None:
             cheapest = _cheapest_gift() or {"name": "", "cost": 0}
             await gift_cmd.finish(
@@ -214,6 +227,8 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
             return_key = _roll_return_gift() if main_event == "return" else None
 
         out = _settle(group, sender_id, target_qq, gift, main_event, mishap, return_key)
+        if str(gift.get("name", "")) == str(_wedding_cfg().get("gift_name", "彰冬婚礼邀请函")):
+            out = _settle_wedding_invitation(group, sender_id, target_qq, out, today)
         _bump_count(group, sender_id, target_qq)  # 记一次有向送礼（无论事件结果）
         _save_data(data)
 
@@ -494,7 +509,7 @@ async def _(event: Event):
     group = _get_group(data, group_id)
     pairs = sorted(group.get("intimacy", {}).items(), key=lambda kv: int(kv[1]), reverse=True)[:10]
     if not pairs:
-        await rank_cmd.finish(MessageSegment.reply(event.message_id) + "本群还没有羁绊数据，快去送礼吧～")
+        await rank_cmd.finish(MessageSegment.reply(event.message_id) + "目前还没有全局羁绊数据，快去送礼吧～")
 
     if GIFT_USE_HTML_RENDER:
         entries: list[dict] = []
@@ -516,13 +531,13 @@ async def _(event: Event):
                 MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes)
             )
         else:
-            lines = ["\U0001f49e 本群同好羁绊排行："]
+            lines = ["\U0001f49e 全局同好羁绊排行："]
             for idx, (key, value) in enumerate(pairs, 1):
                 a, b = key.split("|||")
                 lines.append(f"{idx}. {_name_of(group, a)} × {_name_of(group, b)}：{value}（{_bond_level(value)['name']}）")
             await rank_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
     else:
-        lines = ["💞 本群同好羁绊排行："]
+        lines = ["💞 全局同好羁绊排行："]
         for idx, (key, value) in enumerate(pairs, 1):
             a, b = key.split("|||")
             lines.append(f"{idx}. {_name_of(group, a)} × {_name_of(group, b)}：{value}（{_bond_level(value)['name']}）")
@@ -541,10 +556,9 @@ async def _(event: Event):
     group_id = getattr(event, "group_id", None)
     if group_id is None:
         return
-    data = _load_data()
-    data.setdefault("groups", {})[str(group_id)] = _new_group()
-    _save_data(data)
-    await reset_cmd.finish(MessageSegment.reply(event.message_id) + "已清空本群的送礼/积分/羁绊数据。")
+    async with _GIFT_LOCK:
+        _save_data(_new_data())
+    await reset_cmd.finish(MessageSegment.reply(event.message_id) + "已清空全局送礼/积分/羁绊/RPG数据。")
 
 
 # ==================== 指令：重置本群签到（超管） ====================
@@ -576,9 +590,9 @@ async def _(event: Event):
         _save_data(data)
 
     if cleared:
-        msg = f"本群今日签到已放开，已清掉 {cleared} 人的签到闸门。RPG 连签和今日装备没动。"
+        msg = f"已清掉当前群 {cleared} 名成员的全局签到闸门。RPG 连签和今日装备没动。"
     else:
-        msg = "本群今天还没人被签到闸门卡住。"
+        msg = "当前群今天还没人被全局签到闸门卡住。"
     await reset_signin_cmd.finish(MessageSegment.reply(event.message_id) + msg)
 
 
@@ -605,10 +619,11 @@ async def _(event: Event):
         cleared = _reset_today_steals(group, today)
         _save_data(data)
 
-    if cleared:
-        msg = f"本群今日偷群友次数已重置，已放开 {cleared} 人的偷取/被偷闸门。"
-    else:
-        msg = "本群今天还没人被偷积分次数卡住。"
+    msg = (
+        f"已重置当前群 {cleared} 名成员的全局偷取/被偷闸门。"
+        if cleared
+        else "当前群今天还没人被全局偷取次数卡住。"
+    )
     await reset_steal_cmd.finish(MessageSegment.reply(event.message_id) + msg)
 
 
@@ -628,7 +643,7 @@ async def _(event: Event):
         "· 我的积分 — 查看当前积分和今日状态\n"
         "· 礼物列表 — 查看全部礼物档位和花费\n"
         "· 我的羁绊@某人 — 查看你与 ta 的羁绊详情图\n"
-        "· 群羁绊排行 — 查看本群羁绊排行榜\n"
+        "· 群羁绊排行 — 查看全局羁绊排行榜\n"
         "\n"
         "💡 礼物越贵羁绊加得越多；送礼有概率暴击/回礼/意外事件。\n"
         "💡 偷人需谨慎：偷越亲近的人掉羁绊越多，还可能被反杀。"

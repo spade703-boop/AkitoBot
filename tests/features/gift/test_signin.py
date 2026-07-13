@@ -28,6 +28,20 @@ async def test_sign_cmd_grants_then_silent_on_repeat(monkeypatch):
     assert "70" in str(first.value.result)
     assert state["groups"]["1001"]["users"]["10001"]["points"] == 70
 
+
+@pytest.mark.asyncio
+async def test_sign_cmd_is_silent_across_groups_after_global_signin(monkeypatch):
+    state = _patch_runtime(monkeypatch)
+    monkeypatch.setattr(gift.random, "randint", lambda _a, _b: 70)
+
+    with pytest.raises(FinishedException):
+        await gift.sign_cmd.handlers[0](Event(group_id=1001, user_id="10001"))
+    result = await gift.sign_cmd.handlers[0](Event(group_id=1002, user_id="10001"))
+
+    assert result is None
+    assert state["users"]["10001"]["points"] == 70
+    assert "10001" in state["groups"]["1002"]["user_ids"]
+
     # 当天重复签到：静默（不抛 finish、不改积分）
     result = await gift.sign_cmd.handlers[0](Event(group_id=1001, user_id="10001"))
     assert result is None

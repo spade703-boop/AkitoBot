@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from nonebot_plugin_akito.core import game_store
 import nonebot_plugin_akito.features.gift as gift
 
 from .helpers import _g0, _top
@@ -40,6 +41,23 @@ def test_pick_gift_weighted_prefers_pricier():
     assert picked["name"] == affordable[-1]  # 末位（由桩 rng 决定）
 
 
+def test_pick_gift_can_exclude_wedding_invitation_before_draw():
+    class _RNG:
+        def __init__(self):
+            self.population = []
+
+        def choices(self, population, weights=None, k=1):
+            self.population = list(population)
+            return [population[-1]]
+
+    rng = _RNG()
+    wedding_name = gift._wedding_cfg()["gift_name"]
+    picked = gift._pick_gift(10**9, rng=rng, excluded_names={wedding_name})
+
+    assert all(g["name"] != wedding_name for g in rng.population)
+    assert picked["name"] == gift._gift_list()[-2]["name"]
+
+
 def test_cheapest_gift():
     assert gift._cheapest_gift()["name"] == _g0()["name"]
 
@@ -48,6 +66,16 @@ def test_is_special_gift():
     assert gift._is_special_gift(_top()) is True            # 彰冬婚礼邀请函
     assert gift._is_special_gift(gift._gift_list()[-2]) is True  # 自己产的彰冬饭
     assert gift._is_special_gift(_g0()) is False
+
+
+def test_top_gift_keeps_monotonic_value_after_balance_change():
+    previous, top = gift._gift_list()[-2:]
+    default_top = gift.DEFAULT_GIFT_CONFIG["gifts"][-1]
+
+    assert top["cost"] == default_top["cost"] == 1112
+    assert top["intimacy"] == default_top["intimacy"] == 819
+    assert top["intimacy"] > previous["intimacy"]
+    assert top["intimacy"] / top["cost"] > previous["intimacy"] / previous["cost"]
 
 
 def test_pair_key_is_order_independent():
@@ -125,13 +153,119 @@ def test_count_directed_bump_and_get():
     assert gift._get_count(group, "B", "A") == 1  # 有向：B→A
 
 
-def test_normalize_data_preserves_counts():
-    raw = {"groups": {"1001": {"users": {}, "intimacy": {"a|||b": 50}, "counts": {"a>b": 3, "b>a": 1}}}}
+def test_wedding_invitation_pair_lock_is_directionless():
+    group = gift._new_group()
+    gift._record_wedding_invitation(group, "A", "B", "2026-07-13")
+
+    assert gift._wedding_pair_used(group, "A", "B") is True
+    assert gift._wedding_pair_used(group, "B", "A") is True
+
+
+def test_wedding_first_sender_bonus_only_applies_once():
+    data = gift._normalize_data({"groups": {"1001": {}, "1002": {}}})
+    group = gift._get_group(data, "1001")
+    other_group = gift._get_group(data, "1002")
+    top = _top()
+
+    first = gift._settle(group, "A", "B", top, "special", None)
+    gift._settle_wedding_invitation(group, "A", "B", first, "2026-07-13")
+    second = gift._settle(other_group, "A", "C", top, "special", None)
+    gift._settle_wedding_invitation(other_group, "A", "C", second, "2026-07-14")
+
+    assert first["amount"] == 1314
+    assert first["wedding_bonus"] == 495
+    assert gift._get_intimacy(group, "A", "B") == 1314
+    assert second["amount"] == 819
+    assert second["wedding_bonus"] == 0
+    assert gift._get_intimacy(other_group, "A", "C") == 819
+    assert gift._wedding_pair_used(other_group, "A", "B") is True
+
+
+def test_historical_wedding_records_are_seeded_idempotently():
+    data = gift._normalize_data({"groups": {"1001": {}, "1002": {}}})
+    group = gift._get_group(data, "1001")
+    other_group = gift._get_group(data, "1002")
+
+    assert gift._apply_historical_wedding_records(group) == 2
+    assert gift._apply_historical_wedding_records(other_group) == 0
+    assert gift._wedding_pair_used(group, "2833120053", "630778039") is True
+    assert gift._wedding_pair_used(other_group, "3534610836", "3541957542") is True
+    assert data["users"]["2833120053"]["wedding_first_bonus_claimed"] is True
+    assert data["users"]["3541957542"]["wedding_first_bonus_claimed"] is True
+
+    top = _top()
+    out = gift._settle(group, "2833120053", "NEW", top, "special", None)
+    gift._settle_wedding_invitation(group, "2833120053", "NEW", out, "2026-07-13")
+    assert out["amount"] == 819
+    assert out["wedding_bonus"] == 0
+
+    assert other_group["wedding_invitations"] is group["wedding_invitations"]
+
+
+def test_global_profiles_and_social_state_share_across_groups_with_source_priority():
+    pair = gift._pair_key("A", "B")
+    data = gift._normalize_data({"groups": {
+        "691188576": {
+            "users": {"A": {"points": 88, "exp": 120}},
+            "intimacy": {pair: 400},
+            "counts": {"A>B": 3},
+        },
+        "1002": {
+            "users": {"A": {"points": 999, "exp": 999}, "B": {"points": 20}},
+            "intimacy": {pair: 900},
+            "counts": {"A>B": 8},
+        },
+    }})
+    source = gift._get_group(data, "691188576")
+    other = gift._get_group(data, "1002")
+
+    assert source["users"]["A"] is other["users"]["A"]
+    assert other["users"]["A"]["points"] == 88
+    assert other["users"]["A"]["exp"] == 120
+    assert gift._get_intimacy(other, "A", "B") == 400
+    assert gift._get_count(other, "A", "B") == 3
+
+    gift._add_points(source, "A", 12)
+    gift._add_intimacy(source, "A", "B", 5)
+    gift._bump_count(source, "A", "B")
+    assert other["users"]["A"]["points"] == 100
+    assert gift._get_intimacy(other, "A", "B") == 405
+    assert gift._get_count(other, "A", "B") == 4
+
+
+def test_global_profiles_round_trip_without_group_copies():
+    pair = gift._pair_key("A", "B")
+    data = gift._normalize_data({"groups": {
+        "691188576": {"users": {"A": {"points": 88}}, "intimacy": {pair: 400}},
+        "1002": {"users": {"A": {"points": 999}, "B": {"points": 20}}},
+    }})
+    stored = game_store._serializable_data(data)
+
+    assert stored["users"]["A"]["points"] == 88
+    assert stored["intimacy"][pair] == 400
+    assert set(stored["groups"]["1002"]) == {"user_ids", "rpg"}
+
+    reloaded = gift._normalize_data(stored)
+    source = gift._get_group(reloaded, "691188576")
+    other = gift._get_group(reloaded, "1002")
+    assert source["users"]["A"] is other["users"]["A"]
+    assert gift._get_intimacy(other, "A", "B") == 400
+
+
+def test_normalize_data_preserves_counts_and_wedding_invitations():
+    raw = {"groups": {"1001": {
+        "users": {},
+        "intimacy": {"a|||b": 50},
+        "counts": {"a>b": 3, "b>a": 1},
+        "wedding_invitations": {"a|||b": {"sender_id": "a", "recipient_id": "b"}},
+    }}}
     norm = gift._normalize_data(raw)
     assert norm["groups"]["1001"]["counts"] == {"a>b": 3, "b>a": 1}
+    assert norm["groups"]["1001"]["wedding_invitations"]["a|||b"]["sender_id"] == "a"
     # 旧数据无 counts → 容错为空（不报错）
     old = gift._normalize_data({"groups": {"1001": {"intimacy": {"a|||b": 5}}}})
     assert old["groups"]["1001"]["counts"] == {}
+    assert old["groups"]["1001"]["wedding_invitations"] == {}
 
 
 def test_bond_card_shows_level_and_directed_counts():
@@ -346,7 +480,14 @@ def test_render_with_ats_builds_at_and_text():
 
 
 def test_normalize_data_tolerates_garbage():
-    assert gift._normalize_data("nonsense") == {"schema_version": gift.SCHEMA_VERSION, "groups": {}}
+    assert gift._normalize_data("nonsense") == {
+        "schema_version": gift.SCHEMA_VERSION,
+        "users": {},
+        "intimacy": {},
+        "counts": {},
+        "wedding_invitations": {},
+        "groups": {},
+    }
     norm = gift._normalize_data({"groups": {"1001": {"users": {"u": {"points": 5}}, "intimacy": {"a|||b": 7}}}})
     assert norm["groups"]["1001"]["users"]["u"]["points"] == 5
     assert norm["groups"]["1001"]["intimacy"]["a|||b"] == 7

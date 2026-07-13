@@ -10,6 +10,26 @@ from .helpers import _patch_runtime
 
 
 @pytest.mark.asyncio
+async def test_reset_gift_cmd_clears_global_state(monkeypatch):
+    su = gift.SUPERUSER_QQ
+    state = _patch_runtime(
+        monkeypatch,
+        store={"groups": {
+            "1001": {"users": {"10001": {"points": 88}}, "intimacy": {"10001|||10002": 20}},
+            "1002": {"users": {"10002": {"points": 99}}},
+        }},
+    )
+
+    with pytest.raises(FinishedException) as exc:
+        await gift.reset_cmd.handlers[0](Event(group_id=1001, user_id=su))
+
+    assert "全局" in str(exc.value.result)
+    assert state["users"] == {}
+    assert state["intimacy"] == {}
+    assert state["groups"] == {}
+
+
+@pytest.mark.asyncio
 async def test_reset_signin_cmd_clears_only_today_gate(monkeypatch):
     su = gift.SUPERUSER_QQ
     state = _patch_runtime(
@@ -32,7 +52,7 @@ async def test_reset_signin_cmd_clears_only_today_gate(monkeypatch):
     with pytest.raises(FinishedException) as exc:
         await gift.reset_signin_cmd.handlers[0](Event(group_id=1001, user_id=su))
 
-    assert "已清掉 2 人" in str(exc.value.result)
+    assert "当前群 2 名成员的全局签到闸门" in str(exc.value.result)
     users = state["groups"]["1001"]["users"]
     assert users["10001"]["last_sign_in"] == ""
     assert users["10003"]["last_sign_in"] == ""
@@ -70,7 +90,7 @@ async def test_reset_signin_cmd_reports_when_nobody_blocked(monkeypatch):
     )
     with pytest.raises(FinishedException) as exc:
         await gift.reset_signin_cmd.handlers[0](Event(group_id=1001, user_id=su))
-    assert "还没人被签到闸门卡住" in str(exc.value.result)
+    assert "还没人被全局签到闸门卡住" in str(exc.value.result)
 
 
 @pytest.mark.asyncio
@@ -101,7 +121,7 @@ async def test_reset_steal_cmd_clears_only_today_gate(monkeypatch):
     with pytest.raises(FinishedException) as exc:
         await gift.reset_steal_cmd.handlers[0](Event(group_id=1001, user_id=su))
 
-    assert "已放开 2 人" in str(exc.value.result)
+    assert "当前群 2 名成员的全局偷取/被偷闸门" in str(exc.value.result)
     users = state["groups"]["1001"]["users"]
     assert users["10001"]["steal_date"] == ""
     assert users["10001"]["steal_used"] == 0
@@ -141,4 +161,4 @@ async def test_reset_steal_cmd_reports_when_nobody_blocked(monkeypatch):
     )
     with pytest.raises(FinishedException) as exc:
         await gift.reset_steal_cmd.handlers[0](Event(group_id=1001, user_id=su))
-    assert "还没人被偷积分次数卡住" in str(exc.value.result)
+    assert "还没人被全局偷取次数卡住" in str(exc.value.result)
