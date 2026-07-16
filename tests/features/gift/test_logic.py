@@ -58,6 +58,23 @@ def test_pick_gift_can_exclude_wedding_invitation_before_draw():
     assert picked["name"] == gift._gift_list()[-2]["name"]
 
 
+def test_pick_gift_uses_independent_forty_percent_wedding_roll():
+    class _RNG:
+        def __init__(self, roll):
+            self.roll = roll
+
+        def random(self):
+            return self.roll
+
+        def choices(self, population, weights=None, k=1):
+            return [population[-1]]
+
+    wedding_name = gift._wedding_cfg()["gift_name"]
+    assert gift._wedding_cfg()["chance"] == 0.40
+    assert gift._pick_gift(1112, rng=_RNG(0.399))["name"] == wedding_name
+    assert gift._pick_gift(1112, rng=_RNG(0.400))["name"] == gift._gift_list()[-2]["name"]
+
+
 def test_cheapest_gift():
     assert gift._cheapest_gift()["name"] == _g0()["name"]
 
@@ -153,12 +170,13 @@ def test_count_directed_bump_and_get():
     assert gift._get_count(group, "B", "A") == 1  # 有向：B→A
 
 
-def test_wedding_invitation_pair_lock_is_directionless():
+def test_wedding_invitation_history_uses_directionless_pair_key():
     group = gift._new_group()
-    gift._record_wedding_invitation(group, "A", "B", "2026-07-13")
+    gift._record_wedding_invitation(group, "A", "B", "2026-07-13", bonus=495)
 
-    assert gift._wedding_pair_used(group, "A", "B") is True
-    assert gift._wedding_pair_used(group, "B", "A") is True
+    assert gift._pair_key("A", "B") in group["wedding_invitations"]
+    assert gift._pair_key("B", "A") in group["wedding_invitations"]
+    assert gift._wedding_pair_has_1314(group, "B", "A") is True
 
 
 def test_wedding_first_sender_bonus_only_applies_once():
@@ -178,7 +196,42 @@ def test_wedding_first_sender_bonus_only_applies_once():
     assert second["amount"] == 819
     assert second["wedding_bonus"] == 0
     assert gift._get_intimacy(other_group, "A", "C") == 819
-    assert gift._wedding_pair_used(other_group, "A", "B") is True
+    assert gift._pair_key("A", "B") in other_group["wedding_invitations"]
+
+
+def test_wedding_bonus_requires_sender_first_and_pair_without_1314():
+    data = gift._normalize_data({"groups": {"1001": {}}})
+    group = gift._get_group(data, "1001")
+    top = _top()
+
+    first = gift._settle(group, "B", "C", top, "special", None)
+    gift._settle_wedding_invitation(group, "B", "C", first, "2026-07-13")
+    pair_blocked = gift._settle(group, "C", "B", top, "special", None)
+    gift._settle_wedding_invitation(group, "C", "B", pair_blocked, "2026-07-14")
+
+    assert first["amount"] == 1314
+    assert pair_blocked["amount"] == 819
+    assert pair_blocked["wedding_bonus"] == 0
+    assert data["users"]["C"]["wedding_first_bonus_claimed"] is True
+
+
+def test_wedding_pair_with_only_819_does_not_block_eligible_sender_bonus():
+    data = gift._normalize_data({"groups": {"1001": {}}})
+    group = gift._get_group(data, "1001")
+    top = _top()
+    data["users"]["B"] = {"wedding_first_bonus_claimed": True}
+
+    base = gift._settle(group, "B", "A", top, "special", None)
+    gift._settle_wedding_invitation(group, "B", "A", base, "2026-07-13")
+    assert gift._wedding_pair_has_1314(group, "A", "B") is False
+
+    eligible = gift._settle(group, "A", "B", top, "special", None)
+    gift._settle_wedding_invitation(group, "A", "B", eligible, "2026-07-14")
+
+    assert base["amount"] == 819
+    assert gift._wedding_pair_has_1314(group, "A", "B") is True
+    assert eligible["amount"] == 1314
+    assert eligible["wedding_bonus"] == 495
 
 
 def test_historical_wedding_records_are_seeded_idempotently():
@@ -188,8 +241,8 @@ def test_historical_wedding_records_are_seeded_idempotently():
 
     assert gift._apply_historical_wedding_records(group) == 2
     assert gift._apply_historical_wedding_records(other_group) == 0
-    assert gift._wedding_pair_used(group, "2833120053", "630778039") is True
-    assert gift._wedding_pair_used(other_group, "3534610836", "3541957542") is True
+    assert gift._pair_key("2833120053", "630778039") in group["wedding_invitations"]
+    assert gift._pair_key("3534610836", "3541957542") in other_group["wedding_invitations"]
     assert data["users"]["2833120053"]["wedding_first_bonus_claimed"] is True
     assert data["users"]["3541957542"]["wedding_first_bonus_claimed"] is True
 

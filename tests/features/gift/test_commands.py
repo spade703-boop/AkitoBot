@@ -118,32 +118,34 @@ async def test_gift_cmd_special_gift_always_special(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_gift_cmd_redraws_when_pair_already_used_wedding_invitation(monkeypatch):
+async def test_gift_cmd_allows_repeat_wedding_for_existing_pair_at_base_reward(monkeypatch):
     pair_key = gift._pair_key("10001", "10002")
     state = _patch_runtime(
         monkeypatch,
         store={"groups": {"1001": {
-            "users": {"10001": {"points": 100000}},
+            "users": {"10001": {"points": 100000, "wedding_first_bonus_claimed": True}},
             "intimacy": {},
-            "wedding_invitations": {pair_key: {"sender_id": "10002", "recipient_id": "10001"}},
+            "wedding_invitations": {pair_key: {
+                "sender_id": "10002",
+                "recipient_id": "10001",
+                "has_1314": True,
+            }},
         }}},
     )
-    replacement = gift._gift_list()[-2]
+    top = _top()
     wedding_name = gift._wedding_cfg()["gift_name"]
-
-    def _pick(_points, rng=gift.random, *, excluded_names=None):
-        assert excluded_names == {wedding_name}
-        return replacement
-
-    monkeypatch.setattr(gift, "_pick_gift", _pick)
+    monkeypatch.setattr(
+        gift, "_pick_gift", lambda _points, rng=gift.random, excluded_names=None: top
+    )
     event = Event(group_id=1001, user_id="10001", original_message=[_at("10002")])
     with pytest.raises(FinishedException) as exc:
         await gift.gift_cmd.handlers[0](_bot(), event, Message(""))
 
     result = str(exc.value.result)
-    assert "彰冬饭" in result
-    assert wedding_name not in result
-    assert state["groups"]["1001"]["intimacy"][pair_key] == replacement["intimacy"]
+    assert wedding_name in result
+    assert "首次送出纪念加成" not in result
+    assert state["groups"]["1001"]["intimacy"][pair_key] == 819
+    assert state["users"]["10001"]["points"] == 100000 - 1112
     assert state["groups"]["1001"]["wedding_invitations"][pair_key]["sender_id"] == "10002"
 
 

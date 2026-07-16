@@ -41,11 +41,6 @@ def _get_count(group: dict, frm, to) -> int:
     return int(group.get("counts", {}).get(_count_key(frm, to), 0))
 
 
-def _wedding_pair_used(group: dict, sender_id: str, recipient_id: str) -> bool:
-    records = group.get("wedding_invitations", {})
-    return isinstance(records, dict) and _pkg()._pair_key(sender_id, recipient_id) in records
-
-
 def _record_wedding_invitation(
     group: dict,
     sender_id: str,
@@ -53,15 +48,46 @@ def _record_wedding_invitation(
     date: str = "",
     *,
     historical: bool = False,
+    bonus: int = 0,
 ) -> None:
     records = group.setdefault("wedding_invitations", {})
     key = _pkg()._pair_key(sender_id, recipient_id)
-    records.setdefault(key, {
-        "sender_id": str(sender_id),
-        "recipient_id": str(recipient_id),
-        "date": str(date),
-        "historical": bool(historical),
-    })
+    record = records.get(key)
+    if not isinstance(record, dict):
+        records[key] = {
+            "sender_id": str(sender_id),
+            "recipient_id": str(recipient_id),
+            "date": str(date),
+            "historical": bool(historical),
+            "has_1314": bool(historical or bonus > 0),
+            "count": 1,
+        }
+        return
+    if historical:
+        record["historical"] = True
+        record["has_1314"] = True
+        return
+    record["count"] = max(1, int(record.get("count", 1))) + 1
+    record["last_sender_id"] = str(sender_id)
+    record["last_recipient_id"] = str(recipient_id)
+    record["last_date"] = str(date)
+    if bonus > 0:
+        record["has_1314"] = True
+
+
+def _wedding_pair_has_1314(group: dict, sender_id: str, recipient_id: str) -> bool:
+    records = group.get("wedding_invitations", {})
+    if not isinstance(records, dict):
+        return False
+    record = records.get(_pkg()._pair_key(sender_id, recipient_id))
+    if not isinstance(record, dict):
+        return False
+    if "has_1314" in record:
+        return bool(record["has_1314"])
+    if int(record.get("bonus", 0)) > 0 or int(record.get("amount", 0)) >= 1314:
+        return True
+    # 旧版记录没有结算金额；按已发过 1314 处理，避免升级后重复发放纪念加成。
+    return True
 
 
 def _global_user(group: dict, user_id: str) -> dict:
@@ -87,9 +113,11 @@ def _apply_historical_wedding_records(group: dict) -> int:
         recipient_id = str(record.get("recipient_id", ""))
         if not sender_id or not recipient_id:
             continue
-        if not _wedding_pair_used(group, sender_id, recipient_id):
-            _record_wedding_invitation(group, sender_id, recipient_id, historical=True)
+        key = _pkg()._pair_key(sender_id, recipient_id)
+        existing = group.setdefault("wedding_invitations", {}).get(key)
+        if not isinstance(existing, dict) or not _wedding_pair_has_1314(group, sender_id, recipient_id):
             applied += 1
+        _record_wedding_invitation(group, sender_id, recipient_id, historical=True)
         _global_user(group, sender_id)["wedding_first_bonus_claimed"] = True
     return applied
 
@@ -103,14 +131,16 @@ def _settle_wedding_invitation(
 ) -> dict:
     sender = _get_user(group, sender_id)
     bonus = 0
-    if not bool(sender.get("wedding_first_bonus_claimed", False)):
+    sender_has_sent = bool(sender.get("wedding_first_bonus_claimed", False))
+    pair_has_1314 = _wedding_pair_has_1314(group, sender_id, recipient_id)
+    if not sender_has_sent and not pair_has_1314:
         bonus = max(0, int(_pkg()._wedding_cfg().get("first_sender_bonus", 0)))
         if bonus:
             _pkg()._add_intimacy(group, sender_id, recipient_id, bonus)
             out["amount"] = int(out.get("amount", 0)) + bonus
     sender["wedding_first_bonus_claimed"] = True
     out["wedding_bonus"] = bonus
-    _record_wedding_invitation(group, sender_id, recipient_id, date)
+    _record_wedding_invitation(group, sender_id, recipient_id, date, bonus=bonus)
     return out
 
 

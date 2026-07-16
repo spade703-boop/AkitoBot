@@ -5,7 +5,7 @@
 - `送礼@对方`：每天 1 次，系统从「你当前积分买得起的礼物」里随机送一份给对方，按权重抽随机事件
   （普通/暴击/回礼/失败/意外），累积两个群友之间的「亲密度（同好羁绊）」。
   高档保证礼「自己产的彰冬饭」「彰冬婚礼邀请函」一旦抽中，必定触发「惊喜升级」固定结算；
-  婚礼邀请函同一对关系只会出现一次，且每位送出者的首份邀请函带一次纪念加成。
+  达到 1112 积分后会独立判定婚礼邀请函；送出者首次赠送且该关系尚无 1314 邀请函时带纪念加成。
 - `偷@对方`：每天 2 次，小概率顺走对方少量积分（强保护 + 偷必掉羁绊，偷越亲近掉越多）。
 - `我的积分` / `礼物列表` / `亲密度` / `群羁绊排行` 查询；玩家档案与羁绊跨群共享；
   `重置送礼`（超管）清空全局玩家数据。
@@ -98,7 +98,7 @@ from .logic import (
     _steal_bond_loss,
     _steal_outcome,
     _top_partners,
-    _wedding_pair_used,
+    _wedding_pair_has_1314,
 )
 from .pages import build_bond_page_data, build_bond_rank_page_data, build_my_bonds_page_data
 from .render import render_bond_page
@@ -204,10 +204,7 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
             )
 
         points = int(sender.get("points", 0))
-        excluded_names: set[str] = set()
-        if _wedding_pair_used(group, sender_id, target_qq):
-            excluded_names.add(str(_wedding_cfg().get("gift_name", "彰冬婚礼邀请函")))
-        gift = _pick_gift(points, excluded_names=excluded_names)
+        gift = _pick_gift(points)
         if gift is None:
             cheapest = _cheapest_gift() or {"name": "", "cost": 0}
             await gift_cmd.finish(

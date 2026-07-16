@@ -57,6 +57,7 @@
   ],
   "wedding_invitation": {
     "gift_name": "彰冬婚礼邀请函",
+    "chance": 0.4,
     "first_sender_bonus": 495,
     "historical_records": [
       {

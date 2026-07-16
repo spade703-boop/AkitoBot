@@ -83,7 +83,7 @@ features/rpg/
 - RPG 用户字段：
   `equip_date/equip_level/equip_roll/equip_forge/equip_used`（今日装备）、`exp_buff_uses/exp_buff_mult`（双倍经验卡）、
   `hunt_total/hunt_wins`（战绩，喂排行榜/面板）、`signin_streak/signin_last_date`（连续签到）、`world_boss_trophies`（世界BOSS收藏展示）。
-- 全局社交：顶层 `intimacy/counts/wedding_invitations` 保存羁绊、送礼次数和婚礼邀请函关系锁。
+- 全局社交：顶层 `intimacy/counts/wedding_invitations` 保存羁绊、送礼次数和婚礼邀请函关系记录（含该关系是否已有 +1314 邀请函）。
 - 群级 RPG 状态：`groups[gid]["rpg"]["world_boss"]` 保存当日世界 BOSS 的名字、剩余生命、贡献榜、活跃人数快照，以及 `participants[uid]` 这套独立临时装备记录。
 - 称号（按等级派生）与今日增益（按日期算）**不落库**。`game_store._normalize_data` 必须同时保留全局玩家层和群级 RPG 层。
 

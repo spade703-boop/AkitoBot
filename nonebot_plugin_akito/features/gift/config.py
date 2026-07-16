@@ -29,6 +29,7 @@ DEFAULT_GIFT_CONFIG: dict = {
     ],
     "wedding_invitation": {
         "gift_name": "彰冬婚礼邀请函",
+        "chance": 0.40,
         "first_sender_bonus": 495,
         "historical_records": [
             {"sender_id": "2833120053", "recipient_id": "630778039"},
@@ -295,6 +296,16 @@ def _pick_gift(points: int, rng=random, *, excluded_names: set[str] | None = Non
     pool = _affordable_gifts(points, excluded_names)
     if not pool:
         return None
+    wedding_cfg = _wedding_cfg()
+    wedding_name = str(wedding_cfg.get("gift_name", "彰冬婚礼邀请函"))
+    wedding_gift = next((gift for gift in pool if str(gift.get("name", "")) == wedding_name), None)
+    if wedding_gift is not None:
+        chance = min(1.0, max(0.0, float(wedding_cfg.get("chance", 0.0))))
+        if rng.random() < chance:
+            return wedding_gift
+        pool = [gift for gift in pool if gift is not wedding_gift]
+        if not pool:
+            return None
     weights = list(range(1, len(pool) + 1))
     return rng.choices(pool, weights=weights, k=1)[0]
 
