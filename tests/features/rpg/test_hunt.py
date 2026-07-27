@@ -4,31 +4,35 @@ from nonebot.adapters import Event
 from nonebot.exception import FinishedException
 import pytest
 
+import nonebot_plugin_akito.features.rpg.combat as combat
 import nonebot_plugin_akito.features.rpg.config as rpg_config
+import nonebot_plugin_akito.features.rpg.events as rpg_events
 import nonebot_plugin_akito.features.rpg.fortune as fortune
 import nonebot_plugin_akito.features.rpg.hunt as hunt
+import nonebot_plugin_akito.features.rpg.rewards as rewards
+import nonebot_plugin_akito.features.rpg.utils as rpg_utils
 
 from .helpers import _PLAIN_BUFF, _bot, _equipped_user, _patch_io, _stub_hunt_rng
 
 
 def _direct_solo_exp(win: bool, level: int = 1) -> int:
-    bonus = hunt._solo_exp_bonus(win)
-    return int(hunt._challenge_exp(win, level) * (1.0 + bonus))
+    bonus = rewards._solo_exp_bonus(win)
+    return int(rewards._challenge_exp(win, level) * (1.0 + bonus))
 
 
 def test_resolve_hunt_win_lose():
     m = {"name": "史", "power_req": 20}
-    assert hunt.resolve_hunt(25, m, power_factor=1.0)["win"] is True
-    assert hunt.resolve_hunt(15, m, power_factor=1.0)["win"] is False
+    assert combat.resolve_hunt(25, m, power_factor=1.0)["win"] is True
+    assert combat.resolve_hunt(15, m, power_factor=1.0)["win"] is False
 
 
 def test_resolve_hunt_slip_and_desperate_flip():
     m = {"name": "怪", "power_req": 18}
-    assert hunt.resolve_hunt(20, m, power_factor=1.0)["win"] is True
-    assert hunt.resolve_hunt(20, m, power_factor=1.0, event="slip")["win"] is False  # ×0.74=14.8<18
+    assert combat.resolve_hunt(20, m, power_factor=1.0)["win"] is True
+    assert combat.resolve_hunt(20, m, power_factor=1.0, event="slip")["win"] is False  # ×0.74=14.8<18
     big = {"name": "强怪", "power_req": 28}
-    assert hunt.resolve_hunt(20, big, power_factor=1.0)["win"] is False
-    assert hunt.resolve_hunt(20, big, power_factor=1.0, event="desperate")["win"] is True  # ×1.6=32≥28
+    assert combat.resolve_hunt(20, big, power_factor=1.0)["win"] is False
+    assert combat.resolve_hunt(20, big, power_factor=1.0, event="desperate")["win"] is True  # ×1.6=32≥28
 
 
 def test_hunt_result_lines_prefers_result_specific_event_copy_and_falls_back(monkeypatch):
@@ -103,26 +107,26 @@ def test_hunt_result_lines_rescue_flip_uses_generic_event_copy(monkeypatch):
 
 def test_challenge_exp_scales_with_level():
     c = rpg_config._cfg("challenge", {})
-    assert hunt._challenge_exp(True, 3) == int(c["win_exp_base"]) + 3 * int(c["win_exp_per_level"])
-    assert hunt._challenge_exp(False, 3) == int(c["lose_exp_base"]) + 3 * int(c["lose_exp_per_level"])
+    assert rewards._challenge_exp(True, 3) == int(c["win_exp_base"]) + 3 * int(c["win_exp_per_level"])
+    assert rewards._challenge_exp(False, 3) == int(c["lose_exp_base"]) + 3 * int(c["lose_exp_per_level"])
 
 
 def test_roll_hunt_event_brackets(monkeypatch):
-    monkeypatch.setattr(hunt, "_weighted_choice", lambda cands, rng: next((k for k in cands if k), ""))
+    monkeypatch.setattr(rpg_events, "_weighted_choice", lambda cands, rng: next((k for k in cands if k), ""))
     ccfg = rpg_config._cfg("combat", {})
     crush, weak = float(ccfg["crush_margin"]), float(ccfg["weak_margin"])
-    assert hunt._roll_hunt_event(crush) == "insight"
-    assert hunt._roll_hunt_event(weak - 0.01) == "desperate"
-    assert hunt._roll_hunt_event((crush + weak) / 2) == "slip"
+    assert rpg_events._roll_hunt_event(crush) == "insight"
+    assert rpg_events._roll_hunt_event(weak - 0.01) == "desperate"
+    assert rpg_events._roll_hunt_event((crush + weak) / 2) == "slip"
 
 
 def test_fortune_combat_and_drop_factors():
     lv = fortune._fortune_by_key("daji")
     signed = {"fortune": "daji", "fortune_date": "D"}
-    assert hunt._fortune_combat_factor(signed, "D") == float(lv["combat_factor"])
-    assert hunt._fortune_drop_factor(signed, "D") == float(lv["drop_factor"])
-    assert hunt._fortune_combat_factor({"fortune": "daji", "fortune_date": "X"}, "D") == 1.0
-    assert hunt._fortune_drop_factor({"fortune_date": "X"}, "D") == 1.0
+    assert rpg_utils._fortune_combat_factor(signed, "D") == float(lv["combat_factor"])
+    assert rpg_utils._fortune_drop_factor(signed, "D") == float(lv["drop_factor"])
+    assert rpg_utils._fortune_combat_factor({"fortune": "daji", "fortune_date": "X"}, "D") == 1.0
+    assert rpg_utils._fortune_drop_factor({"fortune_date": "X"}, "D") == 1.0
 
 
 def test_pick_encounter_uses_stage_weights_and_elite_gate():
@@ -147,12 +151,12 @@ def test_pick_encounter_uses_stage_weights_and_elite_gate():
         return []
 
     low = _CaptureRng(0.0)
-    _monster, elite = hunt._pick_encounter(2, low)
+    _monster, elite = combat._pick_encounter(2, low)
     assert low.weights == _weights_for(2)
     assert elite is False
 
     high = _CaptureRng(0.0)
-    _monster, elite = hunt._pick_encounter(8, high)
+    _monster, elite = combat._pick_encounter(8, high)
     assert high.weights == _weights_for(8)
     assert elite is True
 
@@ -167,8 +171,8 @@ def test_default_encounter_brackets_match_monster_pool_length():
 def test_default_encounter_brackets_hold_dragon_until_level_ten_and_then_release():
     monsters = rpg_config._cfg("monsters", [])
     dragon_index = next(i for i, monster in enumerate(monsters) if monster.get("name") == "龙")
-    assert hunt._encounter_weights(10, len(monsters))[dragon_index] == 0
-    assert hunt._encounter_weights(13, len(monsters))[dragon_index] > 0
+    assert combat._encounter_weights(10, len(monsters))[dragon_index] == 0
+    assert combat._encounter_weights(13, len(monsters))[dragon_index] > 0
 
 
 def test_pick_monster_uses_brackets_for_non_six_monster_pool(monkeypatch):
@@ -185,34 +189,34 @@ def test_pick_monster_uses_brackets_for_non_six_monster_pool(monkeypatch):
         {"name": "B", "power_req": 2, "weight": 5},
         {"name": "C", "power_req": 3, "weight": 99},
     ]
-    combat = {
+    combat_cfg = {
         "encounter_brackets": [
             {"max_level": 2, "weights": [9, 1, 0]},
             {"max_level": None, "weights": [1, 2, 3]},
         ]
     }
-    orig_cfg = hunt._cfg
+    orig_cfg = combat._cfg
     monkeypatch.setattr(
-        hunt,
+        combat,
         "_cfg",
         lambda key, default=None: monsters if key == "monsters"
-        else combat if key == "combat"
+        else combat_cfg if key == "combat"
         else orig_cfg(key, default),
     )
     rng = _CaptureRng()
 
-    picked = hunt._pick_monster(2, rng)
+    picked = combat._pick_monster(2, rng)
 
     assert picked["name"] == "A"
     assert rng.weights == [9, 1, 0]
 
 
-@pytest.mark.parametrize("combat", [
+@pytest.mark.parametrize("combat_cfg", [
     {},
     {"encounter_brackets": "oops"},
     {"encounter_brackets": [{"max_level": None, "weights": [9, 1]}]},
 ])
-def test_pick_monster_falls_back_to_monster_weights_when_brackets_unusable(monkeypatch, combat):
+def test_pick_monster_falls_back_to_monster_weights_when_brackets_unusable(monkeypatch, combat_cfg):
     class _CaptureRng:
         def __init__(self):
             self.weights = []
@@ -226,17 +230,17 @@ def test_pick_monster_falls_back_to_monster_weights_when_brackets_unusable(monke
         {"name": "B", "power_req": 2, "weight": 5},
         {"name": "C", "power_req": 3, "weight": 3},
     ]
-    orig_cfg = hunt._cfg
+    orig_cfg = combat._cfg
     monkeypatch.setattr(
-        hunt,
+        combat,
         "_cfg",
         lambda key, default=None: monsters if key == "monsters"
-        else combat if key == "combat"
+        else combat_cfg if key == "combat"
         else orig_cfg(key, default),
     )
     rng = _CaptureRng()
 
-    picked = hunt._pick_monster(2, rng)
+    picked = combat._pick_monster(2, rng)
 
     assert picked["name"] == "A"
     assert rng.weights == [7, 5, 3]
@@ -307,10 +311,10 @@ async def test_hunt_minor_encounter_grants_extra_rewards(monkeypatch):
     with pytest.raises(FinishedException) as exc:
         await hunt.hunt_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="u1"))
 
-    spec = hunt._minor_event_spec("supply_cache")
+    spec = rpg_events._minor_event_spec("supply_cache")
     user = state["groups"]["1001"]["users"]["u1"]
     assert user["exp"] == _direct_solo_exp(True, 1) + int(spec.get("exp", 0))
-    assert user["points"] == hunt._challenge_points(True, user) + int(spec.get("points", 0))
+    assert user["points"] == rewards._challenge_points(True, user) + int(spec.get("points", 0))
     result = str(exc.value.result)
     assert "补给" in result
     assert f"经验 +{int(spec.get('exp', 0))}" in result
@@ -343,7 +347,7 @@ async def test_hunt_grants_points(monkeypatch):
     with pytest.raises(FinishedException) as exc:
         await hunt.hunt_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="u1"))
     user = state["groups"]["1001"]["users"]["u1"]
-    assert user["points"] == hunt._challenge_points(True, user)  # 胜得 win_points
+    assert user["points"] == rewards._challenge_points(True, user)  # 胜得 win_points
     assert "积分" in str(exc.value.result)
 
 
@@ -352,18 +356,18 @@ def test_challenge_points_halved_for_rebought_equip():
     wp = int(cfg.get("win_points", 15))
     lp = int(cfg.get("lose_points", 5))
     mult = float(rpg_config._cfg("equip", {}).get("rebuy_points_mult", 0.5))
-    assert hunt._challenge_points(True, {"equip_rebought": True}) == int(wp * mult)
-    assert hunt._challenge_points(False, {"equip_rebought": True}) == int(lp * mult)
-    assert hunt._challenge_points(True, {"equip_rebought": False}) == wp
-    assert hunt._challenge_points(False, {}) == lp
+    assert rewards._challenge_points(True, {"equip_rebought": True}) == int(wp * mult)
+    assert rewards._challenge_points(False, {"equip_rebought": True}) == int(lp * mult)
+    assert rewards._challenge_points(True, {"equip_rebought": False}) == wp
+    assert rewards._challenge_points(False, {}) == lp
 
 
 def test_apply_rewards_halves_exp_for_rebought_equip():
     equip_cfg = rpg_config._cfg("equip", {})
     mult = float(equip_cfg.get("rebuy_exp_mult", equip_cfg.get("rebuy_points_mult", 0.5)))
     user = _equipped_user(exp=0, points=0, equip_rebought=True)
-    out = hunt._apply_rewards(user, "2026-06-22", win=True, monster={"name": "史莱姆", "drops": []})
-    assert out["exp_gain"] == int(hunt._challenge_exp(True, 1) * mult)
+    out = rewards._apply_rewards(user, "2026-06-22", win=True, monster={"name": "史莱姆", "drops": []})
+    assert out["exp_gain"] == int(rewards._challenge_exp(True, 1) * mult)
     assert user["exp"] == out["exp_gain"]
 
 
@@ -372,7 +376,7 @@ def test_settle_solo_rookie_bonus_only_applies_to_solo(monkeypatch):
     reward_kwargs: list[dict] = []
     monster = {"name": "史莱姆", "power_req": 1, "drops": []}
 
-    def _pick(level, rng=hunt.random):
+    def _pick(level, rng=combat.random):
         return monster, False
 
     def _resolve(combat_power, eff_monster, *, power_factor, fortune_factor=1.0, event=None):
@@ -381,22 +385,22 @@ def test_settle_solo_rookie_bonus_only_applies_to_solo(monkeypatch):
                 "event": event or "", "monster": eff_monster}
 
     reward = {"exp_gain": 0, "exp_buffed": False, "drops": [], "points_gain": 0, "old_level": 1, "new_level": 1}
-    monkeypatch.setattr(hunt, "_pick_encounter", _pick)
-    monkeypatch.setattr(hunt.random, "uniform", lambda _a, _b: 1.0)
-    monkeypatch.setattr(hunt, "_roll_hunt_event", lambda margin, rng=hunt.random: "")
-    monkeypatch.setattr(hunt, "_roll_solo_support_scene", lambda win, rng=hunt.random: "")
-    monkeypatch.setattr(hunt, "_roll_coop_event", lambda rng=hunt.random: "")
-    monkeypatch.setattr(hunt, "_today_buff", lambda: _PLAIN_BUFF)
-    monkeypatch.setattr(hunt, "resolve_hunt", _resolve)
+    monkeypatch.setattr(combat, "_pick_encounter", _pick)
+    monkeypatch.setattr(rewards.random, "uniform", lambda _a, _b: 1.0)
+    monkeypatch.setattr(rpg_events, "_roll_hunt_event", lambda margin, rng=rpg_events.random: "")
+    monkeypatch.setattr(rpg_events, "_roll_solo_support_scene", lambda win, rng=rpg_events.random: "")
+    monkeypatch.setattr(rpg_events, "_roll_coop_event", lambda rng=rpg_events.random: "")
+    monkeypatch.setattr(combat, "_today_buff", lambda: _PLAIN_BUFF)
+    monkeypatch.setattr(combat, "resolve_hunt", _resolve)
     monkeypatch.setattr(
-        hunt,
+        rewards,
         "_apply_rewards",
         lambda *args, **kwargs: (reward_kwargs.append(dict(kwargs)) or dict(reward)),
     )
 
-    hunt._settle_solo(_equipped_user(exp=0, equip_level=1), "D", direct=True)
-    hunt._settle_solo(_equipped_user(exp=0, equip_level=1), "D")
-    hunt._settle_coop(_equipped_user(exp=0, equip_level=1), _equipped_user(exp=0, equip_level=1), "D")
+    rewards._settle_solo(_equipped_user(exp=0, equip_level=1), "D", direct=True)
+    rewards._settle_solo(_equipped_user(exp=0, equip_level=1), "D")
+    rewards._settle_coop(_equipped_user(exp=0, equip_level=1), _equipped_user(exp=0, equip_level=1), "D")
 
     assert factors[0] == pytest.approx(1.08 * (1.0 + float(rpg_config._cfg("solo", {}).get("power_bonus", 0.0))))
     assert factors[1] == pytest.approx(1.08)
@@ -415,28 +419,28 @@ def test_roll_solo_support_scene_uses_fixed_three_percent_bands():
         def random(self):
             return self.val
 
-    assert hunt._roll_solo_support_scene(True, _SeqRng(0.0)) == "akito_success"
-    assert hunt._roll_solo_support_scene(True, _SeqRng(0.04)) == ""
-    assert hunt._roll_solo_support_scene(False, _SeqRng(0.00)) == "akito_fail"
-    assert hunt._roll_solo_support_scene(False, _SeqRng(0.04)) == "toya_rescue"
-    assert hunt._roll_solo_support_scene(False, _SeqRng(0.08)) == "duo_combo"
-    assert hunt._roll_solo_support_scene(False, _SeqRng(0.12)) == ""
+    assert rpg_events._roll_solo_support_scene(True, _SeqRng(0.0)) == "akito_success"
+    assert rpg_events._roll_solo_support_scene(True, _SeqRng(0.04)) == ""
+    assert rpg_events._roll_solo_support_scene(False, _SeqRng(0.00)) == "akito_fail"
+    assert rpg_events._roll_solo_support_scene(False, _SeqRng(0.04)) == "toya_rescue"
+    assert rpg_events._roll_solo_support_scene(False, _SeqRng(0.08)) == "duo_combo"
+    assert rpg_events._roll_solo_support_scene(False, _SeqRng(0.12)) == ""
 
 
 @pytest.mark.asyncio
 async def test_hunt_support_akito_success_adds_bonus_rewards(monkeypatch):
     state = _patch_io(monkeypatch, hunt, store={"groups": {"1001": {"users": {"u1": _equipped_user(points=0)}}}})
     _stub_hunt_rng(monkeypatch, {"name": "史莱姆", "power_req": 1, "drops": []})
-    monkeypatch.setattr(hunt, "_roll_solo_support_scene", lambda win, rng=hunt.random: "akito_success")
+    monkeypatch.setattr(rpg_events, "_roll_solo_support_scene", lambda win, rng=rpg_events.random: "akito_success")
 
     with pytest.raises(FinishedException) as exc:
         await hunt.hunt_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="u1"))
 
     user = state["groups"]["1001"]["users"]["u1"]
-    bonus_exp = hunt._support_bonus_exp("akito_success", user, 1)
-    bonus_points = hunt._support_bonus_points("akito_success", user)
+    bonus_exp = rewards._support_bonus_exp("akito_success", user, 1)
+    bonus_points = rewards._support_bonus_points("akito_success", user)
     assert user["exp"] == _direct_solo_exp(True, 1) + bonus_exp
-    assert user["points"] == hunt._challenge_points(True, user) + bonus_points
+    assert user["points"] == rewards._challenge_points(True, user) + bonus_points
     result = str(exc.value.result)
     assert "真·龙王烈火斩" in result
     assert f"额外获得经验 +{bonus_exp}" in result
@@ -446,16 +450,16 @@ async def test_hunt_support_akito_success_adds_bonus_rewards(monkeypatch):
 async def test_hunt_support_akito_fail_keeps_failure_with_bonus(monkeypatch):
     state = _patch_io(monkeypatch, hunt, store={"groups": {"1001": {"users": {"u1": _equipped_user(points=0)}}}})
     _stub_hunt_rng(monkeypatch, {"name": "座狼", "power_req": 999, "drops": []})
-    monkeypatch.setattr(hunt, "_roll_solo_support_scene", lambda win, rng=hunt.random: "akito_fail")
+    monkeypatch.setattr(rpg_events, "_roll_solo_support_scene", lambda win, rng=rpg_events.random: "akito_fail")
 
     with pytest.raises(FinishedException) as exc:
         await hunt.hunt_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="u1"))
 
     user = state["groups"]["1001"]["users"]["u1"]
-    bonus_exp = hunt._support_bonus_exp("akito_fail", user, 1)
-    bonus_points = hunt._support_bonus_points("akito_fail", user)
+    bonus_exp = rewards._support_bonus_exp("akito_fail", user, 1)
+    bonus_points = rewards._support_bonus_points("akito_fail", user)
     assert user["exp"] == _direct_solo_exp(False, 1) + bonus_exp
-    assert user["points"] == hunt._challenge_points(False, user) + bonus_points
+    assert user["points"] == rewards._challenge_points(False, user) + bonus_points
     result = str(exc.value.result)
     assert "未能击败【座狼】" in result
     assert "反手补上一剑" in result
@@ -465,15 +469,15 @@ async def test_hunt_support_akito_fail_keeps_failure_with_bonus(monkeypatch):
 async def test_hunt_support_toya_rescue_turns_loss_into_win(monkeypatch):
     state = _patch_io(monkeypatch, hunt, store={"groups": {"1001": {"users": {"u1": _equipped_user(points=0)}}}})
     _stub_hunt_rng(monkeypatch, {"name": "座狼", "power_req": 999, "drops": []})
-    monkeypatch.setattr(hunt, "_roll_hunt_event", lambda margin, rng=hunt.random: "desperate")
-    monkeypatch.setattr(hunt, "_roll_solo_support_scene", lambda win, rng=hunt.random: "toya_rescue")
+    monkeypatch.setattr(rpg_events, "_roll_hunt_event", lambda margin, rng=rpg_events.random: "desperate")
+    monkeypatch.setattr(rpg_events, "_roll_solo_support_scene", lambda win, rng=rpg_events.random: "toya_rescue")
 
     with pytest.raises(FinishedException) as exc:
         await hunt.hunt_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="u1"))
 
     user = state["groups"]["1001"]["users"]["u1"]
     assert user["exp"] == _direct_solo_exp(True, 1)
-    assert user["points"] == hunt._challenge_points(True, user)
+    assert user["points"] == rewards._challenge_points(True, user)
     result = str(exc.value.result)
     assert any(
         text in result
@@ -493,17 +497,17 @@ async def test_hunt_support_toya_rescue_turns_loss_into_win(monkeypatch):
 async def test_hunt_support_duo_combo_turns_loss_into_win_with_bonus(monkeypatch):
     state = _patch_io(monkeypatch, hunt, store={"groups": {"1001": {"users": {"u1": _equipped_user(points=0)}}}})
     _stub_hunt_rng(monkeypatch, {"name": "食人魔", "power_req": 999, "drops": []})
-    monkeypatch.setattr(hunt, "_roll_hunt_event", lambda margin, rng=hunt.random: "desperate")
-    monkeypatch.setattr(hunt, "_roll_solo_support_scene", lambda win, rng=hunt.random: "duo_combo")
+    monkeypatch.setattr(rpg_events, "_roll_hunt_event", lambda margin, rng=rpg_events.random: "desperate")
+    monkeypatch.setattr(rpg_events, "_roll_solo_support_scene", lambda win, rng=rpg_events.random: "duo_combo")
 
     with pytest.raises(FinishedException) as exc:
         await hunt.hunt_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="u1"))
 
     user = state["groups"]["1001"]["users"]["u1"]
-    bonus_exp = hunt._support_bonus_exp("duo_combo", user, 1)
-    bonus_points = hunt._support_bonus_points("duo_combo", user)
+    bonus_exp = rewards._support_bonus_exp("duo_combo", user, 1)
+    bonus_points = rewards._support_bonus_points("duo_combo", user)
     assert user["exp"] == _direct_solo_exp(True, 1) + bonus_exp
-    assert user["points"] == hunt._challenge_points(True, user) + bonus_points
+    assert user["points"] == rewards._challenge_points(True, user) + bonus_points
     result = str(exc.value.result)
     assert any(
         text in result
@@ -542,9 +546,9 @@ async def test_hunt_elite_boosts_rewards_and_reveals(monkeypatch):
 
 
 def test_today_buff_deterministic_by_date(monkeypatch):
-    monkeypatch.setattr(hunt, "_today_str", lambda: "2026-07-01")
-    assert hunt._today_buff()["key"] == hunt._today_buff()["key"]            # 同一天一致
-    assert hunt._today_buff()["key"] in set(rpg_config._cfg("daily_buffs", {}))
+    monkeypatch.setattr(combat, "_today_str", lambda: "2026-07-01")
+    assert combat._today_buff()["key"] == combat._today_buff()["key"]            # 同一天一致
+    assert combat._today_buff()["key"] in set(rpg_config._cfg("daily_buffs", {}))
 
 
 @pytest.mark.asyncio

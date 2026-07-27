@@ -16,7 +16,7 @@ def _load_backfill_tool():
     return module
 
 
-def test_回补脚本_会按个人累计重建历史角色榜与抽数(tmp_path):
+def test_backfill_rebuilds_historical_character_ranks_and_draw_counts(tmp_path):
     tool = _load_backfill_tool()
     stats_path = tmp_path / "paro_stats.json"
     original = {

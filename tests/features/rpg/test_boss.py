@@ -324,7 +324,7 @@ async def test_team_world_boss_fail_only_consumes_initiator(monkeypatch):
     monkeypatch.setattr(boss.random, "random", lambda: 0.999)
     monkeypatch.setattr(boss.random, "randint", lambda _a, _b: 0)
     monkeypatch.setattr(boss.random, "uniform", lambda _a, _b: 1.0)
-    monkeypatch.setattr(boss, "_roll_team_fail_flavor", lambda rng=boss.random: "hesitate")
+    monkeypatch.setattr(boss, "_roll_fail_flavor", lambda rng=boss.random: "hesitate")
 
     with pytest.raises(FinishedException) as exc:
         await boss.team_world_boss_cmd.handlers[0](_bot(), _team_event("u1", "u2"))
@@ -455,7 +455,7 @@ async def test_team_world_boss_fail_kill_only_shows_settlement_lines(monkeypatch
     monkeypatch.setattr(boss.random, "random", lambda: 0.999)
     monkeypatch.setattr(boss.random, "randint", lambda _a, _b: 0)
     monkeypatch.setattr(boss.random, "uniform", lambda _a, _b: 1.0)
-    monkeypatch.setattr(boss, "_roll_team_fail_flavor", lambda rng=boss.random: "hesitate")
+    monkeypatch.setattr(boss, "_roll_fail_flavor", lambda rng=boss.random: "hesitate")
     async def _fake_render(_settlement):
         return b"fake-world-boss-rank"
     monkeypatch.setattr(boss, "_render_world_boss_settlement_image", _fake_render)

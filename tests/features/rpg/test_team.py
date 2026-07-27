@@ -8,10 +8,13 @@ import pytest
 
 from nonebot_plugin_akito.core import game_store
 import nonebot_plugin_akito.features.rpg.boss as boss
+import nonebot_plugin_akito.features.rpg.combat as combat
 import nonebot_plugin_akito.features.rpg.config as rpg_config
-import nonebot_plugin_akito.features.rpg.hunt as hunt
+import nonebot_plugin_akito.features.rpg.events as rpg_events
 import nonebot_plugin_akito.features.rpg.player as player
+import nonebot_plugin_akito.features.rpg.rewards as rewards
 import nonebot_plugin_akito.features.rpg.team as team
+import nonebot_plugin_akito.features.rpg.utils as rpg_utils
 
 from .helpers import _PLAIN_BUFF, _bot, _equipped_user, _patch_io, _Rng, _stub_hunt_rng, _team_event
 
@@ -94,7 +97,7 @@ async def test_team_success_both_rewarded(monkeypatch):
     state = _patch_io(monkeypatch, team, store=store)
     monkeypatch.setattr(team, "random", _Rng(0.0))
     _stub_hunt_rng(monkeypatch, {"name": "史莱姆", "power_req": 1, "drops": []})
-    monkeypatch.setattr(hunt, "_roll_coop_event", lambda rng=hunt.random: "focus_fire")
+    monkeypatch.setattr(rpg_events, "_roll_coop_event", lambda rng=rpg_events.random: "focus_fire")
     with pytest.raises(FinishedException) as exc:
         await team.team_cmd.handlers[0](_bot(), _team_event("u1", "u2"))
     g = state["groups"]["1001"]["users"]
@@ -113,25 +116,25 @@ def test_settle_coop_uses_higher_level_for_encounter(monkeypatch):
     captured: dict = {}
     monster = {"name": "史莱姆", "power_req": 1, "drops": []}
 
-    def _pick(level, rng=hunt.random):
+    def _pick(level, rng=combat.random):
         captured["level"] = level
         return monster, False
 
     reward = {"exp_gain": 0, "exp_buffed": False, "drops": [], "points_gain": 0, "old_level": 1, "new_level": 1}
-    monkeypatch.setattr(hunt, "_pick_encounter", _pick)
-    monkeypatch.setattr(hunt.random, "uniform", lambda _a, _b: 1.0)
-    monkeypatch.setattr(hunt, "_roll_coop_event", lambda rng=hunt.random: "")
-    monkeypatch.setattr(hunt, "_today_buff", lambda: _PLAIN_BUFF)
+    monkeypatch.setattr(combat, "_pick_encounter", _pick)
+    monkeypatch.setattr(rewards.random, "uniform", lambda _a, _b: 1.0)
+    monkeypatch.setattr(rpg_events, "_roll_coop_event", lambda rng=rpg_events.random: "")
+    monkeypatch.setattr(combat, "_today_buff", lambda: _PLAIN_BUFF)
     monkeypatch.setattr(
-        hunt,
+        combat,
         "resolve_hunt",
         lambda combat_power, eff_monster, *, power_factor, fortune_factor=1.0, event=None:
         {"win": True, "effective": int(combat_power * power_factor * fortune_factor),
          "event": event or "", "monster": eff_monster},
     )
-    monkeypatch.setattr(hunt, "_apply_rewards", lambda *args, **kwargs: dict(reward))
+    monkeypatch.setattr(rewards, "_apply_rewards", lambda *args, **kwargs: dict(reward))
 
-    hunt._settle_coop(
+    rewards._settle_coop(
         _equipped_user(exp=player._cum_exp(2, player._level_base()), equip_level=2),
         _equipped_user(exp=player._cum_exp(7, player._level_base()), equip_level=7),
         "D",
@@ -147,13 +150,17 @@ def test_settle_coop_uses_average_fortune_factor(monkeypatch):
     right = _equipped_user()
     reward = {"exp_gain": 0, "exp_buffed": False, "drops": [], "points_gain": 0, "old_level": 1, "new_level": 1}
 
-    monkeypatch.setattr(hunt, "_pick_encounter", lambda level, rng=hunt.random: (monster, False))
-    monkeypatch.setattr(hunt.random, "uniform", lambda _a, _b: 1.0)
-    monkeypatch.setattr(hunt, "_roll_coop_event", lambda rng=hunt.random: "")
-    monkeypatch.setattr(hunt, "_today_buff", lambda: _PLAIN_BUFF)
-    monkeypatch.setattr(hunt, "_fortune_combat_factor", lambda user, today: 1.4 if user is left else 0.8)
+    monkeypatch.setattr(combat, "_pick_encounter", lambda level, rng=combat.random: (monster, False))
+    monkeypatch.setattr(rewards.random, "uniform", lambda _a, _b: 1.0)
+    monkeypatch.setattr(rpg_events, "_roll_coop_event", lambda rng=rpg_events.random: "")
+    monkeypatch.setattr(combat, "_today_buff", lambda: _PLAIN_BUFF)
     monkeypatch.setattr(
-        hunt,
+        rpg_utils,
+        "_fortune_combat_factor",
+        lambda user, today, enabled=True: 1.4 if user is left else 0.8,
+    )
+    monkeypatch.setattr(
+        combat,
         "resolve_hunt",
         lambda combat_power, eff_monster, *, power_factor, fortune_factor=1.0, event=None:
         (captured.update({"fortune_factor": fortune_factor}) or {
@@ -163,9 +170,9 @@ def test_settle_coop_uses_average_fortune_factor(monkeypatch):
             "monster": eff_monster,
         }),
     )
-    monkeypatch.setattr(hunt, "_apply_rewards", lambda *args, **kwargs: dict(reward))
+    monkeypatch.setattr(rewards, "_apply_rewards", lambda *args, **kwargs: dict(reward))
 
-    hunt._settle_coop(left, right, "D")
+    rewards._settle_coop(left, right, "D")
 
     assert captured["fortune_factor"] == pytest.approx(1.1)
 
@@ -190,12 +197,12 @@ def test_settle_coop_applies_team_event_and_drop_bonus(
     monster = {"name": "slime", "power_req": 1, "drops": []}
     reward = {"exp_gain": 0, "exp_buffed": False, "drops": [], "points_gain": 0, "old_level": 1, "new_level": 1}
 
-    monkeypatch.setattr(hunt, "_pick_encounter", lambda level, rng=hunt.random: (monster, False))
-    monkeypatch.setattr(hunt.random, "uniform", lambda _a, _b: 1.0)
-    monkeypatch.setattr(hunt, "_roll_coop_event", lambda rng=hunt.random: event_key)
-    monkeypatch.setattr(hunt, "_today_buff", lambda: _PLAIN_BUFF)
+    monkeypatch.setattr(combat, "_pick_encounter", lambda level, rng=combat.random: (monster, False))
+    monkeypatch.setattr(rewards.random, "uniform", lambda _a, _b: 1.0)
+    monkeypatch.setattr(rpg_events, "_roll_coop_event", lambda rng=rpg_events.random: event_key)
+    monkeypatch.setattr(combat, "_today_buff", lambda: _PLAIN_BUFF)
     monkeypatch.setattr(
-        hunt,
+        combat,
         "resolve_hunt",
         lambda combat_power, eff_monster, *, power_factor, fortune_factor=1.0, event=None:
         (captured.update({"power_factor": power_factor}) or {
@@ -210,9 +217,9 @@ def test_settle_coop_applies_team_event_and_drop_bonus(
         captured["reward_kwargs"].append(kwargs)
         return dict(reward)
 
-    monkeypatch.setattr(hunt, "_apply_rewards", _apply_rewards)
+    monkeypatch.setattr(rewards, "_apply_rewards", _apply_rewards)
 
-    hunt._settle_coop(_equipped_user(), _equipped_user(), "D", exp_bonus=0.15, drop_bonus=0.25)
+    rewards._settle_coop(_equipped_user(), _equipped_user(), "D", exp_bonus=0.15, drop_bonus=0.25)
 
     assert captured["power_factor"] == pytest.approx(expected_power)
     assert len(captured["reward_kwargs"]) == 2
@@ -227,12 +234,12 @@ def test_settle_coop_applies_extra_negative_multipliers(monkeypatch):
     monster = {"name": "slime", "power_req": 1, "drops": []}
     reward = {"exp_gain": 0, "exp_buffed": False, "drops": [], "points_gain": 0, "old_level": 1, "new_level": 1}
 
-    monkeypatch.setattr(hunt, "_pick_encounter", lambda level, rng=hunt.random: (monster, False))
-    monkeypatch.setattr(hunt.random, "uniform", lambda _a, _b: 1.0)
-    monkeypatch.setattr(hunt, "_roll_coop_event", lambda rng=hunt.random: "")
-    monkeypatch.setattr(hunt, "_today_buff", lambda: _PLAIN_BUFF)
+    monkeypatch.setattr(combat, "_pick_encounter", lambda level, rng=combat.random: (monster, False))
+    monkeypatch.setattr(rewards.random, "uniform", lambda _a, _b: 1.0)
+    monkeypatch.setattr(rpg_events, "_roll_coop_event", lambda rng=rpg_events.random: "")
+    monkeypatch.setattr(combat, "_today_buff", lambda: _PLAIN_BUFF)
     monkeypatch.setattr(
-        hunt,
+        combat,
         "resolve_hunt",
         lambda combat_power, eff_monster, *, power_factor, fortune_factor=1.0, event=None:
         (captured.update({"power_factor": power_factor}) or {
@@ -247,9 +254,9 @@ def test_settle_coop_applies_extra_negative_multipliers(monkeypatch):
         captured["reward_kwargs"].append(kwargs)
         return dict(reward)
 
-    monkeypatch.setattr(hunt, "_apply_rewards", _apply_rewards)
+    monkeypatch.setattr(rewards, "_apply_rewards", _apply_rewards)
 
-    hunt._settle_coop(
+    rewards._settle_coop(
         _equipped_user(),
         _equipped_user(),
         "D",
@@ -305,8 +312,8 @@ async def test_team_fail_by_rng_degrades_to_solo(monkeypatch):
         await team.team_cmd.handlers[0](_bot(), _team_event("u1", "u2"))
     g = state["groups"]["1001"]["users"]
     assert g["u1"]["equip_used"] is True and g["u2"]["equip_used"] is False
-    assert g["u1"]["exp"] == hunt._challenge_exp(True, 1)
-    assert g["u1"]["points"] == hunt._challenge_points(True, g["u1"])
+    assert g["u1"]["exp"] == rewards._challenge_exp(True, 1)
+    assert g["u1"]["points"] == rewards._challenge_points(True, g["u1"])
     assert g["u2"]["exp"] == 0 and g["u2"]["points"] == 0
     assert "独自前往" in str(exc.value.result)
     assert "迟疑" in str(exc.value.result)
@@ -322,7 +329,7 @@ async def test_team_fail_rescue_runs_normal_coop_settlement(monkeypatch):
     monkeypatch.setattr(team, "_roll_fail_flavor", lambda rng=team.random: "late_reply")
     monkeypatch.setattr(team, "_roll_team_fail_rescue", lambda rng=team.random: True)
     _stub_hunt_rng(monkeypatch, {"name": "史莱姆", "power_req": 1, "drops": []})
-    monkeypatch.setattr(hunt, "_roll_coop_event", lambda rng=hunt.random: "")
+    monkeypatch.setattr(rpg_events, "_roll_coop_event", lambda rng=rpg_events.random: "")
 
     with pytest.raises(FinishedException) as exc:
         await team.team_cmd.handlers[0](_bot(), _team_event("u1", "u2"))
@@ -359,7 +366,7 @@ async def test_team_negative_break_ice_grants_extra_bond(monkeypatch):
     monkeypatch.setattr(team, "random", _Rng(0.0))
     monkeypatch.setattr(team, "_roll_negative_team_event", lambda intimacy, rng=team.random: "break_ice")
     _stub_hunt_rng(monkeypatch, {"name": "史莱姆", "power_req": 1, "drops": []})
-    monkeypatch.setattr(hunt, "_roll_coop_event", lambda rng=hunt.random: "")
+    monkeypatch.setattr(rpg_events, "_roll_coop_event", lambda rng=rpg_events.random: "")
 
     with pytest.raises(FinishedException) as exc:
         await team.team_cmd.handlers[0](_bot(), _team_event("u1", "u2"))
@@ -383,18 +390,18 @@ async def test_team_success_minor_encounter_splits_numeric_rewards(monkeypatch):
         {"name": "史莱姆", "power_req": 1, "drops": []},
         minor_event="supply_cache",
     )
-    monkeypatch.setattr(hunt, "_roll_coop_event", lambda rng=hunt.random: "")
+    monkeypatch.setattr(rpg_events, "_roll_coop_event", lambda rng=rpg_events.random: "")
 
     with pytest.raises(FinishedException) as exc:
         await team.team_cmd.handlers[0](_bot(), _team_event("u1", "u2"))
 
-    spec = hunt._minor_event_spec("supply_cache", team=True)
+    spec = rpg_events._minor_event_spec("supply_cache", team=True)
     user1 = state["groups"]["1001"]["users"]["u1"]
     user2 = state["groups"]["1001"]["users"]["u2"]
-    assert user1["exp"] == hunt._challenge_exp(True, 1) + int(spec.get("exp", 0)) // 2
-    assert user2["exp"] == hunt._challenge_exp(True, 1) + int(spec.get("exp", 0)) // 2
-    assert user1["points"] == hunt._challenge_points(True, user1) + int(spec.get("points", 0)) // 2
-    assert user2["points"] == hunt._challenge_points(True, user2) + int(spec.get("points", 0)) // 2
+    assert user1["exp"] == rewards._challenge_exp(True, 1) + int(spec.get("exp", 0)) // 2
+    assert user2["exp"] == rewards._challenge_exp(True, 1) + int(spec.get("exp", 0)) // 2
+    assert user1["points"] == rewards._challenge_points(True, user1) + int(spec.get("points", 0)) // 2
+    assert user2["points"] == rewards._challenge_points(True, user2) + int(spec.get("points", 0)) // 2
     result = str(exc.value.result)
     assert "两人在路边翻出一袋还没被雨淋透的补给" in result
     assert f"经验 +{int(spec.get('exp', 0)) // 2}" in result
@@ -415,7 +422,7 @@ async def test_team_success_minor_encounter_item_rewards_duplicate(monkeypatch):
         minor_event="worn_chest",
         minor_reward={"type": "item", "name": "彰冬无料券", "amount": 1},
     )
-    monkeypatch.setattr(hunt, "_roll_coop_event", lambda rng=hunt.random: "")
+    monkeypatch.setattr(rpg_events, "_roll_coop_event", lambda rng=rpg_events.random: "")
 
     with pytest.raises(FinishedException) as exc:
         await team.team_cmd.handlers[0](_bot(), _team_event("u1", "u2"))
@@ -446,8 +453,8 @@ async def test_team_fail_fallback_solo_does_not_trigger_minor_encounter(monkeypa
         await team.team_cmd.handlers[0](_bot(), _team_event("u1", "u2"))
 
     user = state["groups"]["1001"]["users"]["u1"]
-    assert user["exp"] == hunt._challenge_exp(True, 1)
-    assert user["points"] == hunt._challenge_points(True, user)
+    assert user["exp"] == rewards._challenge_exp(True, 1)
+    assert user["points"] == rewards._challenge_points(True, user)
     assert "【奇遇】" not in str(exc.value.result)
 
 

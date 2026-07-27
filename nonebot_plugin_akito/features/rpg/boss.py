@@ -25,14 +25,18 @@ from ...core.game_store import (
     _render_with_ats,
     _save_data,
     _today_str,
-    _weighted_choice,
 )
 from ..gift import _bond_level
 from ..gift.pages import build_world_boss_rank_page_data
 from ..gift.render import render_bond_page
 from .config import _cfg, _copy, _error, _line
-from .fortune import _fortune_by_key
 from .player import _consume_equip, _ensure_player, _equip_power, _level_of, _resolve_group
+from .utils import (
+    _fortune_combat_factor,
+    _roll_fail_flavor,
+    _team_power_bonus,
+    _team_success_rate,
+)
 
 
 def _world_boss_cfg() -> dict:
@@ -50,29 +54,7 @@ def _soft_scale_count(active_count: int, *, base_cap: int, extra_rate: float, ma
     return min(max_cap, base_cap + math.ceil((active_count - base_cap) * extra_rate))
 
 
-def _team_success_rate(bond_level: int) -> float:
-    tcfg = _cfg("team", {})
-    level = int(bond_level)
-    base = float(tcfg.get("base_success", 0.35))
-    if level >= 1:
-        rate = base + (level - 1) * float(tcfg.get("per_level", 0.12))
-    else:
-        rate = base + (level - 1) * float(tcfg.get("negative_per_level", tcfg.get("per_level", 0.12)))
-    return max(float(tcfg.get("min_success", 0.10)), min(float(tcfg.get("max_success", 0.95)), rate))
 
-
-def _team_power_bonus() -> float:
-    return max(0.0, float(_cfg("team", {}).get("power_bonus", 0.0)))
-
-
-def _roll_team_fail_flavor(rng=random) -> str:
-    weights = _cfg("team", {}).get("fail_flavor", {})
-    if not isinstance(weights, dict) or not weights:
-        return ""
-    cands = {key: int(weight) for key, weight in weights.items()}
-    if sum(cands.values()) <= 0:
-        return ""
-    return _weighted_choice(cands, rng)
 
 
 def _rpg_state(group: dict) -> dict:
@@ -265,12 +247,6 @@ def _maybe_spawn_world_boss(group: dict, today: str, user_id: str, rng=random) -
 def _maybe_spawn_world_boss_lines(group: dict, today: str, user_id: str, rng=random) -> list[str]:
     boss = _maybe_spawn_world_boss(group, today, user_id, rng=rng)
     return _world_boss_spawn_lines(boss) if boss else []
-
-
-def _fortune_combat_factor(user: dict, today: str) -> float:
-    if user.get("fortune_date") != today:
-        return 1.0
-    return float(_fortune_by_key(user.get("fortune", "")).get("combat_factor", 1.0))
 
 
 def _boss_participants(boss: dict) -> dict:
@@ -1125,7 +1101,7 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
             if bonus_total > 0 and int(boss.get("hp", 0)) > 0:
                 lines.append(_line("world_boss_team_bonus", bonus_total=bonus_total))
         else:
-            fail_event = _roll_team_fail_flavor()
+            fail_event = _roll_fail_flavor()
             if fail_event:
                 lines.append(_line(f"world_boss_fail_event_{fail_event}", b_name=a_name))
             lines.append(

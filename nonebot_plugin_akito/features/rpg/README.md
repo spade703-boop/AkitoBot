@@ -59,9 +59,13 @@ features/rpg/
 ├── config.py                 全部数值 / 文案 / 配置（DEFAULT_RPG_CONFIG，可被 rpg_config.json 覆盖热重载）；_cfg/_copy/_error/_line
 ├── player.py                 经验→等级派生；称号派生 `_title_of`；今日装备 helper；_combat_power；群校验 _resolve_group
 ├── fortune.py                隐藏运势掷取（含连签保底 / 大凶转大吉修正）+ 签到钩子 on_signin（暗掷运势 + 发经验[10 起步、连签最高 20] + 发今日装备）
-├── hunt.py                   `今日打怪` 指令 + 战斗结算（精英 `_pick_encounter` / 今日增益 `_today_buff` / 单刷 `_settle_solo` / 组队合力 `_settle_coop` / 援护与追击 / 小奇遇 / 发奖 `_apply_rewards` 共用）
+├── hunt.py                   `今日打怪` 指令入口 + 战斗结果、援护追击和小奇遇播报
+├── combat.py                 遭遇分段 / 精英 / 今日增益 / 新手保护 / 胜负判定
+├── events.py                 普通与组队事件 / 援护追击 / 单人和双人小奇遇抽取
+├── rewards.py                经验积分掉落 / 援护与奇遇入账 / `_settle_solo` / `_settle_coop`
+├── utils.py                  组队成功率 / 协作战力 / 失败事件 / 运势战力与掉落公共公式
 ├── boss.py                   世界 BOSS 刷出 / 强制开启 / 查询 / 独立临时装备的单人攻击 / 双人攻击 / 贡献结算
-├── team.py                   `组队@某人` 指令：羁绊定成功率、负羁绊事件/小额羁绊增长、成功后的双人小奇遇、失败退化单刷或被援护拉回（复用 hunt 结算）
+├── team.py                   `组队@某人` 指令：负羁绊事件/小额羁绊增长、失败退化单刷或被援护拉回（复用 rewards 结算）
 ├── smith.py                  `强化今日装备` / `强化世界BOSS装备` / `购买装备` / `重置RPG功能`
 ├── inventory.py              `背包` / `使用` 指令 + 道具效果 + 打怪掉落 helper
 └── character.py              `我的角色` 面板（含称号/战绩）+ `群排行榜`（等级榜）+ `冒险帮助`
@@ -74,8 +78,8 @@ features/rpg/
 
 **数据流**：
 - 签到：`gift.签到` →（持锁）`run_signin_hooks` → `fortune.on_signin` → `player._grant_equip`（发今日装备）。
-- 打怪：`hunt` → `player._combat_power`（今日装备战力）+ `fortune` 运势系数 + `inventory._roll_drops/_add_item`（掉落）+ 低概率援护/追击特判 + 少量积分 → `_maybe_spawn_world_boss_lines`（低概率刷出世界 BOSS）。
-- 组队：`team` → `game_store._get_intimacy` + `gift._bond_level`（定成功率）→ 负羁绊额外事件 / 每日限次羁绊增长 / 失败后低概率援护拉回 → `hunt._settle_coop`（成）/ `hunt._settle_solo`（败，单刷）。
+- 打怪：`hunt` → `rewards._settle_solo` → `combat.resolve_hunt`（遭遇与胜负）+ `events`（随机事件/援护追击/小奇遇）+ `inventory._roll_drops/_add_item`（掉落与入账）→ `hunt` 组装播报 → `_maybe_spawn_world_boss_lines`（低概率刷出世界 BOSS）。
+- 组队：`team` → `game_store._get_intimacy` + `gift._bond_level` + `utils._team_success_rate`（定成功率）→ 负羁绊额外事件 / 每日限次羁绊增长 / 失败后低概率援护拉回 → `rewards._settle_coop`（成）/ `rewards._settle_solo`（败，单刷）。
 - 世界 BOSS：`boss` 读取 `group["rpg"]["world_boss"]` → 近 7 日活跃人数先映射成血量规模 `scale_count`，再单独映射成奖励规模 `reward_scale_count` → 为参与者懒创建独立临时装备记录 `participants[uid]` → 单人或双人计算本次伤害 → 更新贡献榜和剩余生命 → 击杀时按贡献发经验 / 积分，并结算世界BOSS羁绊展示与专属收藏掉落，然后清掉群级状态。
 
 **玩家与群数据**（存于 `gift_data.json`，与送礼共用）：
@@ -91,8 +95,7 @@ features/rpg/
 
 ## 测试
 
-`tests/test_rpg.py`：纯逻辑（等级/今日装备/运势/胜负/掉落/强化/组队成功率/负羁绊概率分档/组队羁绊日限/称号分档/连签记录·断签/今日增益按日期确定 / 世界 BOSS 缩放与贡献分配）
-+ 指令行为（签到钩子含连签/打怪含积分·精英·今日增益·援护追击/战绩计数/强化与重置 RPG / 面板含称号战绩/排行榜排序·过滤·空榜/背包/普通组队成功·失败退化单刷或援护拉回/负羁绊缓和事件/世界 BOSS 查询·单人攻击·双人攻击·击杀结算）。
+`tests/features/rpg/` 按源码职责拆分测试：纯逻辑覆盖等级/装备/运势/胜负/掉落/强化/组队成功率/负羁绊概率/组队羁绊日限/称号/连签/今日增益/世界 BOSS 缩放与贡献分配；指令行为覆盖签到钩子、打怪、援护追击、战绩、强化与重置、角色面板、排行榜、背包、组队和世界 BOSS 完整结算。
 数值断言一律从 `_cfg(...)` 读，调数值不会让测试变脆。
 
 > 组队复用「送礼」**现有**的羁绊梯（6 档正向，顶档「从今往后直到永远」=Lv6），送礼数值平衡由 `gift` 自身维护——

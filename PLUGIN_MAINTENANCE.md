@@ -48,9 +48,13 @@ nonebot_plugin_akito/
                                    ├── config.py         # 全部数值/文案/配置（可被 rpg_config.json 热更新，含小奇遇/世界BOSS）
                                    ├── player.py         # 经验→等级派生/称号/今日装备 helper/战力计算
                                    ├── fortune.py        # 隐藏运势掷取（含连签保底）+ 签到钩子 on_signin
-                                   ├── hunt.py           # 打怪指令 + 战斗结算（精英/今日增益/单刷/组队合力/小奇遇）
+                                   ├── hunt.py           # 今日打怪指令 + 战斗结果播报
+                                   ├── combat.py         # 遭遇/精英/今日增益/胜负判定
+                                   ├── events.py         # 战斗事件/援护追击/小奇遇抽取
+                                   ├── rewards.py        # 经验积分掉落 + 单人/组队结算
+                                   ├── utils.py          # 组队概率/战力与运势公共公式
                                    ├── boss.py           # 世界BOSS刷出/强制开启/查询/单人攻击/双人攻击/贡献结算
-                                   ├── team.py           # 组队@某人 指令（羁绊定成功率、负羁绊事件、小额羁绊增长、双人小奇遇、失败退化单刷）
+                                   ├── team.py           # 组队@某人 指令（羁绊事件、小额羁绊增长、失败退化单刷）
                                    ├── smith.py          # 强化/购买装备/重置RPG功能
                                    ├── inventory.py      # 背包/使用指令 + 道具效果 + 掉落 helper
                                    └── character.py      # 我的角色面板（含称号/战绩）+ 群排行榜 + 冒险帮助
@@ -81,7 +85,7 @@ game_store.py  (← __init__；gift/rpg 共用存储层)         │
 
 - `core/` 子模块只能用相对导入 `.` 访问同层文件，**严禁**向上引用 `handlers/` 或 `features/`
 - `handlers/` 和 `features/` 均使用 `from ..core import ...`（两个点 = 上一级包）
-- `handlers/` 和 `features/` 之间**无互相引用**（唯一例外：`rpg/team.py` → `gift._bond_level`，单向消费 gift 的羁绊体系——gift 不反向依赖 rpg，无环）
+- `handlers/` 和 `features/` 之间**无互相引用**；`features/rpg/` 对 `features/gift/` 有单向依赖：`team.py` / `boss.py` 消费羁绊等级，`inventory.py` 复用礼物结算，gift 不反向依赖 rpg，无环
 - `features/verify/` 无任何内部依赖，完全独立
 - `features/director/` 仅被 `handlers/chat.py` 调用，可整体删除（chat.py 有安全降级）
 
@@ -533,10 +537,14 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（戳一戳
 |------|------|
 | `config.py` | 全部数值（战斗/运势/强化/掉落/连签/精英/小奇遇/世界BOSS）/ 文案 / 错误的默认配置 `DEFAULT_RPG_CONFIG`；`_cfg(key)` 读取、`_error(key)` 错误文案、`_copy(key)` 随机文案；`reload_rpg_config()` 被 `reload_assets()` 联动热更 |
 | `player.py` | 纯函数：`_level_of(exp)` 经验→等级、`_level_progress(exp)` 进度、`_title_of(level)` 称号分档、`_cum_exp(level)` 升到此级所需累计经验、`_ensure_player(group, uid, name)` 初始化玩家记录；`_combat_power(user)` 计算今日装备隐藏战力；`_resolve_group(event)` 群校验 |
-| `fortune.py` | `on_signin(group, uid, rng, today)` 签到钩子入口（暗掷运势 + 发经验 + 今日装备 + 连签记录 + 断签重置）；`_fortune_combat/drop_factor` 为战力/掉落提供运势修正；连签保底机制（连凶天数达阈值自动转大吉） |
-| `hunt.py` | `今日打怪` 指令 + 战斗结算管线：`_encounter_level`（装备等级分段）→ `_pick_encounter`（怪池权重按等级分档 + 精英概率按等级门槛）→ `_settle_solo`（单刷含新手保护 `_rookie_power_factor` + 随机事件 + 运势修正 + 今日增益）→ `_settle_coop`（组队合力，取双方较高等级抽怪）；普通打怪结算后还会追加轻量尾声：单刷援护/追击、单人小奇遇与双人小奇遇，并在最后额外触发一次世界 BOSS 刷出判定 |
+| `fortune.py` | `on_signin(group, uid, rng, today)` 签到钩子入口（暗掷运势 + 发经验 + 今日装备 + 连签记录 + 断签重置）；`_fortune_by_key` 提供运势配置查询；连签保底机制（连凶天数达阈值自动转大吉）。战斗和掉落系数由 `utils.py` 统一接入 |
+| `hunt.py` | `今日打怪` / `test打怪掉落` 指令入口和普通战斗播报组装；调用 `rewards._settle_solo` 取得结构化结果，再展示事件、奖励、援护追击和小奇遇，最后触发一次世界 BOSS 刷出判定 |
+| `combat.py` | 战斗纯逻辑：按装备等级选择怪物分段和精英概率、计算今日增益、生成有效怪物数值，并由 `resolve_hunt` 完成胜负判定；单刷新手保护 `_rookie_power_factor` 仅在此处维护 |
+| `events.py` | 普通战斗事件、组队战斗事件、援护追击场景和单人/双人小奇遇的配置读取与随机抽取；只决定事件结果，不直接修改存档 |
+| `rewards.py` | 普通 RPG 的经验、积分、掉落、援护奖励和小奇遇入账；`_settle_solo` / `_settle_coop` 串联 `combat`、`events`、`inventory` 后返回统一结算结果，供 `hunt.py` 与 `team.py` 复用 |
+| `utils.py` | 普通组队与世界 BOSS 共用的组队成功率、协作战力加成、失败事件抽取及运势战力/掉落系数，避免两条战斗线重复维护同一公式 |
 | `boss.py` | 世界 BOSS 逻辑：近 7 日活跃签到人数缩放、群级状态 `group["rpg"]["world_boss"]` 持久化、`世界BOSS` / `攻击世界BOSS` / `组队世界BOSS@某人` / `强制开启世界BOSS` / `test世界排行` 指令、贡献榜、按贡献发放经验/积分；12 人后血量规模 `scale_count` 会继续软扩容，但奖励规模 `reward_scale_count` 扩容更慢，避免大群秒杀后奖励也同步爆炸；每个已签到玩家在每只 BOSS 上都有独立的 `participants[uid]` 临时装备与 1 次出手机会；双人挑战会记录轻量羁绊成长；击杀结算还会按 3% 独立概率发放不重复的世界BOSS专属收藏；若当天未击败，则在隔天首次访问相关状态时按已造成进度折算补偿并清场；`强制开启世界BOSS` 仅超管可用，会跳过概率与活跃人数门槛，但不会覆盖当天已存在的 BOSS；奖励不计入 `hunt_total/hunt_wins` |
-| `team.py` | `组队@某人` 指令：从 `gift._bond_level` 取羁绊→算成功率（正羁绊正常爬升，负羁绊缓降）；对方未签到/装备已损坏 → 直接拒绝（不退化单刷）；成功走 `_settle_coop`（双方各得经验积分掉落、各自装备消耗，并额外结算战力/掉落协作加成）；若 pair 当前是负羁绊，还会按深度概率触发一次摩擦/磨合事件，影响本场战力/经验/掉落或追加破冰羁绊；成功结队后该 pair 每天还会小幅增长一次羁绊，并低概率触发双人小奇遇；羁绊不够 → 走 `_settle_solo`（只消耗发起人，队友无损，而且不会误触发双人小奇遇）；普通组队结算后同样会触发世界 BOSS 刷出判定 |
+| `team.py` | `组队@某人` 指令：从 `gift._bond_level` 取羁绊，再通过 `utils._team_success_rate` 判定组队；成功或失败退化单刷分别调用 `rewards._settle_coop` / `_settle_solo`。本模块保留负羁绊摩擦/磨合、每日羁绊增长、组队失败援护和播报逻辑；普通组队结算后同样会触发世界 BOSS 刷出判定 |
 | `smith.py` | `强化今日装备` / `强化世界BOSS装备` / `购买装备` / `重置RPG功能` 指令（积分出口 + 超管测试辅助）：两套强化都走 `forge.costs` 分段收费 `[30,60,90]`；世界 BOSS 强化只作用于该 BOSS 的独立临时装备；购买装备花 100 积分重置已损坏普通装备（每天限 1 次，打上 `equip_rebought` 标记，打怪经验和积分减半）；`重置RPG功能` 仅为今天签到过的人重发普通装备，不改运势、连签和世界 BOSS 状态 |
 | `inventory.py` | `背包` / `使用 [道具名]` 指令 + 道具效果（`exp_buff`/`exp_grant`/`gift` 三种类型）+ 礼物券分支走完整送礼流程（`_settle`/`_build_broadcast`） + `_roll_drops` 掉落判定 + `_add_item` 背包入库 |
 | `character.py` | `我的角色` 面板（含称号 `_title_of`/战绩/普通装备状态/世界BOSS状态/积分/背包）+ `群排行榜`（本群 exp>0 的人按经验降序 Top 10，纯文字不 @）+ `冒险帮助`（含世界 BOSS 指令） |

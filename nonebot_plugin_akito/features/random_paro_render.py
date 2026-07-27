@@ -2,8 +2,16 @@
 
 from __future__ import annotations
 
-from .random_paro.render import TEMPLATE_DIR, _RENDER_SEM, _TEMPLATE_ENV
-from .random_paro.render import html_to_pic as _html_to_pic
+from .random_paro.render import (
+    _RENDER_SEM,
+    _TEMPLATE_ENV,
+    TEMPLATE_DIR,
+)
+from .random_paro.render import (
+    html_to_pic as _html_to_pic,
+)
+
+__all__ = ("TEMPLATE_DIR", "html_to_pic", "render_random_paro_page")
 
 html_to_pic = _html_to_pic
 

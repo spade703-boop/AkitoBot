@@ -27,21 +27,12 @@ from ...core.game_store import (
 )
 from ..gift import _bond_level
 from .boss import _cleanup_stale_world_boss, _maybe_spawn_world_boss_lines
-from .config import _copy, _cfg, _error, _line
-from .hunt import _apply_team_minor_encounter, _buff_active, _hunt_result_lines, _settle_coop, _settle_solo, _team_minor_lines
+from .combat import _buff_active
+from .config import _cfg, _copy, _error, _line
+from .hunt import _hunt_result_lines, _team_minor_lines
 from .player import _ensure_player, _resolve_group
-
-
-def _team_success_rate(bond_level: int) -> float:
-    """组队成功率：正羁绊提速，负羁绊缓降，并钳在 [min, max]。"""
-    t = _cfg("team", {})
-    level = int(bond_level)
-    base = float(t.get("base_success", 0.35))
-    if level >= 1:
-        rate = base + (level - 1) * float(t.get("per_level", 0.12))
-    else:
-        rate = base + (level - 1) * float(t.get("negative_per_level", t.get("per_level", 0.12)))
-    return max(float(t.get("min_success", 0.10)), min(float(t.get("max_success", 0.95)), rate))
+from .rewards import _apply_team_minor_encounter, _settle_coop, _settle_solo
+from .utils import _roll_fail_flavor, _support_chance, _team_success_rate
 
 
 def _team_exp_bonus(bond_level: int) -> float:
@@ -60,18 +51,6 @@ def _team_drop_bonus(bond_level: int) -> float:
         0.0,
         min(float(t.get("drop_bonus_max", 0.40)), (int(bond_level) - 1) * float(t.get("drop_bonus_per_level", 0.08))),
     )
-
-
-def _team_power_bonus() -> float:
-    """组队成功时的基础战力协作加成。"""
-    return max(0.0, float(_cfg("team", {}).get("power_bonus", 0.0)))
-
-
-def _support_chance() -> float:
-    cfg = _cfg("support", {})
-    if not isinstance(cfg, dict):
-        return 0.0
-    return max(0.0, min(1.0, float(cfg.get("chance", 0.03))))
 
 
 def _roll_team_fail_rescue(rng=random) -> bool:
@@ -157,17 +136,6 @@ def _grant_team_bond(group: dict, uid1: str, uid2: str, today: str, *, win: bool
     _add_intimacy(group, uid1, uid2, gain)
     pairs[key] = int(pairs.get(key, 0)) + 1
     return gain
-
-
-def _roll_fail_flavor(rng=random) -> str:
-    """组队失败时抽一条前置氛围事件。"""
-    weights = _cfg("team", {}).get("fail_flavor", {})
-    if not isinstance(weights, dict) or not weights:
-        return ""
-    cands = {key: int(weight) for key, weight in weights.items()}
-    if sum(cands.values()) <= 0:
-        return ""
-    return _weighted_choice(cands, rng)
 
 
 def _member_line(rew: dict, name: str) -> str:

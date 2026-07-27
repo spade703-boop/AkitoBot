@@ -6,7 +6,10 @@ import types
 from nonebot.adapters import Bot, Event
 
 from nonebot_plugin_akito.core import game_store
-import nonebot_plugin_akito.features.rpg.hunt as hunt
+import nonebot_plugin_akito.features.rpg.combat as combat
+import nonebot_plugin_akito.features.rpg.events as rpg_events
+import nonebot_plugin_akito.features.rpg.inventory as inventory
+import nonebot_plugin_akito.features.rpg.rewards as rewards
 
 
 def _bot():
@@ -99,12 +102,24 @@ _MISSING = object()
 def _stub_hunt_rng(monkeypatch, monster, *, event="", drops=None, elite=False, buff=None,
                    minor_event="", minor_reward=_MISSING):
     # 遭遇桩：精英默认关、今日增益默认平日 → 既有用例保持确定（数值不被随机精英/增益扰动）
-    monkeypatch.setattr(hunt, "_pick_encounter", lambda level, rng=hunt.random: (monster, elite))
-    monkeypatch.setattr(hunt, "_roll_hunt_event", lambda margin, rng=hunt.random: event)
-    monkeypatch.setattr(hunt, "_roll_solo_support_scene", lambda win, rng=hunt.random: "")
-    monkeypatch.setattr(hunt, "_roll_minor_encounter", lambda win, team=False, rng=hunt.random: minor_event)
-    monkeypatch.setattr(hunt.random, "uniform", lambda _a, _b: 1.0)
-    monkeypatch.setattr(hunt, "_roll_drops", lambda m, rng=hunt.random, mult=1.0: list(drops or []))
-    monkeypatch.setattr(hunt, "_today_buff", lambda: buff or _PLAIN_BUFF)
+    monkeypatch.setattr(combat, "_pick_encounter", lambda level, rng=combat.random: (monster, elite))
+    monkeypatch.setattr(rpg_events, "_roll_hunt_event", lambda margin, rng=rpg_events.random: event)
+    monkeypatch.setattr(rpg_events, "_roll_solo_support_scene", lambda win, rng=rpg_events.random: "")
+    monkeypatch.setattr(
+        rpg_events,
+        "_roll_minor_encounter",
+        lambda win, team=False, rng=rpg_events.random: minor_event,
+    )
+    monkeypatch.setattr(rewards.random, "uniform", lambda _a, _b: 1.0)
+    monkeypatch.setattr(
+        inventory,
+        "_roll_drops",
+        lambda monster_spec, rng=inventory.random, mult=1.0: list(drops or []),
+    )
+    monkeypatch.setattr(combat, "_today_buff", lambda: buff or _PLAIN_BUFF)
     if minor_reward is not _MISSING:
-        monkeypatch.setattr(hunt, "_roll_minor_reward", lambda spec, rng=hunt.random: dict(minor_reward))
+        monkeypatch.setattr(
+            rpg_events,
+            "_roll_minor_reward",
+            lambda spec, rng=rpg_events.random: dict(minor_reward),
+        )
