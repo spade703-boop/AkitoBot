@@ -26,6 +26,7 @@ from ...core.game_store import (
     _weighted_choice,
 )
 from ..gift import _bond_level
+from .analytics import record_battle, record_team_attempt
 from .boss import _cleanup_stale_world_boss, _maybe_spawn_world_boss_lines
 from .combat import _buff_active
 from .config import _cfg, _copy, _error, _line
@@ -242,6 +243,31 @@ def _settle_team_result(group: dict, initiator: str, target: str, b: dict, a: di
     return out
 
 
+def _record_team_metrics(
+    group: dict,
+    today: str,
+    outcome: dict,
+    initiator: str,
+    target: str,
+    b: dict,
+    a: dict,
+    before: dict[str, tuple[int, int]],
+    *,
+    formed: bool,
+) -> None:
+    record_team_attempt(group, today, formed=formed)
+    participants = [(initiator, b), (target, a)] if formed else [(initiator, b)]
+    record_battle(
+        group,
+        today,
+        mode="team" if formed else "fallback",
+        user_ids=[user_id for user_id, _user in participants],
+        outcome=outcome,
+        exp_gained=sum(int(user.get("exp", 0)) - before[user_id][0] for user_id, user in participants),
+        points_gained=sum(int(user.get("points", 0)) - before[user_id][1] for user_id, user in participants),
+    )
+
+
 team_cmd = on_command("组队", priority=5, block=True)
 
 
@@ -302,12 +328,17 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
 
         raw_intimacy = _get_intimacy(group, initiator, target)
         bond_level = _bond_level(raw_intimacy)["team_level"]
+        before = {
+            initiator: (int(b.get("exp", 0)), int(b.get("points", 0))),
+            target: (int(a.get("exp", 0)), int(a.get("points", 0))),
+        }
         success = random.random() < _team_success_rate(bond_level)
         b_name = b.get("display_name") or f"群友{initiator}"
         fail_flavor = ""
 
         if success:
             out = _settle_team_result(group, initiator, target, b, a, today, raw_intimacy, bond_level)
+            _record_team_metrics(group, today, out, initiator, target, b, a, before, formed=True)
             boss_lines = _maybe_spawn_world_boss_lines(group, today, initiator, rng=random)
             _save_data(data)
             msg = _build_coop_broadcast(out, initiator, target, b_name, a_name)
@@ -315,11 +346,13 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
             fail_flavor = _roll_fail_flavor()
             if _roll_team_fail_rescue(random):
                 out = _settle_team_result(group, initiator, target, b, a, today, raw_intimacy, bond_level)
+                _record_team_metrics(group, today, out, initiator, target, b, a, before, formed=True)
                 boss_lines = _maybe_spawn_world_boss_lines(group, today, initiator, rng=random)
                 _save_data(data)
                 msg = _build_fail_rescue_broadcast(out, initiator, target, b_name, a_name, fail_flavor)
             else:
                 out = _settle_solo(b, today)
+                _record_team_metrics(group, today, out, initiator, target, b, a, before, formed=False)
                 boss_lines = _maybe_spawn_world_boss_lines(group, today, initiator, rng=random)
                 _save_data(data)
                 msg = _build_fail_broadcast(out, initiator, a_name, fail_flavor)

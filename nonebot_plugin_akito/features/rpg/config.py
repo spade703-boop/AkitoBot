@@ -65,16 +65,63 @@ DEFAULT_RPG_CONFIG: dict = {
             "insight":   {"weight": 22, "exp_mult": 1.6},     # 弱点看破：胜则经验 ×1.6
             "desperate": {"weight": 28, "power_mult": 1.60},  # 绝境爆发：有效战力 ×1.60 可翻盘
         },
-        # ---- 遭遇分段：前 30 天尽量留在低阶池；中后段逐步抬高强怪占比，把半年线压回目标区间 ----
+        # ---- 遭遇分段：名称权重允许以后追加怪物而不改旧分段；最后一档作为未来等级的安全回退 ----
         "encounter_brackets": [
-            {"max_level": 2, "weights": [36, 32, 20, 12, 0, 0, 0, 0, 0, 0, 0]},
-            {"max_level": 4, "weights": [20, 24, 28, 28, 0, 0, 0, 0, 0, 0, 0]},
-            {"max_level": 6, "weights": [10, 14, 20, 24, 18, 14, 0, 0, 0, 0, 0]},
-            {"max_level": 8, "weights": [4, 8, 12, 16, 18, 18, 14, 10, 0, 0, 0]},
-            {"max_level": 10, "weights": [0, 0, 2, 6, 10, 14, 18, 18, 18, 14, 0]},
-            {"max_level": 13, "weights": [0, 0, 0, 2, 8, 12, 16, 18, 18, 20, 6]},
-            {"max_level": 15, "weights": [0, 0, 0, 0, 2, 8, 12, 16, 18, 20, 24]},
-            {"max_level": None, "weights": [0, 0, 0, 0, 0, 2, 8, 12, 18, 24, 36]},
+            {"max_level": 2, "weights": {"史莱姆": 36, "泥怪": 32, "哥布林": 20, "野狼": 12}},
+            {"max_level": 4, "weights": {"史莱姆": 20, "泥怪": 24, "哥布林": 28, "野狼": 28}},
+            {
+                "max_level": 6,
+                "weights": {"史莱姆": 10, "泥怪": 14, "哥布林": 20, "野狼": 24, "座狼": 18, "骸骨兵": 14},
+            },
+            {
+                "max_level": 8,
+                "weights": {"史莱姆": 4, "泥怪": 8, "哥布林": 12, "野狼": 16, "座狼": 18, "骸骨兵": 18,
+                            "食人魔": 14, "魔铠兵": 10},
+            },
+            {
+                "max_level": 10,
+                "weights": {"哥布林": 2, "野狼": 6, "座狼": 10, "骸骨兵": 14, "食人魔": 18, "魔铠兵": 18,
+                            "石像鬼": 18, "双足飞龙": 14},
+            },
+            {
+                "max_level": 13,
+                "weights": {"野狼": 2, "座狼": 8, "骸骨兵": 12, "食人魔": 16, "魔铠兵": 18, "石像鬼": 18,
+                            "双足飞龙": 20, "龙": 6},
+            },
+            {
+                "max_level": 15,
+                "weights": {"座狼": 2, "骸骨兵": 8, "食人魔": 12, "魔铠兵": 16, "石像鬼": 18,
+                            "双足飞龙": 20, "龙": 24},
+            },
+            {
+                "max_level": 18,
+                "weights": {"骸骨兵": 2, "食人魔": 6, "魔铠兵": 10, "石像鬼": 18, "双足飞龙": 24,
+                            "龙": 30, "风暴狮鹫": 10},
+            },
+            {
+                "max_level": 21,
+                "weights": {"食人魔": 2, "魔铠兵": 6, "石像鬼": 10, "双足飞龙": 18, "龙": 24,
+                            "风暴狮鹫": 28, "魔化奇美拉": 12},
+            },
+            {
+                "max_level": 24,
+                "weights": {"魔铠兵": 2, "石像鬼": 6, "双足飞龙": 10, "龙": 16, "风暴狮鹫": 22,
+                            "魔化奇美拉": 28, "深渊骑士": 16},
+            },
+            {
+                "max_level": 27,
+                "weights": {"石像鬼": 2, "双足飞龙": 6, "龙": 10, "风暴狮鹫": 16, "魔化奇美拉": 22,
+                            "深渊骑士": 28, "冰霜巨人": 16},
+            },
+            {
+                "max_level": 30,
+                "weights": {"龙": 4, "风暴狮鹫": 8, "魔化奇美拉": 16, "深渊骑士": 24, "冰霜巨人": 30,
+                            "远古巨龙": 18},
+            },
+            {
+                "max_level": None,
+                "weights": {"风暴狮鹫": 2, "魔化奇美拉": 8, "深渊骑士": 18, "冰霜巨人": 30, "远古巨龙": 42},
+            },
         ],
         # ---- 精英怪：遭遇时小概率升级，更难打（power_req×）但胜则更肥（经验/掉落×）。藏着不外显，撞上才知道 ----
         "elite": {"chance": 0.12, "power_mult": 1.6, "exp_mult": 1.8, "drop_mult": 2.0},
@@ -259,6 +306,21 @@ DEFAULT_RPG_CONFIG: dict = {
         {"name": "龙",     "power_req": 95, "weight": 5,
          "drops": [{"item": "双倍经验卡", "chance": 0.15},
                    {"item": "彰冬立牌券", "chance": 0.06}]},
+        {"name": "风暴狮鹫", "power_req": 106, "weight": 4, "reward_exp_mult": 1.03,
+         "drops": [{"item": "双倍经验卡", "chance": 0.15},
+                   {"item": "彰冬豆豆眼券", "chance": 0.04}, {"item": "彰冬立牌券", "chance": 0.06}]},
+        {"name": "魔化奇美拉", "power_req": 120, "weight": 3, "reward_exp_mult": 1.05,
+         "drops": [{"item": "双倍经验卡", "chance": 0.15},
+                   {"item": "彰冬豆豆眼券", "chance": 0.04}, {"item": "彰冬立牌券", "chance": 0.07}]},
+        {"name": "深渊骑士", "power_req": 134, "weight": 2, "reward_exp_mult": 1.07,
+         "drops": [{"item": "双倍经验卡", "chance": 0.15},
+                   {"item": "彰冬立牌券", "chance": 0.08}]},
+        {"name": "冰霜巨人", "power_req": 149, "weight": 1, "reward_exp_mult": 1.09,
+         "drops": [{"item": "双倍经验卡", "chance": 0.15},
+                   {"item": "彰冬立牌券", "chance": 0.09}]},
+        {"name": "远古巨龙", "power_req": 164, "weight": 1, "reward_exp_mult": 1.12,
+         "drops": [{"item": "双倍经验卡", "chance": 0.15},
+                   {"item": "彰冬立牌券", "chance": 0.10}]},
     ],
     # ---- 道具（消耗品，经验向）：effect.type = exp_buff / exp_grant ----
     "items": [
@@ -444,13 +506,160 @@ DEFAULT_RPG_CONFIG: dict = {
 }
 
 
+class RpgConfigError(ValueError):
+    """Raised when an RPG config would break runtime balance or lookup rules."""
+
+
+def _config_section(config: dict, key: str, expected_type: type):
+    value = config[key] if key in config else DEFAULT_RPG_CONFIG[key]
+    if not isinstance(value, expected_type):
+        raise RpgConfigError(f"{key} 必须是 {expected_type.__name__}")
+    return value
+
+
+def _validate_probability(value, path: str) -> None:
+    try:
+        chance = float(value)
+    except (TypeError, ValueError) as exc:
+        raise RpgConfigError(f"{path} 必须是 0 到 1 之间的数字") from exc
+    if not 0.0 <= chance <= 1.0:
+        raise RpgConfigError(f"{path} 必须在 0 到 1 之间")
+
+
+def _validate_monsters(config: dict) -> list[dict]:
+    monsters = _config_section(config, "monsters", list)
+    if not monsters:
+        raise RpgConfigError("monsters 不能为空")
+    names: set[str] = set()
+    for index, monster in enumerate(monsters):
+        if not isinstance(monster, dict):
+            raise RpgConfigError(f"monsters[{index}] 必须是对象")
+        name = str(monster.get("name", "")).strip()
+        if not name:
+            raise RpgConfigError(f"monsters[{index}].name 不能为空")
+        if name in names:
+            raise RpgConfigError(f"怪物名重复：{name}")
+        names.add(name)
+        try:
+            power_req = int(monster.get("power_req", 0))
+            weight = int(monster.get("weight", 0))
+            reward_exp_mult = float(monster.get("reward_exp_mult", 1.0))
+        except (TypeError, ValueError) as exc:
+            raise RpgConfigError(f"怪物 {name} 的 power_req/weight/reward_exp_mult 格式错误") from exc
+        if power_req <= 0:
+            raise RpgConfigError(f"怪物 {name} 的 power_req 必须大于 0")
+        if weight < 0:
+            raise RpgConfigError(f"怪物 {name} 的 weight 不能为负数")
+        if not 0.5 <= reward_exp_mult <= 2.0:
+            raise RpgConfigError(f"怪物 {name} 的 reward_exp_mult 必须在 0.5 到 2.0 之间")
+        if not isinstance(monster.get("drops", []), list):
+            raise RpgConfigError(f"怪物 {name} 的 drops 必须是列表")
+    return monsters
+
+
+def _validate_encounter_brackets(config: dict, monsters: list[dict]) -> None:
+    combat = _config_section(config, "combat", dict)
+    brackets = combat.get("encounter_brackets")
+    if not isinstance(brackets, list) or not brackets:
+        raise RpgConfigError("combat.encounter_brackets 必须是非空列表")
+    monster_names = {str(monster.get("name", "")) for monster in monsters}
+    previous_max = 0
+    for index, bracket in enumerate(brackets):
+        if not isinstance(bracket, dict):
+            raise RpgConfigError(f"combat.encounter_brackets[{index}] 必须是对象")
+        max_level = bracket.get("max_level")
+        if max_level is None:
+            if index != len(brackets) - 1:
+                raise RpgConfigError("max_level=None 只能出现在最后一个遭遇分段")
+        else:
+            try:
+                max_level = int(max_level)
+            except (TypeError, ValueError) as exc:
+                raise RpgConfigError(f"第 {index + 1} 个遭遇分段的 max_level 必须是整数或 null") from exc
+            if max_level <= previous_max:
+                raise RpgConfigError("遭遇分段的 max_level 必须严格递增")
+            previous_max = max_level
+        weights = bracket.get("weights")
+        if isinstance(weights, dict):
+            unknown_names = {str(name) for name in weights} - monster_names
+            if unknown_names:
+                unknown = "、".join(sorted(unknown_names))
+                raise RpgConfigError(f"第 {index + 1} 个遭遇分段引用了不存在的怪物：{unknown}")
+            raw_weights = list(weights.values())
+        elif isinstance(weights, list):
+            if len(weights) != len(monsters):
+                raise RpgConfigError(
+                    f"第 {index + 1} 个遭遇分段有 {len(weights)} 个权重，但怪物池有 {len(monsters)} 只怪物"
+                )
+            raw_weights = weights
+        else:
+            raise RpgConfigError(f"第 {index + 1} 个遭遇分段的 weights 必须是名称映射或位置数组")
+        try:
+            normalized = [int(weight) for weight in raw_weights]
+        except (TypeError, ValueError) as exc:
+            raise RpgConfigError(f"第 {index + 1} 个遭遇分段的权重必须全部是整数") from exc
+        if any(weight < 0 for weight in normalized) or sum(normalized) <= 0:
+            raise RpgConfigError(f"第 {index + 1} 个遭遇分段必须至少有一个正权重，且不能出现负权重")
+    if brackets[-1].get("max_level") is not None:
+        raise RpgConfigError("最后一个遭遇分段必须使用 max_level=null 覆盖后续等级")
+
+
+def validate_rpg_config(config: dict) -> None:
+    """Validate balance-sensitive structures before startup or hot reload."""
+    if not isinstance(config, dict):
+        raise RpgConfigError("RPG 配置根节点必须是对象")
+    monsters = _validate_monsters(config)
+    _validate_encounter_brackets(config, monsters)
+
+    combat = _config_section(config, "combat", dict)
+    try:
+        factor_min = float(combat.get("factor_min", 0.9))
+        factor_max = float(combat.get("factor_max", 1.1))
+    except (TypeError, ValueError) as exc:
+        raise RpgConfigError("combat.factor_min/factor_max 必须是数字") from exc
+    if factor_min <= 0 or factor_max < factor_min:
+        raise RpgConfigError("combat.factor_min 必须大于 0，且不能高于 factor_max")
+
+    support = _config_section(config, "support", dict)
+    minor = _config_section(config, "minor_encounters", dict)
+    world_boss = _config_section(config, "world_boss", dict)
+    _validate_probability(support.get("chance", 0.0), "support.chance")
+    _validate_probability(minor.get("chance", 0.0), "minor_encounters.chance")
+    _validate_probability(minor.get("team_chance", 0.0), "minor_encounters.team_chance")
+    _validate_probability(world_boss.get("spawn_chance", 0.0), "world_boss.spawn_chance")
+    special_drop = world_boss.get("special_drop", {})
+    if not isinstance(special_drop, dict):
+        raise RpgConfigError("world_boss.special_drop 必须是对象")
+    _validate_probability(special_drop.get("chance", 0.0), "world_boss.special_drop.chance")
+
+    boss_names = world_boss.get("boss_names", [])
+    if not isinstance(boss_names, list) or not boss_names or any(not str(name).strip() for name in boss_names):
+        raise RpgConfigError("world_boss.boss_names 必须是非空名称列表")
+    if len({str(name) for name in boss_names}) != len(boss_names):
+        raise RpgConfigError("world_boss.boss_names 不能包含重复名称")
+
+    titles = _config_section(config, "titles", list)
+    try:
+        title_levels = [int(title.get("min_level", 0)) for title in titles if isinstance(title, dict)]
+    except (TypeError, ValueError) as exc:
+        raise RpgConfigError("titles[*].min_level 必须是整数") from exc
+    if len(title_levels) != len(titles) or not title_levels or title_levels != sorted(set(title_levels)):
+        raise RpgConfigError("titles 必须按唯一的 min_level 递增排列")
+
+
 def _load_config() -> dict:
-    """加载 RPG 配置；无文件 / 解析失败时回落到默认配置的深拷贝。"""
+    """加载并校验 RPG 配置；无文件时使用默认配置。"""
     loaded = load_json_file(CONFIG_FILE, None)
-    return loaded if isinstance(loaded, dict) else copy.deepcopy(DEFAULT_RPG_CONFIG)
+    candidate = loaded if isinstance(loaded, dict) else copy.deepcopy(DEFAULT_RPG_CONFIG)
+    validate_rpg_config(candidate)
+    return candidate
 
 
-RPG_CONFIG: dict = _load_config()
+try:
+    RPG_CONFIG: dict = _load_config()
+except RpgConfigError as exc:
+    logger.error(f"❌ RPG 配置校验失败，启动时改用默认配置：{exc}")
+    RPG_CONFIG = copy.deepcopy(DEFAULT_RPG_CONFIG)
 
 
 def _cfg(key: str, default=None):
@@ -489,7 +698,12 @@ def _line(key: str, **fmt) -> str:
 
 
 def reload_rpg_config() -> None:
-    """热重载 RPG 配置（原地 clear+update，保持已持有引用不失效）。"""
+    """校验通过后原地热重载；失败时保留当前运行配置。"""
+    try:
+        candidate = _load_config()
+    except RpgConfigError as exc:
+        logger.error(f"❌ RPG 配置热重载被拒绝，继续使用当前配置：{exc}")
+        raise
     RPG_CONFIG.clear()
-    RPG_CONFIG.update(_load_config())
+    RPG_CONFIG.update(candidate)
     logger.info("🔄 RPG 配置已热重载")

@@ -21,8 +21,8 @@ def _monster_weights(pool: list[dict]) -> list[int]:
     return [max(0, int(m.get("weight", 0))) for m in pool]
 
 
-def _encounter_weights(level: int, monster_count: int) -> list[int] | None:
-    """按等级读取配置里的遭遇权重分段；缺失或非法时返回 None 交给怪物自带 weight 兜底。"""
+def _encounter_weights(level: int, pool: list[dict]) -> list[int] | None:
+    """按等级读取遭遇权重；名称映射和旧版位置数组均可用。"""
     brackets = _cfg("combat", {}).get("encounter_brackets", [])
     if not isinstance(brackets, list):
         return None
@@ -38,12 +38,17 @@ def _encounter_weights(level: int, monster_count: int) -> list[int] | None:
             if level > max_level:
                 continue
         weights = bracket.get("weights")
-        if not isinstance(weights, list) or len(weights) != monster_count:
-            return None
-        try:
-            return [max(0, int(weight)) for weight in weights]
-        except (TypeError, ValueError):
-            return None
+        if isinstance(weights, dict):
+            try:
+                return [max(0, int(weights.get(str(monster.get("name", "")), 0))) for monster in pool]
+            except (TypeError, ValueError):
+                return None
+        if isinstance(weights, list) and len(weights) == len(pool):
+            try:
+                return [max(0, int(weight)) for weight in weights]
+            except (TypeError, ValueError):
+                return None
+        return None
     return None
 
 
@@ -51,7 +56,7 @@ def _pick_monster(level: int, rng=random) -> dict:
     pool = _monsters()
     if not pool:
         return {"name": "野怪", "power_req": 10}
-    weights = _encounter_weights(level, len(pool)) or _monster_weights(pool)
+    weights = _encounter_weights(level, pool) or _monster_weights(pool)
     if not pool or sum(weights) <= 0:
         return pool[0] if pool else {"name": "野怪", "power_req": 10}
     return rng.choices(pool, weights=weights, k=1)[0]
@@ -89,8 +94,8 @@ def _rookie_power_factor(level: int) -> float:
     return 1.0
 
 
-def _today_buff() -> dict:
-    """今日增益：以日期为种子从 daily_buffs 加权选一个（同一天全群一致、可单测）。
+def _buff_for_date(day: str) -> dict:
+    """以日期为种子选取全群一致的当日增益。
 
     返回含 name/exp_mult/drop_mult 的 spec；缺省/空表回落到「平日」（无效果、不外显）。
     """
@@ -98,13 +103,17 @@ def _today_buff() -> dict:
     if not isinstance(buffs, dict) or not buffs:
         return {"key": "plain", "name": "平日", "exp_mult": 1.0, "drop_mult": 1.0}
     weights = {k: int(v.get("weight", 0)) for k, v in buffs.items()}
-    key = _weighted_choice(weights, random.Random(_today_str()))
+    key = _weighted_choice(weights, random.Random(day))
     spec = dict(buffs.get(key, {}))
     spec.setdefault("key", key)
     spec.setdefault("name", key)
     spec.setdefault("exp_mult", 1.0)
     spec.setdefault("drop_mult", 1.0)
     return spec
+
+
+def _today_buff() -> dict:
+    return _buff_for_date(_today_str())
 
 
 def _buff_active(buff: dict | None) -> bool:

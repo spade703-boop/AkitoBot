@@ -143,11 +143,15 @@ def test_pick_encounter_uses_stage_weights_and_elite_gate():
             return self.roll
 
     def _weights_for(level: int) -> list[int]:
+        monsters = rpg_config._cfg("monsters", [])
         brackets = rpg_config._cfg("combat", {}).get("encounter_brackets", [])
         for bracket in brackets:
             max_level = bracket.get("max_level")
             if max_level is None or level <= int(max_level):
-                return list(bracket["weights"])
+                weights = bracket["weights"]
+                if isinstance(weights, dict):
+                    return [int(weights.get(monster["name"], 0)) for monster in monsters]
+                return list(weights)
         return []
 
     low = _CaptureRng(0.0)
@@ -161,18 +165,61 @@ def test_pick_encounter_uses_stage_weights_and_elite_gate():
     assert elite is True
 
 
-def test_default_encounter_brackets_match_monster_pool_length():
+def test_default_encounter_brackets_use_named_monster_weights():
     monsters = rpg_config._cfg("monsters", [])
     brackets = rpg_config._cfg("combat", {}).get("encounter_brackets", [])
     assert monsters and brackets
-    assert all(len(bracket["weights"]) == len(monsters) for bracket in brackets)
+    monster_names = {monster["name"] for monster in monsters}
+    assert all(isinstance(bracket["weights"], dict) for bracket in brackets)
+    assert all(set(bracket["weights"]) <= monster_names for bracket in brackets)
 
 
 def test_default_encounter_brackets_hold_dragon_until_level_ten_and_then_release():
     monsters = rpg_config._cfg("monsters", [])
     dragon_index = next(i for i, monster in enumerate(monsters) if monster.get("name") == "龙")
-    assert combat._encounter_weights(10, len(monsters))[dragon_index] == 0
-    assert combat._encounter_weights(13, len(monsters))[dragon_index] > 0
+    assert combat._encounter_weights(10, monsters)[dragon_index] == 0
+    assert combat._encounter_weights(13, monsters)[dragon_index] > 0
+
+
+def test_high_level_encounter_brackets_release_new_monsters_gradually():
+    monsters = rpg_config._cfg("monsters", [])
+    indices = {monster["name"]: index for index, monster in enumerate(monsters)}
+    release_levels = {
+        "风暴狮鹫": 16,
+        "魔化奇美拉": 19,
+        "深渊骑士": 22,
+        "冰霜巨人": 25,
+        "远古巨龙": 28,
+    }
+
+    for name, level in release_levels.items():
+        assert combat._encounter_weights(level - 1, monsters)[indices[name]] == 0
+        assert combat._encounter_weights(level, monsters)[indices[name]] > 0
+
+
+def test_named_encounter_weights_allow_future_monsters_without_rewriting_old_brackets(monkeypatch):
+    monsters = [
+        {"name": "A", "power_req": 1, "weight": 7},
+        {"name": "B", "power_req": 2, "weight": 5},
+        {"name": "未来怪", "power_req": 3, "weight": 3},
+    ]
+    combat_cfg = {
+        "encounter_brackets": [
+            {"max_level": 30, "weights": {"A": 9, "B": 1}},
+            {"max_level": None, "weights": {"B": 2, "未来怪": 8}},
+        ]
+    }
+    orig_cfg = combat._cfg
+    monkeypatch.setattr(
+        combat,
+        "_cfg",
+        lambda key, default=None: monsters if key == "monsters"
+        else combat_cfg if key == "combat"
+        else orig_cfg(key, default),
+    )
+
+    assert combat._encounter_weights(30, monsters) == [9, 1, 0]
+    assert combat._encounter_weights(31, monsters) == [0, 2, 8]
 
 
 def test_pick_monster_uses_brackets_for_non_six_monster_pool(monkeypatch):
@@ -369,6 +416,17 @@ def test_apply_rewards_halves_exp_for_rebought_equip():
     out = rewards._apply_rewards(user, "2026-06-22", win=True, monster={"name": "史莱姆", "drops": []})
     assert out["exp_gain"] == int(rewards._challenge_exp(True, 1) * mult)
     assert user["exp"] == out["exp_gain"]
+
+
+def test_apply_rewards_uses_high_tier_monster_exp_multiplier_without_changing_points():
+    user = _equipped_user(points=0)
+    monster = {"name": "远古巨龙", "drops": [], "reward_exp_mult": 1.12}
+
+    out = rewards._apply_rewards(user, "2026-06-22", win=True, monster=monster)
+
+    assert out["exp_gain"] == int(rewards._challenge_exp(True, 1) * 1.12)
+    assert out["monster_exp_mult"] == 1.12
+    assert out["points_gain"] == int(rpg_config._cfg("challenge", {}).get("win_points", 0))
 
 
 def test_settle_solo_rookie_bonus_only_applies_to_solo(monkeypatch):

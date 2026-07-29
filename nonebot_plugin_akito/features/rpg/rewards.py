@@ -68,10 +68,11 @@ def _apply_extra_rewards(user: dict, *, exp: int = 0, points: int = 0) -> tuple[
 
 
 def _apply_rewards(user: dict, today: str, *, win: bool, monster: dict, event_key: str = "",
-                   exp_bonus: float = 0.0, exp_mult: float = 1.0, drop_mult: float = 1.0) -> dict:
+                   exp_bonus: float = 0.0, exp_mult: float = 1.0, drop_mult: float = 1.0,
+                   rng=random) -> dict:
     """给单个玩家结算（经验[含看破/单刷或组队额外加成/双倍卡/精英/今日增益] + 掉落 + 积分）并消耗其今日装备，记一次战绩。
 
-    `exp_mult`/`drop_mult` 由调用方算好（精英 × 今日增益）传入。
+    `exp_mult`/`drop_mult` 由调用方算好（精英 × 今日增益）传入；怪物自身可用 `reward_exp_mult` 微调经验。
     返回奖励明细 {exp_gain, exp_buffed, drops, points_gain, old_level, new_level}（不含播报）。
     单刷与组队（双方各调一次）共用本函数：胜负由调用方判定后传入。
     """
@@ -83,6 +84,9 @@ def _apply_rewards(user: dict, today: str, *, win: bool, monster: dict, event_ke
         exp_gain = int(exp_gain * float(ccfg.get("events", {}).get("insight", {}).get("exp_mult", 1.5)))
     if exp_bonus:
         exp_gain = int(exp_gain * (1.0 + float(exp_bonus)))  # 额外经验加成（单刷补偿 / 组队加成）
+    monster_exp_mult = float(monster.get("reward_exp_mult", 1.0))
+    if monster_exp_mult != 1.0:
+        exp_gain = int(exp_gain * monster_exp_mult)
     if exp_mult != 1.0:
         exp_gain = int(exp_gain * float(exp_mult))           # 精英 × 今日增益
     buffed = False
@@ -98,6 +102,7 @@ def _apply_rewards(user: dict, today: str, *, win: bool, monster: dict, event_ke
     base_drop = float(cc.get("win_drop_mult", 1.0) if win else cc.get("lose_drop_mult", 0.3))
     drops = inventory._roll_drops(
         monster,
+        rng=rng,
         mult=base_drop * utils._fortune_drop_factor(user, today) * float(drop_mult),
     )
     for d in drops:
@@ -110,7 +115,7 @@ def _apply_rewards(user: dict, today: str, *, win: bool, monster: dict, event_ke
         user["hunt_wins"] = int(user.get("hunt_wins", 0)) + 1  # 战绩：累计胜场
     _consume_equip(user)  # 今日装备损坏
     return {
-        "exp_gain": exp_gain, "exp_buffed": buffed, "drops": drops,
+        "exp_gain": exp_gain, "exp_buffed": buffed, "monster_exp_mult": monster_exp_mult, "drops": drops,
         "points_gain": points_gain, "old_level": level, "new_level": _level_of(user["exp"]),
     }
 
@@ -292,26 +297,26 @@ def _apply_team_minor_encounter(b: dict, a: dict, out: dict, *, rng=random) -> N
     }
 
 
-def _settle_solo(user: dict, today: str, *, direct: bool = False) -> dict:
+def _settle_solo(user: dict, today: str, *, direct: bool = False, rng=random, buff: dict | None = None) -> dict:
     """单刷完整结算：遭遇(含精英) → 事件 → 胜负（随机系数 + 隐藏运势）→ 发奖（含今日增益）→ 消耗装备。
 
     `direct=True` 仅用于直接执行「今日打怪」的主动单人线，吃到小额稳定性与经验补偿；
     组队失败后退化成单刷时保持 False，不额外吃这层补偿。
     """
     ccfg = _cfg("combat", {})
-    buff = combat._today_buff()
+    buff = buff or combat._today_buff()
     level = combat._encounter_level(user)
-    monster, is_elite = combat._pick_encounter(level)
+    monster, is_elite = combat._pick_encounter(level, rng)
     eff = combat._eff_monster(monster, is_elite)
     cp = _combat_power(user)
     margin = cp / max(1, int(eff.get("power_req", 1)))
-    event_key = events._roll_hunt_event(margin)
+    event_key = events._roll_hunt_event(margin, rng)
     fortune_factor = utils._fortune_combat_factor(
         user,
         today,
         enabled=bool(ccfg.get("fortune_affects_hunt", True)),
     )
-    power_factor = random.uniform(float(ccfg.get("factor_min", 0.8)), float(ccfg.get("factor_max", 1.2)))
+    power_factor = rng.uniform(float(ccfg.get("factor_min", 0.8)), float(ccfg.get("factor_max", 1.2)))
     power_factor *= combat._rookie_power_factor(level)
     if direct:
         power_factor *= 1.0 + _solo_power_bonus()
@@ -323,18 +328,18 @@ def _settle_solo(user: dict, today: str, *, direct: bool = False) -> dict:
         event=event_key,
     )
     base_win = bool(res["win"])
-    support_scene = events._roll_solo_support_scene(bool(res["win"]))
+    support_scene = events._roll_solo_support_scene(bool(res["win"]), rng)
     if not res["win"] and support_scene in {"toya_rescue", "duo_combo"}:
         res["win"] = True
     exp_mult, drop_mult = combat._reward_mults(buff, is_elite, res["win"])
     exp_bonus = _solo_exp_bonus(bool(res["win"])) if direct else 0.0
     rew = _apply_rewards(user, today, win=res["win"], monster=eff, event_key=event_key,
-                         exp_bonus=exp_bonus, exp_mult=exp_mult, drop_mult=drop_mult)
+                         exp_bonus=exp_bonus, exp_mult=exp_mult, drop_mult=drop_mult, rng=rng)
     out = {**res, **rew, "monster": monster, "event": event_key, "elite": is_elite, "buff": buff,
            "support_scene": support_scene, "base_win": base_win, "direct_solo": direct}
     _apply_support_bonus(user, out)
     out["reward_new_level"] = int(out.get("new_level", out.get("old_level", 1)))
-    _apply_minor_encounter(user, out)
+    _apply_minor_encounter(user, out, rng=rng)
     return out
 
 
@@ -348,6 +353,7 @@ def _settle_coop(
     extra_power_mult: float = 1.0,
     extra_exp_mult: float = 1.0,
     extra_drop_mult: float = 1.0,
+    rng=random,
 ) -> dict:
     """组队合力结算：合力战力（B+A）打一只怪（含精英）、胜负共享；双方各按自身等级/运势/今日增益发奖、各自消耗装备。
 
@@ -358,11 +364,11 @@ def _settle_coop(
     ccfg = _cfg("combat", {})
     buff = combat._today_buff()
     level = max(combat._encounter_level(b), combat._encounter_level(a))
-    monster, is_elite = combat._pick_encounter(level)
+    monster, is_elite = combat._pick_encounter(level, rng)
     eff = combat._eff_monster(monster, is_elite)
     cp = _combat_power(b) + _combat_power(a)
     margin = cp / max(1, int(eff.get("power_req", 1)))
-    team_event = events._roll_coop_event()
+    team_event = events._roll_coop_event(rng)
     event_spec = events._coop_event_spec(team_event)
     fortune_enabled = bool(ccfg.get("fortune_affects_hunt", True))
     fortune_factor = (
@@ -370,7 +376,7 @@ def _settle_coop(
         + utils._fortune_combat_factor(a, today, enabled=fortune_enabled)
     ) / 2.0
     power_bonus = utils._team_power_bonus()
-    power_factor = random.uniform(float(ccfg.get("factor_min", 0.8)), float(ccfg.get("factor_max", 1.2)))
+    power_factor = rng.uniform(float(ccfg.get("factor_min", 0.8)), float(ccfg.get("factor_max", 1.2)))
     power_factor *= 1.0 + power_bonus
     if margin > 0 and event_spec.get("power_mult") is not None:
         power_factor *= float(event_spec.get("power_mult", 1.0))
@@ -405,6 +411,7 @@ def _settle_coop(
             exp_bonus=exp_bonus,
             exp_mult=exp_mult,
             drop_mult=drop_mult,
+            rng=rng,
         ),
         "a": _apply_rewards(
             a,
@@ -414,5 +421,6 @@ def _settle_coop(
             exp_bonus=exp_bonus,
             exp_mult=exp_mult,
             drop_mult=drop_mult,
+            rng=rng,
         ),
     }

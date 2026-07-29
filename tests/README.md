@@ -67,6 +67,7 @@ tests/
   - `test_admin.py`
   - `helpers.py`
 - `tests/features/rpg/`
+  - `test_config.py` / `test_simulation.py` / `test_analytics.py`
   - `test_player.py`
   - `test_fortune.py`
   - `test_hunt.py`

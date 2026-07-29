@@ -24,6 +24,7 @@ from ...core.game_store import (
     _save_data,
     _today_str,
 )
+from .analytics import record_battle
 from .boss import _cleanup_stale_world_boss, _maybe_spawn_world_boss_lines
 from .combat import _buff_active, _eff_monster, _monsters, _today_buff
 from .config import _cfg, _copy, _error, _line
@@ -214,7 +215,18 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
             lines = [*settlement_lines, _error("equip_broken")] if settlement_lines else [_error("equip_broken")]
             await hunt_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
 
+        old_exp = int(user.get("exp", 0))
+        old_points = int(user.get("points", 0))
         out = _settle_solo(user, today, direct=True)
+        record_battle(
+            group,
+            today,
+            mode="solo",
+            user_ids=[user_id],
+            outcome=out,
+            exp_gained=int(user.get("exp", 0)) - old_exp,
+            points_gained=int(user.get("points", 0)) - old_points,
+        )
         boss_lines = _maybe_spawn_world_boss_lines(group, today, user_id, rng=random)
         _save_data(data)
 

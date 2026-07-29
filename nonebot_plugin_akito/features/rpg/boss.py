@@ -29,6 +29,11 @@ from ...core.game_store import (
 from ..gift import _bond_level
 from ..gift.pages import build_world_boss_rank_page_data
 from ..gift.render import render_bond_page
+from .analytics import (
+    record_world_boss_attack,
+    record_world_boss_settlement,
+    record_world_boss_spawn,
+)
 from .config import _cfg, _copy, _error, _line
 from .player import _consume_equip, _ensure_player, _equip_power, _level_of, _resolve_group
 from .utils import (
@@ -208,7 +213,15 @@ def _force_world_boss_snapshot(group: dict, today: str) -> dict:
     }
 
 
-def _spawn_world_boss(group: dict, today: str, user_id: str, rng=random, snapshot: dict | None = None) -> dict | None:
+def _spawn_world_boss(
+    group: dict,
+    today: str,
+    user_id: str,
+    rng=random,
+    snapshot: dict | None = None,
+    *,
+    forced: bool = False,
+) -> dict | None:
     snap = snapshot or _world_boss_snapshot(group, today)
     if not snap.get("spawnable"):
         return None
@@ -230,6 +243,7 @@ def _spawn_world_boss(group: dict, today: str, user_id: str, rng=random, snapsho
         "spawned_by": str(user_id),
     }
     _rpg_state(group)["world_boss"] = boss
+    record_world_boss_spawn(group, today, forced=forced)
     return boss
 
 
@@ -597,6 +611,7 @@ def _world_boss_kill_settlement(group: dict, boss: dict, *, last_hit_uids: list[
     }
     if not contributors:
         result["lines"] = [_line("world_boss_kill")]
+        record_world_boss_settlement(group, boss, [], killed=True)
         _rpg_state(group).pop("world_boss", None)
         return result
 
@@ -634,6 +649,7 @@ def _world_boss_kill_settlement(group: dict, boss: dict, *, last_hit_uids: list[
     if result["last_hit_name"]:
         result["lines"].append(_line("world_boss_last_hit", name=result["last_hit_name"]))
 
+    record_world_boss_settlement(group, boss, rows, killed=True)
     _rpg_state(group).pop("world_boss", None)
     return result
 
@@ -648,6 +664,7 @@ def _world_boss_kill_lines(group: dict, boss: dict) -> list[str]:
 def _world_boss_unfinished_lines(group: dict, boss: dict) -> list[str]:
     contributors = _world_boss_contributors(boss)
     if not contributors:
+        record_world_boss_settlement(group, boss, [], killed=False)
         return []
 
     reward_cfg = _world_boss_reward_cfg()
@@ -675,6 +692,7 @@ def _world_boss_unfinished_lines(group: dict, boss: dict) -> list[str]:
         points_fixed=reward_values["points_fixed"],
         bond_gains=_world_boss_bond_gains(boss),
     )
+    record_world_boss_settlement(group, boss, rows, killed=False)
     lines.extend(_world_boss_reward_lines(rows))
     return lines
 
@@ -843,6 +861,7 @@ async def _(event: Event, args: Message = CommandArg()):
                 event.get_user_id(),
                 rng=random,
                 snapshot=_force_world_boss_snapshot(group, today),
+                forced=True,
             )
             _save_data(data)
             lines = [*settlement_lines, _line("world_boss_force_opened"), *_world_boss_spawn_lines(spawned)]
@@ -948,6 +967,7 @@ async def _(event: Event, args: Message = CommandArg()):
             {user_id: _boss_damage(participant, user, today, rng=random)},
         ).get(str(user_id), 0)
         _consume_equip(participant)
+        record_world_boss_attack(group, today, user_ids=[user_id], damage=dealt)
 
         head_key = "world_boss_attack_kill" if int(boss.get("hp", 0)) <= 0 else "world_boss_attack"
         if int(boss.get("hp", 0)) <= 0:
@@ -1061,6 +1081,12 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
             dealt = _apply_world_boss_damage(boss, team_hits)
             _consume_equip(b_participant)
             _consume_equip(a_participant)
+            record_world_boss_attack(
+                group,
+                today,
+                user_ids=[initiator, target],
+                damage=sum(dealt.values()),
+            )
             kill_done = int(boss.get("hp", 0)) <= 0
             if kill_done:
                 boss["last_hit_uids"] = [str(initiator), str(target)]
@@ -1119,6 +1145,12 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
                 {initiator: _boss_damage(b_participant, b, today, rng=random)},
             )
             _consume_equip(b_participant)
+            record_world_boss_attack(
+                group,
+                today,
+                user_ids=[initiator],
+                damage=sum(dealt.values()),
+            )
             attack_line = _boss_at_line(
                 "world_boss_attack_kill" if int(boss.get("hp", 0)) <= 0 else "world_boss_attack",
                 {
