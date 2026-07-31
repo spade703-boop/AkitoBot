@@ -67,6 +67,24 @@
     line-height: 1.55;
     color: rgba(255, 245, 230, 0.82);
   }
+  .subsection {
+    margin-top: 8px;
+    padding-left: 1.1em;
+  }
+  .subsection-title {
+    font-size: 10pt;
+    line-height: 1.5;
+    font-weight: 700;
+    color: rgba(255, 245, 230, 0.92);
+  }
+  .subsection-line {
+    margin-top: 2px;
+    padding-left: 1.1em;
+    font-size: 10pt;
+    line-height: 1.55;
+    font-weight: 400;
+    color: rgba(255, 245, 230, 0.82);
+  }
   .hint {
     margin-top: 18px;
     padding-top: 16px;
@@ -88,8 +106,13 @@
         <div class="entry">
           <div class="command">· {{ item.command }}</div>
           <div class="description">——{{ item.description }}</div>
-          {% for detail in item.details or [] %}
-          <div class="description">——{{ detail }}</div>
+          {% for section in item.sections or [] %}
+          <div class="subsection">
+            <div class="subsection-title">· {{ section.title }}</div>
+            {% for line in section.lines %}
+            <div class="subsection-line">——{{ line }}</div>
+            {% endfor %}
+          </div>
           {% endfor %}
         </div>
         {% endfor %}
