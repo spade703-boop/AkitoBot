@@ -23,7 +23,7 @@ from ...core.game_store import (
 )
 from .analytics import record_supply_open
 from .config import _cfg, _error, _line
-from .inventory import _add_item
+from .inventory import _add_item, _item_by_name
 from .player import _ensure_player, _level_of, _resolve_group
 
 
@@ -85,6 +85,7 @@ async def _(event: Event, args: Message = CommandArg()):
             )
 
         item_name = _pick_supply_item(random)
+        item_effect = str((_item_by_name(item_name) or {}).get("desc", "详见冒险帮助"))
         exp_gain = max(0, int(_supply_cfg().get("exp", 0)))
         old_level = _level_of(int(user.get("exp", 0)))
         user["points"] = points - cost
@@ -107,6 +108,7 @@ async def _(event: Event, args: Message = CommandArg()):
         count=int(weekly["supply_count"]),
         max=len(costs),
         name=item_name,
+        effect=item_effect,
         exp=exp_gain,
         levelup=levelup,
     )

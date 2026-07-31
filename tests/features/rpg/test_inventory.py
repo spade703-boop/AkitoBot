@@ -71,6 +71,10 @@ def test_battle_supply_activation_explains_scope():
 
     assert regular_ok and "普通个人/组队挑战" in regular_message and "世界BOSS不生效" in regular_message
     assert guard_ok and "普通个人/组队挑战" in guard_message and "世界BOSS不生效" in guard_message
+    assert "【旅人的行囊】已整备。\n· 效果：战力 +10% / 经验 +25%" in regular_message
+    assert "· 规则：接下来 2 场" in regular_message
+    assert "【神官的护符】已整备。\n· 效果：挑战转为成功 / 护符持有者经验 +50%" in guard_message
+    assert "· 规则：在下一次" in guard_message
 
 
 @pytest.mark.asyncio

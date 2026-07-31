@@ -88,7 +88,8 @@ def _activate_battle_supply(user: dict, item: dict) -> tuple[bool, str]:
         return False, _error(error_key, name=active["name"])
     user[slot] = {"name": name, "uses": max(1, int(effect.get("uses", 1)))}
     line_key = "use_battle_guard" if is_guard else "use_battle_supply"
-    return True, _line(line_key, name=name, uses=user[slot]["uses"])
+    parts = " / ".join(_battle_supply_parts({"effect": effect}))
+    return True, _line(line_key, name=name, uses=user[slot]["uses"], parts=parts)
 
 
 def _consume_battle_supply(user: dict, *, guard: bool = False) -> int:
@@ -111,6 +112,11 @@ def _battle_supply_parts(active: dict | None) -> list[str]:
         return []
     effect = active.get("effect", {})
     parts: list[str] = []
+    if effect.get("type") == "battle_guard":
+        parts.append("挑战转为成功")
+        rescue_exp_mult = float(effect.get("rescue_exp_mult", 1.0))
+        if rescue_exp_mult != 1.0:
+            parts.append(f"护符持有者经验 +{int(round((rescue_exp_mult - 1.0) * 100))}%")
     if effect.get("full_forge"):
         parts.append("装备视为强化满")
     power_mult = float(effect.get("power_mult", 1.0))

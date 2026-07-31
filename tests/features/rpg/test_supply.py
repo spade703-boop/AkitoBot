@@ -23,8 +23,10 @@ async def test_supply_uses_cross_group_weekly_costs_and_limit(monkeypatch):
         group_id = 1001 if index % 2 == 0 else 1002
         with pytest.raises(FinishedException) as exc:
             await supply.supply_cmd.handlers[0](Event(group_id=group_id, user_id="u1"), Message(""))
-        assert f"消耗 {cost} 积分" in str(exc.value.result)
-        assert "普通个人挑战 / 普通组队挑战（世界BOSS不生效）" in str(exc.value.result)
+        result = str(exc.value.result)
+        assert f"消耗 {cost} 积分" in result
+        assert "获得【旅人的行囊】×1（效果：接下来2次普通个人/组队挑战：战力+10%、经验+25%" in result
+        assert "普通个人挑战 / 普通组队挑战（世界BOSS不生效）" in result
 
     user = state["users"]["u1"]
     assert user["points"] == 800
