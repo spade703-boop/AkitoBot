@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from nonebot import on_command
 from nonebot.adapters import Event, Message
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageSegment
@@ -12,6 +14,7 @@ from nonebot.params import CommandArg
 
 from ...core import ALLOWED_CHAT_GROUPS
 from ...core.game_store import LOCK, _display_name, _get_group, _load_data, _save_data, _today_str
+from ..gift.pages import FOOTER_RPG_BRAND, qq_avatar_uri
 from ..gift.render import render_bond_page
 from .boss import _active_world_boss, _cleanup_stale_world_boss, _ensure_boss_participant
 from .config import _error, _line
@@ -83,9 +86,73 @@ async def _(event: Event, args: Message = CommandArg()):
     await status_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
 
 
-# ==================== 指令：排行榜（等级榜，纯文字、不 @、不出图） ====================
+# ==================== 指令：排行榜（等级榜） ====================
 
 rank_cmd = on_command("群排行榜", priority=5, block=True)
+
+
+def _ranked_players(users: dict, limit: int = 10) -> list[tuple[str, dict]]:
+    return sorted(
+        (
+            (str(uid), rec)
+            for uid, rec in users.items()
+            if isinstance(rec, dict) and int(rec.get("exp", 0)) > 0
+        ),
+        key=lambda item: int(item[1].get("exp", 0)),
+        reverse=True,
+    )[:limit]
+
+
+def _rank_page_data(ranked: list[tuple[str, dict]]) -> dict:
+    rows = []
+    for rank, (uid, rec) in enumerate(ranked, 1):
+        progress = _level_progress(rec.get("exp", 0))
+        name = str(rec.get("display_name") or f"用户{uid}")
+        rows.append(
+            {
+                "rank": rank,
+                "player": {
+                    "qq": uid,
+                    "name": name,
+                    "avatar": qq_avatar_uri(uid),
+                    "initial": name[:1] if name else "?",
+                },
+                "level": progress["level"],
+                "title": _title_of(progress["level"]),
+                "exp": progress["exp"],
+                "progress_pct": round(progress["into"] / progress["span"] * 100),
+                "progress_text": f"{progress['into']}/{progress['span']}",
+                "wins": int(rec.get("hunt_wins", 0)),
+                "battles": int(rec.get("hunt_total", 0)),
+            }
+        )
+    return {
+        "page_width": 680,
+        "title": "冒险者等级排行",
+        "eyebrow_tail": "ADVENTURER RANKING",
+        "pill": f"本群冒险者 TOP {len(rows)}",
+        "rows": rows,
+        "footer_left": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "footer_right": FOOTER_RPG_BRAND,
+    }
+
+
+def _rank_text(ranked: list[tuple[str, dict]]) -> str:
+    lines = [_line("rank_title")]
+    for idx, (uid, rec) in enumerate(ranked, 1):
+        level = _level_of(rec.get("exp", 0))
+        name = rec.get("display_name") or f"用户{uid}"
+        wins = int(rec.get("hunt_wins", 0))
+        lines.append(f"{idx}. {name}　Lv{level} {_title_of(level)}　胜{wins}场")
+    return "\n".join(lines)
+
+
+async def _render_rank_image(ranked: list[tuple[str, dict]]) -> bytes | None:
+    try:
+        return await render_bond_page("rpg_rank.html", _rank_page_data(ranked))
+    except Exception as error:
+        logger.warning(f"rpg rank render failed ({error}), falling back to text")
+        return None
 
 
 @rank_cmd.handle()
@@ -103,21 +170,14 @@ async def _(event: Event, args: Message = CommandArg()):
     group = _get_group(data, group_id)
     users = group.get("users", {})
     # 只收已开始冒险（exp>0）的人，按经验降序 Top 10；纯查询、不落库
-    ranked = sorted(
-        ((uid, rec) for uid, rec in users.items() if isinstance(rec, dict) and int(rec.get("exp", 0)) > 0),
-        key=lambda kv: int(kv[1].get("exp", 0)),
-        reverse=True,
-    )[:10]
+    ranked = _ranked_players(users)
     if not ranked:
         await rank_cmd.finish(MessageSegment.reply(event.message_id) + _error("rank_empty"))
 
-    lines = [_line("rank_title")]
-    for idx, (uid, rec) in enumerate(ranked, 1):
-        lvl = _level_of(rec.get("exp", 0))
-        name = rec.get("display_name") or f"用户{uid}"
-        wins = int(rec.get("hunt_wins", 0))
-        lines.append(f"{idx}. {name}　Lv{lvl} {_title_of(lvl)}　胜{wins}场")
-    await rank_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
+    img_bytes = await _render_rank_image(ranked)
+    if img_bytes is not None:
+        await rank_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes))
+    await rank_cmd.finish(MessageSegment.reply(event.message_id) + _rank_text(ranked))
 
 
 help_cmd = on_command("冒险帮助", aliases={"打怪帮助", "冒险说明"}, priority=5, block=True)

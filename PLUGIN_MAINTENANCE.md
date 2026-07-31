@@ -551,7 +551,7 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（戳一戳
 | `team.py` | `组队@某人` 指令：从 `gift._bond_level` 取羁绊，再通过 `utils._team_success_rate` 判定组队；成功或失败退化单刷分别调用 `rewards._settle_coop` / `_settle_solo`。本模块保留负羁绊摩擦/磨合、每日羁绊增长、组队失败援护和播报逻辑；普通组队结算后同样会触发世界 BOSS 刷出判定 |
 | `smith.py` | `强化今日装备` / `强化世界BOSS装备` / `购买装备` / `重置RPG功能` 指令（积分出口 + 超管测试辅助）：两套强化都走 `forge.costs` 分段收费 `[30,60,90]`；世界 BOSS 强化只作用于该 BOSS 的独立临时装备；购买装备花 100 积分重置已损坏普通装备（每天限 1 次，打上 `equip_rebought` 标记，打怪经验和积分减半）；`重置RPG功能` 仅为今天签到过的人重发普通装备，不改运势、连签和世界 BOSS 状态 |
 | `inventory.py` | `背包` / `使用 [道具名]` 指令 + 道具效果（`exp_buff`/`exp_grant`/`gift` 三种类型）+ 礼物券分支走完整送礼流程（`_settle`/`_build_broadcast`） + `_roll_drops` 掉落判定 + `_add_item` 背包入库 |
-| `character.py` | `我的角色` 面板（含称号 `_title_of`/战绩/普通装备状态/世界BOSS状态/积分/背包）+ `群排行榜`（本群 exp>0 的人按经验降序 Top 10，纯文字不 @）+ `冒险帮助`（含世界 BOSS 指令） |
+| `character.py` | `我的角色` 面板（含称号 `_title_of`/战绩/普通装备状态/世界BOSS状态/积分/背包）+ `群排行榜`（本群 exp>0 的人按经验降序 Top 10 图片看板，失败回退文字）+ `冒险帮助`（含世界 BOSS 指令） |
 
 **依赖方向**（design constraint）：`features/gift/` 与 `features/rpg/*` 都依赖 `core/game_store.py`；签到走钩子表解耦（gift → `run_signin_hooks` → `fortune.on_signin`，gift 不依赖 rpg）；三条 rpg→gift 单向依赖：`rpg/team.py` / `rpg/boss.py` → `gift._bond_level`（消费羁绊）、`rpg/inventory.py` → `gift._pick_gift_by_name`/`_settle`/`_build_broadcast` 等（礼物券消费走完整送礼流程）；gift 不反向依赖 rpg，无环。
 

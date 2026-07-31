@@ -7,6 +7,7 @@ from nonebot.exception import FinishedException
 import pytest
 
 from nonebot_plugin_akito.core import game_store
+from nonebot_plugin_akito.features.gift import render as bond_render
 import nonebot_plugin_akito.features.rpg.character as character
 import nonebot_plugin_akito.features.rpg.player as player
 
@@ -84,12 +85,50 @@ async def test_rank_sorts_filters_and_formats(monkeypatch):
         "u3": {"exp": 0, "display_name": "路人"},   # 没开始冒险（exp=0）→ 不上榜
     }}}})
     monkeypatch.setattr(character, "_load_data", lambda: deepcopy(state))
+    async def _fake_render(ranked):
+        assert [uid for uid, _rec in ranked] == ["u2", "u1"]
+        return b"fake-rpg-rank-image"
+    monkeypatch.setattr(character, "_render_rank_image", _fake_render)
     with pytest.raises(FinishedException) as exc:
         await character.rank_cmd.handlers[0](Event(group_id=1001, user_id="u1"))
     r = str(exc.value.result)
-    assert r.index("大二") < r.index("小一")   # 经验高的排前
-    assert "路人" not in r                       # exp=0 不上榜
-    assert "胜7场" in r and "Lv5" in r
+    assert "[image]" in r
+    assert "大二" not in r
+    assert "路人" not in r
+
+
+@pytest.mark.asyncio
+async def test_rank_falls_back_to_text(monkeypatch):
+    lv5 = player._cum_exp(5, player._level_base())
+    state = game_store._normalize_data({"groups": {"1001": {"users": {
+        "u1": {"exp": 10, "display_name": "小一", "hunt_wins": 2},
+        "u2": {"exp": lv5, "display_name": "大二", "hunt_wins": 7},
+    }}}})
+    monkeypatch.setattr(character, "_load_data", lambda: deepcopy(state))
+    async def _fake_render(_ranked):
+        return None
+    monkeypatch.setattr(character, "_render_rank_image", _fake_render)
+
+    with pytest.raises(FinishedException) as exc:
+        await character.rank_cmd.handlers[0](Event(group_id=1001, user_id="u1"))
+
+    result = str(exc.value.result)
+    assert result.index("大二") < result.index("小一")
+    assert "胜7场" in result and "Lv5" in result
+
+
+def test_rank_template_renders_player_progress_and_record():
+    lv5 = player._cum_exp(5, player._level_base())
+    ranked = [("10001", {"exp": lv5 + 50, "display_name": "测试猎手", "hunt_wins": 7, "hunt_total": 9})]
+    page_data = character._rank_page_data(ranked)
+    html = bond_render._TEMPLATE_ENV.get_template("rpg_rank.html").render(**page_data)
+    progress = player._level_progress(lv5 + 50)
+
+    assert "冒险者等级排行" in html
+    assert "测试猎手" in html
+    assert "Lv5" in html
+    assert f"50/{progress['span']}" in html
+    assert "7 胜 / 9 场" in html
 
 
 @pytest.mark.asyncio
