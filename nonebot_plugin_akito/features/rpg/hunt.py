@@ -106,7 +106,9 @@ def _battle_supply_line(reward: dict) -> str:
     name = str(reward.get("battle_supply_name", ""))
     if not name:
         return ""
-    parts = reward.get("battle_supply_parts") or []
+    parts = list(reward.get("battle_supply_parts") or [])
+    if reward.get("exp_buff_suppressed"):
+        parts.append("双倍经验卡暂缓且未消耗")
     return _line(
         "battle_supply_active",
         name=name,

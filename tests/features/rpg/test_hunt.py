@@ -430,12 +430,21 @@ def test_apply_rewards_uses_high_tier_monster_exp_multiplier_without_changing_po
     assert out["points_gain"] == int(rpg_config._cfg("challenge", {}).get("win_points", 0))
 
 
-def test_expedition_supply_does_not_stack_or_consume_double_exp_card():
+@pytest.mark.parametrize(
+    ("supply_name", "expected_mult"),
+    [
+        ("旅人的行囊", 1.25),
+        ("龙骑士的地图", 1.2),
+        ("厨子的美食", 1.4),
+        ("勇者的远征套装", 2.0),
+    ],
+)
+def test_regular_supply_defers_double_exp_card(supply_name, expected_mult):
     user = _equipped_user(
         exp=0,
         exp_buff_uses=1,
         exp_buff_mult=2,
-        active_battle_supply={"name": "勇者的远征套装", "uses": 2},
+        active_battle_supply={"name": supply_name, "uses": 2},
     )
     active = inventory._active_battle_supply(user)
 
@@ -447,10 +456,41 @@ def test_expedition_supply_does_not_stack_or_consume_double_exp_card():
         battle_supply=active,
     )
 
-    assert out["exp_gain"] == rewards._challenge_exp(True, 1) * 2
+    assert out["exp_gain"] == int(rewards._challenge_exp(True, 1) * expected_mult)
     assert out["exp_buffed"] is False and out["exp_buff_suppressed"] is True
+    assert "双倍经验卡暂缓且未消耗" in hunt._battle_supply_line(out)
     assert user["exp_buff_uses"] == 1
     assert user["active_battle_supply"]["uses"] == 1
+
+
+def test_double_exp_card_resumes_after_regular_supply_is_consumed():
+    user = _equipped_user(
+        exp=0,
+        exp_buff_uses=1,
+        exp_buff_mult=2,
+        active_battle_supply={"name": "厨子的美食", "uses": 1},
+    )
+
+    first = rewards._apply_rewards(
+        user,
+        "2026-06-22",
+        win=True,
+        monster={"name": "史莱姆", "drops": []},
+        battle_supply=inventory._active_battle_supply(user),
+    )
+    second = rewards._apply_rewards(
+        user,
+        "2026-06-22",
+        win=True,
+        monster={"name": "史莱姆", "drops": []},
+        battle_supply=inventory._active_battle_supply(user),
+    )
+
+    assert first["exp_buff_suppressed"] is True
+    assert first["exp_gain"] == int(rewards._challenge_exp(True, 1) * 1.4)
+    assert second["exp_buffed"] is True
+    assert second["exp_gain"] == rewards._challenge_exp(True, 1) * 2
+    assert user["exp_buff_uses"] == 0
 
 
 def test_expedition_supply_treats_equipment_as_fully_forged():
@@ -471,6 +511,39 @@ def test_guard_flips_solo_failure_after_character_support_check(monkeypatch):
     assert out["battle_guard_triggered"] is True
     assert out["exp_gain"] == int(rewards._challenge_exp(True, 1) * 1.5)
     assert "active_battle_guard" not in user
+
+
+def test_guard_alone_can_stack_with_double_exp_card(monkeypatch):
+    user = _equipped_user(
+        exp_buff_uses=1,
+        exp_buff_mult=2,
+        active_battle_guard={"name": "神官的护符", "uses": 1},
+    )
+    _stub_hunt_rng(monkeypatch, {"name": "强敌", "power_req": 999, "drops": []})
+
+    out = rewards._settle_solo(user, "2026-06-22")
+
+    assert out["battle_guard_triggered"] is True and out["exp_buffed"] is True
+    assert out["exp_gain"] == int(rewards._challenge_exp(True, 1) * 1.5) * 2
+    assert user["exp_buff_uses"] == 0
+
+
+def test_regular_supply_and_guard_together_defer_double_exp_card(monkeypatch):
+    user = _equipped_user(
+        exp_buff_uses=1,
+        exp_buff_mult=2,
+        active_battle_supply={"name": "厨子的美食", "uses": 1},
+        active_battle_guard={"name": "神官的护符", "uses": 1},
+    )
+    _stub_hunt_rng(monkeypatch, {"name": "强敌", "power_req": 999, "drops": []})
+
+    out = rewards._settle_solo(user, "2026-06-22")
+
+    expected = int(int(rewards._challenge_exp(True, 1) * 1.4) * 1.5)
+    assert out["battle_guard_triggered"] is True and out["exp_buffed"] is False
+    assert out["exp_buff_suppressed"] is True and out["exp_gain"] == expected
+    assert user["exp_buff_uses"] == 1
+    assert "active_battle_supply" not in user and "active_battle_guard" not in user
 
 
 def test_character_rescue_does_not_waste_guard(monkeypatch):

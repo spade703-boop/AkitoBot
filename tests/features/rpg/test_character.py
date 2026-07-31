@@ -73,7 +73,47 @@ async def test_help_cmd_falls_back_to_text(monkeypatch):
     result = str(exc.value.result)
     assert "冒险系统" in result
     assert "今日打怪" in result
+    assert "开启冒险补给" in result
+    assert "战后小奇遇" in result
+    assert "旅人的行囊（35%）" in result
+    assert "神官的护符（12%）" in result
+    assert "——补给袋：提供少量经验与积分。" in result
+    assert "——破旧积分卡：使用后获得 5 积分。" in result
+    assert "——破旧经验券：使用后获得 10 经验。" in result
+    assert "——彰冬无料券：使用后可向一名群友赠送彰冬无料。" in result
+    assert "常规战备共享一个槽位" in result
+    assert "触发时共同结算" in result
+    assert "双倍经验卡暂缓且不消耗" in result
+    assert "重置RPG功能" in result
+    assert "——进行一次普通个人挑战" in result
     assert "[image]" not in result
+
+
+def test_help_items_cover_public_and_admin_commands():
+    commands = {item["command"] for item in character._HELP_ITEMS}
+
+    assert {
+        "签到",
+        "今日打怪",
+        "组队@某人",
+        "战后小奇遇",
+        "小奇遇奖励",
+        "开启冒险补给",
+        "战备使用规则",
+        "旅人的行囊（35%）",
+        "龙骑士的地图（30%）",
+        "厨子的美食（20%）",
+        "神官的护符（12%）",
+        "勇者的远征套装（3%）",
+        "攻击世界BOSS",
+        "组队世界BOSS@某人",
+        "强化世界BOSS装备",
+        "我的角色",
+        "群排行榜",
+        "强制开启世界BOSS",
+        "RPG数据",
+        "重置RPG功能",
+    } <= commands
 
 
 @pytest.mark.asyncio

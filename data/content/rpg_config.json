@@ -929,8 +929,7 @@
         "uses": 3,
         "full_forge": true,
         "exp_mult": 2.0,
-        "drop_mult": 2.0,
-        "suppress_exp_buff": true
+        "drop_mult": 2.0
       }
     }
   ],
@@ -1030,7 +1029,7 @@
       "🛡️ 替换装备已就位，花了 {cost} 积分。不过这套是临时凑的，打怪经验和积分都会减半。"
     ],
     "use_exp_buff": [
-      "📖 【{name}】用了。下次打怪经验 ×{mult}。"
+      "📖 【{name}】已储备。会在没有常规战备生效的下一次普通挑战中使经验 ×{mult}。"
     ],
     "use_exp_grant": [
       "📖 【{name}】用了。经验 +{amount}。"
@@ -1039,10 +1038,10 @@
       "📦 冒险补给已开启。\n· 消耗 {cost} 积分（本周 {count}/{max}）\n· 获得【{name}】×1\n· 经验 +{exp}{levelup}\n· 战备范围：普通个人挑战 / 普通组队挑战（世界BOSS不生效）"
     ],
     "use_battle_supply": [
-      "🎒 【{name}】已整备，接下来 {uses} 场普通个人/组队挑战生效；世界BOSS不生效。"
+      "🎒 【{name}】已整备，接下来 {uses} 场普通个人/组队挑战生效；期间双倍经验卡暂缓且不消耗；世界BOSS不生效。"
     ],
     "use_battle_guard": [
-      "🛡️ 【{name}】已装备，会在下一次普通个人/组队挑战失败时生效；世界BOSS不生效。"
+      "🛡️ 【{name}】已装备，会在下一次普通个人/组队挑战失败时生效；护符本身不压制双倍经验卡；世界BOSS不生效。"
     ],
     "battle_supply_active": [
       "🎒 【{name}】生效：{parts}（剩余 {uses} 场；仅限普通个人/组队挑战）"

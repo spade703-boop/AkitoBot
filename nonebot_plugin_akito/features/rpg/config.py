@@ -352,7 +352,7 @@ DEFAULT_RPG_CONFIG: dict = {
          "effect": {"type": "battle_guard", "uses": 1, "rescue_exp_mult": 1.50}},
         {"name": "勇者的远征套装", "desc": "接下来3次普通个人/组队挑战：装备视为强化满、经验×2、掉落率×2（世界BOSS不生效）",
          "effect": {"type": "battle_supply", "uses": 3, "full_forge": True, "exp_mult": 2.0,
-                    "drop_mult": 2.0, "suppress_exp_buff": True}},
+                    "drop_mult": 2.0}},
     ],
     # ---- 文案。占位符：{a}=真@；其余 {exp}{level}{newlevel}{monster}{cost}{forge}{name}{amount}{loot} 为文本 ----
     "copy": {
@@ -394,11 +394,11 @@ DEFAULT_RPG_CONFIG: dict = {
         "minor_encounter_team_member_levelup": ["· {name}：升级 Lv{level}→Lv{newlevel}。"],
         "forge_ok": ["🔨 强化好了。今日装备更稳了（已强化 ×{forge}，花费 {cost} 积分）。"],
         "rebuy_ok": ["🛡️ 替换装备已就位，花了 {cost} 积分。不过这套是临时凑的，打怪经验和积分都会减半。"],
-        "use_exp_buff": ["📖 【{name}】用了。下次打怪经验 ×{mult}。"],
+        "use_exp_buff": ["📖 【{name}】已储备。会在没有常规战备生效的下一次普通挑战中使经验 ×{mult}。"],
         "use_exp_grant": ["📖 【{name}】用了。经验 +{amount}。"],
         "supply_open": ["📦 冒险补给已开启。\n· 消耗 {cost} 积分（本周 {count}/{max}）\n· 获得【{name}】×1\n· 经验 +{exp}{levelup}\n· 战备范围：普通个人挑战 / 普通组队挑战（世界BOSS不生效）"],
-        "use_battle_supply": ["🎒 【{name}】已整备，接下来 {uses} 场普通个人/组队挑战生效；世界BOSS不生效。"],
-        "use_battle_guard": ["🛡️ 【{name}】已装备，会在下一次普通个人/组队挑战失败时生效；世界BOSS不生效。"],
+        "use_battle_supply": ["🎒 【{name}】已整备，接下来 {uses} 场普通个人/组队挑战生效；期间双倍经验卡暂缓且不消耗；世界BOSS不生效。"],
+        "use_battle_guard": ["🛡️ 【{name}】已装备，会在下一次普通个人/组队挑战失败时生效；护符本身不压制双倍经验卡；世界BOSS不生效。"],
         "battle_supply_active": ["🎒 【{name}】生效：{parts}（剩余 {uses} 场；仅限普通个人/组队挑战）"],
         "battle_guard_triggered": ["🛡️ 【{name}】护住了战线，本次挑战转为成功，经验额外 +50%。"],
         "team_battle_guard_triggered": ["🛡️ {name} 的【{item}】护住了两人的战线，本次挑战转为成功；护符持有者经验额外 +50%。"],

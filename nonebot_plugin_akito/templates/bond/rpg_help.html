@@ -49,19 +49,29 @@
   .list {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 14px;
   }
-  .line {
-    font-size: 18px;
-    line-height: 1.62;
+  .entry {
     color: #f5efe6;
     word-break: break-word;
+  }
+  .command {
+    font-size: 12pt;
+    line-height: 1.45;
+    font-weight: 800;
+  }
+  .description {
+    margin-top: 2px;
+    padding-left: 1.1em;
+    font-size: 10pt;
+    line-height: 1.55;
+    color: rgba(255, 245, 230, 0.82);
   }
   .hint {
     margin-top: 18px;
     padding-top: 16px;
     border-top: 1px solid rgba(255, 255, 255, 0.08);
-    font-size: 17px;
+    font-size: 10pt;
     line-height: 1.6;
     color: rgba(255, 245, 230, 0.88);
   }
@@ -74,8 +84,14 @@
       <h1>{{ title }}</h1>
       <div class="rule"></div>
       <div class="list">
-        {% for line in lines %}
-        <div class="line">· {{ line }}</div>
+        {% for item in items %}
+        <div class="entry">
+          <div class="command">· {{ item.command }}</div>
+          <div class="description">——{{ item.description }}</div>
+          {% for detail in item.details or [] %}
+          <div class="description">——{{ detail }}</div>
+          {% endfor %}
+        </div>
         {% endfor %}
       </div>
       <div class="hint">{{ hint }}</div>

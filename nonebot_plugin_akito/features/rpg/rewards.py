@@ -109,8 +109,9 @@ def _apply_rewards(user: dict, today: str, *, win: bool, monster: dict, event_ke
     if rescue_exp_mult != 1.0:
         exp_gain = int(exp_gain * float(rescue_exp_mult))
     buffed = False
-    suppress_exp_buff = bool(supply_effect.get("suppress_exp_buff"))
-    if int(user.get("exp_buff_uses", 0)) > 0 and not suppress_exp_buff:  # 双倍经验卡
+    exp_buff_pending = int(user.get("exp_buff_uses", 0)) > 0
+    exp_buff_deferred = bool(battle_supply and exp_buff_pending)
+    if exp_buff_pending and not battle_supply:  # 常规战备优先，护符本身不压制双倍经验卡
         exp_gain *= int(user.get("exp_buff_mult", 2))
         buffed = True
         user["exp_buff_uses"] = int(user["exp_buff_uses"]) - 1
@@ -146,7 +147,7 @@ def _apply_rewards(user: dict, today: str, *, win: bool, monster: dict, event_ke
         "battle_supply_name": str(battle_supply.get("name", "")) if battle_supply else "",
         "battle_supply_parts": inventory._battle_supply_parts(battle_supply),
         "battle_supply_uses_left": supply_uses_left,
-        "exp_buff_suppressed": bool(suppress_exp_buff and int(user.get("exp_buff_uses", 0)) > 0),
+        "exp_buff_suppressed": exp_buff_deferred,
     }
 
 
