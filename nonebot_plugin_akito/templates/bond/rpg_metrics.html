@@ -130,6 +130,7 @@
             <div class="row"><span class="key">战斗构成</span><span class="value">单人 {{ period.solo_battles }} · 组队 {{ period.team_battles }} · 改单刷 {{ period.fallback_battles }}</span></div>
             <div class="row"><span class="key">组队邀请</span><span class="value">{{ period.team_formed }} / {{ period.team_attempts }} 次成立</span></div>
             <div class="row"><span class="key">奖励投放</span><span class="value">经验 +{{ "{:,}".format(period.exp_gained) }} · 积分 +{{ "{:,}".format(period.points_gained) }}</span></div>
+            <div class="row"><span class="key">冒险补给</span><span class="value">{{ period.supply_opens }} 次 · 消耗 {{ "{:,}".format(period.supply_points_spent) }} 积分 · 经验 +{{ "{:,}".format(period.supply_exp_gained) }}</span></div>
           </div>
         </div>
 

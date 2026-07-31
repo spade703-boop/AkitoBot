@@ -11,7 +11,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
+from datetime import date, datetime
 import json
 import os
 import re
@@ -35,6 +35,49 @@ LOCK = asyncio.Lock()
 
 def _today_str() -> str:
     return datetime.now(TZ_CN).date().isoformat()
+
+
+def _week_key(day: str) -> str:
+    """把 ISO 日期转换为稳定的 ISO 周键。"""
+    try:
+        parsed = date.fromisoformat(str(day))
+    except (TypeError, ValueError):
+        parsed = datetime.now(TZ_CN).date()
+    iso_year, iso_week, _weekday = parsed.isocalendar()
+    return f"{iso_year}-W{iso_week:02d}"
+
+
+def _weekly_investment(user: dict, day: str) -> dict:
+    """读取当周的冒险补给/送礼投入；跨周时懒重置。"""
+    week = _week_key(day)
+    record = user.get("weekly_investment")
+    if not isinstance(record, dict) or record.get("week") != week:
+        record = {
+            "week": week,
+            "supply_count": 0,
+            "supply_spent": 0,
+            "gift_spent": 0,
+        }
+        user["weekly_investment"] = record
+    for key in ("supply_count", "supply_spent", "gift_spent"):
+        record[key] = max(0, int(record.get(key, 0)))
+    return record
+
+
+def _record_weekly_investment(
+    user: dict,
+    day: str,
+    *,
+    supply_count: int = 0,
+    supply_spent: int = 0,
+    gift_spent: int = 0,
+) -> dict:
+    """原子结算已持锁时，累加玩家本周两条积分去向。"""
+    record = _weekly_investment(user, day)
+    record["supply_count"] += max(0, int(supply_count))
+    record["supply_spent"] += max(0, int(supply_spent))
+    record["gift_spent"] += max(0, int(gift_spent))
+    return record
 
 
 # ==================== 数据骨架与归一化 ====================

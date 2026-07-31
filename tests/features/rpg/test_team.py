@@ -177,6 +177,47 @@ def test_settle_coop_uses_average_fortune_factor(monkeypatch):
     assert captured["fortune_factor"] == pytest.approx(1.1)
 
 
+def test_team_guard_prefers_initiator_and_only_buffs_holder_exp(monkeypatch):
+    monster = {"name": "强敌", "power_req": 999, "drops": []}
+    left = _equipped_user(active_battle_guard={"name": "神官的护符", "uses": 1})
+    right = _equipped_user(active_battle_guard={"name": "神官的护符", "uses": 1})
+    monkeypatch.setattr(combat, "_pick_encounter", lambda level, rng=combat.random: (monster, False))
+    monkeypatch.setattr(rewards.random, "uniform", lambda _a, _b: 1.0)
+    monkeypatch.setattr(rpg_events, "_roll_coop_event", lambda rng=rpg_events.random: "")
+    monkeypatch.setattr(combat, "_today_buff", lambda: _PLAIN_BUFF)
+
+    out = rewards._settle_coop(left, right, "2026-06-22")
+
+    base_exp = rewards._challenge_exp(True, 1)
+    assert out["base_win"] is False and out["win"] is True
+    assert out["battle_guard_owner"] == "b"
+    assert out["b"]["exp_gain"] == int(base_exp * 1.5)
+    assert out["a"]["exp_gain"] == base_exp
+    assert "active_battle_guard" not in left
+    assert right["active_battle_guard"]["uses"] == 1
+    broadcast = str(team._build_coop_broadcast(out, "u1", "u2", "甲", "乙"))
+    assert "没能取胜" in broadcast or "未能击败" in broadcast or "败下阵来" in broadcast or "没能拿下" in broadcast
+    assert "神官的护符" in broadcast and "转为成功" in broadcast
+
+
+def test_team_regular_supply_only_changes_its_owner_rewards(monkeypatch):
+    monster = {"name": "史莱姆", "power_req": 1, "drops": []}
+    left = _equipped_user(active_battle_supply={"name": "旅人的行囊", "uses": 2})
+    right = _equipped_user()
+    monkeypatch.setattr(combat, "_pick_encounter", lambda level, rng=combat.random: (monster, False))
+    monkeypatch.setattr(rewards.random, "uniform", lambda _a, _b: 1.0)
+    monkeypatch.setattr(rpg_events, "_roll_coop_event", lambda rng=rpg_events.random: "")
+    monkeypatch.setattr(combat, "_today_buff", lambda: _PLAIN_BUFF)
+
+    out = rewards._settle_coop(left, right, "2026-06-22")
+
+    base_exp = rewards._challenge_exp(True, 1)
+    assert out["b"]["exp_gain"] == int(base_exp * 1.25)
+    assert out["a"]["exp_gain"] == base_exp
+    assert left["active_battle_supply"]["uses"] == 1
+    assert "active_battle_supply" not in right
+
+
 @pytest.mark.parametrize(
     ("event_key", "expected_power", "expected_exp_mult", "expected_drop_mult"),
     [

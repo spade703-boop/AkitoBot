@@ -52,6 +52,18 @@ def _solo_exp_bonus(win: bool) -> float:
     return max(0.0, float(_solo_cfg().get(key, 0.0)))
 
 
+def _battle_power(user: dict, active_supply: dict | None) -> float:
+    """应用玩家自己的战备战力；组队时不会把效果扩散给队友。"""
+    power = float(_combat_power(user))
+    effect = active_supply.get("effect", {}) if active_supply else {}
+    if effect.get("full_forge"):
+        forge = int(user.get("equip_forge", 0))
+        forge_cfg = _cfg("forge", {})
+        missing = max(0, int(forge_cfg.get("max_per_day", 3)) - forge)
+        power += missing * int(forge_cfg.get("step", 0))
+    return power * float(effect.get("power_mult", 1.0))
+
+
 def _apply_extra_rewards(user: dict, *, exp: int = 0, points: int = 0) -> tuple[int, int, int, int]:
     level_before = _level_of(int(user.get("exp", 0)))
     exp_gain = max(0, int(exp))
@@ -69,6 +81,7 @@ def _apply_extra_rewards(user: dict, *, exp: int = 0, points: int = 0) -> tuple[
 
 def _apply_rewards(user: dict, today: str, *, win: bool, monster: dict, event_key: str = "",
                    exp_bonus: float = 0.0, exp_mult: float = 1.0, drop_mult: float = 1.0,
+                   battle_supply: dict | None = None, rescue_exp_mult: float = 1.0,
                    rng=random) -> dict:
     """给单个玩家结算（经验[含看破/单刷或组队额外加成/双倍卡/精英/今日增益] + 掉落 + 积分）并消耗其今日装备，记一次战绩。
 
@@ -89,8 +102,15 @@ def _apply_rewards(user: dict, today: str, *, win: bool, monster: dict, event_ke
         exp_gain = int(exp_gain * monster_exp_mult)
     if exp_mult != 1.0:
         exp_gain = int(exp_gain * float(exp_mult))           # 精英 × 今日增益
+    supply_effect = battle_supply.get("effect", {}) if battle_supply else {}
+    supply_exp_mult = float(supply_effect.get("exp_mult", 1.0))
+    if supply_exp_mult != 1.0:
+        exp_gain = int(exp_gain * supply_exp_mult)
+    if rescue_exp_mult != 1.0:
+        exp_gain = int(exp_gain * float(rescue_exp_mult))
     buffed = False
-    if int(user.get("exp_buff_uses", 0)) > 0:  # 双倍经验卡
+    suppress_exp_buff = bool(supply_effect.get("suppress_exp_buff"))
+    if int(user.get("exp_buff_uses", 0)) > 0 and not suppress_exp_buff:  # 双倍经验卡
         exp_gain *= int(user.get("exp_buff_mult", 2))
         buffed = True
         user["exp_buff_uses"] = int(user["exp_buff_uses"]) - 1
@@ -103,7 +123,12 @@ def _apply_rewards(user: dict, today: str, *, win: bool, monster: dict, event_ke
     drops = inventory._roll_drops(
         monster,
         rng=rng,
-        mult=base_drop * utils._fortune_drop_factor(user, today) * float(drop_mult),
+        mult=(
+            base_drop
+            * utils._fortune_drop_factor(user, today)
+            * float(drop_mult)
+            * float(supply_effect.get("drop_mult", 1.0))
+        ),
     )
     for d in drops:
         inventory._add_item(user, d, 1)
@@ -113,10 +138,15 @@ def _apply_rewards(user: dict, today: str, *, win: bool, monster: dict, event_ke
     user["hunt_total"] = int(user.get("hunt_total", 0)) + 1   # 战绩：累计打怪
     if win:
         user["hunt_wins"] = int(user.get("hunt_wins", 0)) + 1  # 战绩：累计胜场
+    supply_uses_left = inventory._consume_battle_supply(user) if battle_supply else 0
     _consume_equip(user)  # 今日装备损坏
     return {
         "exp_gain": exp_gain, "exp_buffed": buffed, "monster_exp_mult": monster_exp_mult, "drops": drops,
         "points_gain": points_gain, "old_level": level, "new_level": _level_of(user["exp"]),
+        "battle_supply_name": str(battle_supply.get("name", "")) if battle_supply else "",
+        "battle_supply_parts": inventory._battle_supply_parts(battle_supply),
+        "battle_supply_uses_left": supply_uses_left,
+        "exp_buff_suppressed": bool(suppress_exp_buff and int(user.get("exp_buff_uses", 0)) > 0),
     }
 
 
@@ -308,7 +338,8 @@ def _settle_solo(user: dict, today: str, *, direct: bool = False, rng=random, bu
     level = combat._encounter_level(user)
     monster, is_elite = combat._pick_encounter(level, rng)
     eff = combat._eff_monster(monster, is_elite)
-    cp = _combat_power(user)
+    battle_supply = inventory._active_battle_supply(user)
+    cp = _battle_power(user, battle_supply)
     margin = cp / max(1, int(eff.get("power_req", 1)))
     event_key = events._roll_hunt_event(margin, rng)
     fortune_factor = utils._fortune_combat_factor(
@@ -331,12 +362,24 @@ def _settle_solo(user: dict, today: str, *, direct: bool = False, rng=random, bu
     support_scene = events._roll_solo_support_scene(bool(res["win"]), rng)
     if not res["win"] and support_scene in {"toya_rescue", "duo_combo"}:
         res["win"] = True
+    battle_guard = inventory._active_battle_supply(user, guard=True)
+    guard_triggered = bool(not res["win"] and battle_guard)
+    guard_uses_left = 0
+    guard_exp_mult = 1.0
+    if guard_triggered:
+        res["win"] = True
+        guard_exp_mult = float(battle_guard["effect"].get("rescue_exp_mult", 1.0))
+        guard_uses_left = inventory._consume_battle_supply(user, guard=True)
     exp_mult, drop_mult = combat._reward_mults(buff, is_elite, res["win"])
     exp_bonus = _solo_exp_bonus(bool(res["win"])) if direct else 0.0
     rew = _apply_rewards(user, today, win=res["win"], monster=eff, event_key=event_key,
-                         exp_bonus=exp_bonus, exp_mult=exp_mult, drop_mult=drop_mult, rng=rng)
+                         exp_bonus=exp_bonus, exp_mult=exp_mult, drop_mult=drop_mult,
+                         battle_supply=battle_supply, rescue_exp_mult=guard_exp_mult, rng=rng)
     out = {**res, **rew, "monster": monster, "event": event_key, "elite": is_elite, "buff": buff,
-           "support_scene": support_scene, "base_win": base_win, "direct_solo": direct}
+           "support_scene": support_scene, "base_win": base_win, "direct_solo": direct,
+           "battle_guard_triggered": guard_triggered,
+           "battle_guard_name": str(battle_guard.get("name", "")) if guard_triggered else "",
+           "battle_guard_uses_left": guard_uses_left}
     _apply_support_bonus(user, out)
     out["reward_new_level"] = int(out.get("new_level", out.get("old_level", 1)))
     _apply_minor_encounter(user, out, rng=rng)
@@ -366,7 +409,9 @@ def _settle_coop(
     level = max(combat._encounter_level(b), combat._encounter_level(a))
     monster, is_elite = combat._pick_encounter(level, rng)
     eff = combat._eff_monster(monster, is_elite)
-    cp = _combat_power(b) + _combat_power(a)
+    b_supply = inventory._active_battle_supply(b)
+    a_supply = inventory._active_battle_supply(a)
+    cp = _battle_power(b, b_supply) + _battle_power(a, a_supply)
     margin = cp / max(1, int(eff.get("power_req", 1)))
     team_event = events._roll_coop_event(rng)
     event_spec = events._coop_event_spec(team_event)
@@ -387,15 +432,55 @@ def _settle_coop(
         power_factor=power_factor,
         fortune_factor=fortune_factor,
     )
-    win = res["win"]
+    base_win = bool(res["win"])
+    win = base_win
+    guard_owner = ""
+    guard_name = ""
+    guard_exp_mult = {"b": 1.0, "a": 1.0}
+    if not win:
+        for owner, user in (("b", b), ("a", a)):
+            guard = inventory._active_battle_supply(user, guard=True)
+            if not guard:
+                continue
+            guard_owner = owner
+            guard_name = str(guard.get("name", ""))
+            guard_exp_mult[owner] = float(guard["effect"].get("rescue_exp_mult", 1.0))
+            inventory._consume_battle_supply(user, guard=True)
+            win = True
+            break
     exp_mult, drop_mult = combat._reward_mults(buff, is_elite, win)
     exp_mult *= float(event_spec.get("exp_mult", 1.0))
     exp_mult *= float(extra_exp_mult)
     drop_mult *= float(event_spec.get("drop_mult", 1.0))
     drop_mult *= 1.0 + float(drop_bonus)
     drop_mult *= float(extra_drop_mult)
+    b_reward = _apply_rewards(
+        b,
+        today,
+        win=win,
+        monster=eff,
+        exp_bonus=exp_bonus,
+        exp_mult=exp_mult,
+        drop_mult=drop_mult,
+        battle_supply=b_supply,
+        rescue_exp_mult=guard_exp_mult["b"],
+        rng=rng,
+    )
+    a_reward = _apply_rewards(
+        a,
+        today,
+        win=win,
+        monster=eff,
+        exp_bonus=exp_bonus,
+        exp_mult=exp_mult,
+        drop_mult=drop_mult,
+        battle_supply=a_supply,
+        rescue_exp_mult=guard_exp_mult["a"],
+        rng=rng,
+    )
     return {
         "win": win,
+        "base_win": base_win,
         "monster": monster,
         "elite": is_elite,
         "buff": buff,
@@ -403,24 +488,8 @@ def _settle_coop(
         "power_bonus": power_bonus,
         "exp_bonus": exp_bonus,
         "drop_bonus": drop_bonus,
-        "b": _apply_rewards(
-            b,
-            today,
-            win=win,
-            monster=eff,
-            exp_bonus=exp_bonus,
-            exp_mult=exp_mult,
-            drop_mult=drop_mult,
-            rng=rng,
-        ),
-        "a": _apply_rewards(
-            a,
-            today,
-            win=win,
-            monster=eff,
-            exp_bonus=exp_bonus,
-            exp_mult=exp_mult,
-            drop_mult=drop_mult,
-            rng=rng,
-        ),
+        "battle_guard_owner": guard_owner,
+        "battle_guard_name": guard_name,
+        "b": b_reward,
+        "a": a_reward,
     }

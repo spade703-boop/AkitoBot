@@ -33,6 +33,22 @@ def test_config_rejects_unbounded_monster_exp_multiplier():
         rpg_config.validate_rpg_config(config)
 
 
+def test_config_rejects_invalid_supply_cost_count():
+    config = deepcopy(rpg_config.DEFAULT_RPG_CONFIG)
+    config["adventure_supply"]["weekly_costs"] = [140] * 5
+
+    with pytest.raises(rpg_config.RpgConfigError, match="7 次成本"):
+        rpg_config.validate_rpg_config(config)
+
+
+def test_config_rejects_supply_pool_weights_not_equal_to_one_hundred():
+    config = deepcopy(rpg_config.DEFAULT_RPG_CONFIG)
+    config["adventure_supply"]["pool"][0]["weight"] = 34
+
+    with pytest.raises(rpg_config.RpgConfigError, match="权重总和"):
+        rpg_config.validate_rpg_config(config)
+
+
 def test_failed_hot_reload_keeps_current_config(monkeypatch):
     previous = deepcopy(rpg_config.RPG_CONFIG)
     invalid = deepcopy(rpg_config.DEFAULT_RPG_CONFIG)

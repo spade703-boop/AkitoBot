@@ -13,11 +13,20 @@ from nonebot.log import logger
 from nonebot.params import CommandArg
 
 from ...core import ALLOWED_CHAT_GROUPS
-from ...core.game_store import LOCK, _display_name, _get_group, _load_data, _save_data, _today_str
+from ...core.game_store import (
+    LOCK,
+    _display_name,
+    _get_group,
+    _load_data,
+    _save_data,
+    _today_str,
+    _weekly_investment,
+)
 from ..gift.pages import FOOTER_RPG_BRAND, qq_avatar_uri
 from ..gift.render import render_bond_page
 from .boss import _active_world_boss, _cleanup_stale_world_boss, _ensure_boss_participant
 from .config import _error, _line
+from .inventory import _active_battle_supply
 from .player import (
     _ensure_player,
     _equip_status,
@@ -28,6 +37,31 @@ from .player import (
 )
 
 status_cmd = on_command("我的角色", priority=5, block=True)
+
+
+def _weekly_tendency(adventure_spent: int, gift_spent: int) -> str:
+    if adventure_spent <= 0 and gift_spent <= 0:
+        return "尚未决定"
+    if gift_spent <= 0:
+        return "偏向冒险"
+    if adventure_spent <= 0:
+        return "偏向羁绊"
+    if adventure_spent > gift_spent * 1.2:
+        return "偏向冒险"
+    if gift_spent > adventure_spent * 1.2:
+        return "偏向羁绊"
+    return "均衡发展"
+
+
+def _battle_status(user: dict) -> str:
+    parts: list[str] = []
+    regular = _active_battle_supply(user)
+    if regular:
+        parts.append(f"{regular['name']}（剩余 {regular['uses']} 场）")
+    guard = _active_battle_supply(user, guard=True)
+    if guard:
+        parts.append(f"{guard['name']}（待触发）")
+    return " / ".join(parts) if parts else "暂无"
 
 
 @status_cmd.handle()
@@ -67,6 +101,10 @@ async def _(event: Event, args: Message = CommandArg()):
         title = _title_of(prog["level"])
         bag = sum(int(v) for v in (user.get("inventory") or {}).values())
         wins, total = int(user.get("hunt_wins", 0)), int(user.get("hunt_total", 0))
+        weekly = _weekly_investment(user, today)
+        supply_count = int(weekly.get("supply_count", 0))
+        supply_spent = int(weekly.get("supply_spent", 0))
+        gift_spent = int(weekly.get("gift_spent", 0))
         trophies = user.get("world_boss_trophies")
         if isinstance(trophies, list) and trophies:
             trophy_line = "· 世界BOSS收藏：" + "、".join(str(item) for item in trophies if str(item))
@@ -81,8 +119,13 @@ async def _(event: Event, args: Message = CommandArg()):
             boss_line,
             f"· 积分：{int(user.get('points', 0))}",
             f"· 背包：{bag} 件道具",
-            trophy_line,
+            f"· 本周投入：冒险补给 {supply_count}/7（已花费 {supply_spent} 积分） / 送礼 {gift_spent} 积分",
+            f"· 本周倾向：{_weekly_tendency(supply_spent, gift_spent)}",
+            f"· 当前战备：{_battle_status(user)}",
         ]
+        if _active_battle_supply(user) or _active_battle_supply(user, guard=True):
+            lines.append("· 战备范围：普通个人挑战 / 普通组队挑战（世界BOSS不生效）")
+        lines.append(trophy_line)
     await status_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
 
 
@@ -196,6 +239,7 @@ _HELP_LINES = [
     "我的角色 — 看等级、称号、战绩和装备状态（含世界BOSS）",
     "群排行榜 — 看本群谁练得最快",
     "我的背包 / 使用 [道具] — 看道具 / 用掉它；礼物券需 @ 对方",
+    "开启冒险补给 — 花积分开启每周限量补给：前5次各140分，第6次200分，第7次300分；每次固定获得30经验和一件战备，仅普通个人/组队挑战生效，世界BOSS不生效",
 ]
 
 

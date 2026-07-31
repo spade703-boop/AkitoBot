@@ -157,6 +157,30 @@ async def test_status_panel_shows_title_and_record(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_status_panel_shows_weekly_investment_and_active_supplies(monkeypatch):
+    store = {"groups": {"1001": {"users": {"u1": _equipped_user(
+        weekly_investment={
+            "week": "2026-W26",
+            "supply_count": 3,
+            "supply_spent": 420,
+            "gift_spent": 200,
+        },
+        active_battle_supply={"name": "旅人的行囊", "uses": 2},
+        active_battle_guard={"name": "神官的护符", "uses": 1},
+    )}}}}
+    _patch_io(monkeypatch, character, store=store)
+
+    with pytest.raises(FinishedException) as exc:
+        await character.status_cmd.handlers[0](Event(group_id=1001, user_id="u1"))
+
+    result = str(exc.value.result)
+    assert "冒险补给 3/7（已花费 420 积分） / 送礼 200 积分" in result
+    assert "本周倾向：偏向冒险" in result
+    assert "旅人的行囊（剩余 2 场） / 神官的护符（待触发）" in result
+    assert "战备范围：普通个人挑战 / 普通组队挑战（世界BOSS不生效）" in result
+
+
+@pytest.mark.asyncio
 async def test_status_panel_shows_world_boss_equip_status(monkeypatch):
     store = {"groups": {"1001": {
         "users": {"u1": _equipped_user()},

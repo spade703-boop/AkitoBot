@@ -41,7 +41,7 @@ def _hunt_event_line(out: dict) -> str:
         copy_table = _cfg("copy", {})
         support_scene = str(out.get("support_scene", ""))
         flipped_by_support = (
-            support_scene in {"toya_rescue", "duo_combo"}
+            (support_scene in {"toya_rescue", "duo_combo"} or out.get("battle_guard_triggered"))
             and not bool(out.get("base_win", out.get("win")))
             and bool(out.get("win"))
         )
@@ -102,6 +102,19 @@ def _hunt_support_lines(out: dict) -> list[str]:
     return lines
 
 
+def _battle_supply_line(reward: dict) -> str:
+    name = str(reward.get("battle_supply_name", ""))
+    if not name:
+        return ""
+    parts = reward.get("battle_supply_parts") or []
+    return _line(
+        "battle_supply_active",
+        name=name,
+        parts=" / ".join(str(part) for part in parts),
+        uses=int(reward.get("battle_supply_uses_left", 0)),
+    )
+
+
 def _hunt_minor_lines(out: dict) -> list[str]:
     scene = str(out.get("minor_event", ""))
     if not scene:
@@ -158,7 +171,12 @@ def _hunt_result_lines(out: dict) -> list:
     support_lines = _hunt_support_lines(out)
     if out.get("support_scene") in {"toya_rescue", "duo_combo"}:
         lines.extend(support_lines)
+    if out.get("battle_guard_triggered"):
+        lines.append(_line("battle_guard_triggered", name=out.get("battle_guard_name", "神官的护符")))
     lines.extend(_hunt_reward_lines(out))
+    supply_line = _battle_supply_line(out)
+    if supply_line:
+        lines.append(supply_line)
     if out.get("support_scene") in {"akito_success", "akito_fail"}:
         lines.extend(support_lines)
     lines.extend(_hunt_minor_lines(out))

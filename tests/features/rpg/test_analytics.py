@@ -24,6 +24,7 @@ def test_metrics_aggregate_battles_teams_and_world_boss():
         points_gained=20,
     )
     analytics.record_team_attempt(group, "2026-07-27", formed=True)
+    analytics.record_supply_open(group, "2026-07-27", points_spent=140, exp_gained=30)
     analytics.record_world_boss_spawn(group, "2026-07-27")
     analytics.record_world_boss_attack(group, "2026-07-27", user_ids=["u1", "u2"], damage=66)
     analytics.record_world_boss_settlement(
@@ -38,6 +39,9 @@ def test_metrics_aggregate_battles_teams_and_world_boss():
     assert summary["team_battles"] == 1
     assert summary["team_formed"] == 1
     assert summary["active_players"] == 2
+    assert summary["supply_opens"] == 1
+    assert summary["supply_points_spent"] == 140
+    assert summary["supply_exp_gained"] == 30
     assert summary["world_boss_damage"] == 66
     assert summary["world_boss_exp_gained"] == 75
     assert summary["monsters"]["史莱姆"]["wins"] == 1

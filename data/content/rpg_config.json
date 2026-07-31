@@ -265,6 +265,17 @@
     "win_points": 15,
     "lose_points": 5
   },
+  "adventure_supply": {
+    "weekly_costs": [140, 140, 140, 140, 140, 200, 300],
+    "exp": 30,
+    "pool": [
+      {"item": "旅人的行囊", "weight": 35},
+      {"item": "龙骑士的地图", "weight": 30},
+      {"item": "厨子的美食", "weight": 20},
+      {"item": "神官的护符", "weight": 12},
+      {"item": "勇者的远征套装", "weight": 3}
+    ]
+  },
   "minor_encounters": {
     "chance": 0.06,
     "team_chance": 0.04,
@@ -889,6 +900,38 @@
         "type": "gift",
         "gift_name": "彰冬亚克力立牌"
       }
+    },
+    {
+      "name": "旅人的行囊",
+      "desc": "接下来2次普通个人/组队挑战：战力+10%、经验+25%（世界BOSS不生效）",
+      "effect": {"type": "battle_supply", "uses": 2, "power_mult": 1.1, "exp_mult": 1.25}
+    },
+    {
+      "name": "龙骑士的地图",
+      "desc": "接下来2次普通个人/组队挑战：掉落率×2、经验+20%（世界BOSS不生效）",
+      "effect": {"type": "battle_supply", "uses": 2, "exp_mult": 1.2, "drop_mult": 2.0}
+    },
+    {
+      "name": "厨子的美食",
+      "desc": "接下来2次普通个人/组队挑战：战力+15%、经验+40%（世界BOSS不生效）",
+      "effect": {"type": "battle_supply", "uses": 2, "power_mult": 1.15, "exp_mult": 1.4}
+    },
+    {
+      "name": "神官的护符",
+      "desc": "下一次普通个人/组队挑战失败时转为成功，经验额外+50%（世界BOSS不生效）",
+      "effect": {"type": "battle_guard", "uses": 1, "rescue_exp_mult": 1.5}
+    },
+    {
+      "name": "勇者的远征套装",
+      "desc": "接下来3次普通个人/组队挑战：装备视为强化满、经验×2、掉落率×2（世界BOSS不生效）",
+      "effect": {
+        "type": "battle_supply",
+        "uses": 3,
+        "full_forge": true,
+        "exp_mult": 2.0,
+        "drop_mult": 2.0,
+        "suppress_exp_buff": true
+      }
     }
   ],
   "copy": {
@@ -991,6 +1034,24 @@
     ],
     "use_exp_grant": [
       "📖 【{name}】用了。经验 +{amount}。"
+    ],
+    "supply_open": [
+      "📦 冒险补给已开启。\n· 消耗 {cost} 积分（本周 {count}/{max}）\n· 获得【{name}】×1\n· 经验 +{exp}{levelup}\n· 战备范围：普通个人挑战 / 普通组队挑战（世界BOSS不生效）"
+    ],
+    "use_battle_supply": [
+      "🎒 【{name}】已整备，接下来 {uses} 场普通个人/组队挑战生效；世界BOSS不生效。"
+    ],
+    "use_battle_guard": [
+      "🛡️ 【{name}】已装备，会在下一次普通个人/组队挑战失败时生效；世界BOSS不生效。"
+    ],
+    "battle_supply_active": [
+      "🎒 【{name}】生效：{parts}（剩余 {uses} 场；仅限普通个人/组队挑战）"
+    ],
+    "battle_guard_triggered": [
+      "🛡️ 【{name}】护住了战线，本次挑战转为成功，经验额外 +50%。"
+    ],
+    "team_battle_guard_triggered": [
+      "🛡️ {name} 的【{item}】护住了两人的战线，本次挑战转为成功；护符持有者经验额外 +50%。"
     ],
     "team_win": [
       "🤝 {a} 与 {b} 一同出击，成功击败了【{monster}】。",
@@ -1187,6 +1248,10 @@
     "use_need_name": "要用什么？比如：使用 经验书。",
     "item_unknown": "没这个道具：{name}。",
     "item_none": "你背包里没有【{name}】。",
+    "supply_limit": "这周已经开过 {max} 次冒险补给了，下周再来。",
+    "supply_poor": "积分不够。第 {count} 次冒险补给需要 {cost} 积分，你现在只有 {total}。",
+    "supply_slot_busy": "【{name}】还在生效，先用完再启用新的常规战备。",
+    "supply_guard_busy": "【{name}】还在待命，暂时不能再装备新的护符。",
     "team_need_target": "组队得@人。比如：组队@某人。",
     "boss_need_target": "组队世界BOSS得@人。比如：组队世界BOSS@某人。",
     "team_self": "自己跟自己组队就算了。换个人 @。",

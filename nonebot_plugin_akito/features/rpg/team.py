@@ -30,7 +30,7 @@ from .analytics import record_battle, record_team_attempt
 from .boss import _cleanup_stale_world_boss, _maybe_spawn_world_boss_lines
 from .combat import _buff_active
 from .config import _cfg, _copy, _error, _line
-from .hunt import _hunt_result_lines, _team_minor_lines
+from .hunt import _battle_supply_line, _hunt_result_lines, _team_minor_lines
 from .player import _ensure_player, _resolve_group
 from .rewards import _apply_team_minor_encounter, _settle_coop, _settle_solo
 from .utils import _roll_fail_flavor, _support_chance, _team_success_rate
@@ -153,12 +153,21 @@ def _build_coop_broadcast(out: dict, b_id: str, a_id: str, b_name: str, a_name: 
     name = out["monster"].get("name", "")
     if out.get("elite"):
         name = "精英·" + name
-    head = random.choice(_copy("team_win" if out["win"] else "team_lose"))
+    head_key = "team_lose" if out.get("battle_guard_owner") else ("team_win" if out["win"] else "team_lose")
+    head = random.choice(_copy(head_key))
     msg = _render_with_ats(head, {"a": b_id, "b": a_id, "monster": name})
     if out.get("team_event"):
         msg = msg + "\n" + _line(f"team_event_{out['team_event']}")
     if out.get("negative_event"):
         msg = msg + "\n" + _line(f"team_negative_event_{out['negative_event']}")
+    guard_owner = str(out.get("battle_guard_owner", ""))
+    if guard_owner:
+        guard_holder = b_name if guard_owner == "b" else a_name
+        msg = msg + "\n" + _line(
+            "team_battle_guard_triggered",
+            name=guard_holder,
+            item=out.get("battle_guard_name", "神官的护符"),
+        )
     bonus_parts: list[str] = []
     if float(out.get("power_bonus", 0.0)) > 0:
         bonus_parts.append(f"战力 +{int(round(float(out.get('power_bonus', 0.0)) * 100))}%")
@@ -171,7 +180,13 @@ def _build_coop_broadcast(out: dict, b_id: str, a_id: str, b_name: str, a_name: 
     if int(out.get("bond_gain", 0)) > 0:
         msg = msg + "\n" + _line("team_bond_gain", amount=int(out["bond_gain"]))
     msg = msg + "\n" + _member_line(out["b"], b_name)
+    b_supply_line = _battle_supply_line(out["b"])
+    if b_supply_line:
+        msg = msg + "\n" + f"· {b_name}：{b_supply_line}"
     msg = msg + "\n" + _member_line(out["a"], a_name)
+    a_supply_line = _battle_supply_line(out["a"])
+    if a_supply_line:
+        msg = msg + "\n" + f"· {a_name}：{a_supply_line}"
     if _buff_active(out.get("buff")):
         msg = msg + "\n" + _line("daily_buff", buff=out["buff"].get("name", ""))
     for line in _team_minor_lines(out, b_name, a_name):

@@ -234,7 +234,12 @@ async def test_team_world_boss_guards(monkeypatch):
 @pytest.mark.asyncio
 async def test_attack_world_boss_consumes_equip_and_records_damage(monkeypatch):
     state = _patch_io(monkeypatch, boss, store={"groups": {"1001": {
-        "users": {"u1": _equipped_user(hunt_total=7, hunt_wins=4)},
+        "users": {"u1": _equipped_user(
+            hunt_total=7,
+            hunt_wins=4,
+            active_battle_supply={"name": "勇者的远征套装", "uses": 3},
+            active_battle_guard={"name": "神官的护符", "uses": 1},
+        )},
         "rpg": {"world_boss": _world_boss_record(max_hp=100, hp=100)},
     }}})
     monkeypatch.setattr(boss.random, "randint", lambda _a, _b: 0)
@@ -247,6 +252,8 @@ async def test_attack_world_boss_consumes_equip_and_records_damage(monkeypatch):
     wb = state["groups"]["1001"]["rpg"]["world_boss"]
     participant = wb["participants"]["u1"]
     assert user["equip_used"] is False
+    assert user["active_battle_supply"] == {"name": "勇者的远征套装", "uses": 3}
+    assert user["active_battle_guard"] == {"name": "神官的护符", "uses": 1}
     assert participant["equip_used"] is True
     assert wb["hp"] == 85
     assert wb["contributors"]["u1"] == 15

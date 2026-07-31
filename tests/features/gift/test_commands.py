@@ -59,6 +59,7 @@ async def test_gift_cmd_happy_path_deducts_and_adds_intimacy(monkeypatch):
     assert g0["name"] in result
     assert "[at:10001]" in result and "[at:10002]" in result
     assert state["groups"]["1001"]["users"]["10001"]["points"] == 100000 - g0["cost"]
+    assert state["users"]["10001"]["weekly_investment"]["gift_spent"] == g0["cost"]
     assert state["groups"]["1001"]["intimacy"]["10001|||10002"] == g0["intimacy"]
     assert state["groups"]["1001"]["counts"]["10001>10002"] == 1  # 有向送礼次数 +1
 
@@ -87,6 +88,7 @@ async def test_gift_cmd_return_path_credits_refund(monkeypatch):
     assert spec["name"] in result  # 文案含回赠物名
     assert "[at:10001]" in result and "[at:10002]" in result
     assert state["groups"]["1001"]["users"]["10001"]["points"] == 100000 - g0["cost"] + refund
+    assert state["users"]["10001"]["weekly_investment"]["gift_spent"] == g0["cost"] - refund
     assert state["groups"]["1001"]["intimacy"]["10001|||10002"] == g0["intimacy"] + spec["bonus"]
     assert state["groups"]["1001"]["counts"]["10001>10002"] == 1
 

@@ -27,6 +27,9 @@ _SCALAR_FIELDS = (
     "team_formed",
     "exp_gained",
     "points_gained",
+    "supply_opens",
+    "supply_points_spent",
+    "supply_exp_gained",
     "world_boss_spawns",
     "world_boss_forced_spawns",
     "world_boss_attacks",
@@ -130,6 +133,13 @@ def record_team_attempt(group: dict, today: str, *, formed: bool) -> None:
     entry["team_formed"] += int(bool(formed))
 
 
+def record_supply_open(group: dict, today: str, *, points_spent: int, exp_gained: int) -> None:
+    entry = _metric_day(group, today)
+    entry["supply_opens"] += 1
+    entry["supply_points_spent"] += max(0, int(points_spent))
+    entry["supply_exp_gained"] += max(0, int(exp_gained))
+
+
 def record_world_boss_spawn(group: dict, today: str, *, forced: bool = False) -> None:
     entry = _metric_day(group, today)
     field = "world_boss_forced_spawns" if forced else "world_boss_spawns"
@@ -206,6 +216,10 @@ def _summary_lines(summary: dict) -> list[str]:
         ),
         f"· 组队邀请 {team_attempts} 次，成立 {summary['team_formed']} 次（{_rate(int(summary['team_formed']), team_attempts)}）",
         f"· 普通投放：经验 +{summary['exp_gained']}，积分 +{summary['points_gained']}",
+        (
+            f"· 冒险补给：开启 {summary['supply_opens']} 次，"
+            f"消耗 {summary['supply_points_spent']} 积分，固定经验 +{summary['supply_exp_gained']}"
+        ),
         (
             f"· 世界BOSS：刷新 {boss_spawns} 次（强制 {summary['world_boss_forced_spawns']}），"
             f"击杀 {summary['world_boss_kills']} / 离场 {summary['world_boss_expired']}，"

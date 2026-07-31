@@ -45,6 +45,7 @@ from ...core.game_store import (
     _normalize_data,  # noqa: F401  仅供 tests/test_gift.py 引用 gift._normalize_data
     _pair_key,  # noqa: F401  仅供 tests/test_gift.py 引用 gift._pair_key
     _render_with_ats,
+    _record_weekly_investment,
     _save_data,
     _today_str,
     _weighted_choice,
@@ -226,6 +227,8 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
         out = _settle(group, sender_id, target_qq, gift, main_event, mishap, return_key)
         if str(gift.get("name", "")) == str(_wedding_cfg().get("gift_name", "彰冬婚礼邀请函")):
             out = _settle_wedding_invitation(group, sender_id, target_qq, out, today)
+        net_spent = max(0, points - int(sender.get("points", 0)))
+        _record_weekly_investment(sender, today, gift_spent=net_spent)
         _bump_count(group, sender_id, target_qq)  # 记一次有向送礼（无论事件结果）
         _save_data(data)
 

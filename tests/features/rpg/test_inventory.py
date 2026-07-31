@@ -45,6 +45,34 @@ def test_apply_item_effect_exp_buff_and_grant():
     assert ok2 and u2["exp"] == 10 + int(book["effect"]["amount"])
 
 
+def test_battle_supply_slots_are_independent_and_regular_slot_is_exclusive():
+    user: dict = {}
+    bag = inventory._item_by_name("旅人的行囊")
+    food = inventory._item_by_name("厨子的美食")
+    guard = inventory._item_by_name("神官的护符")
+
+    ok, _ = inventory._apply_item_effect(user, bag)
+    assert ok and inventory._active_battle_supply(user)["uses"] == 2
+    blocked, message = inventory._apply_item_effect(user, food)
+    assert not blocked and "旅人的行囊" in message
+
+    guard_ok, _ = inventory._apply_item_effect(user, guard)
+    assert guard_ok
+    assert inventory._active_battle_supply(user, guard=True)["name"] == "神官的护符"
+    assert inventory._consume_battle_supply(user) == 1
+    assert inventory._active_battle_supply(user)["uses"] == 1
+    assert inventory._consume_battle_supply(user, guard=True) == 0
+    assert inventory._active_battle_supply(user, guard=True) is None
+
+
+def test_battle_supply_activation_explains_scope():
+    regular_ok, regular_message = inventory._apply_item_effect({}, inventory._item_by_name("旅人的行囊"))
+    guard_ok, guard_message = inventory._apply_item_effect({}, inventory._item_by_name("神官的护符"))
+
+    assert regular_ok and "普通个人/组队挑战" in regular_message and "世界BOSS不生效" in regular_message
+    assert guard_ok and "普通个人/组队挑战" in guard_message and "世界BOSS不生效" in guard_message
+
+
 @pytest.mark.asyncio
 async def test_bag_and_use_book(monkeypatch):
     state = _patch_io(monkeypatch, inventory, store={"groups": {"1001": {"users": {

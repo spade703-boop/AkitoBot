@@ -133,6 +133,18 @@ DEFAULT_RPG_CONFIG: dict = {
         "win_drop_mult": 1.0, "lose_drop_mult": 0.3,
         "win_points": 15, "lose_points": 5,
     },
+    # ---- 冒险补给：每周前 5 次常规价格，第 6/7 次作为高价存量积分出口 ----
+    "adventure_supply": {
+        "weekly_costs": [140, 140, 140, 140, 140, 200, 300],
+        "exp": 30,
+        "pool": [
+            {"item": "旅人的行囊", "weight": 35},
+            {"item": "龙骑士的地图", "weight": 30},
+            {"item": "厨子的美食", "weight": 20},
+            {"item": "神官的护符", "weight": 12},
+            {"item": "勇者的远征套装", "weight": 3},
+        ],
+    },
     # ---- 小奇遇：普通单刷与成功组成的双人战斗结算后，低概率补一点旅途感与轻奖励 ----
     "minor_encounters": {
         "chance": 0.06,
@@ -322,7 +334,7 @@ DEFAULT_RPG_CONFIG: dict = {
          "drops": [{"item": "双倍经验卡", "chance": 0.15},
                    {"item": "彰冬立牌券", "chance": 0.10}]},
     ],
-    # ---- 道具（消耗品，经验向）：effect.type = exp_buff / exp_grant ----
+    # ---- 道具：普通消耗品 + 需要主动启用的冒险战备 ----
     "items": [
         {"name": "双倍经验卡", "desc": "下次打怪经验翻倍", "effect": {"type": "exp_buff", "uses": 1, "mult": 2}},
         {"name": "经验书", "desc": "立即获得 80 经验", "effect": {"type": "exp_grant", "amount": 80}},
@@ -330,6 +342,17 @@ DEFAULT_RPG_CONFIG: dict = {
         {"name": "彰冬谷子券", "desc": "赠送「彰冬谷子」，羁绊+28", "effect": {"type": "gift", "gift_name": "彰冬谷子"}},
         {"name": "彰冬豆豆眼券", "desc": "赠送「彰冬豆豆眼」，羁绊+60", "effect": {"type": "gift", "gift_name": "彰冬豆豆眼"}},
         {"name": "彰冬立牌券", "desc": "赠送「彰冬亚克力立牌」，羁绊+85", "effect": {"type": "gift", "gift_name": "彰冬亚克力立牌"}},
+        {"name": "旅人的行囊", "desc": "接下来2次普通个人/组队挑战：战力+10%、经验+25%（世界BOSS不生效）",
+         "effect": {"type": "battle_supply", "uses": 2, "power_mult": 1.10, "exp_mult": 1.25}},
+        {"name": "龙骑士的地图", "desc": "接下来2次普通个人/组队挑战：掉落率×2、经验+20%（世界BOSS不生效）",
+         "effect": {"type": "battle_supply", "uses": 2, "exp_mult": 1.20, "drop_mult": 2.0}},
+        {"name": "厨子的美食", "desc": "接下来2次普通个人/组队挑战：战力+15%、经验+40%（世界BOSS不生效）",
+         "effect": {"type": "battle_supply", "uses": 2, "power_mult": 1.15, "exp_mult": 1.40}},
+        {"name": "神官的护符", "desc": "下一次普通个人/组队挑战失败时转为成功，经验额外+50%（世界BOSS不生效）",
+         "effect": {"type": "battle_guard", "uses": 1, "rescue_exp_mult": 1.50}},
+        {"name": "勇者的远征套装", "desc": "接下来3次普通个人/组队挑战：装备视为强化满、经验×2、掉落率×2（世界BOSS不生效）",
+         "effect": {"type": "battle_supply", "uses": 3, "full_forge": True, "exp_mult": 2.0,
+                    "drop_mult": 2.0, "suppress_exp_buff": True}},
     ],
     # ---- 文案。占位符：{a}=真@；其余 {exp}{level}{newlevel}{monster}{cost}{forge}{name}{amount}{loot} 为文本 ----
     "copy": {
@@ -373,6 +396,12 @@ DEFAULT_RPG_CONFIG: dict = {
         "rebuy_ok": ["🛡️ 替换装备已就位，花了 {cost} 积分。不过这套是临时凑的，打怪经验和积分都会减半。"],
         "use_exp_buff": ["📖 【{name}】用了。下次打怪经验 ×{mult}。"],
         "use_exp_grant": ["📖 【{name}】用了。经验 +{amount}。"],
+        "supply_open": ["📦 冒险补给已开启。\n· 消耗 {cost} 积分（本周 {count}/{max}）\n· 获得【{name}】×1\n· 经验 +{exp}{levelup}\n· 战备范围：普通个人挑战 / 普通组队挑战（世界BOSS不生效）"],
+        "use_battle_supply": ["🎒 【{name}】已整备，接下来 {uses} 场普通个人/组队挑战生效；世界BOSS不生效。"],
+        "use_battle_guard": ["🛡️ 【{name}】已装备，会在下一次普通个人/组队挑战失败时生效；世界BOSS不生效。"],
+        "battle_supply_active": ["🎒 【{name}】生效：{parts}（剩余 {uses} 场；仅限普通个人/组队挑战）"],
+        "battle_guard_triggered": ["🛡️ 【{name}】护住了战线，本次挑战转为成功，经验额外 +50%。"],
+        "team_battle_guard_triggered": ["🛡️ {name} 的【{item}】护住了两人的战线，本次挑战转为成功；护符持有者经验额外 +50%。"],
         # 组队（{a}{b}=真@；{name}{exp}{points}{loot}{levelup}{b_name}=文本）
         "team_win": [
             "🤝 {a} 与 {b} 一同出击，成功击败了【{monster}】。",
@@ -493,6 +522,10 @@ DEFAULT_RPG_CONFIG: dict = {
         "use_need_name": "要用什么？比如：使用 经验书。",
         "item_unknown": "没这个道具：{name}。",
         "item_none": "你背包里没有【{name}】。",
+        "supply_limit": "这周已经开过 {max} 次冒险补给了，下周再来。",
+        "supply_poor": "积分不够。第 {count} 次冒险补给需要 {cost} 积分，你现在只有 {total}。",
+        "supply_slot_busy": "【{name}】还在生效，先用完再启用新的常规战备。",
+        "supply_guard_busy": "【{name}】还在待命，暂时不能再装备新的护符。",
         "team_need_target": "组队得@人。比如：组队@某人。",
         "boss_need_target": "组队世界BOSS得@人。比如：组队世界BOSS@某人。",
         "team_self": "自己跟自己组队就算了。换个人 @。",
@@ -604,12 +637,74 @@ def _validate_encounter_brackets(config: dict, monsters: list[dict]) -> None:
         raise RpgConfigError("最后一个遭遇分段必须使用 max_level=null 覆盖后续等级")
 
 
+def _validate_adventure_supply(config: dict) -> None:
+    supply = _config_section(config, "adventure_supply", dict)
+    costs = supply.get("weekly_costs")
+    if not isinstance(costs, list) or len(costs) != 7:
+        raise RpgConfigError("adventure_supply.weekly_costs 必须正好配置 7 次成本")
+    try:
+        normalized_costs = [int(cost) for cost in costs]
+        fixed_exp = int(supply.get("exp", 0))
+    except (TypeError, ValueError) as exc:
+        raise RpgConfigError("冒险补给成本和固定经验必须是整数") from exc
+    if any(cost <= 0 for cost in normalized_costs) or normalized_costs != sorted(normalized_costs):
+        raise RpgConfigError("冒险补给成本必须是正整数且不能随次数下降")
+    if not 0 <= fixed_exp <= 200:
+        raise RpgConfigError("adventure_supply.exp 必须在 0 到 200 之间")
+
+    items = _config_section(config, "items", list)
+    item_table = {
+        str(item.get("name", "")): item
+        for item in items
+        if isinstance(item, dict) and str(item.get("name", ""))
+    }
+    pool = supply.get("pool")
+    if not isinstance(pool, list) or not pool:
+        raise RpgConfigError("adventure_supply.pool 必须是非空列表")
+    names: set[str] = set()
+    total_weight = 0
+    for index, entry in enumerate(pool):
+        if not isinstance(entry, dict):
+            raise RpgConfigError(f"adventure_supply.pool[{index}] 必须是对象")
+        name = str(entry.get("item", "")).strip()
+        if not name or name in names:
+            raise RpgConfigError("冒险补给奖池道具名不能为空或重复")
+        names.add(name)
+        try:
+            weight = int(entry.get("weight", 0))
+        except (TypeError, ValueError) as exc:
+            raise RpgConfigError(f"冒险补给道具 {name} 的 weight 必须是整数") from exc
+        if weight <= 0:
+            raise RpgConfigError(f"冒险补给道具 {name} 的 weight 必须大于 0")
+        total_weight += weight
+        item = item_table.get(name)
+        if not item:
+            raise RpgConfigError(f"冒险补给奖池引用了未定义道具：{name}")
+        effect = item.get("effect")
+        if not isinstance(effect, dict) or effect.get("type") not in {"battle_supply", "battle_guard"}:
+            raise RpgConfigError(f"冒险补给道具 {name} 必须使用 battle_supply 或 battle_guard 效果")
+        try:
+            uses = int(effect.get("uses", 0))
+            exp_mult = float(effect.get("exp_mult", effect.get("rescue_exp_mult", 1.0)))
+            power_mult = float(effect.get("power_mult", 1.0))
+            drop_mult = float(effect.get("drop_mult", 1.0))
+        except (TypeError, ValueError) as exc:
+            raise RpgConfigError(f"冒险补给道具 {name} 的效果数值格式错误") from exc
+        if not 1 <= uses <= 10:
+            raise RpgConfigError(f"冒险补给道具 {name} 的 uses 必须在 1 到 10 之间")
+        if not 1.0 <= exp_mult <= 3.0 or not 1.0 <= power_mult <= 2.0 or not 1.0 <= drop_mult <= 3.0:
+            raise RpgConfigError(f"冒险补给道具 {name} 的倍率超出安全范围")
+    if total_weight != 100:
+        raise RpgConfigError("adventure_supply.pool 权重总和必须等于 100")
+
+
 def validate_rpg_config(config: dict) -> None:
     """Validate balance-sensitive structures before startup or hot reload."""
     if not isinstance(config, dict):
         raise RpgConfigError("RPG 配置根节点必须是对象")
     monsters = _validate_monsters(config)
     _validate_encounter_brackets(config, monsters)
+    _validate_adventure_supply(config)
 
     combat = _config_section(config, "combat", dict)
     try:

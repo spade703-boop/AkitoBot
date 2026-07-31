@@ -9,6 +9,7 @@ import nonebot_plugin_akito.features.rpg.config as rpg_config
 import nonebot_plugin_akito.features.rpg.events as rpg_events
 import nonebot_plugin_akito.features.rpg.fortune as fortune
 import nonebot_plugin_akito.features.rpg.hunt as hunt
+import nonebot_plugin_akito.features.rpg.inventory as inventory
 import nonebot_plugin_akito.features.rpg.rewards as rewards
 import nonebot_plugin_akito.features.rpg.utils as rpg_utils
 
@@ -427,6 +428,60 @@ def test_apply_rewards_uses_high_tier_monster_exp_multiplier_without_changing_po
     assert out["exp_gain"] == int(rewards._challenge_exp(True, 1) * 1.12)
     assert out["monster_exp_mult"] == 1.12
     assert out["points_gain"] == int(rpg_config._cfg("challenge", {}).get("win_points", 0))
+
+
+def test_expedition_supply_does_not_stack_or_consume_double_exp_card():
+    user = _equipped_user(
+        exp=0,
+        exp_buff_uses=1,
+        exp_buff_mult=2,
+        active_battle_supply={"name": "勇者的远征套装", "uses": 2},
+    )
+    active = inventory._active_battle_supply(user)
+
+    out = rewards._apply_rewards(
+        user,
+        "2026-06-22",
+        win=True,
+        monster={"name": "史莱姆", "drops": []},
+        battle_supply=active,
+    )
+
+    assert out["exp_gain"] == rewards._challenge_exp(True, 1) * 2
+    assert out["exp_buffed"] is False and out["exp_buff_suppressed"] is True
+    assert user["exp_buff_uses"] == 1
+    assert user["active_battle_supply"]["uses"] == 1
+
+
+def test_expedition_supply_treats_equipment_as_fully_forged():
+    user = _equipped_user(equip_forge=1, active_battle_supply={"name": "勇者的远征套装", "uses": 1})
+    active = inventory._active_battle_supply(user)
+    forge = rpg_config._cfg("forge", {})
+    missing_power = (int(forge["max_per_day"]) - 1) * int(forge["step"])
+    assert rewards._battle_power(user, active) == pytest.approx(rewards._combat_power(user) + missing_power)
+
+
+def test_guard_flips_solo_failure_after_character_support_check(monkeypatch):
+    user = _equipped_user(active_battle_guard={"name": "神官的护符", "uses": 1})
+    _stub_hunt_rng(monkeypatch, {"name": "强敌", "power_req": 999, "drops": []})
+
+    out = rewards._settle_solo(user, "2026-06-22")
+
+    assert out["base_win"] is False and out["win"] is True
+    assert out["battle_guard_triggered"] is True
+    assert out["exp_gain"] == int(rewards._challenge_exp(True, 1) * 1.5)
+    assert "active_battle_guard" not in user
+
+
+def test_character_rescue_does_not_waste_guard(monkeypatch):
+    user = _equipped_user(active_battle_guard={"name": "神官的护符", "uses": 1})
+    _stub_hunt_rng(monkeypatch, {"name": "强敌", "power_req": 999, "drops": []})
+    monkeypatch.setattr(rpg_events, "_roll_solo_support_scene", lambda win, rng=rpg_events.random: "toya_rescue")
+
+    out = rewards._settle_solo(user, "2026-06-22")
+
+    assert out["win"] is True and out["battle_guard_triggered"] is False
+    assert user["active_battle_guard"]["uses"] == 1
 
 
 def test_settle_solo_rookie_bonus_only_applies_to_solo(monkeypatch):

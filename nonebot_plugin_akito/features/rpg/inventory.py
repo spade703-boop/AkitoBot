@@ -1,7 +1,7 @@
-"""背包与道具（精简版）：查看背包、使用消耗品（经验/礼物券），并向打怪提供掉落写入。
+"""背包与道具：查看背包、使用消耗品/战备，并向打怪提供掉落写入。
 
 道具按名称入背包（`user["inventory"] = {道具名: 数量}`，已被 game_store 的 normalize 原样保留）。
-消耗品三种：双倍经验卡（下次打怪经验×2）、经验书（即得经验）、礼物券（使用后触发完整送礼流程）。
+战备需要主动使用；常规战备互斥，神官护符使用独立保护位，可与常规战备同时生效。
 纯逻辑（掉落/效果）拆出便于单测。
 """
 
@@ -48,6 +48,84 @@ def _item_by_name(name: str) -> dict | None:
         if it.get("name") == name:
             return it
     return None
+
+
+def _battle_effect(item: dict | None) -> dict:
+    effect = item.get("effect", {}) if isinstance(item, dict) else {}
+    return effect if isinstance(effect, dict) else {}
+
+
+def _active_battle_supply(user: dict, *, guard: bool = False) -> dict | None:
+    """返回当前已启用且仍有效的战备快照；配置删项时自动视为失效。"""
+    key = "active_battle_guard" if guard else "active_battle_supply"
+    record = user.get(key)
+    if not isinstance(record, dict):
+        return None
+    name = str(record.get("name", ""))
+    uses = int(record.get("uses", 0))
+    if not name or uses <= 0:
+        return None
+    item = _item_by_name(name)
+    effect = _battle_effect(item)
+    expected_type = "battle_guard" if guard else "battle_supply"
+    if effect.get("type") != expected_type:
+        return None
+    return {"name": name, "uses": uses, "effect": dict(effect)}
+
+
+def _activate_battle_supply(user: dict, item: dict) -> tuple[bool, str]:
+    """主动装备一件战备，返回是否成功及提示文案。"""
+    name = str(item.get("name", ""))
+    effect = _battle_effect(item)
+    etype = effect.get("type")
+    if etype not in {"battle_supply", "battle_guard"}:
+        return False, _error("item_unknown", name=name)
+    is_guard = etype == "battle_guard"
+    slot = "active_battle_guard" if is_guard else "active_battle_supply"
+    active = _active_battle_supply(user, guard=is_guard)
+    if active:
+        error_key = "supply_guard_busy" if is_guard else "supply_slot_busy"
+        return False, _error(error_key, name=active["name"])
+    user[slot] = {"name": name, "uses": max(1, int(effect.get("uses", 1)))}
+    line_key = "use_battle_guard" if is_guard else "use_battle_supply"
+    return True, _line(line_key, name=name, uses=user[slot]["uses"])
+
+
+def _consume_battle_supply(user: dict, *, guard: bool = False) -> int:
+    """消耗一次已启用战备并返回剩余次数。"""
+    key = "active_battle_guard" if guard else "active_battle_supply"
+    active = _active_battle_supply(user, guard=guard)
+    if not active:
+        user.pop(key, None)
+        return 0
+    rest = active["uses"] - 1
+    if rest > 0:
+        user[key] = {"name": active["name"], "uses": rest}
+    else:
+        user.pop(key, None)
+    return rest
+
+
+def _battle_supply_parts(active: dict | None) -> list[str]:
+    if not active:
+        return []
+    effect = active.get("effect", {})
+    parts: list[str] = []
+    if effect.get("full_forge"):
+        parts.append("装备视为强化满")
+    power_mult = float(effect.get("power_mult", 1.0))
+    if power_mult != 1.0:
+        parts.append(f"战力 +{int(round((power_mult - 1.0) * 100))}%")
+    exp_mult = float(effect.get("exp_mult", 1.0))
+    if exp_mult != 1.0:
+        if exp_mult.is_integer():
+            parts.append(f"经验 ×{int(exp_mult)}")
+        else:
+            parts.append(f"经验 +{int(round((exp_mult - 1.0) * 100))}%")
+    drop_mult = float(effect.get("drop_mult", 1.0))
+    if drop_mult != 1.0:
+        parts.append(f"掉落率 ×{drop_mult:g}")
+    return parts
 
 
 # ==================== 背包存取（作用于传入的 user dict） ====================
@@ -111,6 +189,8 @@ def _apply_item_effect(user: dict, item: dict) -> tuple[bool, str]:
         amount = int(eff.get("amount", 0))
         user["exp"] = int(user.get("exp", 0)) + amount
         return True, _line("use_exp_grant", name=name, amount=amount)
+    if etype in {"battle_supply", "battle_guard"}:
+        return _activate_battle_supply(user, item)
     return False, _error("item_unknown", name=name)
 
 
