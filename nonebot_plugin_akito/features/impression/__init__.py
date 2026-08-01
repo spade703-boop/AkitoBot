@@ -6,6 +6,7 @@ import json
 import random
 import sqlite3
 import time
+from typing import Optional
 
 from nonebot import on_command, on_message
 from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, MessageSegment
@@ -45,6 +46,18 @@ AUTO_CHAT_GROUPS = ALLOWED_CP_GROUPS
 
 CHAT_PROBABILITY = 0.03
 
+IMPRESSION_HISTORY_LIMIT = 50
+IMPRESSION_HISTORY_SCAN_LIMIT = 150
+IMPRESSION_RECENT_DAYS = 14
+IMPRESSION_RECENT_TARGET_LIMIT = 20
+IMPRESSION_RECENT_SCAN_LIMIT = 60
+IMPRESSION_CONTEXT_SIDE_LIMIT = 2
+IMPRESSION_CONTEXT_MAX_GAP_SECONDS = 300
+IMPRESSION_CONTEXT_MAX_BLOCKS = 6
+IMPRESSION_CONTEXT_BLOCK_MESSAGE_LIMIT = 12
+IMPRESSION_MESSAGE_CHAR_LIMIT = 240
+IMPRESSION_COMMANDS = ("群印象", "评价我", "说说印象", "我的印象")
+
 BLOCK_PREFIXES = ["/", "#", ".", "!", "！", "*", "-", "@"]
 BLOCK_KEYWORDS = [
     "签到", "打卡", "个人信息", "日速", "时速", "help",
@@ -59,6 +72,8 @@ BLOCK_KEYWORDS = [
 ]
 
 # ===========================================
+
+MessageRow = tuple[int, str, str, str, Optional[str], str]
 
 
 def _resolve_impression_target(event: GroupMessageEvent, bot_self_id: str) -> tuple[str, str, bool, bool]:
@@ -84,24 +99,250 @@ def _resolve_impression_target(event: GroupMessageEvent, bot_self_id: str) -> tu
     return target_id, target_name, is_querying_other, is_querying_bot
 
 
-def _build_impression_history_text(rows: list[tuple[str]], target_name: str) -> str:
-    """Render fetched history rows into the prompt payload."""
-    return "\n".join(f"【{target_name}】: {row[0]}" for row in rows[::-1])
+def _parse_message_timestamp(value: str) -> Optional[datetime.datetime]:
+    try:
+        parsed = datetime.datetime.fromisoformat(value)
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=datetime.timezone.utc)
+    return parsed
 
 
-def _parse_impression_reply(raw_result: str) -> tuple[str, str]:
-    """Parse impression model output into final reply and inner thoughts."""
+def _format_message_time(value: str) -> str:
+    parsed = _parse_message_timestamp(value)
+    if parsed is None:
+        return "时间未知"
+    return parsed.astimezone(TZ_CN).strftime("%m-%d %H:%M")
+
+
+def _truncate_impression_content(content: str) -> str:
+    content = " ".join(content.split())
+    if len(content) <= IMPRESSION_MESSAGE_CHAR_LIMIT:
+        return content
+    return content[:IMPRESSION_MESSAGE_CHAR_LIMIT].rstrip() + "…"
+
+
+def _is_impression_noise(content: str) -> bool:
+    text = " ".join(content.split()).strip()
+    if not text:
+        return True
+    if any(text == command or text.startswith(f"{command} ") for command in IMPRESSION_COMMANDS):
+        return True
+    return any(text.startswith(prefix) for prefix in BLOCK_PREFIXES)
+
+
+def _is_current_impression_message(row: MessageRow, current_message_id: str) -> bool:
+    return bool(current_message_id and row[4] is not None and str(row[4]) == current_message_id)
+
+
+def _select_target_rows(
+    rows: list[MessageRow],
+    *,
+    current_message_id: str,
+    limit: int,
+    min_content_length: int,
+    max_repeats: Optional[int],
+) -> list[MessageRow]:
+    selected: list[MessageRow] = []
+    content_counts: dict[str, int] = {}
+    for row in rows:
+        content = row[3].strip()
+        if _is_current_impression_message(row, current_message_id):
+            continue
+        if len(content) < min_content_length or _is_impression_noise(content):
+            continue
+        normalized = "".join(content.split())
+        if max_repeats is not None and content_counts.get(normalized, 0) >= max_repeats:
+            continue
+        content_counts[normalized] = content_counts.get(normalized, 0) + 1
+        selected.append(row)
+        if len(selected) >= limit:
+            break
+    return selected
+
+
+def _build_impression_history_text(rows: list[MessageRow], target_name: str) -> str:
+    """Render target-only history into chronological prompt order with timestamps."""
+    return "\n".join(
+        f"[{_format_message_time(row[5])}]【{target_name}】: {_truncate_impression_content(row[3])}"
+        for row in rows[::-1]
+    )
+
+
+def _load_context_window(
+    conn: sqlite3.Connection,
+    *,
+    group_id: str,
+    target_row: MessageRow,
+    current_message_id: str,
+) -> list[MessageRow]:
+    before_rows = conn.execute(
+        "SELECT id, user_id, nickname, content, message_id, timestamp "
+        "FROM messages WHERE group_id=? AND id<=? ORDER BY id DESC LIMIT ?",
+        (group_id, target_row[0], IMPRESSION_CONTEXT_SIDE_LIMIT + 1),
+    ).fetchall()
+    after_rows = conn.execute(
+        "SELECT id, user_id, nickname, content, message_id, timestamp "
+        "FROM messages WHERE group_id=? AND id>? ORDER BY id ASC LIMIT ?",
+        (group_id, target_row[0], IMPRESSION_CONTEXT_SIDE_LIMIT),
+    ).fetchall()
+
+    target_time = _parse_message_timestamp(target_row[5])
+    window: list[MessageRow] = []
+    for row in list(reversed(before_rows)) + after_rows:
+        if _is_current_impression_message(row, current_message_id) or _is_impression_noise(row[3]):
+            continue
+        row_time = _parse_message_timestamp(row[5])
+        if (
+            target_time is not None
+            and row_time is not None
+            and abs((row_time - target_time).total_seconds()) > IMPRESSION_CONTEXT_MAX_GAP_SECONDS
+        ):
+            continue
+        window.append(row)
+    return window
+
+
+def _merge_context_windows(windows: list[list[MessageRow]]) -> list[list[MessageRow]]:
+    ordered_windows = sorted(
+        (sorted(window, key=lambda row: row[0]) for window in windows if window), key=lambda rows: rows[0][0]
+    )
+    merged: list[list[MessageRow]] = []
+    for window in ordered_windows:
+        if not merged:
+            merged.append(window)
+            continue
+
+        previous = merged[-1]
+        previous_time = _parse_message_timestamp(previous[-1][5])
+        current_time = _parse_message_timestamp(window[0][5])
+        overlaps = window[0][0] <= previous[-1][0]
+        gap_is_close = (
+            previous_time is not None
+            and current_time is not None
+            and 0 <= (current_time - previous_time).total_seconds() <= IMPRESSION_CONTEXT_MAX_GAP_SECONDS
+        )
+        if overlaps or gap_is_close:
+            combined = {row[0]: row for row in previous}
+            combined.update({row[0]: row for row in window})
+            merged[-1] = sorted(combined.values(), key=lambda row: row[0])
+        else:
+            merged.append(window)
+    return merged[-IMPRESSION_CONTEXT_MAX_BLOCKS:]
+
+
+def _load_impression_material(
+    conn: sqlite3.Connection,
+    *,
+    group_id: str,
+    target_id: str,
+    current_message_id: str,
+    now: Optional[datetime.datetime] = None,
+) -> tuple[list[MessageRow], list[list[MessageRow]]]:
+    history_candidates = conn.execute(
+        "SELECT id, user_id, nickname, content, message_id, timestamp "
+        "FROM messages WHERE group_id=? AND user_id=? AND length(content)>2 "
+        "ORDER BY id DESC LIMIT ?",
+        (group_id, target_id, IMPRESSION_HISTORY_SCAN_LIMIT),
+    ).fetchall()
+    history_rows = _select_target_rows(
+        history_candidates,
+        current_message_id=current_message_id,
+        limit=IMPRESSION_HISTORY_LIMIT,
+        min_content_length=3,
+        max_repeats=2,
+    )
+
+    current = now or datetime.datetime.now(datetime.timezone.utc)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=datetime.timezone.utc)
+    cutoff = current.astimezone(datetime.timezone.utc) - datetime.timedelta(days=IMPRESSION_RECENT_DAYS)
+    recent_candidates = conn.execute(
+        "SELECT id, user_id, nickname, content, message_id, timestamp "
+        "FROM messages WHERE group_id=? AND user_id=? AND length(trim(content))>0 AND timestamp>=? "
+        "ORDER BY id DESC LIMIT ?",
+        (group_id, target_id, cutoff.strftime("%Y-%m-%d %H:%M:%S"), IMPRESSION_RECENT_SCAN_LIMIT),
+    ).fetchall()
+    recent_target_rows = _select_target_rows(
+        recent_candidates,
+        current_message_id=current_message_id,
+        limit=IMPRESSION_RECENT_TARGET_LIMIT,
+        min_content_length=1,
+        max_repeats=None,
+    )
+    windows = [
+        _load_context_window(
+            conn,
+            group_id=group_id,
+            target_row=row,
+            current_message_id=current_message_id,
+        )
+        for row in recent_target_rows
+    ]
+    return history_rows, _merge_context_windows(windows)
+
+
+def _build_impression_context_text(
+    blocks: list[list[MessageRow]],
+    *,
+    target_id: str,
+    target_name: str,
+) -> str:
+    sections: list[str] = []
+    for index, block in enumerate(blocks, start=1):
+        display_rows = block[-IMPRESSION_CONTEXT_BLOCK_MESSAGE_LIMIT:]
+        lines = [f"【近期对话片段 {index}】"]
+        for row in display_rows:
+            nickname = target_name if row[1] == target_id else row[2]
+            lines.append(f"[{_format_message_time(row[5])}][{nickname}]: {_truncate_impression_content(row[3])}")
+        sections.append("\n".join(lines))
+    return "\n\n".join(sections) if sections else "（最近没有形成可还原的连续对话片段）"
+
+
+def _build_target_evidence_source(
+    history_rows: list[MessageRow],
+    blocks: list[list[MessageRow]],
+    *,
+    target_id: str,
+) -> str:
+    contents = [row[3] for row in history_rows]
+    contents.extend(row[3] for block in blocks for row in block if row[1] == target_id)
+    return "\n".join(_truncate_impression_content(content) for content in contents)
+
+
+def _resolve_wl2_overlay(mem: dict, now_ts: Optional[float] = None) -> tuple[bool, str]:
+    current_ts = time.time() if now_ts is None else now_ts
+    for item in reversed(mem.get("temp_implants", [])):
+        if item.get("id") != "WL2":
+            continue
+        expire_at = item.get("expire_at", item.get("expire_time"))
+        if expire_at is not None and expire_at <= current_ts:
+            continue
+        return True, str(item.get("content", "")).strip()
+    return False, ""
+
+
+def _parse_impression_result(raw_result: str) -> tuple[str, str, list[str], str]:
     final_reply = ""
     inner_os = ""
+    evidence: list[str] = []
+    focus = ""
 
     try:
         response_data = parse_json_object(raw_result)
         if response_data is None:
             raise json.JSONDecodeError("invalid json object", raw_result, 0)
-        inner_os = response_data.get("inner_os", "")
+        inner_os = str(response_data.get("inner_os", "")).strip()
         if inner_os:
             logger.info(f"📝【小彰评价OS】: {inner_os}")
-        final_reply = response_data.get("reply", "")
+        raw_evidence = response_data.get("evidence", [])
+        if isinstance(raw_evidence, list):
+            evidence = [str(item).strip() for item in raw_evidence if str(item).strip()]
+        elif isinstance(raw_evidence, str) and raw_evidence.strip():
+            evidence = [raw_evidence.strip()]
+        focus = str(response_data.get("focus", "")).strip()
+        final_reply = str(response_data.get("reply", "")).strip()
         if not final_reply:
             final_reply = "（打量了你一下）……没什么好说的。"
     except json.JSONDecodeError:
@@ -115,6 +356,36 @@ def _parse_impression_reply(raw_result: str) -> tuple[str, str]:
         else:
             final_reply = "（上下打量了你一下）……啧，没什么特别的印象。"
 
+    return final_reply, inner_os, evidence, focus
+
+
+def _validate_impression_result(
+    *,
+    reply: str,
+    evidence: list[str],
+    focus: str,
+    target_name: str,
+    target_evidence_source: str,
+) -> tuple[bool, str]:
+    if not reply.startswith(f"对{target_name}的印象是"):
+        return False, "reply 未使用指定开头"
+    max_reply_length = 140 if focus else 80
+    if len(reply) > max_reply_length:
+        return False, f"reply 超过 {max_reply_length} 字"
+    if not 2 <= len(evidence) <= 4:
+        return False, "evidence 必须包含 2-4 条本人原话"
+
+    normalized_source = "".join(target_evidence_source.split())
+    for anchor in evidence:
+        normalized_anchor = "".join(anchor.split())
+        if len(normalized_anchor) < 2 or normalized_anchor not in normalized_source:
+            return False, f"evidence 不在目标发言中: {anchor!r}"
+    return True, ""
+
+
+def _parse_impression_reply(raw_result: str) -> tuple[str, str]:
+    """Parse impression model output into final reply and inner thoughts."""
+    final_reply, inner_os, _evidence, _focus = _parse_impression_result(raw_result)
     return final_reply, inner_os
 
 
@@ -140,9 +411,22 @@ async def is_in_auto_group(event: GroupMessageEvent) -> bool:
     """规则：判断该群是否在自动互动（印象 / 插嘴）白名单内。"""
     return event.group_id in AUTO_CHAT_GROUPS
 
+
+def _is_exact_impression_request_message(event: GroupMessageEvent) -> bool:
+    """只接受精确指令文本；额外消息段仅允许用于选择目标的 @。"""
+    if event.get_plaintext().strip() not in IMPRESSION_COMMANDS:
+        return False
+    return all(segment.type in {"text", "at"} for segment in event.original_message)
+
+
+async def is_exact_impression_request(event: GroupMessageEvent) -> bool:
+    return await is_in_auto_group(event) and _is_exact_impression_request_message(event)
+
+
 def save_my_response(group_id: str, bot_qq: str, content: str) -> None:
     """将 bot 自己的回复写入 SQLite 群日志（转调 core.record_bot_message，单一真相源）。"""
     record_bot_message(group_id, content, bot_qq)
+
 
 # ================= 功能 1：默默记录群聊 =================
 recorder = on_message(priority=1, block=False)
@@ -166,8 +450,16 @@ async def _(event: GroupMessageEvent):
     conn.commit()
     conn.close()
 
+
 # ================= 功能 2：生成印象 =================
-um_cmd = on_command("群印象", aliases={"评价我", "说说印象", "我的印象"}, rule=is_in_auto_group, priority=5, block=True)
+um_cmd = on_command(
+    "群印象",
+    aliases={"评价我", "说说印象", "我的印象"},
+    rule=is_exact_impression_request,
+    priority=5,
+    block=True,
+)
+
 
 @um_cmd.handle()
 async def _(bot: Bot, event: GroupMessageEvent):
@@ -193,78 +485,145 @@ async def _(bot: Bot, event: GroupMessageEvent):
             logger.error(f"获取被艾特成员信息失败: {e}")
             target_name = "那家伙"
 
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT COUNT(*) FROM messages WHERE group_id=? AND user_id=? AND length(content) > 2",
-        (group_id, target_id)
-    )
-    target_msg_count = cursor.fetchone()[0]
-
     reply_segment = MessageSegment.reply(event.message_id)
+    current_message_id = str(event.message_id)
+    with sqlite3.connect(DB_PATH) as conn:
+        history_rows, context_blocks = _load_impression_material(
+            conn,
+            group_id=group_id,
+            target_id=target_id,
+            current_message_id=current_message_id,
+        )
 
-    if target_msg_count < 10:
-        conn.close()
+    if len(history_rows) < 10:
         if is_querying_other:
             await um_cmd.finish(reply_segment + f"对 {target_name} 还没什么印象……让他多说点话吧。")
         else:
             await um_cmd.finish(reply_segment + "对你还没什么印象……多说点话吧。")
         return
 
-    cursor.execute(
-        "SELECT content FROM messages WHERE group_id=? AND user_id=? AND length(content) > 2 ORDER BY id DESC LIMIT 50",
-        (group_id, target_id)
+    history_text = _build_impression_history_text(history_rows, target_name)
+    context_text = _build_impression_context_text(
+        context_blocks,
+        target_id=target_id,
+        target_name=target_name,
     )
-    rows = cursor.fetchall()
-    conn.close()
-
-    history_text = _build_impression_history_text(rows, target_name)
+    target_evidence_source = _build_target_evidence_source(
+        history_rows,
+        context_blocks,
+        target_id=target_id,
+    )
 
     persona = get_base_persona()
     is_wl2_active = False
+    wl2_overlay = ""
     try:
         mem = get_user_memory(f"group_{group_id}")
-        if any(item.get("id") == "WL2" for item in mem.get("temp_implants", [])):
-            is_wl2_active = True
+        is_wl2_active, wl2_overlay = _resolve_wl2_overlay(mem)
     except Exception as e:
         logger.error(f"WL2 状态获取失败: {e}")
 
     if is_wl2_active:
-        logger.info("🔥 [Impression] 判定当前处于 WL2 模式，正在注入绝望剧本...")
-        wl2_text = load_prompt_template("wl2_persona.txt")
-        if wl2_text:
-            persona += "\n" + wl2_text
-        persona += "\n🎬【导演附加指导】：请基于上述 WL2 设定进行评价。你不关心群友的状态，评价可以体现一些冷漠和距离感。"
+        logger.info("🔥 [Impression] 判定当前处于 WL2 模式，正在应用群内状态覆写...")
+        if not wl2_overlay:
+            wl2_overlay = load_prompt_template("wl2_persona.txt").strip()
+
+    state_overlay_prompt = ""
+    if wl2_overlay:
+        state_overlay_prompt = f"""
+    🚨【当前群最高优先级世界线覆写】
+    以下状态覆盖基础人设中与其冲突的世界观、关系和情绪设定：
+    {wl2_overlay}
+    """
 
     system_prompt = f"""
     {persona}
-    【任务目标】评价用户。阅读最近 **50条** 发言，给出符合人设的侧写评价。
+    {state_overlay_prompt}
+
+    【群印象任务】
+    你要以东云彰人的完整人格和当前世界线状态，评价群友【{target_name}】。
+    材料分为“本人整体发言样本”和“近期对话片段”：整体样本用于形成长期、整体的印象；近期片段用于还原短句的前因后果，并在确有值得在意的事情时提高权重。
+
+    【事实边界】
+    1. 对【{target_name}】的事实判断只能来自他本人的实际发言。近期片段里其他人的话只用于理解上下文，绝不能算到【{target_name}】头上。
+    2. 完整人设和世界线状态只决定你的口吻、关注点和价值判断，不能替群友编造经历、动机、关系或性格。
+    3. 可以生成不点名具体事件的整体印象，不必为了显得有依据而生硬复述聊天记录。
+    4. 如果材料里确实出现你会感兴趣、在意或很想吐槽的内容，可以把 focus 写出来，并在 reply 中多说几句；否则 focus 必须为空。
+    5. 材料不足或过于零碎时应保守评价，不要强行补全。
+
     【回复要求】
-    1. 符合"东云彰人"盐系男高中生人设。
-    2. 用"对{target_name}的印象是..."开头。
+    1. 必须符合东云彰人的口吻，并服从当前生效的世界线覆写。
+    2. 用“对{target_name}的印象是...”开头。
+    3. 普通整体评价 40-80 字；focus 非空时可以展开，但不得超过 140 字。
+    4. reply 是发到群里的纯文本，不要括号动作；evidence、focus 和 inner_os 不会发到群里。
 
     【================ 强制输出格式 (JSON) ================】
     {{
-      "inner_os": "在这里先回忆一下这50条记录，吐槽一下这个人的日常表现。",
-      "reply": "以指定句式开头的评价正文，80字以内，纯文本，不要括号动作。"
+      "inner_os": "用简短几句归纳材料中有依据的观察，不要写无依据的脑补。",
+      "evidence": ["从【{target_name}】本人发言中原样复制2-16个字", "再复制一处本人发言作为依据"],
+      "focus": "若有你特别感兴趣或想点评的真实内容则简述，否则留空字符串",
+      "reply": "以指定句式开头的最终评价"
     }}
     """
 
+    user_prompt = f"""
+    以下材料只用于评价【{target_name}】。
+
+    【本人整体发言样本（最近最多 {IMPRESSION_HISTORY_LIMIT} 条）】
+    {history_text}
+
+    【近期对话片段（最近 {IMPRESSION_RECENT_DAYS} 天，最多 {IMPRESSION_CONTEXT_MAX_BLOCKS} 段）】
+    {context_text}
+
+    请先从【{target_name}】本人的原话中选取 evidence，再形成整体印象。其他人的话只能帮助理解对话。
+    """
+
     try:
-        raw_result = await call_deepseek_api(
-            [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"以下是群聊记录，其中【{target_name}】是你要评价的对象，[其他名字]是群里其他人。请严格基于【{target_name}】的实际发言内容来评价，不要把其他人说的话算在他头上。\n\n{history_text}"}
-                ],
-            model_name=MODEL_NAME,
-            force_json=True,
-            temperature=1.1,
-            presence_penalty=0.4,
-            frequency_penalty=0.4,
-            max_tokens=2048,
-            timeout=60.0,
-        )
-        final_reply, _inner_os = _parse_impression_reply(raw_result)
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+        final_reply = ""
+        for attempt in range(2):
+            raw_result = await call_deepseek_api(
+                messages,
+                model_name=MODEL_NAME,
+                force_json=True,
+                temperature=0.8,
+                presence_penalty=0.2,
+                frequency_penalty=0.2,
+                max_tokens=1024,
+                timeout=60.0,
+            )
+            candidate_reply, _inner_os, evidence, focus = _parse_impression_result(raw_result)
+            is_valid, invalid_reason = _validate_impression_result(
+                reply=candidate_reply,
+                evidence=evidence,
+                focus=focus,
+                target_name=target_name,
+                target_evidence_source=target_evidence_source,
+            )
+            if is_valid:
+                final_reply = candidate_reply
+                break
+
+            logger.warning(f"⚠️ [Impression] 结果校验失败（第 {attempt + 1} 次）: {invalid_reason}")
+            if attempt == 0:
+                messages.extend(
+                    [
+                        {"role": "assistant", "content": raw_result},
+                        {
+                            "role": "user",
+                            "content": (
+                                f"上一次输出未通过校验：{invalid_reason}。请重新阅读材料并输出完整 JSON；"
+                                f"evidence 必须逐字来自【{target_name}】本人发言，reply 必须使用指定开头和长度。"
+                            ),
+                        },
+                    ]
+                )
+
+        if not final_reply:
+            final_reply = f"对{target_name}的印象是……最近说的话还是太零碎了，暂时看不出什么特别的。"
 
         save_my_response(group_id, str(bot.self_id), final_reply)
 
@@ -273,8 +632,10 @@ async def _(bot: Bot, event: GroupMessageEvent):
         await um_cmd.finish(reply_segment + final_reply)
     except FinishedException:
         raise
-    except Exception:
+    except Exception as e:
+        logger.exception(f"群印象生成失败: {e}")
         await um_cmd.finish(reply_segment + "脑子短路了...")
+
 
 # ================= 功能 3：随机插嘴 (AutoChat) =================
 AUTO_CHAT_COOLDOWN = {}

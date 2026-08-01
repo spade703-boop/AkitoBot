@@ -421,15 +421,15 @@ LLM 输出三字段，Python 端决定最终格式：
 
 > ℹ️ **已并轨**：该文件直接使用 `core` 的共享 `client`（AsyncOpenAI）调用 DeepSeek（带自定义温度/超时参数），
 > JSON 提取与救援也统一走 `core.api.extract_json_block` / `rescue_field`。
-> 仅 JSON schema 仍为两字段（`reply`，无 `action`），与 chat.py 的三字段不同（见风险九）。
+> JSON schema 仍与 chat.py 不同：群印象为 `inner_os/evidence/focus/reply`，AutoChat 为 `inner_os/anchor/reply`，均无 `action`（见风险九）。
 
 | 功能 | 说明 |
 |------|------|
 | `recorder` (priority=1) | 静默录制群聊消息到 SQLite `impression_history.db` |
-| `um_cmd`（群印象） | 读取目标用户最近 50 条发言，AI 生成侧写；支持 @；WL2 模式切换；3-5s 思考延迟 |
+| `um_cmd`（群印象） | 精确指令触发；目标用户最近 50 条整体样本 + 最近 14 天最多 6 段对话片段；支持 @；WL2 状态覆写；证据锚点校验；3-5s 思考延迟 |
 | `random_chat` (priority=99) | 3% 概率随机插嘴；10 分钟冷却；深夜 0-6 点不触发；有 JSON 解析救援 |
 
-JSON 输出格式（impression 和 AutoChat）：`{"inner_os": "...", "reply": "..."}`（两字段，不含 action）
+JSON 输出格式：群印象使用 `{"inner_os": "...", "evidence": [...], "focus": "...", "reply": "..."}`；AutoChat 使用 `{"inner_os": "...", "anchor": "...", "reply": "..."}`，均不含 `action`。
 
 ### gallery.py
 
@@ -824,7 +824,7 @@ py tools/eval_retrieval.py rerank 0.2  # 用指定阈值试跑精排臂
 
 7. **JSON 历史记录格式**：chat.py 将 assistant 回复以 `{"inner_os": ..., "reply": ...}` 存入 history，但 system prompt 要求输出 `{"inner_os": ..., "action": ..., "dialogue": ...}`。读取历史时（time_awareness 压缩、复读检测等）需同时兼容 `reply` 和 `dialogue` 两个字段名。
 
-8. **`impression.py` 与 chat.py 的 schema 差异**：两者已共用 `core` 的 `client` 与 `core.api` 的 JSON 提取/救援工具，但 impression 的 JSON schema 是两字段（`reply`，无 `action`），chat.py 是三字段；救援字段集也不同（impression 只救 `reply`，chat 救 `dialogue`/`reply`），调用形态不能互换。
+8. **`impression.py` 与 chat.py 的 schema 差异**：两者已共用 `core` 的 `client` 与 `core.api` 的 JSON 提取/救援工具，但群印象 schema 是 `inner_os/evidence/focus/reply`，AutoChat 是 `inner_os/anchor/reply`，chat.py 是 `inner_os/action/dialogue`；救援字段集也不同（impression 只救 `reply`，chat 救 `dialogue`/`reply`），调用形态不能互换。
 
 9. **handler 注册时机**：`on_command`/`on_message` 在模块被 import 时立即注册。`features/__init__.py` 中缺少某行 `from . import xxx`，对应功能会完全静默失效，不报任何错误。
 
@@ -921,7 +921,7 @@ chat.py 存入 history 的 assistant 条目格式：
 
 ### 风险九：impression.py 的 JSON 格式与 chat.py 不同
 
-impression.py（群印象 + AutoChat）使用的 schema 是两字段：`{"inner_os": ..., "reply": ...}`，没有 `action` 字段。chat.py 是三字段。两者虽共用 `core.api.extract_json_block` / `rescue_field` 工具，但救援字段集不同（chat 救 `dialogue`/`reply`，impression 只救 `reply`），解析后续的排版逻辑也完全不同，不能互相套用。
+群印象使用 `{"inner_os": ..., "evidence": [...], "focus": ..., "reply": ...}`，AutoChat 使用 `{"inner_os": ..., "anchor": ..., "reply": ...}`，均没有 `action` 字段；chat.py 则使用 `inner_os/action/dialogue` 三字段。它们虽共用 `core.api.extract_json_block` / `rescue_field` 工具，但救援字段集不同（chat 救 `dialogue`/`reply`，impression 只救 `reply`），解析和校验逻辑也完全不同，不能互相套用。
 
 ---
 
