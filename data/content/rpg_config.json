@@ -269,11 +269,12 @@
     "weekly_costs": [140, 140, 140, 140, 140, 200, 300],
     "exp": 30,
     "pool": [
-      {"item": "旅人的行囊", "weight": 35},
+      {"item": "旅人的行囊", "weight": 34},
       {"item": "龙骑士的地图", "weight": 30},
       {"item": "厨子的美食", "weight": 20},
       {"item": "神官的护符", "weight": 12},
-      {"item": "勇者的远征套装", "weight": 3}
+      {"item": "勇者的远征套装", "weight": 3},
+      {"item": "大葱味蛋糕", "weight": 1}
     ]
   },
   "minor_encounters": {
@@ -931,6 +932,18 @@
         "exp_mult": 2.0,
         "drop_mult": 2.0
       }
+    },
+    {
+      "name": "大葱味蛋糕",
+      "desc": "赠送给群友，使其下一场普通个人/组队挑战：经验-15%、积分-10%、掉落率-20%（世界BOSS不生效）",
+      "supply_hint": "· 使用方式：使用 大葱味蛋糕@某人（效果由对方下一场普通个人/组队挑战承受；世界BOSS不生效）",
+      "effect": {
+        "type": "battle_debuff_gift",
+        "uses": 1,
+        "exp_mult": 0.85,
+        "points_mult": 0.9,
+        "drop_mult": 0.8
+      }
     }
   ],
   "copy": {
@@ -1035,7 +1048,10 @@
       "📖 【{name}】用了。经验 +{amount}。"
     ],
     "supply_open": [
-      "📦 冒险补给已开启。\n· 消耗 {cost} 积分（本周 {count}/{max}）\n· 获得【{name}】×1（效果：{effect}）\n· 经验 +{exp}{levelup}\n· 战备范围：普通个人挑战 / 普通组队挑战（世界BOSS不生效）"
+      "📦 冒险补给已开启。\n· 消耗 {cost} 积分（本周 {count}/{max}）\n· 获得【{name}】×1（效果：{effect}）\n· 经验 +{exp}{levelup}\n{usage}"
+    ],
+    "gift_battle_debuff": [
+      "🥬 {a} 把【{name}】送给了 {b}。大葱味已经腌进去了：对方下一场普通个人/组队挑战经验 -15%、积分 -10%、掉落率 -20%（当前排队 {uses} 场；世界BOSS不生效）。"
     ],
     "use_battle_supply": [
       "🎒 【{name}】已整备。\n· 效果：{parts}\n· 规则：接下来 {uses} 场普通个人/组队挑战生效；期间双倍经验卡暂缓且不消耗；世界BOSS不生效。"
@@ -1045,6 +1061,9 @@
     ],
     "battle_supply_active": [
       "🎒 【{name}】生效：{parts}（剩余 {uses} 场；仅限普通个人/组队挑战）"
+    ],
+    "battle_debuff_active": [
+      "🥬 【{name}】的怪味发作：经验 -{exp}% / 积分 -{points}% / 掉落率 -{drop}%（剩余 {uses} 场；仅限普通个人/组队挑战）"
     ],
     "battle_guard_triggered": [
       "🛡️ 【{name}】护住了战线，本次挑战转为成功，经验额外 +50%。"
@@ -1251,6 +1270,7 @@
     "supply_poor": "积分不够。第 {count} 次冒险补给需要 {cost} 积分，你现在只有 {total}。",
     "supply_slot_busy": "【{name}】还在生效，先用完再启用新的常规战备。",
     "supply_guard_busy": "【{name}】还在待命，暂时不能再装备新的护符。",
+    "debuff_gift_bot": "小彰不吃这个。去 @ 一个群友。",
     "team_need_target": "组队得@人。比如：组队@某人。",
     "boss_need_target": "组队世界BOSS得@人。比如：组队世界BOSS@某人。",
     "team_self": "自己跟自己组队就算了。换个人 @。",

@@ -64,13 +64,22 @@ def _battle_power(user: dict, active_supply: dict | None) -> float:
     return power * float(effect.get("power_mult", 1.0))
 
 
-def _apply_extra_rewards(user: dict, *, exp: int = 0, points: int = 0) -> tuple[int, int, int, int]:
+def _apply_extra_rewards(
+    user: dict,
+    *,
+    exp: int = 0,
+    points: int = 0,
+    exp_mult: float = 1.0,
+    points_mult: float = 1.0,
+) -> tuple[int, int, int, int]:
     level_before = _level_of(int(user.get("exp", 0)))
     exp_gain = max(0, int(exp))
     points_gain = max(0, int(points))
     if user.get("equip_rebought"):
         exp_gain = int(exp_gain * _rebuy_exp_mult())
         points_gain = int(points_gain * _rebuy_points_mult())
+    exp_gain = int(exp_gain * float(exp_mult))
+    points_gain = int(points_gain * float(points_mult))
     if exp_gain:
         user["exp"] = int(user.get("exp", 0)) + exp_gain
     if points_gain:
@@ -90,6 +99,11 @@ def _apply_rewards(user: dict, today: str, *, win: bool, monster: dict, event_ke
     单刷与组队（双方各调一次）共用本函数：胜负由调用方判定后传入。
     """
     ccfg = _cfg("combat", {})
+    battle_debuff = inventory._active_battle_debuff(user)
+    debuff_effect = battle_debuff.get("effect", {}) if battle_debuff else {}
+    debuff_exp_mult = float(debuff_effect.get("exp_mult", 1.0))
+    debuff_points_mult = float(debuff_effect.get("points_mult", 1.0))
+    debuff_drop_mult = float(debuff_effect.get("drop_mult", 1.0))
     old_exp = int(user.get("exp", 0))
     level = _level_of(old_exp)
     exp_gain = _challenge_exp(win, level)
@@ -117,6 +131,7 @@ def _apply_rewards(user: dict, today: str, *, win: bool, monster: dict, event_ke
         user["exp_buff_uses"] = int(user["exp_buff_uses"]) - 1
     if user.get("equip_rebought"):
         exp_gain = int(exp_gain * _rebuy_exp_mult())
+    exp_gain = int(exp_gain * debuff_exp_mult)
     user["exp"] = old_exp + exp_gain
 
     cc = _cfg("challenge", {})
@@ -129,17 +144,20 @@ def _apply_rewards(user: dict, today: str, *, win: bool, monster: dict, event_ke
             * utils._fortune_drop_factor(user, today)
             * float(drop_mult)
             * float(supply_effect.get("drop_mult", 1.0))
+            * debuff_drop_mult
         ),
     )
     for d in drops:
         inventory._add_item(user, d, 1)
 
     points_gain = _challenge_points(win, user)
+    points_gain = int(points_gain * debuff_points_mult)
     user["points"] = int(user.get("points", 0)) + points_gain
     user["hunt_total"] = int(user.get("hunt_total", 0)) + 1   # 战绩：累计打怪
     if win:
         user["hunt_wins"] = int(user.get("hunt_wins", 0)) + 1  # 战绩：累计胜场
     supply_uses_left = inventory._consume_battle_supply(user) if battle_supply else 0
+    debuff_uses_left = inventory._consume_battle_debuff(user) if battle_debuff else 0
     _consume_equip(user)  # 今日装备损坏
     return {
         "exp_gain": exp_gain, "exp_buffed": buffed, "monster_exp_mult": monster_exp_mult, "drops": drops,
@@ -148,6 +166,11 @@ def _apply_rewards(user: dict, today: str, *, win: bool, monster: dict, event_ke
         "battle_supply_parts": inventory._battle_supply_parts(battle_supply),
         "battle_supply_uses_left": supply_uses_left,
         "exp_buff_suppressed": exp_buff_deferred,
+        "battle_debuff_name": str(battle_debuff.get("name", "")) if battle_debuff else "",
+        "battle_debuff_exp_mult": debuff_exp_mult,
+        "battle_debuff_points_mult": debuff_points_mult,
+        "battle_debuff_drop_mult": debuff_drop_mult,
+        "battle_debuff_uses_left": debuff_uses_left,
     }
 
 
@@ -176,6 +199,8 @@ def _apply_support_bonus(user: dict, out: dict) -> None:
         return
     bonus_exp = _support_bonus_exp(scene, user, int(out.get("old_level", 1)))
     bonus_points = _support_bonus_points(scene, user)
+    bonus_exp = int(bonus_exp * float(out.get("battle_debuff_exp_mult", 1.0)))
+    bonus_points = int(bonus_points * float(out.get("battle_debuff_points_mult", 1.0)))
     if bonus_exp:
         user["exp"] = int(user.get("exp", 0)) + bonus_exp
     if bonus_points:
@@ -201,6 +226,8 @@ def _apply_minor_encounter(user: dict, out: dict, *, rng=random) -> None:
         user,
         exp=int(spec.get("exp", 0)),
         points=int(spec.get("points", 0)),
+        exp_mult=float(out.get("battle_debuff_exp_mult", 1.0)),
+        points_mult=float(out.get("battle_debuff_points_mult", 1.0)),
     )
     if exp_gain:
         parts.append(f"经验 +{exp_gain}")
@@ -217,12 +244,20 @@ def _apply_minor_encounter(user: dict, out: dict, *, rng=random) -> None:
                 parts.append(f"{name} ×{amount}")
         elif rtype == "exp":
             label = str(reward.get("label", "额外经验"))
-            extra_exp, _pts, _old, level_after = _apply_extra_rewards(user, exp=amount)
+            extra_exp, _pts, _old, level_after = _apply_extra_rewards(
+                user,
+                exp=amount,
+                exp_mult=float(out.get("battle_debuff_exp_mult", 1.0)),
+            )
             level_before = min(level_before, _old)
             parts.append(f"{label}（经验 +{extra_exp}）")
         elif rtype == "points":
             label = str(reward.get("label", "额外积分"))
-            _exp, extra_points, _old, level_after = _apply_extra_rewards(user, points=amount)
+            _exp, extra_points, _old, level_after = _apply_extra_rewards(
+                user,
+                points=amount,
+                points_mult=float(out.get("battle_debuff_points_mult", 1.0)),
+            )
             level_before = min(level_before, _old)
             parts.append(f"{label}（积分 +{extra_points}）")
     out["minor_event"] = event_key
@@ -258,11 +293,15 @@ def _apply_team_minor_encounter(b: dict, a: dict, out: dict, *, rng=random) -> N
         b,
         exp=base_exp,
         points=base_points,
+        exp_mult=float((out.get("b") or {}).get("battle_debuff_exp_mult", 1.0)),
+        points_mult=float((out.get("b") or {}).get("battle_debuff_points_mult", 1.0)),
     )
     a_exp, a_points, _a_before, _a_after = _apply_extra_rewards(
         a,
         exp=base_exp,
         points=base_points,
+        exp_mult=float((out.get("a") or {}).get("battle_debuff_exp_mult", 1.0)),
+        points_mult=float((out.get("a") or {}).get("battle_debuff_points_mult", 1.0)),
     )
     if b_exp:
         b_total_exp += b_exp
@@ -291,8 +330,16 @@ def _apply_team_minor_encounter(b: dict, a: dict, out: dict, *, rng=random) -> N
         elif rtype == "exp":
             label = str(reward.get("label", "额外经验"))
             split_amount = amount // 2
-            b_extra, _b_pts, _b_before, _b_after = _apply_extra_rewards(b, exp=split_amount)
-            a_extra, _a_pts, _a_before, _a_after = _apply_extra_rewards(a, exp=split_amount)
+            b_extra, _b_pts, _b_before, _b_after = _apply_extra_rewards(
+                b,
+                exp=split_amount,
+                exp_mult=float((out.get("b") or {}).get("battle_debuff_exp_mult", 1.0)),
+            )
+            a_extra, _a_pts, _a_before, _a_after = _apply_extra_rewards(
+                a,
+                exp=split_amount,
+                exp_mult=float((out.get("a") or {}).get("battle_debuff_exp_mult", 1.0)),
+            )
             if b_extra:
                 b_total_exp += b_extra
                 b_parts.append(f"{label}（经验 +{b_extra}）")
@@ -302,8 +349,16 @@ def _apply_team_minor_encounter(b: dict, a: dict, out: dict, *, rng=random) -> N
         elif rtype == "points":
             label = str(reward.get("label", "额外积分"))
             split_amount = amount // 2
-            _b_exp, b_extra, _b_before, _b_after = _apply_extra_rewards(b, points=split_amount)
-            _a_exp, a_extra, _a_before, _a_after = _apply_extra_rewards(a, points=split_amount)
+            _b_exp, b_extra, _b_before, _b_after = _apply_extra_rewards(
+                b,
+                points=split_amount,
+                points_mult=float((out.get("b") or {}).get("battle_debuff_points_mult", 1.0)),
+            )
+            _a_exp, a_extra, _a_before, _a_after = _apply_extra_rewards(
+                a,
+                points=split_amount,
+                points_mult=float((out.get("a") or {}).get("battle_debuff_points_mult", 1.0)),
+            )
             if b_extra:
                 b_total_points += b_extra
                 b_parts.append(f"{label}（积分 +{b_extra}）")

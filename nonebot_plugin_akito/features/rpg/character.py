@@ -25,7 +25,7 @@ from ..gift.pages import FOOTER_RPG_BRAND, qq_avatar_uri
 from ..gift.render import render_bond_page
 from .boss import _active_world_boss, _cleanup_stale_world_boss, _ensure_boss_participant
 from .config import _error, _line
-from .inventory import _active_battle_supply
+from .inventory import _active_battle_debuff, _active_battle_supply
 from .player import (
     _ensure_player,
     _equip_status,
@@ -46,7 +46,10 @@ def _battle_status(user: dict) -> str:
     guard = _active_battle_supply(user, guard=True)
     if guard:
         parts.append(f"{guard['name']}（待触发）")
-    return " / ".join(parts) if parts else "暂无"
+    debuff = _active_battle_debuff(user)
+    if debuff:
+        parts.append(f"{debuff['name']}减益（剩余 {debuff['uses']} 场）")
+    return "\n" + "\n".join(f"　· {part}" for part in parts) if parts else "暂无"
 
 
 @status_cmd.handle()
@@ -101,7 +104,7 @@ async def _(event: Event, args: Message = CommandArg()):
             f"· 背包：{bag} 件道具",
             f"· 当前战备：{_battle_status(user)}",
         ]
-        if _active_battle_supply(user) or _active_battle_supply(user, guard=True):
+        if _active_battle_supply(user) or _active_battle_supply(user, guard=True) or _active_battle_debuff(user):
             lines.append("· 战备范围：普通个人挑战 / 普通组队挑战（世界BOSS不生效）")
         lines.append(trophy_line)
     await status_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
@@ -227,23 +230,25 @@ _HELP_ITEMS = [
     {"command": "组队@某人", "description": "邀请已签到的群友进行普通组队挑战；组队结果受双方羁绊影响，并可能获得协作加成与羁绊成长。"},
     {"command": "强化今日装备", "description": "消耗 30 / 60 / 90 积分依次强化今日装备，每日最多强化三次。"},
     {"command": "购买装备", "description": "今日装备损耗后消耗 100 积分购买一套替换装备；每日限一次，战斗经验与积分减半。"},
-    {"command": "开启冒险补给", "description": "每周最多开启七次：前五次各 140 积分，第六次 200 积分，第七次 300 积分；每次获得 30 经验与一件战备。", "sections": [
+    {"command": "开启冒险补给", "description": "每周最多开启七次：前五次各 140 积分，第六次 200 积分，第七次 300 积分；每次获得 30 经验与一件道具。", "sections": [
         {"title": "战备使用规则", "lines": [
             "战备进入背包后需主动使用，所有战备均不作用于世界BOSS。",
             "常规战备共享一个槽位，效果不能叠加，并优先于双倍经验卡结算。",
             "常规战备生效期间，双倍经验卡暂缓且不消耗，战备用完后继续生效。",
             "神官的护符使用独立槽位，可与一种常规战备同时启用，触发时共同结算；护符本身不压制双倍经验卡。",
+            "大葱味蛋糕减益可与已生效战备同时存在；先结算战备增益，再结算蛋糕的经验、积分与掉落减益。",
         ]},
         {"title": "战备列表", "lines": [
-            "旅人的行囊（35%）：接下来两次普通个人或组队挑战，战力 +10%，经验 +25%。",
+            "旅人的行囊（34%）：接下来两次普通个人或组队挑战，战力 +10%，经验 +25%。",
             "龙骑士的地图（30%）：接下来两次普通个人或组队挑战，经验 +20%，掉落率 ×2。",
             "厨子的美食（20%）：接下来两次普通个人或组队挑战，战力 +15%，经验 +40%。",
             "神官的护符（12%）：下一次普通个人或组队挑战失败时转为成功，护符持有者经验额外 +50%。",
             "勇者的远征套装（3%）：接下来三次普通个人或组队挑战，装备视为强化满，经验 ×2，掉落率 ×2。",
+            "大葱味蛋糕（1%）：使用“使用 大葱味蛋糕@某人”送出；对方下一次普通个人或组队挑战的经验 -15%、积分 -10%、掉落率 -20%。",
         ]},
     ]},
     {"command": "我的背包", "description": "查看当前持有的消耗品、礼物券与冒险补给战备。"},
-    {"command": "使用 [道具名]", "description": "使用消耗品或启用战备；礼物券需使用“使用 [礼物券名] @某人”。"},
+    {"command": "使用 [道具名]", "description": "使用消耗品或启用战备；礼物券和大葱味蛋糕需在道具名后 @一名群友。"},
     {"command": "我的角色", "description": "查看等级、称号、战绩、装备、背包、世界BOSS收藏与当前战备。"},
     {"command": "群排行榜", "description": "查看本群角色经验前十名的等级、称号、升级进度与战绩。"},
     {"command": "世界BOSS", "description": "查看当前世界BOSS的生命值、参与规模与贡献排行；未击败的BOSS会在隔日按贡献结算补偿。"},

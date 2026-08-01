@@ -33,6 +33,14 @@ def test_supply_registers_points_status_hook():
     assert any("冒险补给：今日可开启" in line for line in lines)
 
 
+def test_supply_pool_gives_scallion_cake_exactly_one_percent_weight():
+    pool = supply._supply_cfg()["pool"]
+    weights = {entry["item"]: int(entry["weight"]) for entry in pool}
+
+    assert sum(weights.values()) == 100
+    assert weights["大葱味蛋糕"] == 1
+
+
 @pytest.mark.asyncio
 async def test_supply_uses_cross_group_weekly_costs_and_limit(monkeypatch):
     state = _patch_io(
@@ -96,6 +104,25 @@ async def test_supply_sixth_cost_rejects_without_partial_rewards(monkeypatch):
     user = state["users"]["u1"]
     assert user["points"] == 199 and user["exp"] == 10
     assert user["weekly_investment"]["supply_count"] == 5
+
+
+@pytest.mark.asyncio
+async def test_supply_open_scallion_cake_shows_gift_usage(monkeypatch):
+    state = _patch_io(
+        monkeypatch,
+        supply,
+        store={"groups": {"1001": {"users": {"u1": {"points": 140, "exp": 0}}}}},
+    )
+    monkeypatch.setattr(supply, "_pick_supply_item", lambda rng=supply.random: "大葱味蛋糕")
+
+    with pytest.raises(FinishedException) as exc:
+        await supply.supply_cmd.handlers[0](Event(group_id=1001, user_id="u1"), Message(""))
+
+    result = str(exc.value.result)
+    user = state["groups"]["1001"]["users"]["u1"]
+    assert "获得【大葱味蛋糕】×1" in result
+    assert "使用 大葱味蛋糕@某人" in result
+    assert user["inventory"]["大葱味蛋糕"] == 1
 
 
 @pytest.mark.asyncio

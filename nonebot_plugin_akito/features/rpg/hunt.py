@@ -117,6 +117,20 @@ def _battle_supply_line(reward: dict) -> str:
     )
 
 
+def _battle_debuff_line(reward: dict) -> str:
+    name = str(reward.get("battle_debuff_name", ""))
+    if not name:
+        return ""
+    return _line(
+        "battle_debuff_active",
+        name=name,
+        exp=int(round((1.0 - float(reward.get("battle_debuff_exp_mult", 1.0))) * 100)),
+        points=int(round((1.0 - float(reward.get("battle_debuff_points_mult", 1.0))) * 100)),
+        drop=int(round((1.0 - float(reward.get("battle_debuff_drop_mult", 1.0))) * 100)),
+        uses=int(reward.get("battle_debuff_uses_left", 0)),
+    )
+
+
 def _hunt_minor_lines(out: dict) -> list[str]:
     scene = str(out.get("minor_event", ""))
     if not scene:
@@ -179,6 +193,9 @@ def _hunt_result_lines(out: dict) -> list:
     supply_line = _battle_supply_line(out)
     if supply_line:
         lines.append(supply_line)
+    debuff_line = _battle_debuff_line(out)
+    if debuff_line:
+        lines.append(debuff_line)
     if out.get("support_scene") in {"akito_success", "akito_fail"}:
         lines.extend(support_lines)
     lines.extend(_hunt_minor_lines(out))

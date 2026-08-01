@@ -30,7 +30,7 @@ from .analytics import record_battle, record_team_attempt
 from .boss import _cleanup_stale_world_boss, _maybe_spawn_world_boss_lines
 from .combat import _buff_active
 from .config import _cfg, _copy, _error, _line
-from .hunt import _battle_supply_line, _hunt_result_lines, _team_minor_lines
+from .hunt import _battle_debuff_line, _battle_supply_line, _hunt_result_lines, _team_minor_lines
 from .player import _ensure_player, _resolve_group
 from .rewards import _apply_team_minor_encounter, _settle_coop, _settle_solo
 from .utils import _roll_fail_flavor, _support_chance, _team_success_rate
@@ -183,10 +183,16 @@ def _build_coop_broadcast(out: dict, b_id: str, a_id: str, b_name: str, a_name: 
     b_supply_line = _battle_supply_line(out["b"])
     if b_supply_line:
         msg = msg + "\n" + f"· {b_name}：{b_supply_line}"
+    b_debuff_line = _battle_debuff_line(out["b"])
+    if b_debuff_line:
+        msg = msg + "\n" + f"· {b_name}：{b_debuff_line}"
     msg = msg + "\n" + _member_line(out["a"], a_name)
     a_supply_line = _battle_supply_line(out["a"])
     if a_supply_line:
         msg = msg + "\n" + f"· {a_name}：{a_supply_line}"
+    a_debuff_line = _battle_debuff_line(out["a"])
+    if a_debuff_line:
+        msg = msg + "\n" + f"· {a_name}：{a_debuff_line}"
     if _buff_active(out.get("buff")):
         msg = msg + "\n" + _line("daily_buff", buff=out["buff"].get("name", ""))
     for line in _team_minor_lines(out, b_name, a_name):

@@ -218,6 +218,27 @@ def test_team_regular_supply_only_changes_its_owner_rewards(monkeypatch):
     assert "active_battle_supply" not in right
 
 
+def test_team_scallion_cake_only_reduces_its_owner_rewards(monkeypatch):
+    monster = {"name": "史莱姆", "power_req": 1, "drops": []}
+    left = _equipped_user(active_battle_debuff={"name": "大葱味蛋糕", "uses": 1})
+    right = _equipped_user()
+    monkeypatch.setattr(combat, "_pick_encounter", lambda level, rng=combat.random: (monster, False))
+    monkeypatch.setattr(rewards.random, "uniform", lambda _a, _b: 1.0)
+    monkeypatch.setattr(rpg_events, "_roll_coop_event", lambda rng=rpg_events.random: "")
+    monkeypatch.setattr(combat, "_today_buff", lambda: _PLAIN_BUFF)
+
+    out = rewards._settle_coop(left, right, "2026-06-22")
+
+    base_exp = rewards._challenge_exp(True, 1)
+    base_points = int(rpg_config._cfg("challenge", {})["win_points"])
+    assert out["b"]["exp_gain"] == int(base_exp * 0.85)
+    assert out["b"]["points_gain"] == int(base_points * 0.9)
+    assert out["a"]["exp_gain"] == base_exp
+    assert out["a"]["points_gain"] == base_points
+    assert "active_battle_debuff" not in left
+    assert "active_battle_debuff" not in right
+
+
 @pytest.mark.parametrize(
     ("event_key", "expected_power", "expected_exp_mult", "expected_drop_mult"),
     [

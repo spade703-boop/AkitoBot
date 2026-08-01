@@ -21,6 +21,7 @@ from ...core.game_store import (
     _first_at_qq,
     _get_group,
     _load_data,
+    _render_with_ats,
     _save_data,
 )
 from ..gift import (
@@ -33,7 +34,7 @@ from ..gift import (
     _roll_return_gift,
     _settle,
 )
-from .config import _cfg, _error, _line
+from .config import _cfg, _copy, _error, _line
 from .player import _ensure_player, _resolve_group
 
 # ==================== 道具定义 ====================
@@ -104,6 +105,48 @@ def _consume_battle_supply(user: dict, *, guard: bool = False) -> int:
         user[key] = {"name": active["name"], "uses": rest}
     else:
         user.pop(key, None)
+    return rest
+
+
+def _active_battle_debuff(user: dict) -> dict | None:
+    """返回下一场普通挑战会生效的减益；配置删项时自动视为失效。"""
+    record = user.get("active_battle_debuff")
+    if not isinstance(record, dict):
+        return None
+    name = str(record.get("name", ""))
+    uses = int(record.get("uses", 0))
+    if not name or uses <= 0:
+        return None
+    item = _item_by_name(name)
+    effect = _battle_effect(item)
+    if effect.get("type") != "battle_debuff_gift":
+        return None
+    return {"name": name, "uses": uses, "effect": dict(effect)}
+
+
+def _queue_battle_debuff(user: dict, item: dict) -> int:
+    """将赠送道具的减益按场次排队，同名道具不会叠加在同一场。"""
+    name = str(item.get("name", ""))
+    effect = _battle_effect(item)
+    uses = max(1, int(effect.get("uses", 1)))
+    active = _active_battle_debuff(user)
+    if active and active["name"] == name:
+        uses += int(active["uses"])
+    user["active_battle_debuff"] = {"name": name, "uses": uses}
+    return uses
+
+
+def _consume_battle_debuff(user: dict) -> int:
+    """消耗一场普通挑战减益并返回剩余场数。"""
+    active = _active_battle_debuff(user)
+    if not active:
+        user.pop("active_battle_debuff", None)
+        return 0
+    rest = active["uses"] - 1
+    if rest > 0:
+        user["active_battle_debuff"] = {"name": active["name"], "uses": rest}
+    else:
+        user.pop("active_battle_debuff", None)
     return rest
 
 
@@ -241,6 +284,10 @@ def _is_gift_item(item: dict) -> bool:
     return item.get("effect", {}).get("type") == "gift"
 
 
+def _is_battle_debuff_gift(item: dict) -> bool:
+    return item.get("effect", {}).get("type") == "battle_debuff_gift"
+
+
 @use_cmd.handle()
 async def _(bot: Bot, event: Event, args: Message = CommandArg()):
     group_id, rejection = _resolve_group(event)
@@ -258,6 +305,32 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
     item = _item_by_name(name)
     if not item:
         await use_cmd.finish(MessageSegment.reply(event.message_id) + _error("item_unknown", name=name))
+
+    if _is_battle_debuff_gift(item):
+        target = _first_at_qq(getattr(event, "original_message", None))
+        if not target or target == "all" or target == event.get_user_id():
+            return
+        if target == str(getattr(bot, "self_id", "")):
+            await use_cmd.finish(MessageSegment.reply(event.message_id) + _error("debuff_gift_bot"))
+
+        sender_id = event.get_user_id()
+        async with LOCK:
+            data = _load_data()
+            group = _get_group(data, group_id)
+            sender = _ensure_player(group, sender_id, _display_name(event))
+            if _item_count(sender, name) <= 0:
+                await use_cmd.finish(MessageSegment.reply(event.message_id) + _error("item_none", name=name))
+            recipient = _ensure_player(group, target)
+            _remove_item(sender, name, 1)
+            queued_uses = _queue_battle_debuff(recipient, item)
+            _save_data(data)
+
+        template = random.choice(_copy("gift_battle_debuff"))
+        msg = _render_with_ats(
+            template,
+            {"a": sender_id, "b": target, "name": name, "uses": queued_uses},
+        )
+        await use_cmd.finish(MessageSegment.reply(event.message_id) + msg)
 
     # 礼物券分支：需要 @ 目标，走完整送礼结算
     if _is_gift_item(item):

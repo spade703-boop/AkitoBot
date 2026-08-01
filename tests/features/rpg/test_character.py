@@ -30,6 +30,22 @@ async def test_status_panel_only_level_and_equip(monkeypatch):
     assert "战力" not in r  # 战力隐藏，不外显
 
 
+def test_battle_status_lists_supplies_and_cake_on_separate_lines():
+    user = {
+        "active_battle_supply": {"name": "旅人的行囊", "uses": 2},
+        "active_battle_guard": {"name": "神官的护符", "uses": 1},
+        "active_battle_debuff": {"name": "大葱味蛋糕", "uses": 1},
+    }
+
+    status = character._battle_status(user)
+
+    assert status == (
+        "\n　· 旅人的行囊（剩余 2 场）"
+        "\n　· 神官的护符（待触发）"
+        "\n　· 大葱味蛋糕减益（剩余 1 场）"
+    )
+
+
 @pytest.mark.asyncio
 async def test_status_panel_still_available_while_sleeping(monkeypatch):
     lv2 = player._cum_exp(2, player._level_base())
@@ -78,13 +94,15 @@ async def test_help_cmd_falls_back_to_text(monkeypatch):
     assert "　· 战后小奇遇" in result
     assert "　· 小奇遇奖励" in result
     assert "　· 战备列表" in result
-    assert "　——旅人的行囊（35%）" in result
+    assert "　——旅人的行囊（34%）" in result
+    assert "　——大葱味蛋糕（1%）" in result
     assert "　——神官的护符（12%）" in result
     assert "　——补给袋：提供少量经验与积分。" in result
     assert "　——破旧积分卡：使用后获得 5 积分。" in result
     assert "　——破旧经验券：使用后获得 10 经验。" in result
     assert "　——彰冬无料券：使用后可向一名群友赠送彰冬无料。" in result
     assert "常规战备共享一个槽位" in result
+    assert "先结算战备增益，再结算蛋糕" in result
     assert "触发时共同结算" in result
     assert "双倍经验卡暂缓且不消耗" in result
     assert "重置RPG功能" in result
@@ -219,7 +237,7 @@ async def test_status_panel_shows_active_supplies_without_points_summary(monkeyp
     assert "· 积分：" not in result
     assert "本周投入：" not in result
     assert "本周倾向：" not in result
-    assert "旅人的行囊（剩余 2 场） / 神官的护符（待触发）" in result
+    assert "· 当前战备：\n　· 旅人的行囊（剩余 2 场）\n　· 神官的护符（待触发）" in result
     assert "战备范围：普通个人挑战 / 普通组队挑战（世界BOSS不生效）" in result
 
 

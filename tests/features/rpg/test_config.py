@@ -43,9 +43,18 @@ def test_config_rejects_invalid_supply_cost_count():
 
 def test_config_rejects_supply_pool_weights_not_equal_to_one_hundred():
     config = deepcopy(rpg_config.DEFAULT_RPG_CONFIG)
-    config["adventure_supply"]["pool"][0]["weight"] = 34
+    config["adventure_supply"]["pool"][0]["weight"] = 33
 
     with pytest.raises(rpg_config.RpgConfigError, match="权重总和"):
+        rpg_config.validate_rpg_config(config)
+
+
+def test_config_rejects_scallion_cake_multiplier_above_one():
+    config = deepcopy(rpg_config.DEFAULT_RPG_CONFIG)
+    cake = next(item for item in config["items"] if item["name"] == "大葱味蛋糕")
+    cake["effect"]["exp_mult"] = 1.15
+
+    with pytest.raises(rpg_config.RpgConfigError, match="不高于 1"):
         rpg_config.validate_rpg_config(config)
 
 

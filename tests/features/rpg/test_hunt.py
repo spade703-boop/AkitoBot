@@ -463,6 +463,66 @@ def test_regular_supply_defers_double_exp_card(supply_name, expected_mult):
     assert user["active_battle_supply"]["uses"] == 1
 
 
+def test_scallion_cake_applies_after_positive_supply_and_reduces_drop_chance(monkeypatch):
+    captured: dict = {}
+    user = _equipped_user(
+        exp=0,
+        points=0,
+        exp_buff_uses=1,
+        exp_buff_mult=2,
+        active_battle_supply={"name": "龙骑士的地图", "uses": 1},
+        active_battle_debuff={"name": "大葱味蛋糕", "uses": 1},
+    )
+    active_supply = inventory._active_battle_supply(user)
+
+    def _capture_drops(monster, rng=inventory.random, mult=1.0):
+        captured["drop_mult"] = mult
+        return []
+
+    monkeypatch.setattr(inventory, "_roll_drops", _capture_drops)
+    out = rewards._apply_rewards(
+        user,
+        "2026-06-22",
+        win=True,
+        monster={"name": "史莱姆", "drops": []},
+        battle_supply=active_supply,
+    )
+
+    base_exp = rewards._challenge_exp(True, 1)
+    base_points = int(rpg_config._cfg("challenge", {})["win_points"])
+    assert out["exp_gain"] == int(int(base_exp * 1.2) * 0.85)
+    assert out["points_gain"] == int(base_points * 0.9)
+    assert captured["drop_mult"] == pytest.approx(2.0 * 0.8)
+    assert out["exp_buff_suppressed"] is True
+    assert user["exp_buff_uses"] == 1
+    assert "active_battle_supply" not in user
+    assert "active_battle_debuff" not in user
+    assert "经验 -15%" in hunt._battle_debuff_line(out)
+
+
+def test_double_exp_card_applies_before_scallion_cake():
+    user = _equipped_user(
+        exp=0,
+        points=0,
+        exp_buff_uses=1,
+        exp_buff_mult=2,
+        active_battle_debuff={"name": "大葱味蛋糕", "uses": 1},
+    )
+
+    out = rewards._apply_rewards(
+        user,
+        "2026-06-22",
+        win=True,
+        monster={"name": "史莱姆", "drops": []},
+    )
+
+    base_exp = rewards._challenge_exp(True, 1)
+    assert out["exp_gain"] == int(base_exp * 2 * 0.85)
+    assert out["exp_buffed"] is True
+    assert user["exp_buff_uses"] == 0
+    assert "active_battle_debuff" not in user
+
+
 def test_double_exp_card_resumes_after_regular_supply_is_consumed():
     user = _equipped_user(
         exp=0,

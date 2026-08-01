@@ -138,11 +138,12 @@ DEFAULT_RPG_CONFIG: dict = {
         "weekly_costs": [140, 140, 140, 140, 140, 200, 300],
         "exp": 30,
         "pool": [
-            {"item": "旅人的行囊", "weight": 35},
+            {"item": "旅人的行囊", "weight": 34},
             {"item": "龙骑士的地图", "weight": 30},
             {"item": "厨子的美食", "weight": 20},
             {"item": "神官的护符", "weight": 12},
             {"item": "勇者的远征套装", "weight": 3},
+            {"item": "大葱味蛋糕", "weight": 1},
         ],
     },
     # ---- 小奇遇：普通单刷与成功组成的双人战斗结算后，低概率补一点旅途感与轻奖励 ----
@@ -353,6 +354,10 @@ DEFAULT_RPG_CONFIG: dict = {
         {"name": "勇者的远征套装", "desc": "接下来3次普通个人/组队挑战：装备视为强化满、经验×2、掉落率×2（世界BOSS不生效）",
          "effect": {"type": "battle_supply", "uses": 3, "full_forge": True, "exp_mult": 2.0,
                     "drop_mult": 2.0}},
+        {"name": "大葱味蛋糕", "desc": "赠送给群友，使其下一场普通个人/组队挑战：经验-15%、积分-10%、掉落率-20%（世界BOSS不生效）",
+         "supply_hint": "· 使用方式：使用 大葱味蛋糕@某人（效果由对方下一场普通个人/组队挑战承受；世界BOSS不生效）",
+         "effect": {"type": "battle_debuff_gift", "uses": 1, "exp_mult": 0.85,
+                    "points_mult": 0.90, "drop_mult": 0.80}},
     ],
     # ---- 文案。占位符：{a}=真@；其余 {exp}{level}{newlevel}{monster}{cost}{forge}{name}{amount}{loot} 为文本 ----
     "copy": {
@@ -396,10 +401,12 @@ DEFAULT_RPG_CONFIG: dict = {
         "rebuy_ok": ["🛡️ 替换装备已就位，花了 {cost} 积分。不过这套是临时凑的，打怪经验和积分都会减半。"],
         "use_exp_buff": ["📖 【{name}】已储备。会在没有常规战备生效的下一次普通挑战中使经验 ×{mult}。"],
         "use_exp_grant": ["📖 【{name}】用了。经验 +{amount}。"],
-        "supply_open": ["📦 冒险补给已开启。\n· 消耗 {cost} 积分（本周 {count}/{max}）\n· 获得【{name}】×1（效果：{effect}）\n· 经验 +{exp}{levelup}\n· 战备范围：普通个人挑战 / 普通组队挑战（世界BOSS不生效）"],
+        "supply_open": ["📦 冒险补给已开启。\n· 消耗 {cost} 积分（本周 {count}/{max}）\n· 获得【{name}】×1（效果：{effect}）\n· 经验 +{exp}{levelup}\n{usage}"],
+        "gift_battle_debuff": ["🥬 {a} 把【{name}】送给了 {b}。大葱味已经腌进去了：对方下一场普通个人/组队挑战经验 -15%、积分 -10%、掉落率 -20%（当前排队 {uses} 场；世界BOSS不生效）。"],
         "use_battle_supply": ["🎒 【{name}】已整备。\n· 效果：{parts}\n· 规则：接下来 {uses} 场普通个人/组队挑战生效；期间双倍经验卡暂缓且不消耗；世界BOSS不生效。"],
         "use_battle_guard": ["🛡️ 【{name}】已整备。\n· 效果：{parts}\n· 规则：在下一次普通个人/组队挑战于其他援护判定后仍然失败时触发；护符本身不压制双倍经验卡；世界BOSS不生效。"],
         "battle_supply_active": ["🎒 【{name}】生效：{parts}（剩余 {uses} 场；仅限普通个人/组队挑战）"],
+        "battle_debuff_active": ["🥬 【{name}】的怪味发作：经验 -{exp}% / 积分 -{points}% / 掉落率 -{drop}%（剩余 {uses} 场；仅限普通个人/组队挑战）"],
         "battle_guard_triggered": ["🛡️ 【{name}】护住了战线，本次挑战转为成功，经验额外 +50%。"],
         "team_battle_guard_triggered": ["🛡️ {name} 的【{item}】护住了两人的战线，本次挑战转为成功；护符持有者经验额外 +50%。"],
         # 组队（{a}{b}=真@；{name}{exp}{points}{loot}{levelup}{b_name}=文本）
@@ -526,6 +533,7 @@ DEFAULT_RPG_CONFIG: dict = {
         "supply_poor": "积分不够。第 {count} 次冒险补给需要 {cost} 积分，你现在只有 {total}。",
         "supply_slot_busy": "【{name}】还在生效，先用完再启用新的常规战备。",
         "supply_guard_busy": "【{name}】还在待命，暂时不能再装备新的护符。",
+        "debuff_gift_bot": "小彰不吃这个。去 @ 一个群友。",
         "team_need_target": "组队得@人。比如：组队@某人。",
         "boss_need_target": "组队世界BOSS得@人。比如：组队世界BOSS@某人。",
         "team_self": "自己跟自己组队就算了。换个人 @。",
@@ -681,18 +689,28 @@ def _validate_adventure_supply(config: dict) -> None:
         if not item:
             raise RpgConfigError(f"冒险补给奖池引用了未定义道具：{name}")
         effect = item.get("effect")
-        if not isinstance(effect, dict) or effect.get("type") not in {"battle_supply", "battle_guard"}:
-            raise RpgConfigError(f"冒险补给道具 {name} 必须使用 battle_supply 或 battle_guard 效果")
+        if not isinstance(effect, dict) or effect.get("type") not in {
+            "battle_supply",
+            "battle_guard",
+            "battle_debuff_gift",
+        }:
+            raise RpgConfigError(
+                f"冒险补给道具 {name} 必须使用 battle_supply、battle_guard 或 battle_debuff_gift 效果"
+            )
         try:
             uses = int(effect.get("uses", 0))
             exp_mult = float(effect.get("exp_mult", effect.get("rescue_exp_mult", 1.0)))
             power_mult = float(effect.get("power_mult", 1.0))
+            points_mult = float(effect.get("points_mult", 1.0))
             drop_mult = float(effect.get("drop_mult", 1.0))
         except (TypeError, ValueError) as exc:
             raise RpgConfigError(f"冒险补给道具 {name} 的效果数值格式错误") from exc
         if not 1 <= uses <= 10:
             raise RpgConfigError(f"冒险补给道具 {name} 的 uses 必须在 1 到 10 之间")
-        if not 1.0 <= exp_mult <= 3.0 or not 1.0 <= power_mult <= 2.0 or not 1.0 <= drop_mult <= 3.0:
+        if effect.get("type") == "battle_debuff_gift":
+            if not 0.0 < exp_mult <= 1.0 or not 0.0 < points_mult <= 1.0 or not 0.0 < drop_mult <= 1.0:
+                raise RpgConfigError(f"冒险补给减益道具 {name} 的倍率必须大于 0 且不高于 1")
+        elif not 1.0 <= exp_mult <= 3.0 or not 1.0 <= power_mult <= 2.0 or not 1.0 <= drop_mult <= 3.0:
             raise RpgConfigError(f"冒险补给道具 {name} 的倍率超出安全范围")
     if total_weight != 100:
         raise RpgConfigError("adventure_supply.pool 权重总和必须等于 100")

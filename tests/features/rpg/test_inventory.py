@@ -77,6 +77,19 @@ def test_battle_supply_activation_explains_scope():
     assert "· 规则：在下一次" in guard_message
 
 
+def test_battle_debuff_gifts_queue_by_battle_instead_of_stacking():
+    cake = inventory._item_by_name("大葱味蛋糕")
+    user: dict = {}
+
+    assert inventory._queue_battle_debuff(user, cake) == 1
+    assert inventory._queue_battle_debuff(user, cake) == 2
+    assert inventory._active_battle_debuff(user)["uses"] == 2
+    assert inventory._consume_battle_debuff(user) == 1
+    assert inventory._active_battle_debuff(user)["uses"] == 1
+    assert inventory._consume_battle_debuff(user) == 0
+    assert inventory._active_battle_debuff(user) is None
+
+
 @pytest.mark.asyncio
 async def test_bag_and_use_book(monkeypatch):
     state = _patch_io(monkeypatch, inventory, store={"groups": {"1001": {"users": {
@@ -95,6 +108,31 @@ def test_is_gift_item():
     assert inventory._is_gift_item({"name": "彰冬无料券", "effect": {"type": "gift", "gift_name": "彰冬无料"}})
     assert not inventory._is_gift_item({"name": "经验书", "effect": {"type": "exp_grant", "amount": 80}})
     assert not inventory._is_gift_item({})
+
+
+def test_is_battle_debuff_gift():
+    cake = inventory._item_by_name("大葱味蛋糕")
+    assert inventory._is_battle_debuff_gift(cake)
+    assert not inventory._is_battle_debuff_gift(inventory._item_by_name("经验书"))
+
+
+@pytest.mark.asyncio
+async def test_use_scallion_cake_gifts_next_battle_debuff(monkeypatch):
+    state = _patch_io(monkeypatch, inventory, store={"groups": {"1001": {"users": {
+        "u1": {"inventory": {"大葱味蛋糕": 1}},
+        "u2": {},
+    }, "intimacy": {}}}})
+    event = Event(group_id=1001, user_id="u1", original_message=[_at("u2")])
+
+    with pytest.raises(FinishedException) as exc:
+        await inventory.use_cmd.handlers[0](_bot(), event, Message("大葱味蛋糕"))
+
+    result = str(exc.value.result)
+    users = state["groups"]["1001"]["users"]
+    assert "大葱味蛋糕" in result and "[at:u1]" in result and "[at:u2]" in result
+    assert "大葱味蛋糕" not in users["u1"].get("inventory", {})
+    assert users["u2"]["active_battle_debuff"] == {"name": "大葱味蛋糕", "uses": 1}
+    assert state["groups"]["1001"]["intimacy"] == {}
 
 
 async def test_use_gift_voucher_flow(monkeypatch):

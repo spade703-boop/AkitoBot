@@ -109,7 +109,14 @@ async def _(event: Event, args: Message = CommandArg()):
             )
 
         item_name = _pick_supply_item(random)
-        item_effect = str((_item_by_name(item_name) or {}).get("desc", "详见冒险帮助"))
+        item = _item_by_name(item_name) or {}
+        item_effect = str(item.get("desc", "详见冒险帮助"))
+        usage = str(
+            item.get(
+                "supply_hint",
+                "· 战备范围：普通个人挑战 / 普通组队挑战（世界BOSS不生效）",
+            )
+        )
         exp_gain = max(0, int(_supply_cfg().get("exp", 0)))
         old_level = _level_of(int(user.get("exp", 0)))
         user["points"] = points - cost
@@ -135,5 +142,6 @@ async def _(event: Event, args: Message = CommandArg()):
         effect=item_effect,
         exp=exp_gain,
         levelup=levelup,
+        usage=usage,
     )
     await supply_cmd.finish(MessageSegment.reply(event.message_id) + result)
