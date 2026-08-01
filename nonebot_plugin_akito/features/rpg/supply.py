@@ -59,12 +59,12 @@ def _supply_points_status(user: dict, today: str) -> str:
     total = len(costs)
     used = min(used, total)
     if used >= total:
-        return f"· 冒险补给：今日不可开启（本周次数已用完 {used}/{total}）"
+        return f"· 冒险补给：本周次数已用完（已开启 {used}/{total}）"
     cost = costs[used]
     points = int(user.get("points", 0))
     if points >= cost:
-        return f"· 冒险补给：今日可开启 ✅（本周 {used}/{total}，下次消耗 {cost} 积分）"
-    return f"· 冒险补给：今日不可开启（本周 {used}/{total}，下次需要 {cost} 积分，当前 {points}）"
+        return f"· 冒险补给：可开启 ✅（本周已开启 {used}/{total}，本次消耗 {cost} 积分）"
+    return f"· 冒险补给：积分不足（本周已开启 {used}/{total}，本次需要 {cost} 积分，当前 {points}）"
 
 
 register_points_status_hook(_supply_points_status)

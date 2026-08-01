@@ -24,14 +24,14 @@ async def test_points_cmd_shows_supply_and_steal_status(monkeypatch):
     monkeypatch.setattr(
         gift,
         "run_points_status_hooks",
-        lambda user, today: ["· 冒险补给：今日可开启 ✅（本周 0/7，下次消耗 140 积分）"],
+        lambda user, today: ["· 冒险补给：可开启 ✅（本周已开启 0/7，本次消耗 140 积分）"],
     )
 
     with pytest.raises(FinishedException) as exc:
         await gift.points_cmd.handlers[0](Event(group_id=1001, user_id="10001"))
 
     result = str(exc.value.result)
-    assert "冒险补给：今日可开启" in result
+    assert "冒险补给：可开启" in result
     assert "今天已偷 1 次，还可偷 1 次" in result
     assert "今天已被偷 2 次，还可被偷 1 次" in result
 

@@ -12,25 +12,25 @@ from .helpers import _patch_io
 
 def test_supply_points_status_checks_weekly_limit_and_next_cost():
     user = {"points": 140}
-    assert "今日可开启" in supply._supply_points_status(user, "2026-06-22")
-    assert "本周 0/7" in supply._supply_points_status(user, "2026-06-22")
+    assert "冒险补给：可开启" in supply._supply_points_status(user, "2026-06-22")
+    assert "本周已开启 0/7" in supply._supply_points_status(user, "2026-06-22")
 
     user["points"] = 139
-    assert "今日不可开启" in supply._supply_points_status(user, "2026-06-22")
-    assert "下次需要 140 积分，当前 139" in supply._supply_points_status(user, "2026-06-22")
+    assert "冒险补给：积分不足" in supply._supply_points_status(user, "2026-06-22")
+    assert "本次需要 140 积分，当前 139" in supply._supply_points_status(user, "2026-06-22")
 
     user["points"] = 300
     user["weekly_investment"] = {"week": "2026-W26", "supply_count": 7}
-    assert "本周次数已用完 7/7" in supply._supply_points_status(user, "2026-06-22")
+    assert "本周次数已用完（已开启 7/7）" in supply._supply_points_status(user, "2026-06-22")
 
     user["weekly_investment"] = {"week": "2026-W25", "supply_count": 7}
-    assert "今日可开启" in supply._supply_points_status(user, "2026-06-22")
-    assert "本周 0/7" in supply._supply_points_status(user, "2026-06-22")
+    assert "冒险补给：可开启" in supply._supply_points_status(user, "2026-06-22")
+    assert "本周已开启 0/7" in supply._supply_points_status(user, "2026-06-22")
 
 
 def test_supply_registers_points_status_hook():
     lines = run_points_status_hooks({"points": 140}, "2026-06-22")
-    assert any("冒险补给：今日可开启" in line for line in lines)
+    assert any("冒险补给：可开启" in line for line in lines)
 
 
 def test_supply_pool_gives_scallion_cake_exactly_one_percent_weight():
