@@ -4,6 +4,9 @@
 import json
 import os
 from pathlib import Path
+import sqlite3
+
+import nonebot_plugin_akito.core.memory as memory
 
 # ── 从 memory.py 抽取的原子写入逻辑（不依赖运行中的 bot） ─────────────────
 
@@ -82,3 +85,49 @@ def test_atomic_write_handles_empty_dict(tmp_path: Path):
     atomic_save({}, target)
     loaded = json.loads(target.read_text(encoding="utf-8"))
     assert loaded == {}
+
+
+def test_init_db_migrates_message_id_column(tmp_path: Path, monkeypatch):
+    db_path = tmp_path / "legacy.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            "CREATE TABLE messages (id INTEGER PRIMARY KEY, group_id TEXT, user_id TEXT, "
+            "nickname TEXT, content TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)"
+        )
+    monkeypatch.setattr(memory, "DB_PATH", db_path)
+
+    memory.init_db()
+
+    with sqlite3.connect(db_path) as conn:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(messages)")}
+    assert "message_id" in columns
+
+
+def test_group_context_excludes_current_and_drops_stale_topic(tmp_path: Path, monkeypatch):
+    db_path = tmp_path / "context.db"
+    monkeypatch.setattr(memory, "DB_PATH", db_path)
+    memory.init_db()
+    with sqlite3.connect(db_path) as conn:
+        conn.executemany(
+            "INSERT INTO messages (group_id, user_id, nickname, content, message_id, timestamp) "
+            "VALUES (?, ?, ?, ?, ?, datetime('now', ?))",
+            [
+                ("1001", "1", "甲", "很久以前的话题", "old", "-170 seconds"),
+                ("1001", "2", "乙", "刚才的铺垫", "recent", "-20 seconds"),
+                ("1001", "3", "丙", "当前触发消息", "current", "-1 second"),
+            ],
+        )
+
+    result = memory.get_group_context(
+        "1001",
+        limit=12,
+        max_age_seconds=180,
+        max_gap_seconds=90,
+        exclude_message_id="current",
+        include_timestamps=True,
+    )
+
+    assert "刚才的铺垫" in result
+    assert "当前触发消息" not in result
+    assert "很久以前的话题" not in result
+    assert "分钟前]" in result or "刚刚]" in result

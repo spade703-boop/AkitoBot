@@ -64,3 +64,13 @@ def test_should_skip_random_chat_blocks_prefix_and_keywords():
     assert impression._should_skip_random_chat("/help") is True
     assert impression._should_skip_random_chat("开始进货 表情") is True
     assert impression._should_skip_random_chat("你好") is False
+
+
+def test_grounded_random_reply_requires_anchor_from_current_message():
+    assert impression._is_grounded_random_reply("今天又下雨了", "下雨", "出门记得带伞。") is True
+    assert impression._is_grounded_random_reply("今天又下雨了", "昨天考试", "考得怎么样？") is False
+    assert impression._is_grounded_random_reply("今天又下雨了", "雨", "带伞。") is False
+
+
+def test_grounded_random_reply_allows_silence_without_anchor():
+    assert impression._is_grounded_random_reply("哈哈哈哈", "", "") is True

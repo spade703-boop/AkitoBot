@@ -4,6 +4,7 @@
 
 # Local-only reference docs (维护者个人参考，不入库)
 docs/FEATURE_LOGIC.md
+/tmp_pjsk/
 
 # Data (images, memories, DB)
 /data/*

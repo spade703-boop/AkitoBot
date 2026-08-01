@@ -127,6 +127,15 @@ def _should_skip_random_chat(msg: str) -> bool:
     return any(keyword in msg for keyword in BLOCK_KEYWORDS)
 
 
+def _is_grounded_random_reply(msg: str, anchor: str, reply: str) -> bool:
+    """确认随机回复引用的依据确实来自当前消息，而不是历史背景。"""
+    if not reply.strip():
+        return True
+    normalized_msg = "".join(msg.split())
+    normalized_anchor = "".join(anchor.split())
+    return len(normalized_anchor) >= 2 and normalized_anchor in normalized_msg
+
+
 async def is_in_auto_group(event: GroupMessageEvent) -> bool:
     """规则：判断该群是否在自动互动（印象 / 插嘴）白名单内。"""
     return event.group_id in AUTO_CHAT_GROUPS
@@ -144,8 +153,16 @@ async def _(event: GroupMessageEvent):
     if not msg or msg.startswith("/"): return
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO messages (group_id, user_id, nickname, content) VALUES (?, ?, ?, ?)",
-        (str(event.group_id), str(event.user_id), event.sender.card or event.sender.nickname, msg))
+    cursor.execute(
+        "INSERT INTO messages (group_id, user_id, nickname, content, message_id) VALUES (?, ?, ?, ?, ?)",
+        (
+            str(event.group_id),
+            str(event.user_id),
+            event.sender.card or event.sender.nickname,
+            msg,
+            str(event.message_id),
+        ),
+    )
     conn.commit()
     conn.close()
 
@@ -286,7 +303,14 @@ async def _(bot: Bot, event: GroupMessageEvent):
     AUTO_CHAT_COOLDOWN[group_id] = now_ts
 
     reply_segment = MessageSegment.reply(event.message_id)
-    group_context = get_group_context(str(event.group_id), limit=50)
+    group_context = get_group_context(
+        str(event.group_id),
+        limit=12,
+        max_age_seconds=180,
+        max_gap_seconds=90,
+        exclude_message_id=str(event.message_id),
+        include_timestamps=True,
+    )
     current_user_name = event.sender.card or event.sender.nickname
 
     # 语义检索：相关剧本样本 + 相关 PJSK（与主聊天一致；get_relevant_examples 内含 query 扩散）
@@ -360,10 +384,10 @@ async def _(bot: Bot, event: GroupMessageEvent):
         scene_desc = f'你正在群里潜水（旁观），群友【{current_user_name}】刚刚发了一条消息："{msg}"'
         task_logic = f'''
     作为群里潜水的成员（东云彰人），看心情决定是否插一句嘴。遵循以下法则：
-    1. **首选当前消息**：评估"{msg}"有没有槽点，有就直接点评。
-    2. **追溯机制**：如果这句话毫无意义，可以在上下文里找【{current_user_name}】本人刚才说过的有意义的话来承接，禁止接其他人的话题。
-    3. **静默判定**：没意思且没值得接的，必须输出空字符串继续潜水。'''
-        inner_os_guide = f'分析过程：1.这句话是对我说的吗？2."{msg}"有槽点吗？3.没意思的话，【{current_user_name}】本人刚才说过什么值得在意的事吗？4.决定是否插嘴。'
+    1. **唯一回复目标**：只能点评当前消息"{msg}"，禁止回复群聊背景里的任何旧消息。
+    2. **背景用途受限**：群聊背景只能帮助理解当前消息里的代词、省略或正在延续的人物关系，不能借旧话题强行插嘴。
+    3. **静默判定**：当前消息本身没意思、无法自然回应时，必须输出空字符串继续潜水。'''
+        inner_os_guide = f'分析过程：1.这句话是对我说的吗？2.当前消息"{msg}"本身有槽点吗？3.决定回应当前消息或继续潜水。'
         user_content = f'你在群里潜水，看到【{current_user_name}】说了："{msg}"。这句话不是对你说的。决定是否插嘴点评，严格按JSON格式输出。'
 
     system_prompt = f"""
@@ -371,8 +395,8 @@ async def _(bot: Bot, event: GroupMessageEvent):
     {persona}
     【系统物理时间】当前时间是：{time_str}。绝对不可弄错时间。
     {toya_anchor}
-    【场景】{scene_desc}
-    【群聊上下文】\n{group_context}
+    【当前回复目标（唯一）】{scene_desc}
+    【近期群聊背景（仅用于理解当前目标，禁止回复其中旧消息）】\n{group_context}
     【人际资料】{relation_info}
     {song_info}
     {script_examples}
@@ -387,6 +411,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
     你必须且只能输出合法的 JSON 格式。不要用 ```json 包裹！
     {{
       "inner_os": "{inner_os_guide}",
+      "anchor": "若要回复，从当前消息中原样复制至少2个字符作为依据；决定静默时留空。禁止复制历史消息。",
       "reply": "你实际发在群里的话。要求：1. 纯文本，极少用(动作)。2. 善用逗号连接短句，语感流畅。3. 绝不乱接别人的话。4. 旁观模式下如果决定不理，必须输出空字符串。"
     }}
     """
@@ -414,7 +439,12 @@ async def _(bot: Bot, event: GroupMessageEvent):
             inner_os = response_data.get("inner_os", "")
             if inner_os:
                 logger.info(f"💦【小彰潜水OS】: {inner_os}")
+            anchor = response_data.get("anchor", "").strip()
             reply = response_data.get("reply", "").strip()
+
+            if not _is_grounded_random_reply(msg, anchor, reply):
+                logger.warning(f"⚠️ [AutoChat] 当前消息锚点校验失败，静音丢弃: anchor={anchor!r} reply={reply[:40]!r}")
+                return
 
             clean_msg = msg.strip("。，！？.!?~ \n\r")
             clean_reply = reply.strip("。，！？.!?~ \n\r")
@@ -434,6 +464,10 @@ async def _(bot: Bot, event: GroupMessageEvent):
                 rescued = rescue_tail_after_field(raw_result, "inner_os")
             if rescued is not None:
                 reply = rescued.strip()
+                anchor = rescue_field(raw_result, "anchor") or ""
+                if not _is_grounded_random_reply(msg, anchor, reply):
+                    logger.warning("⚠️ [AutoChat] 救援结果缺少有效当前消息锚点，静音丢弃")
+                    return
                 logger.info(f"🔧 插嘴救援成功，reply={repr(reply[:40])}")
                 # reply 为空 = 模型决定静默，走正常静默流程
             else:

@@ -1,8 +1,10 @@
 """记忆系统：长期记忆 JSON 的原子读写，以及基于 SQLite 的群聊上下文存取。"""
 
+import datetime
 import json
 import os
 import sqlite3
+from typing import Optional
 
 from nonebot.adapters import Event
 from nonebot.log import logger
@@ -25,11 +27,21 @@ def init_db() -> None:
             user_id TEXT,
             nickname TEXT,
             content TEXT,
+            message_id TEXT,
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     ''')
+    columns = {row[1] for row in cursor.execute("PRAGMA table_info(messages)").fetchall()}
+    if "message_id" not in columns:
+        cursor.execute("ALTER TABLE messages ADD COLUMN message_id TEXT")
     cursor.execute('''
         CREATE INDEX IF NOT EXISTS idx_messages_gid_uid ON messages(group_id, user_id)
+    ''')
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_messages_gid_timestamp ON messages(group_id, timestamp)
+    ''')
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_messages_gid_mid ON messages(group_id, message_id)
     ''')
     conn.commit()
     conn.close()
@@ -85,23 +97,83 @@ def get_user_memory(unique_key: str) -> dict:
     return MEMORY_DB[unique_key]
 
 
-def get_group_context(group_id: str, limit: int = 20) -> str:
-    """从 SQLite 读取某群最近 limit 条消息，拼成上下文文本（含 bot 复读去重）；失败返回空串。"""
+def _parse_sqlite_timestamp(value: str) -> Optional[datetime.datetime]:
+    """解析 SQLite 时间戳；无时区的 CURRENT_TIMESTAMP 按 UTC 处理。"""
+    try:
+        parsed = datetime.datetime.fromisoformat(value)
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=datetime.timezone.utc)
+    return parsed
+
+
+def _relative_time_label(value: str, now: Optional[datetime.datetime] = None) -> str:
+    """把 SQLite 时间戳转换为简短相对时间标签。"""
+    parsed = _parse_sqlite_timestamp(value)
+    if parsed is None:
+        return "时间未知"
+    current = now or datetime.datetime.now(datetime.timezone.utc)
+    age_seconds = max(0, int((current - parsed.astimezone(datetime.timezone.utc)).total_seconds()))
+    if age_seconds < 60:
+        return "刚刚"
+    if age_seconds < 3600:
+        return f"{age_seconds // 60}分钟前"
+    return f"{age_seconds // 3600}小时前"
+
+
+def get_group_context(
+    group_id: str,
+    limit: int = 20,
+    *,
+    max_age_seconds: Optional[int] = None,
+    max_gap_seconds: Optional[int] = None,
+    exclude_message_id: Optional[str] = None,
+    include_timestamps: bool = False,
+) -> str:
+    """读取群聊上下文，可按消息年龄、连续性和当前消息 ID 收紧范围。"""
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
+        clauses = ["group_id=?"]
+        params: list[object] = [str(group_id)]
+        if max_age_seconds is not None:
+            cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=max_age_seconds)
+            clauses.append("timestamp>=?")
+            params.append(cutoff.strftime("%Y-%m-%d %H:%M:%S"))
+        if exclude_message_id is not None:
+            clauses.append("(message_id IS NULL OR message_id<>?)")
+            params.append(str(exclude_message_id))
+        params.append(limit)
         cursor.execute(
-            "SELECT nickname, content FROM messages WHERE group_id=? ORDER BY id DESC LIMIT ?",
-            (str(group_id), limit),
+            f"SELECT nickname, content, timestamp FROM messages WHERE {' AND '.join(clauses)} "
+            "ORDER BY id DESC LIMIT ?",
+            params,
         )
         rows = cursor.fetchall()
         conn.close()
         if not rows:
             return ""
+
+        if max_gap_seconds is not None and len(rows) > 1:
+            contiguous_rows = [rows[0]]
+            newer_time = _parse_sqlite_timestamp(rows[0][2])
+            for row in rows[1:]:
+                older_time = _parse_sqlite_timestamp(row[2])
+                if (
+                    newer_time is not None
+                    and older_time is not None
+                    and (newer_time - older_time).total_seconds() > max_gap_seconds
+                ):
+                    break
+                contiguous_rows.append(row)
+                newer_time = older_time
+            rows = contiguous_rows
+
         context_str = ""
         seen_bot_contents: set = set()
         bot_consecutive = 0
-        for nickname, content in rows[::-1]:
+        for nickname, content, timestamp in rows[::-1]:
             if nickname == "东云彰人":
                 if content in seen_bot_contents or bot_consecutive >= 2:
                     continue
@@ -109,7 +181,8 @@ def get_group_context(group_id: str, limit: int = 20) -> str:
                 bot_consecutive += 1
             else:
                 bot_consecutive = 0
-            context_str += f"[{nickname}]: {content}\n"
+            time_label = f"[{_relative_time_label(timestamp)}]" if include_timestamps else ""
+            context_str += f"{time_label}[{nickname}]: {content}\n"
         return context_str
     except Exception as e:
         logger.warning(f"⚠️ 读取群上下文失败: {e}")
