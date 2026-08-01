@@ -1,4 +1,4 @@
-"""查询/展示指令：我的角色（等级 + 称号 + 战绩 + 今日装备状态 + 积分 + 背包）、排行榜（等级榜）、冒险帮助。
+"""查询/展示指令：我的角色（等级 + 称号 + 战绩 + 装备 + 背包）、排行榜（等级榜）、冒险帮助。
 
 战力为隐藏值，对外不显示数字。"""
 
@@ -20,7 +20,6 @@ from ...core.game_store import (
     _load_data,
     _save_data,
     _today_str,
-    _weekly_investment,
 )
 from ..gift.pages import FOOTER_RPG_BRAND, qq_avatar_uri
 from ..gift.render import render_bond_page
@@ -37,20 +36,6 @@ from .player import (
 )
 
 status_cmd = on_command("我的角色", priority=5, block=True)
-
-
-def _weekly_tendency(adventure_spent: int, gift_spent: int) -> str:
-    if adventure_spent <= 0 and gift_spent <= 0:
-        return "尚未决定"
-    if gift_spent <= 0:
-        return "偏向冒险"
-    if adventure_spent <= 0:
-        return "偏向羁绊"
-    if adventure_spent > gift_spent * 1.2:
-        return "偏向冒险"
-    if gift_spent > adventure_spent * 1.2:
-        return "偏向羁绊"
-    return "均衡发展"
 
 
 def _battle_status(user: dict) -> str:
@@ -101,10 +86,6 @@ async def _(event: Event, args: Message = CommandArg()):
         title = _title_of(prog["level"])
         bag = sum(int(v) for v in (user.get("inventory") or {}).values())
         wins, total = int(user.get("hunt_wins", 0)), int(user.get("hunt_total", 0))
-        weekly = _weekly_investment(user, today)
-        supply_count = int(weekly.get("supply_count", 0))
-        supply_spent = int(weekly.get("supply_spent", 0))
-        gift_spent = int(weekly.get("gift_spent", 0))
         trophies = user.get("world_boss_trophies")
         if isinstance(trophies, list) and trophies:
             trophy_line = "· 世界BOSS收藏：" + "、".join(str(item) for item in trophies if str(item))
@@ -117,10 +98,7 @@ async def _(event: Event, args: Message = CommandArg()):
             f"· 战绩：{wins} 胜 / 共 {total} 场",
             f"· 今日装备：{_equip_status(user, today)}",
             boss_line,
-            f"· 积分：{int(user.get('points', 0))}",
             f"· 背包：{bag} 件道具",
-            f"· 本周投入：冒险补给 {supply_count}/7（已花费 {supply_spent} 积分） / 送礼 {gift_spent} 积分",
-            f"· 本周倾向：{_weekly_tendency(supply_spent, gift_spent)}",
             f"· 当前战备：{_battle_status(user)}",
         ]
         if _active_battle_supply(user) or _active_battle_supply(user, guard=True):
@@ -266,7 +244,7 @@ _HELP_ITEMS = [
     ]},
     {"command": "我的背包", "description": "查看当前持有的消耗品、礼物券与冒险补给战备。"},
     {"command": "使用 [道具名]", "description": "使用消耗品或启用战备；礼物券需使用“使用 [礼物券名] @某人”。"},
-    {"command": "我的角色", "description": "查看等级、称号、战绩、装备、积分、背包、世界BOSS收藏、本周投入与当前战备。"},
+    {"command": "我的角色", "description": "查看等级、称号、战绩、装备、背包、世界BOSS收藏与当前战备。"},
     {"command": "群排行榜", "description": "查看本群角色经验前十名的等级、称号、升级进度与战绩。"},
     {"command": "世界BOSS", "description": "查看当前世界BOSS的生命值、参与规模与贡献排行；未击败的BOSS会在隔日按贡献结算补偿。"},
     {"command": "攻击世界BOSS", "description": "使用独立的世界BOSS装备进行一次个人攻击，并返回本次造成的精确伤害。"},

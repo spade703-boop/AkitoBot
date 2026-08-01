@@ -10,6 +10,33 @@ from .helpers import _at, _bot, _g0, _patch_runtime, _top
 
 
 @pytest.mark.asyncio
+async def test_points_cmd_shows_supply_and_steal_status(monkeypatch):
+    _patch_runtime(
+        monkeypatch,
+        store={"groups": {"1001": {"users": {"10001": {
+            "points": 180,
+            "steal_date": "2026-06-22",
+            "steal_used": 1,
+            "robbed_date": "2026-06-22",
+            "robbed_count": 2,
+        }}}}},
+    )
+    monkeypatch.setattr(
+        gift,
+        "run_points_status_hooks",
+        lambda user, today: ["· 冒险补给：今日可开启 ✅（本周 0/7，下次消耗 140 积分）"],
+    )
+
+    with pytest.raises(FinishedException) as exc:
+        await gift.points_cmd.handlers[0](Event(group_id=1001, user_id="10001"))
+
+    result = str(exc.value.result)
+    assert "冒险补给：今日可开启" in result
+    assert "今天已偷 1 次，还可偷 1 次" in result
+    assert "今天已被偷 2 次，还可被偷 1 次" in result
+
+
+@pytest.mark.asyncio
 async def test_gift_cmd_requires_at_target(monkeypatch):
     _patch_runtime(monkeypatch)
     event = Event(group_id=1001, user_id="10001", original_message=[])

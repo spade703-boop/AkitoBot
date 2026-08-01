@@ -51,6 +51,7 @@ from ...core.game_store import (
     _weighted_choice,
     get_user,
     resolve_group_id,
+    run_points_status_hooks,
     run_signin_hooks,
 )
 from .config import (
@@ -327,10 +328,20 @@ async def _(event: Event):
 
     can_sign = "可签到 ✅" if user.get("last_sign_in") != today else "今日已签到"
     can_gift = "可送礼 ✅" if user.get("last_gift") != today else "今日已送礼"
-    msg = (
-        f"你当前有 {int(user.get('points', 0))} 积分。\n"
-        f"· {can_sign}\n· {can_gift}"
-    )
+    steal_cfg = _steal_cfg()
+    steal_limit = max(0, int(steal_cfg.get("daily_limit", 2)))
+    robbed_limit = max(0, int(steal_cfg.get("victim_daily_limit", 3)))
+    steal_used = max(0, int(user.get("steal_used", 0))) if user.get("steal_date") == today else 0
+    robbed_count = max(0, int(user.get("robbed_count", 0))) if user.get("robbed_date") == today else 0
+    lines = [
+        f"你当前有 {int(user.get('points', 0))} 积分。",
+        f"· {can_sign}",
+        f"· {can_gift}",
+        *run_points_status_hooks(user, today),
+        f"· 偷取：今天已偷 {steal_used} 次，还可偷 {max(0, steal_limit - steal_used)} 次",
+        f"· 被偷：今天已被偷 {robbed_count} 次，还可被偷 {max(0, robbed_limit - robbed_count)} 次",
+    ]
+    msg = "\n".join(lines)
     await points_cmd.finish(MessageSegment.reply(event.message_id) + msg)
 
 

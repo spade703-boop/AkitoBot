@@ -391,3 +391,28 @@ def run_signin_hooks(group: dict, user_id: str, rng) -> list[str]:
         if line:
             lines.append(str(line))
     return lines
+
+
+# ==================== 积分状态钩子注册表（解耦：gift 查询，rpg 等订阅） ====================
+
+POINTS_STATUS_HOOKS: list = []
+
+
+def register_points_status_hook(fn) -> None:
+    """注册“我的积分”附加状态：fn(user, today) -> str，空串忽略。"""
+    if fn not in POINTS_STATUS_HOOKS:
+        POINTS_STATUS_HOOKS.append(fn)
+
+
+def run_points_status_hooks(user: dict, today: str) -> list[str]:
+    """运行已注册的只读积分状态钩子；单个钩子异常不影响基础查询。"""
+    lines: list[str] = []
+    for fn in list(POINTS_STATUS_HOOKS):
+        try:
+            line = fn(user, today)
+        except Exception as e:
+            logger.warning(f"积分状态钩子 {getattr(fn, '__name__', fn)} 执行失败：{e}")
+            continue
+        if line:
+            lines.append(str(line))
+    return lines

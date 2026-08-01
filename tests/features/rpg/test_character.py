@@ -25,7 +25,8 @@ async def test_status_panel_only_level_and_equip(monkeypatch):
     with pytest.raises(FinishedException) as exc:
         await character.status_cmd.handlers[0](Event(group_id=1001, user_id="u1"))
     r = str(exc.value.result)
-    assert "Lv3" in r and "今日装备" in r and "已强化" in r and "250" in r
+    assert "Lv3" in r and "今日装备" in r and "已强化" in r
+    assert "· 积分：" not in r
     assert "战力" not in r  # 战力隐藏，不外显
 
 
@@ -198,7 +199,7 @@ async def test_status_panel_shows_title_and_record(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_status_panel_shows_weekly_investment_and_active_supplies(monkeypatch):
+async def test_status_panel_shows_active_supplies_without_points_summary(monkeypatch):
     store = {"groups": {"1001": {"users": {"u1": _equipped_user(
         weekly_investment={
             "week": "2026-W26",
@@ -215,8 +216,9 @@ async def test_status_panel_shows_weekly_investment_and_active_supplies(monkeypa
         await character.status_cmd.handlers[0](Event(group_id=1001, user_id="u1"))
 
     result = str(exc.value.result)
-    assert "冒险补给 3/7（已花费 420 积分） / 送礼 200 积分" in result
-    assert "本周倾向：偏向冒险" in result
+    assert "· 积分：" not in result
+    assert "本周投入：" not in result
+    assert "本周倾向：" not in result
     assert "旅人的行囊（剩余 2 场） / 神官的护符（待触发）" in result
     assert "战备范围：普通个人挑战 / 普通组队挑战（世界BOSS不生效）" in result
 

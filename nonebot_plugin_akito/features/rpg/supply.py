@@ -18,8 +18,10 @@ from ...core.game_store import (
     _record_weekly_investment,
     _save_data,
     _today_str,
+    _week_key,
     _weekly_investment,
     _weighted_choice,
+    register_points_status_hook,
 )
 from .analytics import record_supply_open
 from .config import _cfg, _error, _line
@@ -44,6 +46,28 @@ def _pick_supply_item(rng=random) -> str:
         if isinstance(entry, dict) and str(entry.get("item", ""))
     }
     return _weighted_choice(weights, rng)
+
+
+def _supply_points_status(user: dict, today: str) -> str:
+    costs = _supply_costs()
+    if not costs:
+        return ""
+    weekly = user.get("weekly_investment")
+    used = 0
+    if isinstance(weekly, dict) and weekly.get("week") == _week_key(today):
+        used = max(0, int(weekly.get("supply_count", 0)))
+    total = len(costs)
+    used = min(used, total)
+    if used >= total:
+        return f"· 冒险补给：今日不可开启（本周次数已用完 {used}/{total}）"
+    cost = costs[used]
+    points = int(user.get("points", 0))
+    if points >= cost:
+        return f"· 冒险补给：今日可开启 ✅（本周 {used}/{total}，下次消耗 {cost} 积分）"
+    return f"· 冒险补给：今日不可开启（本周 {used}/{total}，下次需要 {cost} 积分，当前 {points}）"
+
+
+register_points_status_hook(_supply_points_status)
 
 
 supply_cmd = on_command("开启冒险补给", priority=5, block=True)
