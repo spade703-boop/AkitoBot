@@ -401,7 +401,7 @@ DEFAULT_RPG_CONFIG: dict = {
         "rebuy_ok": ["🛡️ 替换装备已就位，花了 {cost} 积分。不过这套是临时凑的，打怪经验和积分都会减半。"],
         "use_exp_buff": ["📖 【{name}】已储备。会在没有常规战备生效的下一次普通挑战中使经验 ×{mult}。"],
         "use_exp_grant": ["📖 【{name}】用了。经验 +{amount}。"],
-        "supply_open": ["📦 冒险补给已开启。\n· 消耗 {cost} 积分（本周 {count}/{max}）\n· 获得【{name}】×1（效果：{effect}）\n· 经验 +{exp}{levelup}\n{usage}"],
+        "supply_open": ["📦 冒险补给已开启。\n· 消耗 {cost} 积分（本周 {count}/{max}）\n· 获得【{name}】×1\n（效果：{effect}）\n· 经验 +{exp}，发送“{usage}”后生效{levelup}"],
         "gift_battle_debuff": ["🥬 {a} 把【{name}】送给了 {b}。大葱味已经腌进去了：对方下一场普通个人/组队挑战经验 -15%、积分 -10%、掉落率 -20%（当前排队 {uses} 场；世界BOSS不生效）。"],
         "use_battle_supply": ["🎒 【{name}】已整备。\n· 效果：{parts}\n· 规则：接下来 {uses} 场普通个人/组队挑战生效；期间双倍经验卡暂缓且不消耗；世界BOSS不生效。"],
         "use_battle_guard": ["🛡️ 【{name}】已整备。\n· 效果：{parts}\n· 规则：在下一次普通个人/组队挑战于其他援护判定后仍然失败时触发；护符本身不压制双倍经验卡；世界BOSS不生效。"],

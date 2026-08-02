@@ -111,12 +111,9 @@ async def _(event: Event, args: Message = CommandArg()):
         item_name = _pick_supply_item(random)
         item = _item_by_name(item_name) or {}
         item_effect = str(item.get("desc", "详见冒险帮助"))
-        usage = str(
-            item.get(
-                "supply_hint",
-                "· 战备范围：普通个人挑战 / 普通组队挑战（世界BOSS不生效）",
-            )
-        )
+        effect = item.get("effect", {})
+        target_hint = "@某人" if effect.get("type") == "battle_debuff_gift" else ""
+        usage = f"使用{item_name}{target_hint}"
         exp_gain = max(0, int(_supply_cfg().get("exp", 0)))
         old_level = _level_of(int(user.get("exp", 0)))
         user["points"] = points - cost

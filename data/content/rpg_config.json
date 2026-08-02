@@ -1048,7 +1048,7 @@
       "📖 【{name}】用了。经验 +{amount}。"
     ],
     "supply_open": [
-      "📦 冒险补给已开启。\n· 消耗 {cost} 积分（本周 {count}/{max}）\n· 获得【{name}】×1（效果：{effect}）\n· 经验 +{exp}{levelup}\n{usage}"
+      "📦 冒险补给已开启。\n· 消耗 {cost} 积分（本周 {count}/{max}）\n· 获得【{name}】×1\n（效果：{effect}）\n· 经验 +{exp}，发送“{usage}”后生效{levelup}"
     ],
     "gift_battle_debuff": [
       "🥬 {a} 把【{name}】送给了 {b}。大葱味已经腌进去了：对方下一场普通个人/组队挑战经验 -15%、积分 -10%、掉落率 -20%（当前排队 {uses} 场；世界BOSS不生效）。"

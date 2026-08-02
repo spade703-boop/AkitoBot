@@ -57,8 +57,8 @@ async def test_supply_uses_cross_group_weekly_costs_and_limit(monkeypatch):
             await supply.supply_cmd.handlers[0](Event(group_id=group_id, user_id="u1"), Message(""))
         result = str(exc.value.result)
         assert f"消耗 {cost} 积分" in result
-        assert "获得【旅人的行囊】×1（效果：接下来2次普通个人/组队挑战：战力+10%、经验+25%" in result
-        assert "普通个人挑战 / 普通组队挑战（世界BOSS不生效）" in result
+        assert "· 获得【旅人的行囊】×1\n（效果：接下来2次普通个人/组队挑战：战力+10%、经验+25%" in result
+        assert "· 经验 +30，发送“使用旅人的行囊”后生效" in result
 
     user = state["users"]["u1"]
     assert user["points"] == 800
@@ -120,9 +120,26 @@ async def test_supply_open_scallion_cake_shows_gift_usage(monkeypatch):
 
     result = str(exc.value.result)
     user = state["groups"]["1001"]["users"]["u1"]
-    assert "获得【大葱味蛋糕】×1" in result
-    assert "使用 大葱味蛋糕@某人" in result
+    assert "· 获得【大葱味蛋糕】×1\n（效果：赠送给群友" in result
+    assert "· 经验 +30，发送“使用大葱味蛋糕@某人”后生效" in result
     assert user["inventory"]["大葱味蛋糕"] == 1
+
+
+@pytest.mark.asyncio
+async def test_supply_open_guard_shows_effect_and_usage(monkeypatch):
+    _patch_io(
+        monkeypatch,
+        supply,
+        store={"groups": {"1001": {"users": {"u1": {"points": 140, "exp": 0}}}}},
+    )
+    monkeypatch.setattr(supply, "_pick_supply_item", lambda rng=supply.random: "神官的护符")
+
+    with pytest.raises(FinishedException) as exc:
+        await supply.supply_cmd.handlers[0](Event(group_id=1001, user_id="u1"), Message(""))
+
+    result = str(exc.value.result)
+    assert "· 获得【神官的护符】×1\n（效果：下一次普通个人/组队挑战失败时转为成功" in result
+    assert "· 经验 +30，发送“使用神官的护符”后生效" in result
 
 
 @pytest.mark.asyncio
