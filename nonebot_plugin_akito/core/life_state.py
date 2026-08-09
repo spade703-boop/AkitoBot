@@ -1,5 +1,6 @@
 """生活状态机：作息 / 睡眠 / 节日 / 晨跑等状态推断，以及安全期、吐槽冷却、图片权限等运行时开关。"""
 
+from dataclasses import dataclass
 import datetime
 import random
 import re
@@ -21,6 +22,117 @@ STATE_DURATION = 1800
 
 AKITO_SAFE_UNTIL = 0.0
 AKITO_LAST_COMPLAINT = 0.0
+
+
+@dataclass(frozen=True)
+class QueryIntent:
+    """一次消息的查询意图分类结果。"""
+
+    intent: str
+    explicit_request: bool
+    explicit_search: bool
+    query: str
+    confidence: float
+
+
+_SEARCH_VERBS = ("搜索", "查询", "查找", "检索", "搜", "查")
+_STRONG_SEARCH_PREFIXES = ("搜索", "搜一下", "搜下", "搜搜", "查询", "查找", "检索", "查一下", "查下", "查查", "查一查")
+_DIRECTED_SEARCH_PREFIXES = ("帮我", "替我", "给我", "你帮我", "你替我", "你给我")
+_FIRST_PERSON_SEARCH_PREFIXES = ("我想", "我要", "我需要")
+_POLITE_PREFIXES = ("麻烦你", "麻烦", "请你", "请", "你能不能", "能不能", "可不可以", "可以不可以", "是否可以", "帮忙")
+_WEB_SIGNALS = (
+    "今天", "明天", "现在", "目前", "最近", "最新", "实时", "刚刚", "新闻", "天气", "预报", "价格", "多少钱",
+    "比分", "赛果", "赛程", "汇率", "股价", "票房", "活动安排", "资料", "数据", "记录", "信息", "网址", "词条",
+)
+_FACTUAL_QUESTION_CUES = ("是什么", "谁是", "多少", "哪里", "哪儿", "哪一个", "什么时候", "怎么回事", "原理", "定义")
+_GENERAL_QUESTION_CUES = ("告诉我", "我想知道", "我想问", "想问问", "请问", "你知道", "为什么", "是否", "有没有", "吗")
+_OPINION_CUES = ("怎么看", "觉得", "看法", "评价", "印象", "喜欢", "讨厌", "感受", "个人经历")
+_ROLEPLAY_TOPICS = ("彰人", "小彰", "冬弥", "青柳", "东云", "VBS", "vbs", "PJSK", "pjsk", "世界计划")
+_THIRD_PARTY_SEARCH_RE = re.compile(
+    r"^(?P<subject>[^，。！？,.!?]{1,16}?)(?:要|想|准备|打算|正在|刚刚|已经|会|得去)(?:去)?(?:搜|搜索|查|查询|检查)"
+)
+
+
+def _normalize_query_text(msg: str) -> str:
+    text = msg.strip()
+    lowered = text.lower()
+    for name in ("东云小彰", "机器人", "彰人", "小彰", "松饼", "akito", "bot"):
+        if lowered.startswith(name.lower()):
+            return text[len(name):].lstrip(" ，,：:")
+    return text
+
+
+def _is_third_party_search_mention(text: str) -> bool:
+    match = _THIRD_PARTY_SEARCH_RE.search(text)
+    if not match:
+        return False
+    subject = match.group("subject").strip()
+    return not subject.endswith(("我", "我们", "咱们", "咱", "你"))
+
+
+def _is_explicit_search_request(text: str) -> bool:
+    compact = re.sub(r"[\s，,。！？!?：:]", "", text)
+    body = compact
+    changed = True
+    while changed:
+        changed = False
+        for prefix in _POLITE_PREFIXES:
+            if body.startswith(prefix):
+                body = body[len(prefix):]
+                changed = True
+                break
+
+    for prefix in _DIRECTED_SEARCH_PREFIXES:
+        if body.startswith(prefix):
+            remainder = body[len(prefix):]
+            return remainder.startswith(_SEARCH_VERBS)
+
+    for prefix in _FIRST_PERSON_SEARCH_PREFIXES:
+        if body.startswith(prefix):
+            remainder = body[len(prefix):]
+            return remainder.startswith(_SEARCH_VERBS)
+
+    if body.startswith(_STRONG_SEARCH_PREFIXES):
+        return True
+    if body.startswith("搜"):
+        return True
+    if body.startswith("查"):
+        return any(signal in body[1:] for signal in _WEB_SIGNALS)
+    return False
+
+
+def classify_query_intent(msg: str) -> QueryIntent:
+    """区分闲聊提及、本地问题与需要联网判断的查询。"""
+    text = _normalize_query_text(msg)
+    if not text:
+        return QueryIntent("mention", False, False, "", 1.0)
+
+    if _is_third_party_search_mention(text):
+        return QueryIntent("mention", False, False, text, 0.99)
+
+    has_question_mark = text.endswith(("?", "？"))
+    has_general_question = has_question_mark or any(cue in text for cue in _GENERAL_QUESTION_CUES)
+    has_factual_question = any(cue in text for cue in _FACTUAL_QUESTION_CUES)
+    has_opinion_cue = any(cue in text for cue in _OPINION_CUES)
+    has_web_signal = any(signal in text for signal in _WEB_SIGNALS)
+    has_roleplay_topic = any(topic in text for topic in _ROLEPLAY_TOPICS)
+    has_search_verb = any(verb in text for verb in _SEARCH_VERBS)
+    explicit_search = _is_explicit_search_request(text)
+
+    if explicit_search:
+        if has_roleplay_topic and not has_web_signal:
+            return QueryIntent("local_question", True, False, text, 0.98)
+        return QueryIntent("web_search", True, True, text, 0.99)
+
+    if has_opinion_cue or (has_roleplay_topic and not has_web_signal):
+        return QueryIntent("local_question", has_general_question or has_factual_question, False, text, 0.95)
+    if has_web_signal and (has_general_question or has_factual_question or has_search_verb):
+        return QueryIntent("web_search", True, False, text, 0.9)
+    if has_factual_question:
+        return QueryIntent("web_search", True, False, text, 0.85)
+    if has_general_question:
+        return QueryIntent("local_question", True, False, text, 0.85)
+    return QueryIntent("mention", False, False, text, 0.9)
 
 
 def grant_safety_pass(seconds: int = 5) -> None:
@@ -131,7 +243,7 @@ def get_daily_activity(hour: int, weekday: int, minute: int = 0) -> str:
 
 
 def check_sleep_status(msg: str) -> tuple[bool, str]:
-    """深夜(0–6 点)睡眠状态判定。
+    """深夜(0–6 点)睡眠状态判定；仅明确联网请求可以唤醒。
 
     Returns:
         (是否照常处理, 指令/标记文本)。如 (True, "ignore") 表示装睡忽略，
@@ -140,43 +252,21 @@ def check_sleep_status(msg: str) -> tuple[bool, str]:
     if not is_sleeping():
         return False, ""
 
-    now_jst = datetime.datetime.now(TZ_JST)
-
-    msg_lower = msg.strip().lower()
-    clean_msg = msg_lower
-    for name in ["东云小彰", "彰人", "小彰", "松饼", "akito", "bot", "机器人"]:
-        clean_msg = clean_msg.replace(name, "")
-    clean_msg = clean_msg.strip()
-
-    wake_up_triggers = ["搜", "查", "是什么", "谁是", "天气", "新闻", "多少钱", "搜一下", "搜索", "查询", "帮我查", "我想知道", "告诉我", "我想问问", "你知道", "帮我看看", "问问你"]
-    is_woken_up = any(k in clean_msg for k in wake_up_triggers)
-
-    if not is_woken_up:
+    query_intent = classify_query_intent(msg)
+    if not (query_intent.intent == "web_search" and query_intent.explicit_search):
         if random.random() < 0.8:
             return True, "ignore"
-        else:
-            mumble_pool = SLEEP_DB.get("sleep_mumbles") or ["……zzZ……"]
-            return True, random.choice(mumble_pool)
+        mumble_pool = SLEEP_DB.get("sleep_mumbles") or ["……zzZ……"]
+        return True, random.choice(mumble_pool)
 
-    relation_features = ["评价", "看法", "印象", "怎么看", "认识"]
-    is_evaluation = any(k in clean_msg for k in relation_features)
-
-    if is_evaluation:
-        selected = random.choice(SLEEP_DB.get("sleep_relation") or ["【状态：困】\n动作：闭着眼。\n台词参考：……不知道……困……"])
-        instruction = (
-            f"\n⚠️⚠️【特殊事件：深夜被叫醒问话】⚠️⚠️\n"
-            f"当前时间：凌晨 {now_jst.strftime('%H:%M')}（JST）。用户把你吵醒了，问你对某人的看法：'{msg}'。\n"
-            f"你很困，**完全没有拿手机去查**，而是闭着眼凭印象回答。\n严格扮演：\n{selected}\n"
-        )
-        return False, instruction
-    else:
-        selected = random.choice(SLEEP_DB.get("sleep_search") or ["【状态：困】\n动作：闭着眼查手机。\n台词参考：……给你……呼……"])
-        instruction = (
-            f"\n⚠️⚠️【特殊事件：深夜被迫营业】⚠️⚠️\n"
-            f"当前时间：凌晨 {now_jst.strftime('%H:%M')}（JST）。用户让你查数据/资讯：'{msg}'。\n"
-            f"你必须拿起手机去查。严格扮演：\n{selected}\n"
-        )
-        return False, instruction
+    now_jst = datetime.datetime.now(TZ_JST)
+    selected = random.choice(SLEEP_DB.get("sleep_search") or ["【状态：困】\n动作：闭着眼查手机。\n台词参考：……给你……呼……"])
+    instruction = (
+        f"\n⚠️⚠️【特殊事件：深夜被迫营业】⚠️⚠️\n"
+        f"当前时间：凌晨 {now_jst.strftime('%H:%M')}（JST）。用户明确让你查数据/资讯：'{msg}'。\n"
+        f"你必须拿起手机去查。严格扮演：\n{selected}\n"
+    )
+    return False, instruction
 
 
 def get_festival_buff(date_obj: datetime.datetime) -> str:

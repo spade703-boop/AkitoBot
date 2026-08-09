@@ -87,12 +87,12 @@ from .data import (
 # 注：PJSK_KNOWLEDGE_BASE / PJSK_INTRO 是会被热重载重新赋值的 str，
 # 不做模块级再导出（避免旧引用失效）；需要时经 data.get_pjsk_knowledge_base() 等 getter 取。
 from .life_state import (
-    AKITO_STATUS, STATE_DURATION,
+    AKITO_STATUS, QueryIntent, STATE_DURATION,
     grant_safety_pass, get_safe_until, get_last_complaint, set_last_complaint,
     get_daily_activity, check_sleep_status, get_festival_buff, get_morning_run_buff,
     get_sleep_buffer_buff, get_toya_anchor,
     parse_duration_and_content, check_img_permission,
-    is_sleeping, sleep_block,
+    classify_query_intent, is_sleeping, sleep_block,
 )
 from .api import (
     ImageAnalysis,
@@ -132,6 +132,7 @@ __all__ = [
     # life_state
     "AKITO_STATUS", "STATE_DURATION",
     "grant_safety_pass", "get_safe_until", "get_last_complaint", "set_last_complaint",
+    "QueryIntent", "classify_query_intent",
     "get_daily_activity", "check_sleep_status", "get_festival_buff", "get_morning_run_buff",
     "get_sleep_buffer_buff", "get_toya_anchor", "parse_duration_and_content", "check_img_permission",
     "is_sleeping", "sleep_block",

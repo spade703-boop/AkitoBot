@@ -33,6 +33,7 @@ from ..core import (
     call_deepseek_api,
     call_deepseek_api_agent,
     check_sleep_status,
+    classify_query_intent,
     describe_image,
     extract_json_block,
     format_image_analysis_for_chat,
@@ -74,10 +75,11 @@ AGENT_TOOLS = [
             "name": "search_internet",
             "description": (
                 "搜索互联网上的实时、客观信息。\n\n"
-                "【必须调用】：用户询问具体事实/数据时，例如：赛事结果、天气预报、"
+                "【必须调用】：用户确实在向你询问具体事实/数据时，例如：赛事结果、天气预报、"
                 "某人的实际动态、商品价格、新闻事件、专业知识等客观存在的信息。\n\n"
                 "【禁止调用】：以下情况直接以角色身份回答，不搜索——\n"
                 "- 普通聊天、问候、调侃、玩梗\n"
+                "- 只是提到“查/搜”，例如“冬弥要查你作业”“老师正在检查作业”\n"
                 "- 询问你对某事的看法、感受或个人经历\n"
                 "- 关于东云彰人、冬弥、VBS、PJSK 世界观的角色设定问题\n"
                 "- 用户在和你进行 RP 互动"
@@ -578,9 +580,8 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage()):
         # 涉冬弥话题：注入 routine 锚定的冬弥去向推断 + 连贯锁（WL2 决裂世界线跳过，避免冒同框糖）
         toya_anchor = get_toya_anchor() if (is_toya_context and not is_wl2) else ""
 
-        # 仅用于 acting_guide 语气调节，不触发实际搜索
-        info_keywords = ["搜", "查", "是什么", "谁是", "天气", "新闻", "多少钱", "查询", "我想知道"]
-        is_info_request = any(k in plain_text_content for k in info_keywords)
+        query_intent = classify_query_intent(plain_text_content)
+        is_info_request = query_intent.intent == "web_search"
 
         long_term_facts = user_mem.get("long_term_facts", [])
         long_term_memory_text = "\n".join(long_term_facts) if long_term_facts else "（暂无特殊记忆）"
@@ -667,20 +668,20 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage()):
         messages_list.append({"role": "user", "content": tagged_user_msg_for_llm})
 
         # --- 9. 搜索调度 + 智能体调用循环 ---
-        # 双轨触发：① 特定词汇命中 → 确定性强制联网；② 否则交由 LLM 通过 Function Calling 自主决定。
+        # 双轨触发：① 明确搜索请求确定性联网；② 事实查询候选交由 LLM 通过 Function Calling 决定。
         # 关键：两条路都把搜索结果回灌进【人设系统提示】里重新生成，由小彰用自己的语气复述，绝不直出原始摘要。
         search_result = ""
         raw_result = ""
-        if not has_image and is_info_request:
-            # ① 关键词强制搜索：命中即查，不依赖模型"要不要搜"的自主判断
-            forced_query = plain_text_content.strip()
-            logger.info(f"🔑 关键词命中，强制触发联网搜索: [{forced_query}]")
+        if not has_image and is_info_request and query_intent.explicit_search:
+            # ① 明确搜索请求：高精度句式命中后确定性联网
+            forced_query = query_intent.query or plain_text_content.strip()
+            logger.info(f"🔑 明确搜索请求，强制触发联网搜索: [{forced_query}]")
             search_result = await smart_search(forced_query)
             messages_list[-1]["content"] += _build_search_aside(forced_query, search_result)
             raw_result = await call_deepseek_api(messages_list, force_json=True)
 
-        elif not has_image:
-            # ② 无关键词：交给 LLM 自主判断是否需要联网（ReAct Function Calling）
+        elif not has_image and is_info_request:
+            # ② 事实查询候选：交给 LLM 自主判断是否需要联网（ReAct Function Calling）
             agent_message = await call_deepseek_api_agent(messages_list, tools=AGENT_TOOLS)
 
             if agent_message is not None and agent_message.tool_calls:

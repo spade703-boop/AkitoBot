@@ -126,3 +126,11 @@ def test_get_song_mention_ignores_missing_or_empty_keywords():
     assert "《A》" not in result
     assert "《B》" not in result
     assert "《C》" in result
+
+
+async def test_hybrid_relationship_uses_local_profile_without_web_content():
+    fake = [{"keywords": ["冬弥"], "content": "冬弥是彰人的搭档。"}]
+    with mock.patch.object(context, "RELATIONSHIP_DATA", fake):
+        result = await context.get_hybrid_relationship("你怎么看冬弥？")
+    assert "冬弥是彰人的搭档。" in result
+    assert "网络搜索结果" not in result

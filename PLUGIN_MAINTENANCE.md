@@ -3,7 +3,7 @@
 **角色**：东云彰人（初音未来：缤纷舞台 同人 AI，CP 立场：彰冬不拆不逆）  
 **框架**：NoneBot2 + OneBot V11  
 **AI 后端**：DeepSeek API / 智谱 GLM-4V（视觉）/ Tavily（搜索）  
-**文档更新**：2026-07-04
+**文档更新**：2026-08-09
 
 ---
 
@@ -227,7 +227,8 @@ AKITO_SAFE_UNTIL = time.time() + 10   # 无效！
 |------|------|
 | `compute_period_key(hour, weekday, minute=0)` | 计算 routine 时段 key 的**单一真相源**——`get_daily_activity` 与 `time_awareness` 均转调此函数，调整作息划分只需改这一处 |
 | `get_daily_activity(hour, weekday, minute=0)` | 返回当前时段状态字符串，内置 30 分钟缓存 + **时段变更自动清缓存**。时段划分：`late_night`(0-6)、`morning_*`(6-8)、`noon_*`(8-12)、`lunch_*`(12-13)、`afternoon_*`(13-15)、`evening`(15-18)、`night_training`(18-21)、`night_home`(21-23:29)、`sleep_buffer`(23:45-23:59)。**任何需要 routine 的地方都应无条件调用此函数**，不要在外部判断 cached_content 是否存在后跳过调用 |
-| `check_sleep_status(msg)` | 判断是否深夜并返回 `(should_ignore, instruction)` |
+| `classify_query_intent(msg)` | 返回 `QueryIntent(intent, explicit_request, explicit_search, query, confidence)`；`intent` 分 `mention` / `local_question` / `web_search`。第三方“要查/正在查”优先判为提及，角色看法/设定优先本地，明确“帮我查/搜一下/查询”才置 `explicit_search=True` |
+| `check_sleep_status(msg)` | 北京时间 0–6 点复用 `QueryIntent`：仅 `web_search + explicit_search` 放行并注入“被迫营业”指令；其余消息 80% 返回 `ignore`、20% 从 `sleep_mumbles` 取梦话。返回 `(should_block, instruction)`，注意 `False` 表示继续完整生成 |
 | `get_festival_buff(date_obj)` | 返回今日节日 Prompt 片段 |
 | `get_morning_run_buff(hour)` | 返回晨跑状态 Prompt（6 点整段生效） |
 | `get_sleep_buffer_buff(hour, minute)` | 返回睡前准备状态 Prompt（23:45-23:59 生效），若存在 `previous_context` 则自动注入前一时段的活动记忆 |
@@ -269,7 +270,7 @@ AKITO_SAFE_UNTIL = time.time() + 10   # 无效！
 | `get_relevant_pjsk(query, n)` | 语义检索 PJSK 黑话（检索前与剧本一致做 query 扩散 blend）；检索不可用回退全量 `PJSK_KNOWLEDGE_BASE`，无相关命中仅注入前言（降噪）；`PJSK_INTRO` 始终在前 |
 | `get_song_memories()` | 将 `SONG_DATA` 格式化为静态曲名清单，每次对话先注入；具体点名某首歌时再补充详细记忆 |
 | `get_song_mention(text)` | 对消息做 `keywords` 子串匹配，命中时最多注入 2 首歌的完整 `description` |
-| `get_hybrid_relationship(text)` | 本地关键词白名单扫描 + 可选联网补充，返回 Prompt 片段 |
+| `get_hybrid_relationship(text)` | 仅扫描本地关系档案并返回 Prompt 片段；不得自行调用 `smart_search`，所有联网统一由 chat.py 的 `QueryIntent` 调度 |
 | `reload_persona()` | 重新读取 `akito_persona.txt`，返回新内容（`重载配置 persona` 触发） |
 
 ### retrieval.py
@@ -326,10 +327,10 @@ AKITO_SAFE_UNTIL = time.time() + 10   # 无效！
 2. 文本/视觉解析   分离纯文本和图片；图片（最多 3 张）一次调用 GLM-4.6V 结构化识别
                    （JSON + 布尔特征裁决，26 角色名册，截图自动二次 OCR）
 3. 并发保护        asyncio.Lock（per 会话键）防止同一会话并发
-4. 睡眠检测        check_sleep_status → 深夜可能忽略或返回睡觉提示
+4. 睡眠检测        check_sleep_status → 仅明确联网请求可继续；其余 80% 静默 / 20% 梦话
 5. Prompt 组装     人设 + 时间感知 + 临时记忆 + 关系链 + 搜索结果 +
                    剧本示例 + 歌曲知识 + 导演骰子 + 冬弥去向锚定(get_toya_anchor，涉冬弥且非WL2) + schema 格式指令
-6. ReAct Agent     见下方
+6. 查询意图调度    mention/local 直答；明确搜索强制联网；事实候选交给 ReAct Agent
 7. JSON 解析       提取 inner_os / action / dialogue；两层正则救援兜底
 8. 内联动作回收    action 为空时尝试从 dialogue 开头提取「(动作)」
 9. MVVM 排版       Python 端随机拼装最终文本（动作前置/后置/省略）
@@ -344,14 +345,15 @@ AKITO_SAFE_UNTIL = time.time() + 10   # 无效！
 
 ```
 有图片 ──────────────────────────────────────────────────────→ call_deepseek_api（直接生成，不搜索）
-无图片 + 命中 info_keywords → 强制 smart_search → _build_search_aside 注入用户消息 → call_deepseek_api
-无图片 + 未命中关键词 → call_deepseek_api_agent（带 AGENT_TOOLS，LLM 自主决定）
+无图片 + QueryIntent.explicit_search → 强制 smart_search → _build_search_aside 注入用户消息 → call_deepseek_api
+无图片 + QueryIntent.intent=web_search 且非明确搜索 → call_deepseek_api_agent（带 AGENT_TOOLS，LLM 自主决定）
            ├─ 返回 tool_calls → 执行 smart_search → 塞回 messages → call_deepseek_api
            ├─ 返回普通内容   → 直接使用 agent_message.content
            └─ 返回 None（超时）→ call_deepseek_api（降级兜底）
+无图片 + mention/local_question → call_deepseek_api（直接生成，不搜索）
 ```
 
-> 两条搜索路径（关键词强制 / LLM 自主）都把搜索结果回灌进**人设系统提示**重新生成，
+> 两条搜索路径（明确请求强制 / 事实查询候选由 LLM 自主判断）都把搜索结果回灌进**人设系统提示**重新生成，
 > 由彰人用自己的语气复述，绝不直出原始摘要；搜索无结果时统一走 `_search_miss_note` 兜底。
 
 **JSON 解析 + 两层救援（Step 7）**：
@@ -810,7 +812,7 @@ py tools/eval_retrieval.py rerank 0.2  # 用指定阈值试跑精排臂
 
 ## 关键设计说明
 
-1. **ReAct Agent 循环**：chat.py 主对话用两阶段调用。第一阶段 `call_deepseek_api_agent` 携带 `AGENT_TOOLS` 让 LLM 自主决定是否搜索；返回 `tool_calls` 则执行搜索后发起第二阶段 `call_deepseek_api`。有图片时跳过 Agent 直接走第二阶段。
+1. **QueryIntent + ReAct 搜索调度**：chat.py 先用 `classify_query_intent()` 把消息分成闲聊提及、本地问题、联网候选。`explicit_search=True` 时直接 `smart_search`；普通 `web_search` 候选才进入 `call_deepseek_api_agent`，返回 `tool_calls` 后执行搜索并二次生成；`mention/local_question` 与图片消息都直接调用标准对话，不经过搜索 Agent。关系档案、RAG 等上下文构建层不得私自联网。
 
 2. **MVVM 渲染分离**：LLM 输出 `action`（动作）+ `dialogue`（台词）纯语义字段，Python 端随机拼装最终格式。history 存储已渲染的纯文本，切断格式复读传染链。
 

@@ -4,7 +4,6 @@ import random
 
 from nonebot.log import logger
 
-from .api import smart_search
 from .data import (
     PJSK_ENTRIES,
     RELATIONSHIP_DATA,
@@ -119,7 +118,7 @@ def get_song_mention(text: str) -> str:
 
 
 async def get_hybrid_relationship(text: str) -> str:
-    """命中关系档案关键词时，拼装「本地认知 +（提问时）网络搜索」的关系提示；未命中返回空串。"""
+    """命中关系档案关键词时拼装本地认知提示；联网统一由 chat.py 调度。"""
     text_lower = text.lower()
 
     # --- Step 1: 本地关键词白名单扫描 ---
@@ -144,19 +143,8 @@ async def get_hybrid_relationship(text: str) -> str:
     if not local_info:
         return ""
 
-    # --- Step 3: 仅在明确提问时才触发网络搜索 ---
-    question_markers = ["吗", "呢", "吧", "？", "?", "怎么", "怎样", "如何", "是什么", "哪里", "多少", "为什么", "谁"]
-    should_search = any(m in text for m in question_markers)
-
-    web_info = ""
-    if should_search:
-        logger.info(f"🔍 关系档案触发网搜: [{matched_name}]")
-        web_info = await smart_search(f"Project Sekai 东云彰人 {matched_name} 关系 剧情互动 评价")
-
     final_prompt = f'\n【检测到用户正在询问关于"{matched_name}"的话题】\n'
     final_prompt += f"📖【长期记忆库 (基础认知)】📖\n{local_info}\n"
-    if web_info:
-        final_prompt += f"🔍【补充情报 (网络搜索结果)】🔍\n{web_info}\n"
     return final_prompt
 
 

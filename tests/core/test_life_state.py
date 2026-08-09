@@ -134,16 +134,66 @@ def test_sleep_woken_up_by_search(patch_life_state_deps):
     assert "sleep_search" in instruction or "被迫营业" in instruction
 
 
-def test_sleep_woken_up_by_relation_query(patch_life_state_deps):
-    """凌晨评价类消息（含唤醒词+评价词）触发被叫醒问话。"""
+def test_sleep_relation_query_stays_blocked(patch_life_state_deps):
+    """凌晨角色看法问题不联网，仍走静默/梦话。"""
     ls = patch_life_state_deps
     fake_now = _make_dt(2026, 5, 30, 3, 0, tzinfo=TZ_CN)
     with mock.patch("datetime.datetime") as mock_dt:
         mock_dt.now.side_effect = lambda tz: fake_now
-        with mock.patch.object(ls, "TZ_CN", TZ_CN), mock.patch.object(ls, "TZ_JST", TZ_JST):
+        with mock.patch.object(ls, "TZ_CN", TZ_CN), mock.patch.object(ls, "TZ_JST", TZ_JST), mock.patch.object(
+            ls.random, "random", return_value=0.1
+        ):
             should_block, instruction = ls.check_sleep_status("我想知道你怎么看冬弥")
-    assert should_block is False
-    assert "sleep_relation" in instruction or "被叫醒问话" in instruction
+    assert should_block is True
+    assert instruction == "ignore"
+
+
+def test_query_intent_third_party_search_word_is_mention(patch_life_state_deps):
+    """第三方“要查”是闲聊语义，不是用户发起搜索。"""
+    intent = patch_life_state_deps.classify_query_intent("冬弥要查你作业写完没")
+    assert intent.intent == "mention"
+    assert intent.explicit_request is False
+    assert intent.explicit_search is False
+
+
+def test_query_intent_explicit_search_request(patch_life_state_deps):
+    intent = patch_life_state_deps.classify_query_intent("帮我查一下东京明天天气")
+    assert intent.intent == "web_search"
+    assert intent.explicit_request is True
+    assert intent.explicit_search is True
+
+
+def test_query_intent_time_sensitive_question_uses_agent(patch_life_state_deps):
+    intent = patch_life_state_deps.classify_query_intent("东京明天天气怎么样？")
+    assert intent.intent == "web_search"
+    assert intent.explicit_request is True
+    assert intent.explicit_search is False
+
+
+def test_query_intent_role_opinion_stays_local(patch_life_state_deps):
+    intent = patch_life_state_deps.classify_query_intent("你怎么看冬弥做甜点")
+    assert intent.intent == "local_question"
+    assert intent.explicit_search is False
+
+
+def test_query_intent_explicit_role_setting_request_stays_local(patch_life_state_deps):
+    intent = patch_life_state_deps.classify_query_intent("帮我查一下冬弥是谁")
+    assert intent.intent == "local_question"
+    assert intent.explicit_request is True
+    assert intent.explicit_search is False
+
+
+def test_sleep_third_party_search_word_cannot_wake_bot(patch_life_state_deps):
+    ls = patch_life_state_deps
+    fake_now = _make_dt(2026, 5, 30, 0, 30, tzinfo=TZ_CN)
+    with mock.patch("datetime.datetime") as mock_dt:
+        mock_dt.now.side_effect = lambda tz: fake_now
+        with mock.patch.object(ls, "TZ_CN", TZ_CN), mock.patch.object(ls, "TZ_JST", TZ_JST), mock.patch.object(
+            ls.random, "random", return_value=0.9
+        ):
+            should_block, instruction = ls.check_sleep_status("冬弥要查你作业写完没")
+    assert should_block is True
+    assert instruction in FAKE_SLEEP_DB["sleep_mumbles"]
 
 
 def test_sleep_edge_hour_0(patch_life_state_deps):
