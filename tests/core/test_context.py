@@ -12,13 +12,15 @@ def test_get_random_examples_empty_returns_empty():
 
 
 def test_get_random_examples_formats_entries():
-    """非空时返回含情境 / 台词的参考剧本文本。"""
+    """非空时返回含情境 / 台词和归因锁的参考剧本文本。"""
     fake = [{"context": "在练习室", "dialogue": "再来一遍。"}]
     with mock.patch.object(context, "SCRIPT_DB", fake):
         result = context.get_random_examples(num=5)
     assert "参考剧本" in result
     assert "在练习室" in result
     assert "再来一遍。" in result
+    assert "本条发言者：彰人" in result
+    assert "不得交换主语/宾语" in result
 
 
 def test_get_random_examples_respects_count():
@@ -26,7 +28,7 @@ def test_get_random_examples_respects_count():
     fake = [{"context": f"c{i}", "dialogue": f"d{i}"} for i in range(10)]
     with mock.patch.object(context, "SCRIPT_DB", fake):
         result = context.get_random_examples(num=3)
-    assert result.count("- 情境") == 3
+    assert result.count("本条发言者：彰人") == 3
 
 
 # ── get_song_memories ───────────────────────────────────────────────────────

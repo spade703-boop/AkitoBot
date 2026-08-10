@@ -18,9 +18,93 @@ def test_build_interact_instruction_for_toya_reply_bridge():
         current_image_identity="",
         origin_sender="青柳冬弥",
     )
-    assert "中转站模式" in result
+    assert "中转站" in result
     assert "测试群友" in result
     assert "青柳冬弥" in result
+
+
+def test_third_party_toya_reference_keeps_audience_and_relationship_axes_separate():
+    audience = chat._build_interact_instruction(
+        plain_text_content="冬弥说你作业还没写完",
+        sender_nickname="测试群友",
+        user_id="12345",
+        is_talking_to_toya=False,
+        reply_target_is_toya=False,
+        has_reply=False,
+        current_image_identity="",
+        origin_sender="",
+    )
+    relationship = chat._build_referenced_relationship_instruction(
+        "冬弥说你作业还没写完",
+        "测试群友",
+        is_talking_to_toya=False,
+        reply_target_is_toya=False,
+        is_wl2=False,
+    )
+
+    assert "普通群友" in audience
+    assert "第三方提到冬弥" in relationship
+    assert "两个独立维度" in relationship
+    assert "他的事不关我事" in relationship
+    assert "不能改写你和冬弥的关系" in relationship
+
+
+def test_toya_roleplay_message_is_direct_interaction():
+    assert chat._is_toya_roleplay_message("冬弥：（把作业放到彰人面前）写完了吗") is True
+    assert chat._is_toya_roleplay_message("群友说冬弥要查你作业") is False
+
+
+def test_wl2_skips_normal_toya_relationship_axis():
+    relationship = chat._build_referenced_relationship_instruction(
+        "冬弥最近怎么样",
+        "测试群友",
+        is_talking_to_toya=False,
+        reply_target_is_toya=False,
+        is_wl2=True,
+    )
+    assert relationship == ""
+
+
+def test_toya_fact_grounding_locks_grades_and_remedial_subjects():
+    result = chat._build_fact_grounding_instruction(is_toya_context=True, is_wl2=False)
+    assert "冬弥成绩优异" in result
+    assert "彰人和杏" in result
+    assert "出席日数" in result
+    assert "不能改写成他学习差" in result
+
+
+def test_third_party_toya_topic_does_not_roll_intimate_director():
+    with (
+        mock.patch.object(chat.random, "choice") as choice_mock,
+        mock.patch.object(chat.random, "random") as random_mock,
+    ):
+        result = chat._build_toya_acting_guide(
+            is_direct_toya_interaction=False,
+            is_physical_or_drama=False,
+            prompts_db={"toya_acting_guide": "风格：{selected}"},
+            director_db={"toya_directions": ["亲密动作"]},
+        )
+
+    assert result == ""
+    choice_mock.assert_not_called()
+    random_mock.assert_not_called()
+
+
+def test_direct_toya_director_keeps_groupmate_as_relay_only():
+    with (
+        mock.patch.object(chat.random, "choice", return_value="侧重信任"),
+        mock.patch.object(chat.random, "random", return_value=0.1),
+    ):
+        result = chat._build_toya_acting_guide(
+            is_direct_toya_interaction=True,
+            is_physical_or_drama=False,
+            prompts_db={"toya_acting_guide": "风格：{selected}"},
+            director_db={"toya_directions": ["侧重信任"]},
+        )
+
+    assert "风格：侧重信任" in result
+    assert "群友仍只是中转者" in result
+    assert "不能把你对冬弥的态度切换成疏离" in result
 
 
 def test_build_image_director_instruction_akito():
@@ -76,6 +160,7 @@ def test_build_final_system_prompt_contains_all_major_sections():
         relationship_context="关系文本",
         group_context="[A]: hi",
         interact_instruction="对象说明",
+        referenced_relationship_instruction="被谈论人物关系",
         base_persona="人设文本",
         script_examples="剧本示例",
         pjsk_block="PJSK 内容",
@@ -84,6 +169,7 @@ def test_build_final_system_prompt_contains_all_major_sections():
         reality_overwrite_instruction="临时状态",
         acting_guide="演技提示",
         sleep_instruction="",
+        fact_grounding_instruction="事实归因规则",
         vitality_guide="活力提示",
         memory_capture_rule="记忆规则",
         tone_limiter="语气限制",

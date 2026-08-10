@@ -24,16 +24,34 @@ from .retrieval import (
 expand_query_for_retrieval = None
 
 
+_SCRIPT_ATTRIBUTION_RULE = (
+    "## 这些片段只用于学习彰人的语气和反应结构，不是当前场景的事实。\n"
+    "## 必须保留原片段的人物归属与因果：先看冒号前的说话人，不得交换主语/宾语，"
+    "不得把某人的成绩、经历、关系或行为移植给另一个人。与核心人设或关系档案冲突时，以后者为准。\n"
+)
+
+
+def _format_script_example(entry: dict, *, story_label: bool) -> str:
+    """Format one script sample with an explicit Akito-speaker attribution lock."""
+    fact_label = entry.get("cn_key") or entry.get("context") or "未标注情境"
+    prefix = "【原作·语气参考】" if story_label else "【语气参考】"
+    return (
+        f"{prefix}事实标签：{fact_label}\n"
+        f"  前情：{entry.get('context')}\n"
+        f"  本条发言者：彰人\n"
+        f"  彰人台词：{entry.get('dialogue')}"
+    )
+
+
 def get_random_examples(num: int = 5) -> str:
     """随机抽取 num 条参考剧本台词，拼成用于模仿语气的提示文本；无数据返回空串。"""
     pool = [s for s in SCRIPT_DB if s.get("type") != "noise"]
     if not pool:
         return ""
     samples = random.sample(pool, min(len(pool), num))
-    text = "\n\n# 参考剧本 (请严格模仿以下台词的语气、长短和用词)\n"
-    for s in samples:
-        text += f"- 情境：{s.get('context')}\n  台词：{s.get('dialogue')}\n"
-    return text
+    lines = ["\n\n# 参考剧本（随机语气兜底）\n" + _SCRIPT_ATTRIBUTION_RULE]
+    lines.extend(_format_script_example(sample, story_label=sample.get("type") == "story") for sample in samples)
+    return "\n".join(lines)
 
 
 _PERSONA_CACHE: str = ""
@@ -148,15 +166,12 @@ async def get_hybrid_relationship(text: str) -> str:
     return final_prompt
 
 
-# 语义检索过渡比例：top-(num-1) 相关 + 1 随机（story 纳入后相关池更丰富，降随机比例）
-_RELEVANT_RATIO = 1  # 保留的随机条数（其余来自语义检索）
-
 # 查询扩散增强开关（出问题一键回退原行为）
 _QUERY_EXPANSION_ENABLED = True
 
 
 async def get_relevant_examples(query: str, num: int = 5, retrieval_ctx: RetrievalContext | None = None) -> str:
-    """语义检索剧本示例；检索不可用（None）或精排判定无相关命中（[]）时回退到随机抽取。
+    """语义检索剧本示例；无相关命中时不注入，检索不可用时使用带归因锁的随机语气兜底。
 
     检索前用 LLM 扩散 query（游戏黑话翻含义 + 潜台词/情绪），
     原文 + 联想词 blend 后 embed，让 BGE-M3 突破字面屏障。
@@ -170,53 +185,32 @@ async def get_relevant_examples(query: str, num: int = 5, retrieval_ctx: Retriev
             logger.debug(f"🔍 查询扩散: {query[:40]} → +{ctx.expanded_query[:60]}")
 
     result = await retrieve_result("scripts", ctx.query, num, ctx=ctx) if ctx and ctx.query.strip() else None
-    if result is None or result.status != "hit":
-        # 不可用或无相关命中均回退随机抽取；只有 no_hit 不再注入随机混合样本头
-        logger.debug(f"🔍 剧本检索无果，回退随机抽取 query={query[:40]}")
+    if result is None or result.status == "unavailable":
+        logger.debug(f"🔍 剧本检索不可用，回退带归因锁的随机语气样本 query={query[:40]}")
         return get_random_examples(num)
+    if result.status != "hit":
+        logger.debug(f"🔍 剧本检索无相关命中，跳过剧本注入 query={query[:40]}")
+        return ""
     ids = result.ids
 
-    # 高置信命中时不再固定掺随机；只有纯 cosine 回退时保留少量随机兜底。
-    random_ratio = _RELEVANT_RATIO if result.fell_back_to_cosine else 0
-    relevant_count = max(0, num - random_ratio)
-    relevant_ids = ids[:relevant_count]
-    random_count = min(num - len(relevant_ids), len(SCRIPT_DB))
-
+    relevant_ids = ids[:num]
     relevant = [SCRIPT_DB[i] for i in relevant_ids if 0 <= i < len(SCRIPT_DB)]
-    rand_sources: list[int] = []  # 记录哪些是随机来的
-    if random_count > 0:
-        remaining = [
-            i for i in range(len(SCRIPT_DB))
-            if i not in relevant_ids and SCRIPT_DB[i].get("type") != "noise"
-        ]
-        if remaining:
-            rand_sources = random.sample(remaining, min(random_count, len(remaining)))
-            relevant += [SCRIPT_DB[i] for i in rand_sources]
 
-    # 调试日志：每条来源 + 类型 + 前 30 字
-    logger.debug(
-        f"🔍 剧本命中 [{len(relevant_ids)}检索+{len(rand_sources)}随机] query={query[:40]}"
-    )
-    for i, s in enumerate(relevant):
-        src = "检索" if i < len(relevant_ids) else "随机"
-        logger.debug(f"  [{src}] type={s.get('type','?')} {s.get('context','')[:30]}")
+    logger.debug(f"🔍 剧本命中 [{len(relevant)}检索] query={query[:40]}")
+    for entry in relevant:
+        logger.debug(f"  [检索] type={entry.get('type','?')} {entry.get('context','')[:30]}")
 
     if not relevant:
-        return get_random_examples(num)
+        return ""
 
     header = (
-        "\n\n# 参考剧本 (语义匹配"
-        + (" + 随机注入" if random_ratio else "")
-        + ")\n"
-        "## 以下为原作中类似情境下彰人的反应（日文原文），请体会其语气/态度，**用中文表达**\n"
+        "\n\n# 参考剧本（语义匹配）\n"
+        "## 以下为原作中类似情境下彰人的反应（日文原文），请只体会其语气/态度，**用中文表达**。\n"
+        + _SCRIPT_ATTRIBUTION_RULE
     )
     lines = [header]
-    for s in relevant:
-        tp = s.get("type", "")
-        if tp == "story":
-            lines.append(f"【原作·类似情境】前情：{s.get('context')}\n  彰人：{s.get('dialogue')}")
-        else:
-            lines.append(f"- 情境：{s.get('context')}\n  台词：{s.get('dialogue')}")
+    for entry in relevant:
+        lines.append(_format_script_example(entry, story_label=entry.get("type") == "story"))
     return "\n".join(lines)
 
 

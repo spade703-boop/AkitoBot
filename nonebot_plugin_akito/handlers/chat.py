@@ -99,6 +99,30 @@ AGENT_TOOLS = [
 ]
 
 
+_TOYA_REFERENCE_TERMS = ("冬弥", "青柳", "toya", "搭档")
+
+
+def _contains_toya_reference(text: str) -> bool:
+    """Return whether the current message explicitly refers to Toya."""
+    lowered = (text or "").lower()
+    return any(term in lowered for term in _TOYA_REFERENCE_TERMS)
+
+
+def _is_toya_roleplay_message(text: str) -> bool:
+    """Detect groupmate messages that directly stage Toya's speech or actions."""
+    if not _contains_toya_reference(text):
+        return False
+    if re.search(r"(?:冬弥|青柳(?:冬弥)?|toya)\s*[：:]", text, flags=re.IGNORECASE):
+        return True
+    return bool(
+        re.search(
+            r"[（(][^（）()]{0,80}(?:冬弥|青柳(?:冬弥)?|toya)[^（）()]{0,80}[）)]",
+            text,
+            flags=re.IGNORECASE,
+        )
+    )
+
+
 def _build_interact_instruction(
     plain_text_content: str,
     sender_nickname: str,
@@ -109,33 +133,97 @@ def _build_interact_instruction(
     current_image_identity: str,
     origin_sender: str,
 ) -> str:
-    """Build the audience/interaction instruction block for the current turn."""
+    """Build only the audience-attitude axis for the current turn."""
     if is_talking_to_toya:
-        return f"🛑【交互对象锁定】对话对象是 **青柳冬弥本人** (ID: {user_id})。切换至 [搭档/CP模式]，语气信任、护短。"
+        return f"🧭【对话对象态度轴】你正在直接回复 **青柳冬弥本人** (ID: {user_id})。语气自然、信任，比对普通群友更温和。"
     if reply_target_is_toya:
         return f"""
-            🛑【交互对象锁定：中转站模式】
-            用户 **{sender_nickname}** 引用了 **青柳冬弥** 的话。
-            必须执行"两段式"回复：1. 先对 {sender_nickname} 嫌弃吐槽，让他少管闲事。 2. 无视群友，直接针对引用的冬弥的话做出包容反应。
-            """
-    if "冬弥" in plain_text_content:
-        return f"""
-            🛑【交互对象锁定：涉冬弥话题模式】
-            群友 **{sender_nickname}** 提到了"冬弥"。⚠️ 开启【极度双标/护短】判定：
-            1. 如果群友在【报告冬弥的状况】（如：他在楼下摔倒了/他不舒服）：对报告状态的群友表现出被打扰的急躁，但难掩关心（"啧，他在哪？"）。⚠️你必须结合你当前的【生物钟状态】做出【合理且克制的急切反应】。
-             - 严禁写成夸张的偶像剧（绝对不要写"冲出教室"、"发疯般地跑"等降智描写）！
-             - 正确的动作参考：上课时（眉头紧锁，举手跟老师借口去洗手间然后快步离开）；睡觉时（烦躁地抓着头发爬起来，套上外套就走）；街头练习时（停下动作，直接拎起包）。
-             - 在动作中找到冬弥后，态度极其自然地切入【照顾模式】。不准大惊小怪，而是语气放缓、压低声音询问，绝对不能对虚弱的冬弥说重话（例如："……撞到哪了？我看看。"）。
-            2. 如果群友在括号里【模拟冬弥的动作/台词】：直接把这当成冬弥本人的互动！无视群友，对"冬弥"展现你的占有欲和特有的包容，严禁对"冬弥"粗暴！
-            3. 如果只是普通提及：用护短的酷哥态度回应群友。
-               🚫【防复读强制令】：绝对禁止使用"哈？你脑子没问题吧"、"少拿我和那家伙瞎起哄"这类套话！你必须根据群友说的【具体内容】给出针对性的不同反应！
-               可用的反应方向：沉默不接话、反问对方为什么问、用当前状态岔开话题、简短确认然后立刻转移、表现出被打扰的轻微烦躁但不重复固定句式。
+            🧭【对话对象态度轴：中转站】
+            群友 **{sender_nickname}** 引用了 **青柳冬弥** 的话。群友只是转述者；可以先简短回应他，再把主要内容自然地说给冬弥听。
             """
     if has_reply:
         if current_image_identity:
             return f"🛑【交互对象锁定：识图模式】对象是 {sender_nickname}。他回复并让你看一张图片。请你保持态度，对图片内容进行吐槽或评价。"
         return f"🛑【交互对象锁定：旁观模式】对象是 {sender_nickname}。他给你看了路人 {origin_sender} 的话。保持酷哥态度吐槽即可。"
     return f"""🛑【交互对象锁定】对话对象是普通群友 **{sender_nickname}**。保持 [独立街头歌手/直率/嫌麻烦但有教养] 的态度。\n💡【你的行为准则（请顺应本能反应）】：\n1. 【应对调侃】：保持情绪稳定。用无语的叹气、平淡的反问（"你很闲吗"）或直球承认来终结话题。\n2. 【应对倒霉/送礼】：遇到群友沉船就顺毛安抚两句；收到礼物就叹着气收下（"给我这个干嘛，谢了"），保持游刃有余。\n3. 【应对使唤】：你是有自己生活重心（练歌/打工）的独立男高。面对群友的跑腿要求，优先顺从你的不耐烦：直接冷漠拒绝（"你自己去。"），或用自己的日程当挡箭牌（"没空，正要去练歌"）。仅在心情极好或顺路时，才会勉强帮个小忙（"啧，放那吧我等下弄"）。\n🎯 核心语感：干脆利落的短句。把注意力放在你自己的事上，而不是被群友牵着鼻子走。"""
+
+
+def _build_referenced_relationship_instruction(
+    plain_text_content: str,
+    sender_nickname: str,
+    *,
+    is_talking_to_toya: bool,
+    reply_target_is_toya: bool,
+    is_wl2: bool,
+) -> str:
+    """Build the relationship axis independently from the current audience."""
+    if is_wl2:
+        return ""
+
+    is_roleplay = _is_toya_roleplay_message(plain_text_content)
+    has_toya_subject = _contains_toya_reference(plain_text_content) or is_talking_to_toya or reply_target_is_toya
+    if not has_toya_subject:
+        return ""
+
+    if is_talking_to_toya or reply_target_is_toya or is_roleplay:
+        return """
+            🤝【被谈论人物关系轴：冬弥直接互动】
+            当前回应核心是冬弥本人。你们是从中学起并肩至今、彼此高度熟悉且绝对信任的搭档。
+            表面可以简短、别扭或无奈，但具体回应必须体现你了解他、会认真接住他的话；不要把普通群友的疏离语气套到冬弥身上。
+            """
+
+    return f"""
+        🤝【被谈论人物关系轴：第三方提到冬弥】
+        当前说话对象是群友 **{sender_nickname}**，被谈论的人是冬弥。这是两个独立维度：
+        1. 你可以对群友的起哄或多管闲事表现无语，但这种不耐烦只能指向群友，不能改写你和冬弥的关系。
+        2. 你和冬弥从中学起就是长期搭档，彼此熟悉、信任并默认共同进退。回复冬弥相关内容时，应自然流露这种既有默契。
+        3. 可以称他“冬弥”或“那家伙”；“那家伙”只是熟人间的口吻，不等于关系疏远。普通世界线下不要说“他的事不关我事”“我跟他不熟”“他爱怎样怎样”。
+        4. 群友报告冬弥的状态时，先针对具体信息确认情况，再给出克制但实际的关心；普通提及时也要回应具体内容，不要靠沉默、岔开话题或否认关系来维持酷哥感。
+        """
+
+
+def _build_fact_grounding_instruction(*, is_toya_context: bool, is_wl2: bool) -> str:
+    """Define fact/source precedence and protect speaker attribution."""
+    lines = [
+        "🧱【事实与归因裁决轴】",
+        "1. 当前明确生效的临时状态/世界线覆写优先；除此之外，核心人设与关系档案中的明确事实高于导演演技、随机风格和参考剧本。",
+        "2. 参考剧本只用于学习彰人的语气和反应结构，不能把片段中的人物、主语、行为、成绩、关系或因果移植到当前场景。先看冒号前的说话人，再判断是谁做了什么。",
+        "3. 用户提供的新消息若与既有事实冲突，不要为了接梗直接当真；可以质疑、纠正或只回应其中不冲突的部分。演得生动不能以改写事实为代价。",
+    ]
+    if is_toya_context and not is_wl2:
+        lines.extend(
+            [
+                "4. 普通世界线固定事实：冬弥成绩优异，常辅导彰人等人学习；因低分参加补习的是彰人和杏，不是冬弥。",
+                "5. 若资料提到冬弥参加补习/完成额外课题，原因是赴美活动导致的出席日数安排，不能改写成他学习差或需要别人给他补课。",
+            ]
+        )
+    return "\n".join(lines)
+
+
+def _build_toya_acting_guide(
+    *,
+    is_direct_toya_interaction: bool,
+    is_physical_or_drama: bool,
+    prompts_db: dict,
+    director_db: dict,
+) -> str:
+    """Select intimate staging only for turns that directly interact with Toya."""
+    if not is_direct_toya_interaction:
+        return ""
+
+    target_clarifier = (
+        "\n🧭【双轴解释】本段演出中的动作与情绪目标只能是冬弥。若消息由群友转述或模拟，"
+        "群友仍只是中转者；模板中的“群友隔离”只表示不要把亲密动作施加给群友，不能把你对冬弥的态度切换成疏离。"
+    )
+    directions = director_db.get("toya_directions", [])
+    selected = random.choice(directions) if directions else "侧重动作控制"
+    if is_physical_or_drama:
+        template = prompts_db.get("toya_high_tension_guide", "风格：{selected}。")
+        return template.replace("{selected}", selected) + target_clarifier
+    if random.random() < 0.85:
+        template = prompts_db.get("toya_acting_guide", "风格：{selected}。")
+        return template.replace("{selected}", selected) + target_clarifier
+    return ""
 
 
 def _build_image_director_instruction(character_label: str) -> str:
@@ -213,6 +301,7 @@ def _build_final_system_prompt(
     relationship_context: str,
     group_context: str,
     interact_instruction: str,
+    referenced_relationship_instruction: str,
     base_persona: str,
     script_examples: str,
     pjsk_block: str,
@@ -221,6 +310,7 @@ def _build_final_system_prompt(
     reality_overwrite_instruction: str,
     acting_guide: str,
     sleep_instruction: str,
+    fact_grounding_instruction: str,
     vitality_guide: str,
     memory_capture_rule: str,
     tone_limiter: str,
@@ -249,6 +339,7 @@ def _build_final_system_prompt(
         {group_context}
         🎯【当前交互对象】：
         {interact_instruction}
+        {referenced_relationship_instruction}
 
         # 4. 核心人设与记忆
         {base_persona}
@@ -262,6 +353,7 @@ def _build_final_system_prompt(
         {reality_overwrite_instruction}
         {acting_guide}
         {sleep_instruction}
+        {fact_grounding_instruction}
 
         {vitality_guide}
 
@@ -526,6 +618,16 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage()):
         user_id = str(event.get_user_id())
         sender_nickname = event.sender.card or event.sender.nickname or f"用户{user_id}"
         is_talking_to_toya = (user_id == TOYA_QQ_ID)
+        is_toya_context = (
+            _contains_toya_reference(plain_text_content)
+            or is_talking_to_toya
+            or reply_target_is_toya
+        )
+        is_direct_toya_interaction = (
+            is_talking_to_toya
+            or reply_target_is_toya
+            or _is_toya_roleplay_message(plain_text_content)
+        )
 
         interact_instruction = _build_interact_instruction(
             plain_text_content=plain_text_content,
@@ -536,6 +638,13 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage()):
             has_reply=has_reply,
             current_image_identity=current_image_identity,
             origin_sender=origin_sender,
+        )
+        referenced_relationship_instruction = _build_referenced_relationship_instruction(
+            plain_text_content,
+            sender_nickname,
+            is_talking_to_toya=is_talking_to_toya,
+            reply_target_is_toya=reply_target_is_toya,
+            is_wl2=is_wl2,
         )
 
         retrieval_ctx = await build_retrieval_context(
@@ -575,8 +684,6 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage()):
                 reality_overwrite_instruction = template.replace("{implant}", implant_context)
 
         # --- 7. 导演骰子 ---
-        toya_keywords = ["冬弥", "toya", "Toya", "搭档", "青柳"]
-        is_toya_context = any(k in plain_text_content for k in toya_keywords) or is_talking_to_toya
         # 涉冬弥话题：注入 routine 锚定的冬弥去向推断 + 连贯锁（WL2 决裂世界线跳过，避免冒同框糖）
         toya_anchor = get_toya_anchor() if (is_toya_context and not is_wl2) else ""
 
@@ -593,20 +700,21 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage()):
         acting_guide = ""
         if is_info_request:
             acting_guide = PROMPTS_DB.get("reliable_mode", "")
-        elif is_toya_context:
-            # 冬弥去向锚定已由 toya_anchor 统一注入（见上）；此处只决定 CP 演技风格
-            directions = DIRECTOR_DB.get("toya_directions", [])
-            selected = random.choice(directions) if directions else "侧重动作控制"
-
-            if is_physical_or_drama:
-                template = PROMPTS_DB.get("toya_high_tension_guide", "风格：{selected}。")
-                acting_guide = template.replace("{selected}", selected)
-            else:
-                if random.random() < 0.85:
-                    template = PROMPTS_DB.get("toya_acting_guide", "风格：{selected}。")
-                    acting_guide = template.replace("{selected}", selected)
+        elif is_toya_context and not is_wl2:
+            # 第三方只是谈论冬弥时不抽亲密动作导演，避免表演欲覆盖事实与关系基线。
+            acting_guide = _build_toya_acting_guide(
+                is_direct_toya_interaction=is_direct_toya_interaction,
+                is_physical_or_drama=is_physical_or_drama,
+                prompts_db=PROMPTS_DB,
+                director_db=DIRECTOR_DB,
+            )
         elif _d.get("acting_guide"):
             acting_guide = _d["acting_guide"]
+
+        fact_grounding_instruction = _build_fact_grounding_instruction(
+            is_toya_context=is_toya_context,
+            is_wl2=is_wl2,
+        )
 
         # --- 8. 最终 Prompt 组装 ---
         system_header       = PROMPTS_DB.get("system_header", "【系统级绝对指令】你是东云彰人，只输出合法JSON。")
@@ -629,6 +737,7 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage()):
             relationship_context=relationship_context,
             group_context=group_context,
             interact_instruction=interact_instruction,
+            referenced_relationship_instruction=referenced_relationship_instruction,
             base_persona=get_base_persona(),
             script_examples=script_examples,
             pjsk_block=pjsk_block,
@@ -637,6 +746,7 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage()):
             reality_overwrite_instruction=reality_overwrite_instruction,
             acting_guide=acting_guide,
             sleep_instruction=sleep_instruction,
+            fact_grounding_instruction=fact_grounding_instruction,
             vitality_guide=vitality_guide,
             memory_capture_rule=memory_capture_rule,
             tone_limiter=tone_limiter,

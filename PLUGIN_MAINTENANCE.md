@@ -265,8 +265,8 @@ AKITO_SAFE_UNTIL = time.time() + 10   # 无效！
 | 函数 | 说明 |
 |------|------|
 | `get_base_persona()` | 读取 `data/akito_persona.txt` 人设文本 |
-| `get_random_examples(n)` | 从 `SCRIPT_DB` 随机抽取 n 条台词示例注入 Prompt（检索不可用时的兜底） |
-| `get_relevant_examples(query, n)` | 语义检索剧本示例；检索不可用或无相关命中均回退到 `get_random_examples` |
+| `get_random_examples(n)` | 从 `SCRIPT_DB` 随机抽取 n 条语气示例，并为每条附加“发言者=彰人 / 不得迁移主语、事实和因果”的归因锁（仅检索不可用时兜底） |
+| `get_relevant_examples(query, n)` | 语义检索剧本示例；命中条目附 `cn_key` 事实标签与彰人发言者锁；检索不可用时回退带锁随机样本，精排明确无相关时返回空串 |
 | `get_relevant_pjsk(query, n)` | 语义检索 PJSK 黑话（检索前与剧本一致做 query 扩散 blend）；检索不可用回退全量 `PJSK_KNOWLEDGE_BASE`，无相关命中仅注入前言（降噪）；`PJSK_INTRO` 始终在前 |
 | `get_song_memories()` | 将 `SONG_DATA` 格式化为静态曲名清单，每次对话先注入；具体点名某首歌时再补充详细记忆 |
 | `get_song_mention(text)` | 对消息做 `keywords` 子串匹配，命中时最多注入 2 首歌的完整 `description` |
@@ -329,7 +329,8 @@ AKITO_SAFE_UNTIL = time.time() + 10   # 无效！
 3. 并发保护        asyncio.Lock（per 会话键）防止同一会话并发
 4. 睡眠检测        check_sleep_status → 仅明确联网请求可继续；其余 80% 静默 / 20% 梦话
 5. Prompt 组装     人设 + 时间感知 + 临时记忆 + 关系链 + 搜索结果 +
-                   剧本示例 + 歌曲知识 + 导演骰子 + 冬弥去向锚定(get_toya_anchor，涉冬弥且非WL2) + schema 格式指令
+                   对话对象态度轴 + 被谈论人物关系轴 + 事实/归因裁决轴 +
+                   带主语锁剧本示例 + 歌曲知识 + 导演骰子 + 冬弥去向锚定(get_toya_anchor，涉冬弥且非WL2) + schema 格式指令
 6. 查询意图调度    mention/local 直答；明确搜索强制联网；事实候选交给 ReAct Agent
 7. JSON 解析       提取 inner_os / action / dialogue；两层正则救援兜底
 8. 内联动作回收    action 为空时尝试从 dialogue 开头提取「(动作)」

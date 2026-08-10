@@ -205,16 +205,21 @@ async def test_retrieve_embed_none_returns_none(dummy_index):
 
 @pytest.mark.asyncio
 async def test_get_relevant_examples_fallback_on_no_retrieval():
-    """检索不可用时回退到随机抽取（get_random_examples）。"""
+    """检索不可用时回退到带事实归因锁的随机语气样本。"""
     from nonebot_plugin_akito.core.context import get_relevant_examples
 
-    with mock.patch(
-        "nonebot_plugin_akito.core.context.retrieve",
-        return_value=None,
-    ):
-        result = await get_relevant_examples("test query", 3)
-        # 回退到 get_random_examples → 随机结果或空串
-        assert isinstance(result, str)
+    unavailable = retrieval.RetrievalResult(
+        status="unavailable",
+        ids=[],
+        reason="index_unavailable",
+        used_query="test query",
+    )
+    fake_db = [{"type": "home", "context": "练习结束", "dialogue": "今天就到这。"}]
+    with mock.patch("nonebot_plugin_akito.core.context.retrieve_result", return_value=unavailable):
+        with mock.patch("nonebot_plugin_akito.core.context.SCRIPT_DB", fake_db):
+            result = await get_relevant_examples("test query", 3)
+    assert "随机语气兜底" in result
+    assert "不得交换主语/宾语" in result
 
 
 @pytest.mark.asyncio
@@ -340,7 +345,7 @@ def test_reload_indices_clears_stale_registry():
 
 @pytest.mark.asyncio
 async def test_get_relevant_examples_story_format():
-    """story 条目用「原作·类似情境」格式；home 条目用现有格式。"""
+    """story/home 条目都带事实标签和彰人发言者锁。"""
     from nonebot_plugin_akito.core.context import get_relevant_examples
 
     fake_story = {
@@ -361,14 +366,10 @@ async def test_get_relevant_examples_story_format():
             [fake_story, fake_home],
         ):
             result = await get_relevant_examples("test", num=2)
-    # story 格式
-    assert "原作·类似情境" in result
-    assert "【原作·类似情境】前情：" in result
-    assert "彰人：" in result
-    # home 格式
-    assert "- 情境：" in result
-    assert "台词：" in result
-    # 表头
+    assert "【原作·语气参考】事实标签：杏: どうしたの？" in result
+    assert "【语气参考】事实标签：在练习室排练" in result
+    assert result.count("本条发言者：彰人") == 2
+    assert "不得交换主语/宾语" in result
     assert "用中文表达" in result
 
 
@@ -393,10 +394,9 @@ async def test_get_relevant_examples_mixed_types():
     # 表头
     assert "语义匹配" in result
     assert "用中文表达" in result
-    # 两个 story
-    assert result.count("【原作·类似情境】") == 2
-    # 一个 home
-    assert result.count("- 情境：") == 1
+    assert result.count("【原作·语气参考】") == 2
+    assert result.count("【语气参考】") == 1
+    assert result.count("本条发言者：彰人") == 3
 
 
 # ── 查询扩散 ────────────────────────────────────────────────────────────────────
@@ -741,8 +741,8 @@ async def test_retrieve_rerank_missing_doc_text_falls_back(dummy_index):
 
 
 @pytest.mark.asyncio
-async def test_get_relevant_examples_empty_ids_falls_back_random():
-    """retrieve 返回 []（精排判定无相关）→ 回退随机抽取版头部，而非语义匹配版。"""
+async def test_get_relevant_examples_empty_ids_skips_injection():
+    """精排判定无相关时不再随机注入无关剧本。"""
     from nonebot_plugin_akito.core.context import get_relevant_examples
 
     fake_db = [{"type": "home", "context": "ctx", "dialogue": "dl"}]
@@ -750,8 +750,7 @@ async def test_get_relevant_examples_empty_ids_falls_back_random():
     with mock.patch("nonebot_plugin_akito.core.context.retrieve_result", return_value=no_hit):
         with mock.patch("nonebot_plugin_akito.core.context.SCRIPT_DB", fake_db):
             result = await get_relevant_examples("毫无关联的消息", num=1)
-    assert "请严格模仿" in result
-    assert "语义匹配" not in result
+    assert result == ""
 
 
 @pytest.mark.asyncio
