@@ -30,6 +30,7 @@
     {"query": "彰5是哪张卡", "corpus": "pjsk", "expect_any": ["彰5"]},
     {"query": "烈火是哪张卡", "corpus": "pjsk", "expect_any": ["烈火"], "note": "当前语料为占位条目；维护者补完对应卡面后可继续细化期望"},
     {"query": "VBS 那次 WL 讲了什么", "corpus": "pjsk", "expect_any": ["WL", "World Link"]},
+    {"query": "VBS去美国参加活动时临时借住的学校住处，会不会是冬弥如今的长期住所", "corpus": "pjsk", "expect_any": ["纽约音乐院学生寮", "一次性临时住宿", "不是当前住处"], "note": "验证历史临时住宿不会被迁移成冬弥当前住处"},
     {"query": "小彰加油", "corpus": "scripts", "expect_any": ["加油", "鼓励", "振作"], "note": "v1 曾误设为负例——实测证明语料有大量受应援/为人应援场景，检索它们是正确的；刷屏克制属于输入侧去重，不在检索层解决"},
     {"query": "哈哈哈哈哈哈", "corpus": "scripts", "expect_none": true, "note": "纯笑声"},
     {"query": "在吗", "corpus": "scripts", "expect_none": true, "note": "纯打招呼"},

@@ -32,6 +32,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import json
 from pathlib import Path
 import statistics
@@ -60,6 +61,15 @@ DEFAULT_THRESHOLD = 0.1
 RERANK_URL = "https://api.siliconflow.cn/v1/rerank"
 RERANK_MODEL = "BAAI/bge-reranker-v2-m3"
 EMBED_MODEL = "BAAI/bge-m3"
+
+_HELPER_PATH = Path(__file__).resolve().parents[1] / "nonebot_plugin_akito" / "core" / "retrieval_assets.py"
+_HELPER_SPEC = importlib.util.spec_from_file_location("akito_retrieval_assets", _HELPER_PATH)
+if _HELPER_SPEC is None or _HELPER_SPEC.loader is None:
+    raise RuntimeError(f"无法加载共享检索助手: {_HELPER_PATH}")
+_HELPER_MODULE = importlib.util.module_from_spec(_HELPER_SPEC)
+_HELPER_SPEC.loader.exec_module(_HELPER_MODULE)
+flatten_pjsk_knowledge = _HELPER_MODULE.flatten_pjsk_knowledge
+pjsk_retrieval_text = _HELPER_MODULE.pjsk_retrieval_text
 
 
 # ── 数据加载 ─────────────────────────────────────────────────────────────────
@@ -99,12 +109,7 @@ def load_pjsk_db() -> list[dict]:
         print(f"❌ 未找到 {path}")
         sys.exit(1)
     data = json.loads(path.read_text(encoding="utf-8-sig"))
-    flat = []
-    for item in data.get("knowledge_list", []):
-        category = item.get("category", "")
-        for entry in item.get("entries", []):
-            flat.append({"category": category, "text": entry})
-    return flat
+    return flatten_pjsk_knowledge(data, include_drafts=False)
 
 
 def load_corpus(name: str) -> dict:
@@ -132,15 +137,17 @@ def doc_text(corpus: str, entry: dict) -> str:
     if corpus == "scripts":
         text = (entry.get("cn_key") or "").strip() or (entry.get("context") or "").strip()
         return text or "（空）"
-    text = f"{entry.get('category', '')} {entry.get('text', '')}".strip()
-    return text or "（空）"
+    return pjsk_retrieval_text(entry)
 
 
 def match_text(corpus: str, entry: dict) -> str:
     """expect_any 的匹配面（比 embed 文本更宽，方便用任何记得住的原文出题）。"""
     if corpus == "scripts":
         return " ".join(str(entry.get(k) or "") for k in ("cn_key", "context", "dialogue"))
-    return f"{entry.get('category', '')} {entry.get('text', '')}"
+    return " ".join(
+        str(entry.get(key) or "")
+        for key in ("category", "title", "text", "prompt_text", "retrieval_text")
+    )
 
 
 # ── 检索两臂 ─────────────────────────────────────────────────────────────────

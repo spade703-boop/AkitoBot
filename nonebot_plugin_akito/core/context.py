@@ -25,9 +25,10 @@ expand_query_for_retrieval = None
 
 
 _SCRIPT_ATTRIBUTION_RULE = (
-    "## 这些片段只用于学习彰人的语气和反应结构，不是当前场景的事实。\n"
+    "## 这些片段全部标记为已经发生过的历史事件，只用于学习彰人的语气和反应结构，不是当前场景的事实。\n"
     "## 必须保留原片段的人物归属与因果：先看冒号前的说话人，不得交换主语/宾语，"
-    "不得把某人的成绩、经历、关系或行为移植给另一个人。与核心人设或关系档案冲突时，以后者为准。\n"
+    "不得把某人的成绩、经历、关系或行为移植给另一个人；也不得把历史片段中的一次性地点、临时住宿或活动状态迁移成当前事实。"
+    "与核心人设或关系档案冲突时，以后者为准。\n"
 )
 
 
@@ -243,11 +244,14 @@ async def get_relevant_pjsk(query: str, num: int = 6, retrieval_ctx: RetrievalCo
 
     result = await retrieve_result("pjsk", ctx.query, num, ctx=ctx) if ctx and ctx.query.strip() else None
     if result is None or result.status == "unavailable":
-        logger.debug(f"🔍 PJSK检索不可用，退到 intro-only query={query[:40]}")
-        return (get_pjsk_intro() or "").strip()
+        if not lexical_hits:
+            logger.debug(f"🔍 PJSK检索不可用，退到 intro-only query={query[:40]}")
+            return (get_pjsk_intro() or "").strip()
+        logger.debug(f"🔍 PJSK检索不可用，保留{len(lexical_hits)}条精确别名命中 query={query[:40]}")
 
     merged_ids: list[int] = []
-    for idx in lexical_hits + result.ids:
+    semantic_ids = result.ids if result is not None and result.status != "unavailable" else []
+    for idx in lexical_hits + semantic_ids:
         if idx not in merged_ids:
             merged_ids.append(idx)
         if len(merged_ids) >= num:

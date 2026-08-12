@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from nonebot_plugin_akito.core import retrieval
+from nonebot_plugin_akito.core.retrieval_assets import normalize_pjsk_entry, pjsk_retrieval_text
 
 
 @pytest.fixture(autouse=True)
@@ -126,6 +127,24 @@ def test_load_npz_scripts_fingerprint_ignores_noise_rows(dummy_vectors):
     assert result.fingerprint == fingerprint
 
 
+def test_structured_pjsk_retrieval_text_includes_prompt_only_constraints():
+    entry = normalize_pjsk_entry(
+        "角色历史事件范围",
+        {
+            "title": "纽约音乐院学生寮",
+            "aliases": ["学生寮"],
+            "text": "VBS赴美活动期间曾临时借住。",
+            "prompt_text": "一次性临时住宿，不是当前长期住处。",
+        },
+        1,
+    )
+
+    assert entry is not None
+    retrieval_text = pjsk_retrieval_text(entry)
+    assert "VBS赴美活动期间曾临时借住" in retrieval_text
+    assert "一次性临时住宿，不是当前长期住处" in retrieval_text
+
+
 # ── 检索核心 ────────────────────────────────────────────────────────────────────
 
 
@@ -232,6 +251,30 @@ async def test_get_relevant_pjsk_fallback_to_full_base():
         with mock.patch("nonebot_plugin_akito.core.data.PJSK_INTRO", "MOCK_INTRO"):
             result = await get_relevant_pjsk("test query")
             assert result == "MOCK_INTRO"
+
+
+@pytest.mark.asyncio
+async def test_get_relevant_pjsk_keeps_exact_alias_when_index_is_unavailable():
+    """本地结构化别名证据不依赖向量索引。"""
+    from nonebot_plugin_akito.core.context import get_relevant_pjsk
+
+    fake_entries = [
+        {
+            "category": "角色历史事件范围",
+            "title": "纽约音乐院学生寮",
+            "text": "赴美期间曾临时借住。",
+            "prompt_text": "一次性临时住宿，不是当前住处。",
+            "aliases": ["学生寮", "纽约宿舍"],
+        }
+    ]
+    unavailable = retrieval.RetrievalResult(status="unavailable", ids=[], reason="index_unavailable")
+    with mock.patch("nonebot_plugin_akito.core.context.retrieve_result", return_value=unavailable):
+        with mock.patch("nonebot_plugin_akito.core.context.PJSK_ENTRIES", fake_entries):
+            with mock.patch("nonebot_plugin_akito.core.data.PJSK_INTRO", "【语境锁】前言"):
+                result = await get_relevant_pjsk("冬弥现在还住学生寮吗")
+
+    assert result.startswith("【语境锁】前言")
+    assert "一次性临时住宿，不是当前住处" in result
 
 
 @pytest.mark.asyncio

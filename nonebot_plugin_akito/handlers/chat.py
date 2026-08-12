@@ -13,7 +13,7 @@ from nonebot.exception import FinishedException
 from nonebot.log import logger
 from nonebot.matcher import Matcher
 from nonebot.params import EventMessage
-from nonebot_plugin_alconna import Image, Text, UniMessage
+from nonebot_plugin_alconna import Image, Reply, Text, UniMessage
 from nonebot_plugin_htmlrender import md_to_pic
 
 from ..core import (
@@ -165,12 +165,22 @@ def _build_referenced_relationship_instruction(
     if not has_toya_subject:
         return ""
 
+    boundary_instruction = """
+        🛡️【冬弥的尊严与行为边界】
+        先在内部判断群友所述行为的性质，不要把判断标签或推理过程写进最终回复：
+        - 平等、自愿、互相帮助、练习协作、学习辅导和确有需要的照护属于正常互动，可以接受，不要过度阻止。
+        - 若行为实质是被使唤、服侍化、羞辱、危险、自我牺牲或没有必要地替别人代劳，你不会放任冬弥委屈自己；应按情境制止、接手危险部分或把相处方式纠正回平等互助。
+        - 这是一套通用原则，不是单项行为黑名单。群友只描述了表面动作时，不要仅凭动作名称下结论，要结合目的、自愿性、必要性、风险和双方是否平等判断。
+        - 信息不足或只是群友单方面声称时，不能直接当成事实；先确认冬弥是否自愿、是否有必要，或明确使用“如果真是这样”一类假设语气。
+        最终回复只需用彰人自然的语气表达态度，不要复述以上裁决步骤。
+        """
+
     if is_talking_to_toya or reply_target_is_toya or is_roleplay:
         return """
             🤝【被谈论人物关系轴：冬弥直接互动】
             当前回应核心是冬弥本人。你们是从中学起并肩至今、彼此高度熟悉且绝对信任的搭档。
             表面可以简短、别扭或无奈，但具体回应必须体现你了解他、会认真接住他的话；不要把普通群友的疏离语气套到冬弥身上。
-            """
+            """ + boundary_instruction
 
     return f"""
         🤝【被谈论人物关系轴：第三方提到冬弥】
@@ -179,7 +189,7 @@ def _build_referenced_relationship_instruction(
         2. 你和冬弥从中学起就是长期搭档，彼此熟悉、信任并默认共同进退。回复冬弥相关内容时，应自然流露这种既有默契。
         3. 可以称他“冬弥”或“那家伙”；“那家伙”只是熟人间的口吻，不等于关系疏远。普通世界线下不要说“他的事不关我事”“我跟他不熟”“他爱怎样怎样”。
         4. 群友报告冬弥的状态时，先针对具体信息确认情况，再给出克制但实际的关心；普通提及时也要回应具体内容，不要靠沉默、岔开话题或否认关系来维持酷哥感。
-        """
+        """ + boundary_instruction
 
 
 def _build_fact_grounding_instruction(*, is_toya_context: bool, is_wl2: bool) -> str:
@@ -187,7 +197,7 @@ def _build_fact_grounding_instruction(*, is_toya_context: bool, is_wl2: bool) ->
     lines = [
         "🧱【事实与归因裁决轴】",
         "1. 当前明确生效的临时状态/世界线覆写优先；除此之外，核心人设与关系档案中的明确事实高于导演演技、随机风格和参考剧本。",
-        "2. 参考剧本只用于学习彰人的语气和反应结构，不能把片段中的人物、主语、行为、成绩、关系或因果移植到当前场景。先看冒号前的说话人，再判断是谁做了什么。",
+        "2. 参考剧本都是已经发生过的历史事件，只用于学习彰人的语气和反应结构。不能把片段中的人物、主语、行为、成绩、关系、因果、一次性地点、临时住宿或活动状态迁移到当前场景；先看冒号前的说话人，再判断是谁做了什么。",
         "3. 用户提供的新消息若与既有事实冲突，不要为了接梗直接当真；可以质疑、纠正或只回应其中不冲突的部分。演得生动不能以改写事实为代价。",
     ]
     if is_toya_context and not is_wl2:
@@ -195,9 +205,19 @@ def _build_fact_grounding_instruction(*, is_toya_context: bool, is_wl2: bool) ->
             [
                 "4. 普通世界线固定事实：冬弥成绩优异，常辅导彰人等人学习；因低分参加补习的是彰人和杏，不是冬弥。",
                 "5. 若资料提到冬弥参加补习/完成额外课题，原因是赴美活动导致的出席日数安排，不能改写成他学习差或需要别人给他补课。",
+                "6. 冬弥的住处、近况和当前位置只使用本地人设、关系库、知识库、当前明确状态、有效临时覆写或用户明确确认的信息。证据未命中时承认不知道，不得凭参考剧本或常识补出具体生活细节。",
+                "7. 普通世界线下，住处没有明确证据时默认冬弥住在家里；不得编造宿舍、寄宿、搬家、独居。纽约音乐院学生寮只是在美国活动期间的一次性临时住宿，绝不是当前常住地。明确当前状态、有效临时覆写或用户确认信息优先于这个默认值。",
+                "8. 若用户没有明确要求联网，角色事实只按上述本地证据回答，不调用搜索来补设定；用户明确要求上网/联网搜索时才可使用网络结果，并区分现实资讯与角色扮演事实。",
             ]
         )
     return "\n".join(lines)
+
+
+def _select_search_mode(query_intent, *, has_image: bool) -> str:
+    """Choose deterministic search, agent search, or local-only response."""
+    if has_image or query_intent.intent != "web_search":
+        return "local"
+    return "forced" if query_intent.explicit_search else "agent"
 
 
 def _build_toya_acting_guide(
@@ -446,8 +466,21 @@ async def starts_with_trigger(event: Event) -> bool:
     return any(text.lower().startswith(name.lower()) for name in TRIGGER_NAMES)
 
 
-async def smart_finish(matcher: Matcher, result: str) -> None:
-    """统一发送回复：含图则转 UniMessage，超长(>800)转图片，否则纯文本。"""
+def _with_reply(payload, message_id: str | int | None):
+    """Prefix an outgoing payload with a OneBot-compatible reply segment."""
+    if message_id is None or str(message_id) == "":
+        return payload
+    message = UniMessage()
+    message += Reply(str(message_id))
+    if isinstance(payload, str):
+        message += Text(payload)
+    else:
+        message += payload
+    return message
+
+
+async def smart_finish(matcher: Matcher, result: str, message_id: str | int | None = None) -> None:
+    """统一发送回复：引用原消息；含图或超长文本按原规则转换。"""
     if not result: return
     grant_safety_pass(8)
     result = result.strip()
@@ -460,16 +493,17 @@ async def smart_finish(matcher: Matcher, result: str) -> None:
         clean_text = re.sub(img_pattern, "", result).strip()
         if clean_text: msg += Text(clean_text + "\n")
         for img_url in images: msg += Image(url=img_url)
-        await matcher.finish(msg)
+        await matcher.finish(_with_reply(msg, message_id))
         return
 
     if len(result) > 800:
         try:
             img_data = await md_to_pic(result.replace("•", "  *"), width=800)
-            await matcher.finish(UniMessage(Image(raw=img_data)))
-        except Exception: await matcher.finish(result)
+            await matcher.finish(_with_reply(UniMessage([Image(raw=img_data)]), message_id))
+        except Exception:
+            await matcher.finish(_with_reply(result, message_id))
     else:
-        await matcher.finish(result)
+        await matcher.finish(_with_reply(result, message_id))
 
 
 chat = on_message(rule=starts_with_trigger, priority=10, block=True)
@@ -488,6 +522,7 @@ def get_session_lock(session_key: str) -> asyncio.Lock:
 async def _(event: Event, bot: Bot, message: Message = EventMessage()):
     session_key = get_memory_key(event)
     session_lock = get_session_lock(session_key)
+    trigger_message_id = getattr(event, "message_id", None)
 
     try:
       async with session_lock:
@@ -575,11 +610,10 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage()):
                 if sleep_instruction == "ignore": await chat.finish()
                 else:
                     await asyncio.sleep(2)
-                    grant_safety_pass(5)
-                    await chat.finish(sleep_instruction)
+                    await smart_finish(chat, sleep_instruction, trigger_message_id)
 
         if not plain_text_content and not current_image_identity:
-            await chat.finish("干嘛……")
+            await smart_finish(chat, "干嘛……", trigger_message_id)
 
         # --- 3. 时间 ---
         now_time = datetime.datetime.now(TZ_CN)
@@ -685,10 +719,11 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage()):
 
         # --- 7. 导演骰子 ---
         # 涉冬弥话题：注入 routine 锚定的冬弥去向推断 + 连贯锁（WL2 决裂世界线跳过，避免冒同框糖）
-        toya_anchor = get_toya_anchor() if (is_toya_context and not is_wl2) else ""
+        toya_anchor = get_toya_anchor(is_wl2=is_wl2) if is_toya_context else ""
 
         query_intent = classify_query_intent(plain_text_content)
         is_info_request = query_intent.intent == "web_search"
+        search_mode = _select_search_mode(query_intent, has_image=has_image)
 
         long_term_facts = user_mem.get("long_term_facts", [])
         long_term_memory_text = "\n".join(long_term_facts) if long_term_facts else "（暂无特殊记忆）"
@@ -782,7 +817,7 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage()):
         # 关键：两条路都把搜索结果回灌进【人设系统提示】里重新生成，由小彰用自己的语气复述，绝不直出原始摘要。
         search_result = ""
         raw_result = ""
-        if not has_image and is_info_request and query_intent.explicit_search:
+        if search_mode == "forced":
             # ① 明确搜索请求：高精度句式命中后确定性联网
             forced_query = query_intent.query or plain_text_content.strip()
             logger.info(f"🔑 明确搜索请求，强制触发联网搜索: [{forced_query}]")
@@ -790,7 +825,7 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage()):
             messages_list[-1]["content"] += _build_search_aside(forced_query, search_result)
             raw_result = await call_deepseek_api(messages_list, force_json=True)
 
-        elif not has_image and is_info_request:
+        elif search_mode == "agent":
             # ② 事实查询候选：交给 LLM 自主判断是否需要联网（ReAct Function Calling）
             agent_message = await call_deepseek_api_agent(messages_list, tools=AGENT_TOOLS)
 
@@ -904,12 +939,12 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage()):
         base_delay = random.uniform(0.8, 2.5)
         typing_delay = min(len(result) * 0.12, 5.0)
         await asyncio.sleep(base_delay + typing_delay)
-        await smart_finish(chat, result)
+        await smart_finish(chat, result, trigger_message_id)
     except FinishedException:
         raise
     except Exception as e:
         logger.error(f"❌ 主聊天处理器发生未捕获异常: {e}", exc_info=True)
         try:
-            await chat.finish("……脑子短路了，等一下再说。")
+            await smart_finish(chat, "……脑子短路了，等一下再说。", trigger_message_id)
         except Exception:
             pass

@@ -183,6 +183,24 @@ def test_query_intent_explicit_role_setting_request_stays_local(patch_life_state
     assert intent.explicit_search is False
 
 
+def test_query_intent_role_location_stays_local_without_explicit_web_request(patch_life_state_deps):
+    intent = patch_life_state_deps.classify_query_intent("冬弥现在住哪里？")
+    assert intent.intent == "local_question"
+    assert intent.explicit_search is False
+
+
+def test_query_intent_direct_role_lookup_stays_local_without_web_marker(patch_life_state_deps):
+    intent = patch_life_state_deps.classify_query_intent("帮我查一下冬弥现在住哪里")
+    assert intent.intent == "local_question"
+    assert intent.explicit_search is False
+
+
+def test_query_intent_explicit_online_role_search_can_use_web(patch_life_state_deps):
+    intent = patch_life_state_deps.classify_query_intent("帮我上网查一下冬弥现在住哪里")
+    assert intent.intent == "web_search"
+    assert intent.explicit_search is True
+
+
 def test_sleep_third_party_search_word_cannot_wake_bot(patch_life_state_deps):
     ls = patch_life_state_deps
     fake_now = _make_dt(2026, 5, 30, 0, 30, tzinfo=TZ_CN)
@@ -479,14 +497,14 @@ def test_safety_pass_sets_future_timestamp(patch_life_state_deps):
 # ── get_toya_anchor 测试 ───────────────────────────────────────────────────
 
 def test_toya_anchor_copresent_period(patch_life_state_deps):
-    """同框时段（night_training）+ 状态不含「冬弥」→ 声明 VBS 团队活动同框 + 禁咖啡 + 连贯锁。"""
+    """共同活动时段只允许附近/刚分开/稍后碰头等有限推断。"""
     ls = patch_life_state_deps
     ls.AKITO_STATUS["current_key"] = "night_training"
     ls.AKITO_STATUS["cached_content"] = {"status": "正在做核心力量训练。"}
     result = ls.get_toya_anchor()
-    assert "VBS 团队活动" in result
+    assert "可能在附近、刚分开或稍后碰头" in result
     assert "正在做核心力量训练" in result
-    assert "喝咖啡" in result        # 禁无关支线规则在场
+    assert "不能断言具体位置" in result
     assert "连贯锁" in result
 
 
@@ -496,23 +514,33 @@ def test_toya_anchor_status_mentions_toya(patch_life_state_deps):
     ls.AKITO_STATUS["current_key"] = "noon_weekday"   # 非同框时段，但文本含冬弥应优先
     ls.AKITO_STATUS["cached_content"] = {"status": "在楼梯口遇到了冬弥。"}
     result = ls.get_toya_anchor()
-    assert "此刻冬弥就和你在一起" in result
+    assert "当前状态直接提到了冬弥" in result
+    assert "不得扩写未说明的细节" in result
     assert "连贯锁" in result
 
 
 def test_toya_anchor_generic_period(patch_life_state_deps):
-    """普通时段 + 状态不含「冬弥」→ 走自洽推断规则，不声明同框在场。"""
+    """普通时段没有冬弥证据时不编造位置，并提供普通世界线住处默认。"""
     ls = patch_life_state_deps
     ls.AKITO_STATUS["current_key"] = "noon_weekday"
     ls.AKITO_STATUS["cached_content"] = {"status": "在课堂上发呆。"}
     result = ls.get_toya_anchor()
-    assert "与当前情境自洽" in result
-    assert "VBS 团队活动" not in result   # 非同框时段不应声明在场
+    assert "没有冬弥位置证据" in result
+    assert "住在家里" in result
+    assert "不得编造宿舍、寄宿、搬家、独居" in result
     assert "连贯锁" in result
 
 
-def test_toya_anchor_empty_cache_returns_empty(patch_life_state_deps):
-    """无缓存 routine → 返回空串，不污染 prompt。"""
+def test_toya_anchor_empty_cache_returns_conservative_home_default(patch_life_state_deps):
+    """无缓存 routine 仍提供未知事实约束和普通世界线住处默认。"""
     ls = patch_life_state_deps
     ls.AKITO_STATUS["cached_content"] = ""
-    assert ls.get_toya_anchor() == ""
+    result = ls.get_toya_anchor()
+    assert "没有冬弥位置或近况的明确证据" in result
+    assert "住在家里" in result
+
+
+def test_toya_anchor_wl2_skips_normal_worldline_default(patch_life_state_deps):
+    ls = patch_life_state_deps
+    ls.AKITO_STATUS["cached_content"] = {"status": "在家休息。"}
+    assert ls.get_toya_anchor(is_wl2=True) == ""

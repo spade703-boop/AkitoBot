@@ -114,7 +114,11 @@ def normalize_pjsk_entry(category: str, raw_entry: Any, ordinal: int) -> dict | 
         retrieval_text = str(raw_entry.get("retrieval_text") or "").strip()
         if not retrieval_text:
             retrieval_text = " ".join(
-                x for x in [category, title, *aliases, text] if isinstance(x, str) and x.strip()
+                dict.fromkeys(
+                    x
+                    for x in [category, title, *aliases, text, prompt_text]
+                    if isinstance(x, str) and x.strip()
+                )
             ).strip()
         if not text and not retrieval_text:
             return None

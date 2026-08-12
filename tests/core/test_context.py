@@ -21,6 +21,8 @@ def test_get_random_examples_formats_entries():
     assert "再来一遍。" in result
     assert "本条发言者：彰人" in result
     assert "不得交换主语/宾语" in result
+    assert "历史事件" in result
+    assert "一次性地点、临时住宿或活动状态" in result
 
 
 def test_get_random_examples_respects_count():

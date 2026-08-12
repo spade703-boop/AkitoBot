@@ -99,6 +99,13 @@ def test_init_pjsk_knowledge_flattens_entries():
         data.PJSK_ENTRIES.extend(snapshot[2])
 
 
+def test_fixture_knowledge_locks_new_york_dorm_to_historical_stay():
+    entry = next(item for item in data.PJSK_ENTRIES if item.get("title") == "纽约音乐院学生寮")
+
+    assert "一次性临时住宿" in entry["prompt_text"]
+    assert "不是冬弥或VBS成员的当前住处" in entry["prompt_text"]
+
+
 def test_reload_assets_updates_existing_containers_and_counts_hooks():
     snapshot = {
         "DIRECTOR_DB": copy.deepcopy(data.DIRECTOR_DB),

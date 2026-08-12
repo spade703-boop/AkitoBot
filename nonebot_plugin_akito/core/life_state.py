@@ -36,13 +36,19 @@ class QueryIntent:
 
 
 _SEARCH_VERBS = ("搜索", "查询", "查找", "检索", "搜", "查")
-_STRONG_SEARCH_PREFIXES = ("搜索", "搜一下", "搜下", "搜搜", "查询", "查找", "检索", "查一下", "查下", "查查", "查一查")
+_STRONG_SEARCH_PREFIXES = (
+    "搜索", "搜一下", "搜下", "搜搜", "查询", "查找", "检索", "查一下", "查下", "查查", "查一查",
+    "上网搜索", "上网查", "联网搜索", "联网查", "网络搜索", "网络查询",
+)
 _DIRECTED_SEARCH_PREFIXES = ("帮我", "替我", "给我", "你帮我", "你替我", "你给我")
 _FIRST_PERSON_SEARCH_PREFIXES = ("我想", "我要", "我需要")
 _POLITE_PREFIXES = ("麻烦你", "麻烦", "请你", "请", "你能不能", "能不能", "可不可以", "可以不可以", "是否可以", "帮忙")
+_WEB_SEARCH_PREFIXES = ("上网", "联网", "用网络", "在网上", "从网上")
+_EXPLICIT_WEB_MARKERS = ("上网", "联网", "网络", "互联网", "网上")
 _WEB_SIGNALS = (
     "今天", "明天", "现在", "目前", "最近", "最新", "实时", "刚刚", "新闻", "天气", "预报", "价格", "多少钱",
     "比分", "赛果", "赛程", "汇率", "股价", "票房", "活动安排", "资料", "数据", "记录", "信息", "网址", "词条",
+    "上网", "联网", "网络", "互联网",
 )
 _FACTUAL_QUESTION_CUES = ("是什么", "谁是", "多少", "哪里", "哪儿", "哪一个", "什么时候", "怎么回事", "原理", "定义")
 _GENERAL_QUESTION_CUES = ("告诉我", "我想知道", "我想问", "想问问", "请问", "你知道", "为什么", "是否", "有没有", "吗")
@@ -85,11 +91,19 @@ def _is_explicit_search_request(text: str) -> bool:
     for prefix in _DIRECTED_SEARCH_PREFIXES:
         if body.startswith(prefix):
             remainder = body[len(prefix):]
+            for web_prefix in _WEB_SEARCH_PREFIXES:
+                if remainder.startswith(web_prefix):
+                    remainder = remainder[len(web_prefix):]
+                    break
             return remainder.startswith(_SEARCH_VERBS)
 
     for prefix in _FIRST_PERSON_SEARCH_PREFIXES:
         if body.startswith(prefix):
             remainder = body[len(prefix):]
+            for web_prefix in _WEB_SEARCH_PREFIXES:
+                if remainder.startswith(web_prefix):
+                    remainder = remainder[len(web_prefix):]
+                    break
             return remainder.startswith(_SEARCH_VERBS)
 
     if body.startswith(_STRONG_SEARCH_PREFIXES):
@@ -118,13 +132,14 @@ def classify_query_intent(msg: str) -> QueryIntent:
     has_roleplay_topic = any(topic in text for topic in _ROLEPLAY_TOPICS)
     has_search_verb = any(verb in text for verb in _SEARCH_VERBS)
     explicit_search = _is_explicit_search_request(text)
+    explicit_web_search = any(marker in text for marker in _EXPLICIT_WEB_MARKERS)
 
     if explicit_search:
-        if has_roleplay_topic and not has_web_signal:
+        if has_roleplay_topic and not explicit_web_search:
             return QueryIntent("local_question", True, False, text, 0.98)
         return QueryIntent("web_search", True, True, text, 0.99)
 
-    if has_opinion_cue or (has_roleplay_topic and not has_web_signal):
+    if has_opinion_cue or has_roleplay_topic:
         return QueryIntent("local_question", has_general_question or has_factual_question, False, text, 0.95)
     if has_web_signal and (has_general_question or has_factual_question or has_search_verb):
         return QueryIntent("web_search", True, False, text, 0.9)
@@ -329,43 +344,49 @@ def get_sleep_buffer_buff(hour: int, minute: int) -> str:
     return base
 
 
-# 彰冬同框时段：VBS 团队活动 / 共同行程，冬弥默认在场或近在身边
+# 常见共同活动时段：只允许推断“附近 / 刚分开 / 稍后碰头”，不得断言具体位置
 _TOYA_COPRESENT_PERIODS = {"lunch_weekday", "evening", "night_training"}
 
 # routine→冬弥 位置推断的 IF-THEN 参考（并入自原 reactions.py 的 toya_radar 模板）
 _TOYA_REASONING = (
-    "推断参考：练习/团队活动→冬弥和你在一起、刚分开，或在附近等你一起继续练；上课/在校→冬弥在隔壁班(2-B)，"
-    "可能值日、去洗手间、被老师叫去帮忙，或者刚好在等下课后和你碰头；逛街买衣服/买东西→冬弥在旁边帮你提袋、"
-    "帮你看搭配，或者你们刚聊完等会的安排；吃松饼/在咖啡店→冬弥在对面，或刚去拿饮料；晨跑→冬弥不必同行，"
-    "可以是你在想他昨晚发的消息，或准备之后再找他；在家/睡前→冬弥刚发完晚安、刚和你对完练习内容，或你在回想白天一起复盘的事。"
+    "有限推断只允许日常关系层面的“在附近”“刚分开”“稍后碰头”；除非当前状态直接写明，不得据此补出冬弥所在的具体建筑、"
+    "正在做的具体事情、住宿方式或生活变动。彰人的作息不是冬弥当前位置的证据。"
 )
 
 
-def get_toya_anchor() -> str:
-    """据当前缓存的 routine 推断冬弥此刻的合理位置，返回 Prompt 片段；无缓存返回空串。
+def get_toya_anchor(*, is_wl2: bool = False) -> str:
+    """据当前缓存的 routine 提供有限位置推断和普通世界线住处默认。
 
     并入自原 ``冬弥呢`` 指令（toya_radar 模板）的位置推断逻辑，使主对话引擎也具备
-    routine 锚定的冬弥去向推理 + 跨轮连贯锁。WL2 决裂世界线由调用方门控跳过。
+    routine 锚定的冬弥去向推理 + 跨轮连贯锁。WL2 决裂世界线直接返回空串。
     依赖调用方已先调用 ``get_daily_activity`` 使 ``AKITO_STATUS`` 缓存为热。
     """
+    if is_wl2:
+        return ""
+
     cached = AKITO_STATUS.get("cached_content", "")
     status = cached.get("status", cached) if isinstance(cached, dict) else cached
     key = AKITO_STATUS.get("current_key", "")
     if not status:
-        return ""
+        return (
+            "\n🧭【冬弥此刻】当前没有冬弥位置或近况的明确证据，不得编造具体细节。\n"
+            "住处规则：普通世界线没有更高优先级证据时，只能说冬弥住在家里；不得编造宿舍、寄宿、搬家、独居。"
+            "纽约音乐院学生寮仅是美国活动期间的一次性临时住宿，不代表现在。\n"
+            "（连贯锁）本轮对话里你已说过冬弥在做什么/在哪，就必须前后一致。"
+        )
     status = str(status)
 
     if "冬弥" in status:
-        line = f"此刻冬弥就和你在一起（当前：{status}）。"
+        line = f"当前状态直接提到了冬弥，可据此回答且不得扩写未说明的细节（当前：{status}）。"
     elif key in _TOYA_COPRESENT_PERIODS:
-        line = f"现在是 VBS 团队活动 / 共同行程时段，冬弥就和你在同一场所、附近，或者是刚分开马上又会碰头的状态（当前：{status}）。"
+        line = f"当前属于常见的共同活动时段，只能保守推断冬弥可能在附近、刚分开或稍后碰头，不能断言具体位置（当前：{status}）。"
     else:
-        line = f"当前：{status} 请据此把冬弥放在与当前情境自洽、且明确仍在日本日常范围内的位置。"
+        line = f"当前只有彰人的状态，没有冬弥位置证据（当前：{status}）。不要为了让场景完整而给冬弥编造位置或近况。"
 
     return (
         f"\n🧭【冬弥此刻】{line}\n{_TOYA_REASONING}\n"
-        "约束：冬弥必须和你在同一场景或与当前活动直接相关；理由要轻松日常（买水/帮忙/听歌等），"
-        "禁止编造无关支线（如无端跑去喝咖啡，除非你正好在咖啡店），禁止升学/退学/生重病等沉重话题。\n"
+        "住处规则：普通世界线没有更高优先级证据时，只能说冬弥住在家里；不得编造宿舍、寄宿、搬家、独居。"
+        "纽约音乐院学生寮仅是美国活动期间的一次性临时住宿，不代表现在。\n"
         "（连贯锁）本轮对话里你已说过冬弥在做什么/在哪，就必须前后一致——换措辞可以，事实不能自相矛盾。"
     )
 

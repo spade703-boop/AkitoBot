@@ -150,6 +150,13 @@ class FakeText:
         self.text = text
 
 
+class FakeReply:
+    def __init__(self, message_id: str, msg=None, origin=None):
+        self.id = str(message_id)
+        self.msg = msg
+        self.origin = origin
+
+
 class FakeUniMessage(list):
     def __add__(self, other):
         return FakeUniMessage(list(self) + list(other))
@@ -237,6 +244,7 @@ htmlrender_mod.html_to_pic = mock.AsyncMock(return_value=b"html-image")
 
 alconna_mod = types.ModuleType("nonebot_plugin_alconna")
 alconna_mod.Image = FakeImage
+alconna_mod.Reply = FakeReply
 alconna_mod.Text = FakeText
 alconna_mod.UniMessage = FakeUniMessage
 
