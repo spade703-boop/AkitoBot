@@ -317,8 +317,7 @@ async def test_smart_finish_quotes_trigger_for_plain_text():
     await chat.smart_finish(matcher, "普通回复", "msg-42")
 
     payload = matcher.finish.await_args.args[0]
-    assert payload[0].id == "msg-42"
-    assert payload[1].text == "普通回复"
+    assert payload == "[reply:msg-42]普通回复"
 
 
 @pytest.mark.asyncio
@@ -328,9 +327,7 @@ async def test_smart_finish_quotes_trigger_for_image_reply():
     await chat.smart_finish(matcher, "配文\n![图](https://example.com/a.png)", "msg-43")
 
     payload = matcher.finish.await_args.args[0]
-    assert payload[0].id == "msg-43"
-    assert payload[1].text == "配文\n"
-    assert payload[2].url == "https://example.com/a.png"
+    assert payload == "[reply:msg-43]配文\n[image]"
 
 
 @pytest.mark.asyncio
@@ -340,8 +337,7 @@ async def test_smart_finish_quotes_trigger_for_long_reply_image():
     await chat.smart_finish(matcher, "长" * 801, "msg-44")
 
     payload = matcher.finish.await_args.args[0]
-    assert payload[0].id == "msg-44"
-    assert payload[1].raw == b"md-image"
+    assert payload == "[reply:msg-44][image]"
 
 
 @pytest.mark.asyncio

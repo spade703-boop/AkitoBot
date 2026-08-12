@@ -9,11 +9,13 @@ import time
 
 from nonebot import on_message
 from nonebot.adapters import Bot, Event, Message
+from nonebot.adapters.onebot.v11 import Message as OneBotMessage
+from nonebot.adapters.onebot.v11 import MessageSegment
 from nonebot.exception import FinishedException
 from nonebot.log import logger
 from nonebot.matcher import Matcher
 from nonebot.params import EventMessage
-from nonebot_plugin_alconna import Image, Reply, Text, UniMessage
+from nonebot_plugin_alconna import Image, Text, UniMessage
 from nonebot_plugin_htmlrender import md_to_pic
 
 from ..core import (
@@ -470,13 +472,7 @@ def _with_reply(payload, message_id: str | int | None):
     """Prefix an outgoing payload with a OneBot-compatible reply segment."""
     if message_id is None or str(message_id) == "":
         return payload
-    message = UniMessage()
-    message += Reply(str(message_id))
-    if isinstance(payload, str):
-        message += Text(payload)
-    else:
-        message += payload
-    return message
+    return MessageSegment.reply(message_id) + payload
 
 
 async def smart_finish(matcher: Matcher, result: str, message_id: str | int | None = None) -> None:
@@ -489,19 +485,20 @@ async def smart_finish(matcher: Matcher, result: str, message_id: str | int | No
     images = re.findall(img_pattern, result)
 
     if images:
-        msg = UniMessage()
+        msg = OneBotMessage()
         clean_text = re.sub(img_pattern, "", result).strip()
-        if clean_text: msg += Text(clean_text + "\n")
-        for img_url in images: msg += Image(url=img_url)
+        if clean_text: msg += clean_text + "\n"
+        for img_url in images: msg += MessageSegment.image(img_url)
         await matcher.finish(_with_reply(msg, message_id))
         return
 
     if len(result) > 800:
         try:
             img_data = await md_to_pic(result.replace("•", "  *"), width=800)
-            await matcher.finish(_with_reply(UniMessage([Image(raw=img_data)]), message_id))
         except Exception:
             await matcher.finish(_with_reply(result, message_id))
+        else:
+            await matcher.finish(_with_reply(MessageSegment.image(img_data), message_id))
     else:
         await matcher.finish(_with_reply(result, message_id))
 
