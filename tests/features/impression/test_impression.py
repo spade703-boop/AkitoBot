@@ -173,6 +173,8 @@ def test_validate_impression_result_requires_target_evidence():
     valid, reason = impression._validate_impression_result(
         reply="对小明的印象是挺能熬的，明明还没练完，倒是已经把明早的安排想好了。",
         evidence=["还有两首没练完", "六点起来继续"],
+        mode="specific",
+        angle="嘴上没说多认真，但已经把没练完的歌和明早安排接上了",
         focus="对练习的执着",
         target_name="小明",
         target_evidence_source="还有两首没练完\n六点起来继续",
@@ -180,6 +182,8 @@ def test_validate_impression_result_requires_target_evidence():
     invalid, invalid_reason = impression._validate_impression_result(
         reply="对小明的印象是挺能熬的。",
         evidence=["还有两首没练完", "明天不是要演出吗"],
+        mode="specific",
+        angle="熬夜练歌还安排了第二天继续",
         focus="",
         target_name="小明",
         target_evidence_source="还有两首没练完\n六点起来继续",
@@ -191,18 +195,120 @@ def test_validate_impression_result_requires_target_evidence():
     assert "evidence 不在目标发言中" in invalid_reason
 
 
-def test_parse_impression_result_reads_evidence_and_focus():
+def test_parse_impression_result_reads_evidence_mode_angle_and_focus():
     raw = (
         '{"inner_os":"确实挺拼","evidence":["还有两首没练完","六点起来继续"],'
-        '"focus":"对练习的执着","reply":"对小明的印象是对练习还挺认真的。"}'
+        '"mode":"specific","angle":"没练完就打算早起接着练","focus":"对练习的执着",'
+        '"reply":"对小明的印象是对练习还挺认真的。"}'
     )
 
-    reply, inner_os, evidence, focus = impression._parse_impression_result(raw)
+    reply, inner_os, evidence, mode, angle, focus = impression._parse_impression_result(raw)
 
     assert reply == "对小明的印象是对练习还挺认真的。"
     assert inner_os == "确实挺拼"
     assert evidence == ["还有两首没练完", "六点起来继续"]
+    assert mode == "specific"
+    assert angle == "没练完就打算早起接着练"
     assert focus == "对练习的执着"
+
+
+def test_impression_style_filter_rejects_generic_profile_templates():
+    generic_replies = [
+        "对寒星的印象是...又一个把精力砸在游戏和周边上的家伙。嘴上说着不想打了，结果聊的全是这些。"
+        "不过说话挺随意的，估计挺好相处。",
+        "对复习傻鼠⪩. .⪨的印象是：一个挺能聊的普通网友，聊吃的、打游戏都来劲，偶尔冒出点没头没尾的话。"
+        "感觉挺随和的，不过也就那样。",
+        "对谨言慎行的印象是……就是个普通玩家吧，聊游戏、抱怨几句，偶尔吐槽下生活，没什么特别的。",
+        "对舟的印象是……就是个普通人吧，平时打打游戏吃吃东西，偶尔吐槽下生活里的破事。"
+        "挺正常的，没什么值得多说的。",
+    ]
+
+    for reply in generic_replies:
+        assert impression._find_impression_style_issue(reply)
+
+
+def test_impression_style_filter_allows_multiple_specific_observations():
+    reply = (
+        "对夙沙茗的印象是...也是个玩烤的，聊游戏挺起劲。居然也怕狗，这点倒是跟我一样。"
+        "写文加班熬到挺晚，看来也是个能肝的家伙。"
+    )
+
+    assert impression._find_impression_style_issue(reply) == ""
+
+
+def test_impression_similarity_ignores_name_but_compares_reply_body():
+    candidate = "对小明的印象是……聊游戏一来劲就停不下来，嘴上嫌麻烦，真开打又比谁都认真。"
+    recent = ["对小红的印象是……聊游戏一来劲就停不下来，嘴上嫌麻烦，真开打又比谁都认真。"]
+
+    similar_reply, ratio = impression._find_similar_impression_reply(candidate, recent)
+
+    assert similar_reply == recent[0]
+    assert ratio == 1.0
+
+
+def test_validate_impression_result_rejects_recently_reused_wording():
+    recent_reply = "对小红的印象是……聊游戏一来劲就停不下来，嘴上嫌麻烦，真开打又比谁都认真。"
+
+    valid, reason = impression._validate_impression_result(
+        reply="对小明的印象是……聊游戏一来劲就停不下来，嘴上嫌麻烦，真开打又比谁都认真。",
+        evidence=["不想打了", "再来一把"],
+        mode="specific",
+        angle="嘴上说不打，实际开局比谁都快",
+        focus="打游戏时的嘴硬",
+        target_name="小明",
+        target_evidence_source="不想打了\n再来一把",
+        recent_replies=[recent_reply],
+    )
+
+    assert valid is False
+    assert "近期评价过于相似" in reason
+
+
+def test_validate_limited_impression_requires_honest_uncertainty():
+    valid, reason = impression._validate_impression_result(
+        reply="对小明的印象是……目前能看出的只有他经常接游戏话题，再往下说就有点硬猜了。",
+        evidence=["开一把吗", "又歪了"],
+        mode="limited",
+        angle="",
+        focus="",
+        target_name="小明",
+        target_evidence_source="开一把吗\n又歪了",
+    )
+    invalid, invalid_reason = impression._validate_impression_result(
+        reply="对小明的印象是个普通玩家，应该挺好相处的。",
+        evidence=["开一把吗", "又歪了"],
+        mode="limited",
+        angle="",
+        focus="",
+        target_name="小明",
+        target_evidence_source="开一把吗\n又歪了",
+    )
+
+    assert valid is True
+    assert reason == ""
+    assert invalid is False
+    assert "limited 模式必须明确表达暂时看不准" in invalid_reason
+
+
+def test_validate_specific_impression_allows_detail_beyond_old_eighty_char_limit():
+    reply = (
+        "对小明的印象是……每次说不打了，下一局开得又比谁都快；掉东西时抱怨得响，真有人问配队又讲得很细。"
+        "嘴上总嫌麻烦，手上倒一次没停，连别人漏掉的小地方也会顺手指出来，至少对游戏这件事不是随便混混。"
+    )
+
+    valid, reason = impression._validate_impression_result(
+        reply=reply,
+        evidence=["不打了", "配队得这么换"],
+        mode="specific",
+        angle="嘴上喊停却总是最快开下一局，抱怨归抱怨，讲配队时又很细",
+        focus="",
+        target_name="小明",
+        target_evidence_source="不打了\n配队得这么换",
+    )
+
+    assert 80 < len(reply) <= impression.IMPRESSION_STANDARD_MAX_LENGTH
+    assert valid is True
+    assert reason == ""
 
 
 def test_parse_impression_reply_rescues_broken_reply_field():

@@ -2,8 +2,10 @@
 
 import asyncio
 import datetime
+import difflib
 import json
 import random
+import re
 import sqlite3
 import time
 from typing import Optional
@@ -56,7 +58,31 @@ IMPRESSION_CONTEXT_MAX_GAP_SECONDS = 300
 IMPRESSION_CONTEXT_MAX_BLOCKS = 6
 IMPRESSION_CONTEXT_BLOCK_MESSAGE_LIMIT = 12
 IMPRESSION_MESSAGE_CHAR_LIMIT = 240
+IMPRESSION_STANDARD_MAX_LENGTH = 120
+IMPRESSION_FOCUSED_MAX_LENGTH = 180
+IMPRESSION_RECENT_REPLY_LIMIT = 8
+IMPRESSION_SIMILARITY_THRESHOLD = 0.72
 IMPRESSION_COMMANDS = ("群印象", "评价我", "说说印象", "我的印象")
+
+IMPRESSION_DELIVERY_HINTS = (
+    "从你最想吐槽的反差切入，不要先罗列兴趣标签。",
+    "像被当面追问一样，先说最直接的感觉，再自然补一句理由。",
+    "抓住一个反复出现的行为习惯，围绕它说，不要面面俱到。",
+    "从一处有辨识度的小细节切入，再给判断。",
+    "优先说这个人的参与方式或说话节奏，而不是把聊过的话题列一遍。",
+    "可以用一句短判断加一句补充，没必要凑成完整人物小传。",
+    "如果有两三个彼此独立的具体发现，可以像想到哪说到哪一样自然串起来。",
+    "遇到和你相似、相反或让你在意的地方，可以直接带一句自己的反应。",
+)
+
+IMPRESSION_STALE_PATTERNS = (
+    re.compile(r"普通(?:人|网友|玩家)"),
+    re.compile(r"没什么(?:特别|值得)[^。！？]{0,12}(?:的|说)"),
+    re.compile(r"(?:挺|比较)(?:随和|好相处)"),
+    re.compile(r"也就那样"),
+)
+
+IMPRESSION_UNCERTAIN_PATTERN = re.compile(r"(?:暂时|目前|现在|还没|看不准|说不好|只看得出|能看出的|先不下结论)")
 
 BLOCK_PREFIXES = ["/", "#", ".", "!", "！", "*", "-", "@"]
 BLOCK_KEYWORDS = [
@@ -323,10 +349,12 @@ def _resolve_wl2_overlay(mem: dict, now_ts: Optional[float] = None) -> tuple[boo
     return False, ""
 
 
-def _parse_impression_result(raw_result: str) -> tuple[str, str, list[str], str]:
+def _parse_impression_result(raw_result: str) -> tuple[str, str, list[str], str, str, str]:
     final_reply = ""
     inner_os = ""
     evidence: list[str] = []
+    mode = ""
+    angle = ""
     focus = ""
 
     try:
@@ -341,6 +369,8 @@ def _parse_impression_result(raw_result: str) -> tuple[str, str, list[str], str]
             evidence = [str(item).strip() for item in raw_evidence if str(item).strip()]
         elif isinstance(raw_evidence, str) and raw_evidence.strip():
             evidence = [raw_evidence.strip()]
+        mode = str(response_data.get("mode", "")).strip().lower()
+        angle = str(response_data.get("angle", "")).strip()
         focus = str(response_data.get("focus", "")).strip()
         final_reply = str(response_data.get("reply", "")).strip()
         if not final_reply:
@@ -356,22 +386,79 @@ def _parse_impression_result(raw_result: str) -> tuple[str, str, list[str], str]
         else:
             final_reply = "（上下打量了你一下）……啧，没什么特别的印象。"
 
-    return final_reply, inner_os, evidence, focus
+    return final_reply, inner_os, evidence, mode, angle, focus
+
+
+def _find_impression_style_issue(reply: str) -> str:
+    for pattern in IMPRESSION_STALE_PATTERNS:
+        match = pattern.search(reply)
+        if match:
+            return f"reply 使用了泛化套话: {match.group(0)!r}"
+    return ""
+
+
+def _normalize_impression_body(reply: str) -> str:
+    body = re.sub(r"^对.+?的印象是[：:…。.．\s]*", "", reply.strip())
+    return re.sub(r"[^\w\u4e00-\u9fff]", "", body).lower()
+
+
+def _find_similar_impression_reply(reply: str, recent_replies: list[str]) -> tuple[str, float]:
+    normalized_reply = _normalize_impression_body(reply)
+    if len(normalized_reply) < 20:
+        return "", 0.0
+
+    closest_reply = ""
+    closest_ratio = 0.0
+    for recent_reply in recent_replies:
+        normalized_recent = _normalize_impression_body(recent_reply)
+        if len(normalized_recent) < 20:
+            continue
+        ratio = difflib.SequenceMatcher(None, normalized_reply, normalized_recent).ratio()
+        if ratio > closest_ratio:
+            closest_reply = recent_reply
+            closest_ratio = ratio
+    return closest_reply, closest_ratio
+
+
+def _load_recent_impression_replies(
+    conn: sqlite3.Connection,
+    *,
+    group_id: str,
+    bot_id: str,
+) -> list[str]:
+    rows = conn.execute(
+        "SELECT content FROM messages WHERE group_id=? AND user_id=? AND content LIKE '对%印象是%' "
+        "ORDER BY id DESC LIMIT ?",
+        (group_id, bot_id, IMPRESSION_RECENT_REPLY_LIMIT),
+    ).fetchall()
+    return [str(row[0]).strip() for row in rows if row[0] and str(row[0]).strip()]
 
 
 def _validate_impression_result(
     *,
     reply: str,
     evidence: list[str],
+    mode: str,
+    angle: str,
     focus: str,
     target_name: str,
     target_evidence_source: str,
+    recent_replies: Optional[list[str]] = None,
 ) -> tuple[bool, str]:
     if not reply.startswith(f"对{target_name}的印象是"):
         return False, "reply 未使用指定开头"
-    max_reply_length = 140 if focus else 80
+    if mode not in {"specific", "limited"}:
+        return False, "mode 必须是 specific 或 limited"
+    max_reply_length = IMPRESSION_FOCUSED_MAX_LENGTH if focus else IMPRESSION_STANDARD_MAX_LENGTH
     if len(reply) > max_reply_length:
         return False, f"reply 超过 {max_reply_length} 字"
+    if mode == "specific" and len(angle) < 4:
+        return False, "angle 缺少有区分度的观察角度"
+    if mode == "limited":
+        if focus:
+            return False, "limited 模式下 focus 必须为空"
+        if not IMPRESSION_UNCERTAIN_PATTERN.search(reply):
+            return False, "limited 模式必须明确表达暂时看不准，而不是补全人格画像"
     if not 2 <= len(evidence) <= 4:
         return False, "evidence 必须包含 2-4 条本人原话"
 
@@ -380,12 +467,18 @@ def _validate_impression_result(
         normalized_anchor = "".join(anchor.split())
         if len(normalized_anchor) < 2 or normalized_anchor not in normalized_source:
             return False, f"evidence 不在目标发言中: {anchor!r}"
+    style_issue = _find_impression_style_issue(reply)
+    if style_issue:
+        return False, style_issue
+    similar_reply, similarity = _find_similar_impression_reply(reply, recent_replies or [])
+    if similarity >= IMPRESSION_SIMILARITY_THRESHOLD:
+        return False, f"reply 与近期评价过于相似（{similarity:.0%}）: {similar_reply[:36]!r}"
     return True, ""
 
 
 def _parse_impression_reply(raw_result: str) -> tuple[str, str]:
     """Parse impression model output into final reply and inner thoughts."""
-    final_reply, inner_os, _evidence, _focus = _parse_impression_result(raw_result)
+    final_reply, inner_os, _evidence, _mode, _angle, _focus = _parse_impression_result(raw_result)
     return final_reply, inner_os
 
 
@@ -494,6 +587,11 @@ async def _(bot: Bot, event: GroupMessageEvent):
             target_id=target_id,
             current_message_id=current_message_id,
         )
+        recent_impression_replies = _load_recent_impression_replies(
+            conn,
+            group_id=group_id,
+            bot_id=str(bot.self_id),
+        )
 
     if len(history_rows) < 10:
         if is_querying_other:
@@ -536,33 +634,53 @@ async def _(bot: Bot, event: GroupMessageEvent):
     {wl2_overlay}
     """
 
+    delivery_hint = random.choice(IMPRESSION_DELIVERY_HINTS)
+
     system_prompt = f"""
     {persona}
     {state_overlay_prompt}
 
     【群印象任务】
-    你要以东云彰人的完整人格和当前世界线状态，评价群友【{target_name}】。
+    群友刚当面问你怎么看【{target_name}】。你要以东云彰人的完整人格和当前世界线状态，临场说出真实看法，而不是写人物介绍、用户画像或总结报告。
     材料分为“本人整体发言样本”和“近期对话片段”：整体样本用于形成长期、整体的印象；近期片段用于还原短句的前因后果，并在确有值得在意的事情时提高权重。
+
+    【观察方法】
+    1. 先判断材料能否支持一条只适合【{target_name}】的观察角度：反复出现的行为、说话方式、前后反差、对某件事的具体态度，或你真正会在意的小细节。
+    2. 兴趣类别可以说，但类别本身不算观察。“玩游戏”要结合他聊起来是否起劲、较真、嘴硬或反复改口；“聊吃的”也要落到具体偏好或反应。
+    3. 如果材料里同时有两三个互不重复、确实有辨识度的发现，可以自然串起来，不必强行只说一个；每一点都要比“他聊过某话题”更进一步。
+    4. 可以把群友的表现和你自己的习惯、弱点、价值观作自然对照，例如“这点倒跟我一样”或“这种较真劲我不讨厌”。对自己的描述必须来自基础人设或当前世界线，不能临时编设定。
+    5. 不要按“兴趣标签 → 性格概括 → 好不好相处”写标准人物小传，也不要为了完整而把所有话题都列一遍。
+    6. 基础人设里“对群友没兴趣”表示你保持距离、不会过度热情，不表示你眼里所有群友都一样，更不表示要把人概括成“普通人”。
+    7. 本次表达节奏参考：{delivery_hint}
+
+    【材料强弱分流】
+    - `specific`：材料里存在至少一条稳定、具体、有辨识度的观察。正常发挥，可以只说一个重点，也可以像聊天一样串起两三个具体发现；有共鸣或槽点时可以多说。
+    - `limited`：材料主要是孤立短句、常见话题、复读或缺少稳定行为，无法支持有辨识度的判断。此时不要硬凑“兴趣 + 性格 + 好不好相处”的画像；直接说明目前看不准，可以附带一处确定能看出的现象，然后停下。
+    - `limited` 不是刻薄评价，也不能换成“普通人、没什么特别、也就那样”。它表达的是证据不足，不是这个人没有特点。
 
     【事实边界】
     1. 对【{target_name}】的事实判断只能来自他本人的实际发言。近期片段里其他人的话只用于理解上下文，绝不能算到【{target_name}】头上。
     2. 完整人设和世界线状态只决定你的口吻、关注点和价值判断，不能替群友编造经历、动机、关系或性格。
     3. 可以生成不点名具体事件的整体印象，不必为了显得有依据而生硬复述聊天记录。
-    4. 如果材料里确实出现你会感兴趣、在意或很想吐槽的内容，可以把 focus 写出来，并在 reply 中多说几句；否则 focus 必须为空。
+    4. 如果材料里出现你会感兴趣、在意、产生共鸣或很想吐槽的内容，可以把 focus 写出来，并在 reply 中多说几句；否则 focus 必须为空。
     5. 材料不足或过于零碎时应保守评价，不要强行补全。
 
     【回复要求】
     1. 必须符合东云彰人的口吻，并服从当前生效的世界线覆写。
-    2. 用“对{target_name}的印象是...”开头。
-    3. 普通整体评价 40-80 字；focus 非空时可以展开，但不得超过 140 字。
-    4. reply 是发到群里的纯文本，不要括号动作；evidence、focus 和 inner_os 不会发到群里。
+    2. 必须用“对{target_name}的印象是……”开头；固定开头之后不要接“一个……的人/网友/玩家”式定义，直接进入彰人最想说的观察、吐槽或判断。
+    3. 不需要凑字数。说清楚就停；普通回复不超过 {IMPRESSION_STANDARD_MAX_LENGTH} 字，focus 非空时不超过 {IMPRESSION_FOCUSED_MAX_LENGTH} 字。不要为了压到旧的 80 字限制而删掉有辨识度的细节。
+    4. 禁止用“普通人/普通网友/普通玩家”“没什么特别的/没什么值得说的”“挺随和/挺好相处”“也就那样”作为结论。这些话没有提供有效观察。
+    5. 少用“平时……偶尔……感觉……”的流水账句式，少连续使用“挺、感觉、不过、就是、偶尔”等模糊词。
+    6. reply 是发到群里的纯文本，不要括号动作；evidence、angle、focus 和 inner_os 不会发到群里。
 
     【================ 强制输出格式 (JSON) ================】
     {{
       "inner_os": "用简短几句归纳材料中有依据的观察，不要写无依据的脑补。",
       "evidence": ["从【{target_name}】本人发言中原样复制2-16个字", "再复制一处本人发言作为依据"],
-      "focus": "若有你特别感兴趣或想点评的真实内容则简述，否则留空字符串",
-      "reply": "以指定句式开头的最终评价"
+      "mode": "材料足够时填 specific；材料零碎、无法形成有辨识度判断时填 limited",
+      "angle": "specific 时写本次评价的独特观察主线，可包含2-3个具体发现；limited 时留空",
+      "focus": "若有你特别感兴趣、产生共鸣或想点评的真实内容则简述，否则留空字符串",
+      "reply": "以‘对{target_name}的印象是……’开头，随后像东云彰人当面说话一样自然地给出看法，不写人物小传"
     }}
     """
 
@@ -595,19 +713,25 @@ async def _(bot: Bot, event: GroupMessageEvent):
                 max_tokens=1024,
                 timeout=60.0,
             )
-            candidate_reply, _inner_os, evidence, focus = _parse_impression_result(raw_result)
+            candidate_reply, _inner_os, evidence, mode, angle, focus = _parse_impression_result(raw_result)
             is_valid, invalid_reason = _validate_impression_result(
                 reply=candidate_reply,
                 evidence=evidence,
+                mode=mode,
+                angle=angle,
                 focus=focus,
                 target_name=target_name,
                 target_evidence_source=target_evidence_source,
+                recent_replies=recent_impression_replies,
             )
             if is_valid:
                 final_reply = candidate_reply
                 break
 
-            logger.warning(f"⚠️ [Impression] 结果校验失败（第 {attempt + 1} 次）: {invalid_reason}")
+            logger.warning(
+                f"⚠️ [Impression] 结果校验失败（第 {attempt + 1} 次）: {invalid_reason}; "
+                f"reply_len={len(candidate_reply)}, mode={mode!r}, focus={focus!r}, angle={angle!r}"
+            )
             if attempt == 0:
                 messages.extend(
                     [
@@ -616,14 +740,16 @@ async def _(bot: Bot, event: GroupMessageEvent):
                             "role": "user",
                             "content": (
                                 f"上一次输出未通过校验：{invalid_reason}。请重新阅读材料并输出完整 JSON；"
-                                f"evidence 必须逐字来自【{target_name}】本人发言，reply 必须使用指定开头和长度。"
+                                f"evidence 必须逐字来自【{target_name}】本人发言；angle 要写出不能套给别人的具体观察；"
+                                "材料足够就用 specific 自然发挥；材料太碎就用 limited 明说暂时看不准，"
+                                "不要写兴趣标签加性格结论的人物小传。"
                             ),
                         },
                     ]
                 )
 
         if not final_reply:
-            final_reply = f"对{target_name}的印象是……最近说的话还是太零碎了，暂时看不出什么特别的。"
+            final_reply = f"对{target_name}的印象是……现在这些话太碎了，硬让我下结论也没意思。再观察一阵吧。"
 
         save_my_response(group_id, str(bot.self_id), final_reply)
 
