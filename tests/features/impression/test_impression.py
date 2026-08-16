@@ -56,6 +56,46 @@ def test_resolve_impression_target_detects_querying_bot():
     assert is_querying_bot is True
 
 
+def test_impression_prompt_distinguishes_self_and_other_addressing():
+    self_prompt = impression._build_impression_system_prompt(
+        persona="基础人设",
+        state_overlay_prompt="",
+        target_name="小明",
+        is_querying_other=False,
+    )
+    other_prompt = impression._build_impression_system_prompt(
+        persona="基础人设",
+        state_overlay_prompt="",
+        target_name="小红",
+        is_querying_other=True,
+    )
+
+    assert "使用第二人称“你”" in self_prompt
+    assert "使用女性第三人称“她”" in other_prompt
+    assert "综合一段时间内的发言" in self_prompt
+    assert "不要求每次都显式评价自己是否喜欢" in self_prompt
+    assert "focus" not in self_prompt
+
+
+def test_impression_addressing_filter_rejects_wrong_target_pronouns():
+    assert impression._find_impression_addressing_issue(
+        "对小明的印象是……你最近一直惦记那张卡。",
+        is_querying_other=False,
+    ) == ""
+    assert impression._find_impression_addressing_issue(
+        "对小明的印象是……他最近一直惦记那张卡。",
+        is_querying_other=False,
+    )
+    assert impression._find_impression_addressing_issue(
+        "对小红的印象是……她最近一直惦记那张卡。",
+        is_querying_other=True,
+    ) == ""
+    assert impression._find_impression_addressing_issue(
+        "对小红的印象是……你最近一直惦记那张卡。",
+        is_querying_other=True,
+    )
+
+
 def test_exact_impression_request_rejects_command_prefix_sentences():
     exact_event = types.SimpleNamespace(
         get_plaintext=lambda: "我的印象",
@@ -175,8 +215,8 @@ def test_validate_impression_result_requires_target_evidence():
         evidence=["还有两首没练完", "六点起来继续"],
         mode="specific",
         angle="嘴上没说多认真，但已经把没练完的歌和明早安排接上了",
-        focus="对练习的执着",
         target_name="小明",
+        is_querying_other=False,
         target_evidence_source="还有两首没练完\n六点起来继续",
     )
     invalid, invalid_reason = impression._validate_impression_result(
@@ -184,8 +224,8 @@ def test_validate_impression_result_requires_target_evidence():
         evidence=["还有两首没练完", "明天不是要演出吗"],
         mode="specific",
         angle="熬夜练歌还安排了第二天继续",
-        focus="",
         target_name="小明",
+        is_querying_other=False,
         target_evidence_source="还有两首没练完\n六点起来继续",
     )
 
@@ -195,21 +235,20 @@ def test_validate_impression_result_requires_target_evidence():
     assert "evidence 不在目标发言中" in invalid_reason
 
 
-def test_parse_impression_result_reads_evidence_mode_angle_and_focus():
+def test_parse_impression_result_reads_evidence_mode_and_angle():
     raw = (
         '{"inner_os":"确实挺拼","evidence":["还有两首没练完","六点起来继续"],'
-        '"mode":"specific","angle":"没练完就打算早起接着练","focus":"对练习的执着",'
+        '"mode":"specific","angle":"没练完就打算早起接着练",'
         '"reply":"对小明的印象是对练习还挺认真的。"}'
     )
 
-    reply, inner_os, evidence, mode, angle, focus = impression._parse_impression_result(raw)
+    reply, inner_os, evidence, mode, angle = impression._parse_impression_result(raw)
 
     assert reply == "对小明的印象是对练习还挺认真的。"
     assert inner_os == "确实挺拼"
     assert evidence == ["还有两首没练完", "六点起来继续"]
     assert mode == "specific"
     assert angle == "没练完就打算早起接着练"
-    assert focus == "对练习的执着"
 
 
 def test_impression_style_filter_rejects_generic_profile_templates():
@@ -254,8 +293,8 @@ def test_validate_impression_result_rejects_recently_reused_wording():
         evidence=["不想打了", "再来一把"],
         mode="specific",
         angle="嘴上说不打，实际开局比谁都快",
-        focus="打游戏时的嘴硬",
         target_name="小明",
+        is_querying_other=False,
         target_evidence_source="不想打了\n再来一把",
         recent_replies=[recent_reply],
     )
@@ -266,12 +305,12 @@ def test_validate_impression_result_rejects_recently_reused_wording():
 
 def test_validate_limited_impression_requires_honest_uncertainty():
     valid, reason = impression._validate_impression_result(
-        reply="对小明的印象是……目前能看出的只有他经常接游戏话题，再往下说就有点硬猜了。",
+        reply="对小明的印象是……目前能看出的只有你经常接游戏话题，再往下说就有点硬猜了。",
         evidence=["开一把吗", "又歪了"],
         mode="limited",
         angle="",
-        focus="",
         target_name="小明",
+        is_querying_other=False,
         target_evidence_source="开一把吗\n又歪了",
     )
     invalid, invalid_reason = impression._validate_impression_result(
@@ -279,8 +318,8 @@ def test_validate_limited_impression_requires_honest_uncertainty():
         evidence=["开一把吗", "又歪了"],
         mode="limited",
         angle="",
-        focus="",
         target_name="小明",
+        is_querying_other=False,
         target_evidence_source="开一把吗\n又歪了",
     )
 
@@ -301,12 +340,12 @@ def test_validate_specific_impression_allows_detail_beyond_old_eighty_char_limit
         evidence=["不打了", "配队得这么换"],
         mode="specific",
         angle="嘴上喊停却总是最快开下一局，抱怨归抱怨，讲配队时又很细",
-        focus="",
         target_name="小明",
+        is_querying_other=False,
         target_evidence_source="不打了\n配队得这么换",
     )
 
-    assert 80 < len(reply) <= impression.IMPRESSION_STANDARD_MAX_LENGTH
+    assert 80 < len(reply) <= impression.IMPRESSION_SPECIFIC_MAX_LENGTH
     assert valid is True
     assert reason == ""
 

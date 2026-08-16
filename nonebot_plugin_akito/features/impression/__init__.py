@@ -58,22 +58,11 @@ IMPRESSION_CONTEXT_MAX_GAP_SECONDS = 300
 IMPRESSION_CONTEXT_MAX_BLOCKS = 6
 IMPRESSION_CONTEXT_BLOCK_MESSAGE_LIMIT = 12
 IMPRESSION_MESSAGE_CHAR_LIMIT = 240
-IMPRESSION_STANDARD_MAX_LENGTH = 120
-IMPRESSION_FOCUSED_MAX_LENGTH = 180
+IMPRESSION_LIMITED_MAX_LENGTH = 120
+IMPRESSION_SPECIFIC_MAX_LENGTH = 180
 IMPRESSION_RECENT_REPLY_LIMIT = 8
 IMPRESSION_SIMILARITY_THRESHOLD = 0.72
 IMPRESSION_COMMANDS = ("群印象", "评价我", "说说印象", "我的印象")
-
-IMPRESSION_DELIVERY_HINTS = (
-    "从你最想吐槽的反差切入，不要先罗列兴趣标签。",
-    "像被当面追问一样，先说最直接的感觉，再自然补一句理由。",
-    "抓住一个反复出现的行为习惯，围绕它说，不要面面俱到。",
-    "从一处有辨识度的小细节切入，再给判断。",
-    "优先说这个人的参与方式或说话节奏，而不是把聊过的话题列一遍。",
-    "可以用一句短判断加一句补充，没必要凑成完整人物小传。",
-    "如果有两三个彼此独立的具体发现，可以像想到哪说到哪一样自然串起来。",
-    "遇到和你相似、相反或让你在意的地方，可以直接带一句自己的反应。",
-)
 
 IMPRESSION_STALE_PATTERNS = (
     re.compile(r"普通(?:人|网友|玩家)"),
@@ -349,13 +338,83 @@ def _resolve_wl2_overlay(mem: dict, now_ts: Optional[float] = None) -> tuple[boo
     return False, ""
 
 
-def _parse_impression_result(raw_result: str) -> tuple[str, str, list[str], str, str, str]:
+def _build_impression_system_prompt(
+    *,
+    persona: str,
+    state_overlay_prompt: str,
+    target_name: str,
+    is_querying_other: bool,
+) -> str:
+    if is_querying_other:
+        target_pronoun = "她"
+        scene_description = f"群友正在问你对【{target_name}】的印象；你是在向查询者谈论她。"
+        addressing_rule = (
+            f"固定开头之后，提到【{target_name}】时使用女性第三人称“她”。"
+            "不要把她当成当前对话者写成“你”，也不要称作“他、这个人、这人、这家伙”。"
+        )
+    else:
+        target_pronoun = "你"
+        scene_description = f"【{target_name}】本人正在当面问你对自己的印象；你是在直接对本人说话。"
+        addressing_rule = (
+            f"固定开头之后，提到【{target_name}】时使用第二人称“你”。"
+            "不要把对方写成“他、她、这个人、这人、这家伙”。"
+        )
+
+    return f"""
+    {persona}
+    {state_overlay_prompt}
+
+    【群印象任务】
+    {scene_description}
+    这不是针对“群印象”这条指令本身的即时回复，而是综合一段时间内的发言，形成带有东云彰人个人观察角度的整体评价。
+    材料分为“本人整体发言样本”和“近期对话片段”：整体样本用于观察一段时间内反复出现的关注点、态度和行为；近期片段只用于还原短句的前因后果。不要因为某一条最近消息很醒目，就把整段评价写成对那条消息的单句回复。
+
+    【观察与判断】
+    1. 先寻找跨多条发言能够成立的整体观察：反复关注什么、对什么特别上心、说话和参与群聊的方式、前后表现，或一段时间内比较稳定的倾向。
+    2. 群印象需要有“你的看法”，不能只把聊天记录换一种说法。允许从明确、反复的表现作克制推断，例如一个人持续惦记某张卡，可以说“看来里面大概有{target_pronoun}很喜欢的角色”；这类推断要保留“看来、大概、估计、感觉”等不确定性，不能把未知动机写成事实。
+    3. 兴趣类别本身不算观察。“玩游戏”“想抽卡”“聊吃的”要进一步说明{target_pronoun}表现出了怎样的投入、偏好、态度或变化。
+    4. 材料里有两三个互不重复、确实有辨识度的发现时，可以自然串起来；不需要为了完整而把所有话题列一遍，也不必强行寻找“嘴上怎样、实际上怎样”的反差。
+    5. 东云彰人的人设和当前世界线决定你的措辞、关注点和判断方式，不要求每次都显式评价自己是否喜欢、讨厌或认同对方。像“我倒不讨厌”“这种劲儿不赖”“至少不装”“跟我一样”这样的个人反应，只在它确实自然且能增加信息时使用，不能作为惯例收尾。
+    6. 不要按“兴趣标签 → 性格概括 → 好不好相处”写标准人物小传，也不要为了显得像东云彰人而在观察之后额外补一句态度。看法已经说清楚时就直接结束。
+    7. 基础人设里“对群友没兴趣”表示你保持距离、不会过度热情，不表示你眼里所有群友都一样，更不表示要把人概括成“普通人”。
+
+    【材料强弱分流】
+    - `specific`：材料支持至少一条稳定、具体、有辨识度的整体观察。可以围绕一个重点，也可以自然串起两三个可靠发现；允许加入有依据、措辞克制的理解和推断。
+    - `limited`：材料主要是孤立短句、常见话题、复读或缺少稳定表现，无法支持有辨识度的判断。此时直接说明目前看不准，可以附带一处确定能看出的现象，然后停下。
+    - `limited` 表达的是证据不足，不是这个人没有特点；不能换成“普通人、没什么特别、也就那样”。
+
+    【事实边界】
+    1. 对【{target_name}】的材料依据只能来自本人实际发言。近期片段里其他人的话只用于理解上下文，绝不能算到【{target_name}】头上。
+    2. 可以根据多条发言形成整体判断和克制推断，但不能凭空编造经历、关系、未出现的具体事件，或把不确定的动机和性格写成确定事实。
+    3. 不必为了显得有依据而逐条复述聊天记录；最终评价应当像自然对话，不像分析报告。
+    4. 材料不足或过于零碎时应保守评价，不要强行补全。
+
+    【称呼与回复要求】
+    1. {addressing_rule}
+    2. 必须符合东云彰人的口吻，并服从当前生效的世界线覆写。
+    3. 必须用“对{target_name}的印象是……”开头；固定开头之后直接进入整体观察或判断，不要接“一个……的人/网友/玩家”式定义。
+    4. `specific` 最多 {IMPRESSION_SPECIFIC_MAX_LENGTH} 字，`limited` 最多 {IMPRESSION_LIMITED_MAX_LENGTH} 字。通常一至三句，说清楚就停，不要为了字数补结论、补态度或强行升华。
+    5. 禁止用“普通人/普通网友/普通玩家”“没什么特别的/没什么值得说的”“挺随和/挺好相处”“也就那样”作为结论。这些话没有提供有效观察。
+    6. 少用“平时……偶尔……感觉……”的流水账句式，少连续使用“挺、感觉、不过、就是、偶尔”等模糊词。
+    7. reply 是发到群里的纯文本，不要括号动作；evidence、angle 和 inner_os 不会发到群里。
+
+    【================ 强制输出格式 (JSON) ================】
+    {{
+      "inner_os": "用简短几句归纳一段时间内有依据的整体观察，以及可以成立的克制推断。",
+      "evidence": ["从【{target_name}】本人发言中原样复制2-16个字", "再复制一处本人发言作为依据"],
+      "mode": "材料足够时填 specific；材料零碎、无法形成有辨识度判断时填 limited",
+      "angle": "specific 时写跨一段时间形成的整体观察主线和有依据的理解；limited 时留空",
+      "reply": "以‘对{target_name}的印象是……’开头，按照称呼规则自然说出整体看法，不写人物小传或分析报告"
+    }}
+    """
+
+
+def _parse_impression_result(raw_result: str) -> tuple[str, str, list[str], str, str]:
     final_reply = ""
     inner_os = ""
     evidence: list[str] = []
     mode = ""
     angle = ""
-    focus = ""
 
     try:
         response_data = parse_json_object(raw_result)
@@ -371,7 +430,6 @@ def _parse_impression_result(raw_result: str) -> tuple[str, str, list[str], str,
             evidence = [raw_evidence.strip()]
         mode = str(response_data.get("mode", "")).strip().lower()
         angle = str(response_data.get("angle", "")).strip()
-        focus = str(response_data.get("focus", "")).strip()
         final_reply = str(response_data.get("reply", "")).strip()
         if not final_reply:
             final_reply = "（打量了你一下）……没什么好说的。"
@@ -386,7 +444,7 @@ def _parse_impression_result(raw_result: str) -> tuple[str, str, list[str], str,
         else:
             final_reply = "（上下打量了你一下）……啧，没什么特别的印象。"
 
-    return final_reply, inner_os, evidence, mode, angle, focus
+    return final_reply, inner_os, evidence, mode, angle
 
 
 def _find_impression_style_issue(reply: str) -> str:
@@ -397,8 +455,41 @@ def _find_impression_style_issue(reply: str) -> str:
     return ""
 
 
+def _extract_impression_body(reply: str) -> str:
+    return re.sub(r"^对.+?的印象是[：:…。.．\s]*", "", reply.strip())
+
+
+def _find_impression_addressing_issue(reply: str, *, is_querying_other: bool) -> str:
+    body = _extract_impression_body(reply)
+    if not body:
+        return ""
+
+    sentence_prefix = r"(?:^|[。！？!?；;…])\s*"
+    subject_continuation = r"(?=[，,。！？!?；;、\s]|最近|平时|总|也|还|倒|对|把|会|是|有|没|很|真|就|都|嘴|想|说|聊|玩|抽)"
+    distant_reference = re.search(
+        sentence_prefix + r"(?:他这个人|她这个人|这个人|这人|这家伙)" + subject_continuation,
+        body,
+    )
+    if distant_reference:
+        return f"reply 对目标使用了旁观称呼: {distant_reference.group(0)!r}"
+
+    sentence_subject = sentence_prefix + r"(?:{})" + subject_continuation
+    if is_querying_other:
+        direct_reference = re.search(sentence_subject.format("你"), body)
+        if direct_reference:
+            return "reply 把被艾特的目标写成了当前对话者“你”"
+        masculine_reference = re.search(sentence_subject.format("他"), body)
+        if masculine_reference:
+            return "reply 对被艾特的目标使用了男性第三人称“他”"
+    else:
+        third_person_reference = re.search(sentence_subject.format("他|她"), body)
+        if third_person_reference:
+            return f"reply 没有直接对本人使用“你”: {third_person_reference.group(0).strip()!r}"
+    return ""
+
+
 def _normalize_impression_body(reply: str) -> str:
-    body = re.sub(r"^对.+?的印象是[：:…。.．\s]*", "", reply.strip())
+    body = _extract_impression_body(reply)
     return re.sub(r"[^\w\u4e00-\u9fff]", "", body).lower()
 
 
@@ -440,8 +531,8 @@ def _validate_impression_result(
     evidence: list[str],
     mode: str,
     angle: str,
-    focus: str,
     target_name: str,
+    is_querying_other: bool,
     target_evidence_source: str,
     recent_replies: Optional[list[str]] = None,
 ) -> tuple[bool, str]:
@@ -449,16 +540,13 @@ def _validate_impression_result(
         return False, "reply 未使用指定开头"
     if mode not in {"specific", "limited"}:
         return False, "mode 必须是 specific 或 limited"
-    max_reply_length = IMPRESSION_FOCUSED_MAX_LENGTH if focus else IMPRESSION_STANDARD_MAX_LENGTH
+    max_reply_length = IMPRESSION_SPECIFIC_MAX_LENGTH if mode == "specific" else IMPRESSION_LIMITED_MAX_LENGTH
     if len(reply) > max_reply_length:
         return False, f"reply 超过 {max_reply_length} 字"
     if mode == "specific" and len(angle) < 4:
         return False, "angle 缺少有区分度的观察角度"
-    if mode == "limited":
-        if focus:
-            return False, "limited 模式下 focus 必须为空"
-        if not IMPRESSION_UNCERTAIN_PATTERN.search(reply):
-            return False, "limited 模式必须明确表达暂时看不准，而不是补全人格画像"
+    if mode == "limited" and not IMPRESSION_UNCERTAIN_PATTERN.search(reply):
+        return False, "limited 模式必须明确表达暂时看不准，而不是补全人格画像"
     if not 2 <= len(evidence) <= 4:
         return False, "evidence 必须包含 2-4 条本人原话"
 
@@ -470,6 +558,9 @@ def _validate_impression_result(
     style_issue = _find_impression_style_issue(reply)
     if style_issue:
         return False, style_issue
+    addressing_issue = _find_impression_addressing_issue(reply, is_querying_other=is_querying_other)
+    if addressing_issue:
+        return False, addressing_issue
     similar_reply, similarity = _find_similar_impression_reply(reply, recent_replies or [])
     if similarity >= IMPRESSION_SIMILARITY_THRESHOLD:
         return False, f"reply 与近期评价过于相似（{similarity:.0%}）: {similar_reply[:36]!r}"
@@ -478,7 +569,7 @@ def _validate_impression_result(
 
 def _parse_impression_reply(raw_result: str) -> tuple[str, str]:
     """Parse impression model output into final reply and inner thoughts."""
-    final_reply, inner_os, _evidence, _mode, _angle, _focus = _parse_impression_result(raw_result)
+    final_reply, inner_os, _evidence, _mode, _angle = _parse_impression_result(raw_result)
     return final_reply, inner_os
 
 
@@ -576,7 +667,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
             target_name = member_info.get("card") or member_info.get("nickname") or f"用户{target_id}"
         except Exception as e:
             logger.error(f"获取被艾特成员信息失败: {e}")
-            target_name = "那家伙"
+            target_name = f"用户{target_id}"
 
     reply_segment = MessageSegment.reply(event.message_id)
     current_message_id = str(event.message_id)
@@ -595,7 +686,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
 
     if len(history_rows) < 10:
         if is_querying_other:
-            await um_cmd.finish(reply_segment + f"对 {target_name} 还没什么印象……让他多说点话吧。")
+            await um_cmd.finish(reply_segment + f"对{target_name}还没什么印象……让她多说点话吧。")
         else:
             await um_cmd.finish(reply_segment + "对你还没什么印象……多说点话吧。")
         return
@@ -634,55 +725,12 @@ async def _(bot: Bot, event: GroupMessageEvent):
     {wl2_overlay}
     """
 
-    delivery_hint = random.choice(IMPRESSION_DELIVERY_HINTS)
-
-    system_prompt = f"""
-    {persona}
-    {state_overlay_prompt}
-
-    【群印象任务】
-    群友刚当面问你怎么看【{target_name}】。你要以东云彰人的完整人格和当前世界线状态，临场说出真实看法，而不是写人物介绍、用户画像或总结报告。
-    材料分为“本人整体发言样本”和“近期对话片段”：整体样本用于形成长期、整体的印象；近期片段用于还原短句的前因后果，并在确有值得在意的事情时提高权重。
-
-    【观察方法】
-    1. 先判断材料能否支持一条只适合【{target_name}】的观察角度：反复出现的行为、说话方式、前后反差、对某件事的具体态度，或你真正会在意的小细节。
-    2. 兴趣类别可以说，但类别本身不算观察。“玩游戏”要结合他聊起来是否起劲、较真、嘴硬或反复改口；“聊吃的”也要落到具体偏好或反应。
-    3. 如果材料里同时有两三个互不重复、确实有辨识度的发现，可以自然串起来，不必强行只说一个；每一点都要比“他聊过某话题”更进一步。
-    4. 可以把群友的表现和你自己的习惯、弱点、价值观作自然对照，例如“这点倒跟我一样”或“这种较真劲我不讨厌”。对自己的描述必须来自基础人设或当前世界线，不能临时编设定。
-    5. 不要按“兴趣标签 → 性格概括 → 好不好相处”写标准人物小传，也不要为了完整而把所有话题都列一遍。
-    6. 基础人设里“对群友没兴趣”表示你保持距离、不会过度热情，不表示你眼里所有群友都一样，更不表示要把人概括成“普通人”。
-    7. 本次表达节奏参考：{delivery_hint}
-
-    【材料强弱分流】
-    - `specific`：材料里存在至少一条稳定、具体、有辨识度的观察。正常发挥，可以只说一个重点，也可以像聊天一样串起两三个具体发现；有共鸣或槽点时可以多说。
-    - `limited`：材料主要是孤立短句、常见话题、复读或缺少稳定行为，无法支持有辨识度的判断。此时不要硬凑“兴趣 + 性格 + 好不好相处”的画像；直接说明目前看不准，可以附带一处确定能看出的现象，然后停下。
-    - `limited` 不是刻薄评价，也不能换成“普通人、没什么特别、也就那样”。它表达的是证据不足，不是这个人没有特点。
-
-    【事实边界】
-    1. 对【{target_name}】的事实判断只能来自他本人的实际发言。近期片段里其他人的话只用于理解上下文，绝不能算到【{target_name}】头上。
-    2. 完整人设和世界线状态只决定你的口吻、关注点和价值判断，不能替群友编造经历、动机、关系或性格。
-    3. 可以生成不点名具体事件的整体印象，不必为了显得有依据而生硬复述聊天记录。
-    4. 如果材料里出现你会感兴趣、在意、产生共鸣或很想吐槽的内容，可以把 focus 写出来，并在 reply 中多说几句；否则 focus 必须为空。
-    5. 材料不足或过于零碎时应保守评价，不要强行补全。
-
-    【回复要求】
-    1. 必须符合东云彰人的口吻，并服从当前生效的世界线覆写。
-    2. 必须用“对{target_name}的印象是……”开头；固定开头之后不要接“一个……的人/网友/玩家”式定义，直接进入彰人最想说的观察、吐槽或判断。
-    3. 不需要凑字数。说清楚就停；普通回复不超过 {IMPRESSION_STANDARD_MAX_LENGTH} 字，focus 非空时不超过 {IMPRESSION_FOCUSED_MAX_LENGTH} 字。不要为了压到旧的 80 字限制而删掉有辨识度的细节。
-    4. 禁止用“普通人/普通网友/普通玩家”“没什么特别的/没什么值得说的”“挺随和/挺好相处”“也就那样”作为结论。这些话没有提供有效观察。
-    5. 少用“平时……偶尔……感觉……”的流水账句式，少连续使用“挺、感觉、不过、就是、偶尔”等模糊词。
-    6. reply 是发到群里的纯文本，不要括号动作；evidence、angle、focus 和 inner_os 不会发到群里。
-
-    【================ 强制输出格式 (JSON) ================】
-    {{
-      "inner_os": "用简短几句归纳材料中有依据的观察，不要写无依据的脑补。",
-      "evidence": ["从【{target_name}】本人发言中原样复制2-16个字", "再复制一处本人发言作为依据"],
-      "mode": "材料足够时填 specific；材料零碎、无法形成有辨识度判断时填 limited",
-      "angle": "specific 时写本次评价的独特观察主线，可包含2-3个具体发现；limited 时留空",
-      "focus": "若有你特别感兴趣、产生共鸣或想点评的真实内容则简述，否则留空字符串",
-      "reply": "以‘对{target_name}的印象是……’开头，随后像东云彰人当面说话一样自然地给出看法，不写人物小传"
-    }}
-    """
+    system_prompt = _build_impression_system_prompt(
+        persona=persona,
+        state_overlay_prompt=state_overlay_prompt,
+        target_name=target_name,
+        is_querying_other=is_querying_other,
+    )
 
     user_prompt = f"""
     以下材料只用于评价【{target_name}】。
@@ -693,7 +741,8 @@ async def _(bot: Bot, event: GroupMessageEvent):
     【近期对话片段（最近 {IMPRESSION_RECENT_DAYS} 天，最多 {IMPRESSION_CONTEXT_MAX_BLOCKS} 段）】
     {context_text}
 
-    请先从【{target_name}】本人的原话中选取 evidence，再形成整体印象。其他人的话只能帮助理解对话。
+    请先从【{target_name}】本人的原话中选取 evidence，再综合一段时间内的表现形成整体印象。其他人的话只能帮助理解对话。
+    最终回复必须遵守 system 中的称呼方式：{"用“她”谈论目标" if is_querying_other else "直接用“你”对本人说"}。
     """
 
     try:
@@ -713,14 +762,14 @@ async def _(bot: Bot, event: GroupMessageEvent):
                 max_tokens=1024,
                 timeout=60.0,
             )
-            candidate_reply, _inner_os, evidence, mode, angle, focus = _parse_impression_result(raw_result)
+            candidate_reply, _inner_os, evidence, mode, angle = _parse_impression_result(raw_result)
             is_valid, invalid_reason = _validate_impression_result(
                 reply=candidate_reply,
                 evidence=evidence,
                 mode=mode,
                 angle=angle,
-                focus=focus,
                 target_name=target_name,
+                is_querying_other=is_querying_other,
                 target_evidence_source=target_evidence_source,
                 recent_replies=recent_impression_replies,
             )
@@ -730,7 +779,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
 
             logger.warning(
                 f"⚠️ [Impression] 结果校验失败（第 {attempt + 1} 次）: {invalid_reason}; "
-                f"reply_len={len(candidate_reply)}, mode={mode!r}, focus={focus!r}, angle={angle!r}"
+                f"reply_len={len(candidate_reply)}, mode={mode!r}, angle={angle!r}"
             )
             if attempt == 0:
                 messages.extend(
@@ -742,14 +791,18 @@ async def _(bot: Bot, event: GroupMessageEvent):
                                 f"上一次输出未通过校验：{invalid_reason}。请重新阅读材料并输出完整 JSON；"
                                 f"evidence 必须逐字来自【{target_name}】本人发言；angle 要写出不能套给别人的具体观察；"
                                 "材料足够就用 specific 自然发挥；材料太碎就用 limited 明说暂时看不准，"
-                                "不要写兴趣标签加性格结论的人物小传。"
+                                "不要写兴趣标签加性格结论的人物小传；"
+                                f"称呼目标时必须{('使用“她”' if is_querying_other else '直接使用“你”')}。"
                             ),
                         },
                     ]
                 )
 
         if not final_reply:
-            final_reply = f"对{target_name}的印象是……现在这些话太碎了，硬让我下结论也没意思。再观察一阵吧。"
+            if is_querying_other:
+                final_reply = f"对{target_name}的印象是……她最近留下的话还是太碎了，现在硬下结论也没意思。"
+            else:
+                final_reply = f"对{target_name}的印象是……你最近留下的话还是太碎了，现在硬下结论也没意思。"
 
         save_my_response(group_id, str(bot.self_id), final_reply)
 
