@@ -1,11 +1,15 @@
 """记忆系统：长期记忆 JSON 的原子读写，以及基于 SQLite 的群聊上下文存取。"""
 
+import asyncio
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager, closing
 import datetime
 import json
 import os
 import sqlite3
 from typing import Optional
 
+import aiosqlite
 from nonebot.adapters import Event
 from nonebot.log import logger
 
@@ -13,41 +17,126 @@ from . import DB_PATH
 from .data import find_data_path, get_data_dir
 
 MEMORY_DB: dict = {}
+MessageRow = tuple[int, str, str, str, Optional[str], str]
+_MESSAGE_WRITE_LOCK = asyncio.Lock()
 
 
 def init_db() -> None:
     """创建 impression 历史记录表（由 core 统一初始化，供 impression.py 和 get_group_context 使用）。"""
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS messages (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            group_id TEXT,
-            user_id TEXT,
-            nickname TEXT,
-            content TEXT,
-            message_id TEXT,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    columns = {row[1] for row in cursor.execute("PRAGMA table_info(messages)").fetchall()}
-    if "message_id" not in columns:
-        cursor.execute("ALTER TABLE messages ADD COLUMN message_id TEXT")
-    cursor.execute('''
-        CREATE INDEX IF NOT EXISTS idx_messages_gid_uid ON messages(group_id, user_id)
-    ''')
-    cursor.execute('''
-        CREATE INDEX IF NOT EXISTS idx_messages_gid_timestamp ON messages(group_id, timestamp)
-    ''')
-    cursor.execute('''
-        CREATE INDEX IF NOT EXISTS idx_messages_gid_mid ON messages(group_id, message_id)
-    ''')
-    conn.commit()
-    conn.close()
+    with closing(sqlite3.connect(DB_PATH)) as conn, conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                group_id TEXT,
+                user_id TEXT,
+                nickname TEXT,
+                content TEXT,
+                message_id TEXT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        columns = {row[1] for row in cursor.execute("PRAGMA table_info(messages)").fetchall()}
+        if "message_id" not in columns:
+            cursor.execute("ALTER TABLE messages ADD COLUMN message_id TEXT")
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_messages_gid_uid ON messages(group_id, user_id)
+        ''')
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_messages_gid_timestamp ON messages(group_id, timestamp)
+        ''')
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_messages_gid_mid ON messages(group_id, message_id)
+        ''')
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_messages_gid_id ON messages(group_id, id)
+        ''')
 
 
 init_db()
+
+
+class MessageReader:
+    """在单个异步 SQLite 连接上读取群消息。"""
+
+    def __init__(self, connection: aiosqlite.Connection):
+        self._connection = connection
+
+    async def fetch_impression_history_candidates(
+        self,
+        group_id: str,
+        target_id: str,
+        *,
+        limit: int,
+    ) -> list[MessageRow]:
+        async with self._connection.execute(
+            "SELECT id, user_id, nickname, content, message_id, timestamp "
+            "FROM messages WHERE group_id=? AND user_id=? AND length(content)>2 "
+            "ORDER BY id DESC LIMIT ?",
+            (group_id, target_id, limit),
+        ) as cursor:
+            return await cursor.fetchall()
+
+    async def fetch_recent_impression_candidates(
+        self,
+        group_id: str,
+        target_id: str,
+        *,
+        cutoff: str,
+        limit: int,
+    ) -> list[MessageRow]:
+        async with self._connection.execute(
+            "SELECT id, user_id, nickname, content, message_id, timestamp "
+            "FROM messages WHERE group_id=? AND user_id=? AND length(trim(content))>0 AND timestamp>=? "
+            "ORDER BY id DESC LIMIT ?",
+            (group_id, target_id, cutoff, limit),
+        ) as cursor:
+            return await cursor.fetchall()
+
+    async def fetch_message_context_sides(
+        self,
+        group_id: str,
+        anchor_id: int,
+        *,
+        before_limit: int,
+        after_limit: int,
+    ) -> tuple[list[MessageRow], list[MessageRow]]:
+        async with self._connection.execute(
+            "SELECT id, user_id, nickname, content, message_id, timestamp "
+            "FROM messages WHERE group_id=? AND id<=? ORDER BY id DESC LIMIT ?",
+            (group_id, anchor_id, before_limit + 1),
+        ) as cursor:
+            before_rows = await cursor.fetchall()
+        async with self._connection.execute(
+            "SELECT id, user_id, nickname, content, message_id, timestamp "
+            "FROM messages WHERE group_id=? AND id>? ORDER BY id ASC LIMIT ?",
+            (group_id, anchor_id, after_limit),
+        ) as cursor:
+            after_rows = await cursor.fetchall()
+        return before_rows, after_rows
+
+    async def fetch_recent_impression_reply_contents(
+        self,
+        group_id: str,
+        bot_id: str,
+        *,
+        limit: int,
+    ) -> list[str]:
+        async with self._connection.execute(
+            "SELECT content FROM messages WHERE group_id=? AND user_id=? AND content LIKE '对%印象是%' "
+            "ORDER BY id DESC LIMIT ?",
+            (group_id, bot_id, limit),
+        ) as cursor:
+            rows = await cursor.fetchall()
+        return [str(row[0]).strip() for row in rows if row[0] and str(row[0]).strip()]
+
+
+@asynccontextmanager
+async def open_message_reader() -> AsyncIterator[MessageReader]:
+    """打开一个短生命周期的消息只读会话。"""
+    async with aiosqlite.connect(DB_PATH) as connection:
+        yield MessageReader(connection)
 
 
 def load_memory() -> None:
@@ -122,7 +211,7 @@ def _relative_time_label(value: str, now: Optional[datetime.datetime] = None) ->
     return f"{age_seconds // 3600}小时前"
 
 
-def get_group_context(
+async def get_group_context(
     group_id: str,
     limit: int = 20,
     *,
@@ -133,25 +222,23 @@ def get_group_context(
 ) -> str:
     """读取群聊上下文，可按消息年龄、连续性和当前消息 ID 收紧范围。"""
     try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        clauses = ["group_id=?"]
-        params: list[object] = [str(group_id)]
-        if max_age_seconds is not None:
-            cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=max_age_seconds)
-            clauses.append("timestamp>=?")
-            params.append(cutoff.strftime("%Y-%m-%d %H:%M:%S"))
-        if exclude_message_id is not None:
-            clauses.append("(message_id IS NULL OR message_id<>?)")
-            params.append(str(exclude_message_id))
-        params.append(limit)
-        cursor.execute(
-            f"SELECT nickname, content, timestamp FROM messages WHERE {' AND '.join(clauses)} "
-            "ORDER BY id DESC LIMIT ?",
-            params,
-        )
-        rows = cursor.fetchall()
-        conn.close()
+        async with aiosqlite.connect(DB_PATH) as connection:
+            clauses = ["group_id=?"]
+            params: list[object] = [str(group_id)]
+            if max_age_seconds is not None:
+                cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=max_age_seconds)
+                clauses.append("timestamp>=?")
+                params.append(cutoff.strftime("%Y-%m-%d %H:%M:%S"))
+            if exclude_message_id is not None:
+                clauses.append("(message_id IS NULL OR message_id<>?)")
+                params.append(str(exclude_message_id))
+            params.append(limit)
+            async with connection.execute(
+                f"SELECT nickname, content, timestamp FROM messages WHERE {' AND '.join(clauses)} "
+                "ORDER BY id DESC LIMIT ?",
+                params,
+            ) as cursor:
+                rows = await cursor.fetchall()
         if not rows:
             return ""
 
@@ -189,7 +276,33 @@ def get_group_context(
         return ""
 
 
-def record_bot_message(group_id: str, content: str, bot_qq: str = "") -> None:
+async def record_message(
+    group_id: str,
+    user_id: str,
+    nickname: str,
+    content: str,
+    message_id: Optional[str] = None,
+) -> None:
+    """向共享群消息表写入一条消息。"""
+    async with _MESSAGE_WRITE_LOCK, aiosqlite.connect(DB_PATH) as connection:
+        await connection.execute(
+            "INSERT INTO messages (group_id, user_id, nickname, content, message_id) VALUES (?, ?, ?, ?, ?)",
+            (str(group_id), str(user_id), nickname, content, message_id),
+        )
+        await connection.commit()
+
+
+async def delete_group_messages(group_id: str) -> int:
+    """删除指定群的全部背景消息并返回删除行数。"""
+    async with _MESSAGE_WRITE_LOCK, aiosqlite.connect(DB_PATH) as connection, connection.execute(
+        "DELETE FROM messages WHERE group_id=?", (str(group_id),)
+    ) as cursor:
+        deleted = cursor.rowcount
+        await connection.commit()
+    return int(deleted)
+
+
+async def record_bot_message(group_id: str, content: str, bot_qq: str = "") -> None:
     """把 bot 自己的回复写入共享 SQLite 群日志（nickname 统一为「东云彰人」）。
 
     供 get_group_context 跨引擎读取——主动对话与随机插嘴据此互相「看见」对方说过的话。
@@ -197,13 +310,6 @@ def record_bot_message(group_id: str, content: str, bot_qq: str = "") -> None:
     if not content or not content.strip():
         return
     try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO messages (group_id, user_id, nickname, content) VALUES (?, ?, ?, ?)",
-            (str(group_id), str(bot_qq), "东云彰人", content),
-        )
-        conn.commit()
-        conn.close()
+        await record_message(group_id, bot_qq, "东云彰人", content)
     except Exception as e:
         logger.error(f"❌ 记录 bot 回复到群日志失败: {e}")

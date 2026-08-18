@@ -1,10 +1,13 @@
 """
 测试记忆模块的原子写入逻辑。
 """
+import asyncio
 import json
 import os
 from pathlib import Path
 import sqlite3
+
+import pytest
 
 import nonebot_plugin_akito.core.memory as memory
 
@@ -100,10 +103,13 @@ def test_init_db_migrates_message_id_column(tmp_path: Path, monkeypatch):
 
     with sqlite3.connect(db_path) as conn:
         columns = {row[1] for row in conn.execute("PRAGMA table_info(messages)")}
+        indexes = {row[1] for row in conn.execute("PRAGMA index_list(messages)")}
     assert "message_id" in columns
+    assert "idx_messages_gid_id" in indexes
 
 
-def test_group_context_excludes_current_and_drops_stale_topic(tmp_path: Path, monkeypatch):
+@pytest.mark.asyncio
+async def test_group_context_excludes_current_and_drops_stale_topic(tmp_path: Path, monkeypatch):
     db_path = tmp_path / "context.db"
     monkeypatch.setattr(memory, "DB_PATH", db_path)
     memory.init_db()
@@ -114,11 +120,12 @@ def test_group_context_excludes_current_and_drops_stale_topic(tmp_path: Path, mo
             [
                 ("1001", "1", "甲", "很久以前的话题", "old", "-170 seconds"),
                 ("1001", "2", "乙", "刚才的铺垫", "recent", "-20 seconds"),
+                ("1001", "bot", "东云彰人", "没有消息 ID 的回复", None, "-10 seconds"),
                 ("1001", "3", "丙", "当前触发消息", "current", "-1 second"),
             ],
         )
 
-    result = memory.get_group_context(
+    result = await memory.get_group_context(
         "1001",
         limit=12,
         max_age_seconds=180,
@@ -128,6 +135,78 @@ def test_group_context_excludes_current_and_drops_stale_topic(tmp_path: Path, mo
     )
 
     assert "刚才的铺垫" in result
+    assert "没有消息 ID 的回复" in result
     assert "当前触发消息" not in result
     assert "很久以前的话题" not in result
     assert "分钟前]" in result or "刚刚]" in result
+
+
+@pytest.mark.asyncio
+async def test_message_store_writes_reads_and_deletes_by_group(tmp_path: Path, monkeypatch):
+    db_path = tmp_path / "messages.db"
+    monkeypatch.setattr(memory, "DB_PATH", db_path)
+    memory.init_db()
+
+    await memory.record_message("1001", "1", "甲", "保留这条用户消息", "m1")
+    await memory.record_message("1002", "2", "乙", "另一群消息", "m2")
+    await memory.record_bot_message("1001", "对小明印象是认真")
+    await memory.record_bot_message("1001", "")
+
+    async with memory.open_message_reader() as reader:
+        rows = await reader.fetch_impression_history_candidates("1001", "1", limit=10)
+        replies = await reader.fetch_recent_impression_reply_contents("1001", "", limit=10)
+
+    assert [(row[1], row[3], row[4]) for row in rows] == [("1", "保留这条用户消息", "m1")]
+    assert replies == ["对小明印象是认真"]
+    assert await memory.delete_group_messages("1001") == 2
+
+    with sqlite3.connect(db_path) as conn:
+        remaining = conn.execute("SELECT group_id, content FROM messages ORDER BY id").fetchall()
+    assert remaining == [("1002", "另一群消息")]
+
+
+@pytest.mark.asyncio
+async def test_message_reader_handles_sparse_ids(tmp_path: Path, monkeypatch):
+    db_path = tmp_path / "sparse.db"
+    monkeypatch.setattr(memory, "DB_PATH", db_path)
+    memory.init_db()
+    with sqlite3.connect(db_path) as conn:
+        conn.executemany(
+            "INSERT INTO messages (id, group_id, user_id, nickname, content, message_id, timestamp) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [
+                (10, "1001", "1", "甲", "第一句", None, "2026-08-18 01:00:00"),
+                (500000, "1001", "2", "乙", "第二句", "m2", "2026-08-18 01:01:00"),
+                (1031958, "1001", "1", "甲", "第三句", "m3", "2026-08-18 01:02:00"),
+                (1031959, "1002", "3", "丙", "其他群", "m4", "2026-08-18 01:03:00"),
+            ],
+        )
+
+    async with memory.open_message_reader() as reader:
+        before, after = await reader.fetch_message_context_sides(
+            "1001",
+            500000,
+            before_limit=1,
+            after_limit=1,
+        )
+
+    assert [row[0] for row in before] == [500000, 10]
+    assert [row[0] for row in after] == [1031958]
+
+
+@pytest.mark.asyncio
+async def test_concurrent_message_writes_are_serialized(tmp_path: Path, monkeypatch):
+    db_path = tmp_path / "concurrent.db"
+    monkeypatch.setattr(memory, "DB_PATH", db_path)
+    memory.init_db()
+
+    await asyncio.gather(*(
+        memory.record_message("1001", str(index), f"用户{index}", f"并发消息{index}", f"m{index}")
+        for index in range(20)
+    ))
+
+    with sqlite3.connect(db_path) as conn:
+        count, distinct_message_ids = conn.execute(
+            "SELECT COUNT(*), COUNT(DISTINCT message_id) FROM messages"
+        ).fetchone()
+    assert (count, distinct_message_ids) == (20, 20)

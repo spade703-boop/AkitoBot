@@ -40,11 +40,12 @@
 > 已处理：`464dcbd`（共享上下文层）；`7eef890`（任务级 renderer 与统一 schema）。
 
 ### M3. 数据层泄漏：原始 SQLite 访问散落在全部三层
-- [ ] 待办
+- [x] 完成
 - **证据**：裸 `sqlite3.connect(DB_PATH)` + 手写 SQL 出现在 `core/memory.py:21,136,200`（合理）、`features/impression/__init__.py:438,490`、`handlers/commands.py:196`。
 - **问题**：共享 `messages` 表的结构/列名知识被复制到跨三层的三个文件，违反 spec 自己声明的“core 是数据层”；连接管理不一致（部分 `with`、部分手动 `close()`）。
 - **影响**：一次 schema 迁移要动三处，容易漏改或出连接泄漏。
 - **建议**：`messages` 表的所有读写收敛到 `memory.py` 的函数里，features/handlers 只调函数、不碰 SQL。
+> 已处理：当前工作区变更（commit 待提交）：运行时 SQLite 访问已收口到 `core.memory`，改用 `aiosqlite`，群印象保留单连接异步读会话；依据 2026-08-18 线上库快照补充 `(group_id, id)` 索引，避免稀疏消息 ID 下的窗口查询临时排序，并以进程内写锁串行化消息写入与清群事务。
 
 ### M4. 全局可变字典当数据模型，核心实体零类型
 - [ ] 待办

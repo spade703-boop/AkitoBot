@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import datetime
-import sqlite3
 import types
 
+import aiosqlite
+import pytest
+
+from nonebot_plugin_akito.core.memory import MessageReader
 import nonebot_plugin_akito.features.impression as impression
 
 
@@ -171,9 +174,10 @@ def test_build_impression_history_text_reverses_rows_into_prompt_order():
     assert result == "[08-01 08:00]【小明】: 第一句\n[08-01 09:00]【小明】: 第二句"
 
 
-def test_load_impression_material_builds_history_context_away_from_command():
-    connection = sqlite3.connect(":memory:")
-    connection.execute(
+@pytest.mark.asyncio
+async def test_load_impression_material_builds_history_context_away_from_command():
+    connection = await aiosqlite.connect(":memory:")
+    await connection.execute(
         """
         CREATE TABLE messages (
             id INTEGER PRIMARY KEY,
@@ -195,14 +199,16 @@ def test_load_impression_material_builds_history_context_away_from_command():
         (6, "1", "target", "小明", "群印象", "cmd-current", "2026-08-02 00:00:00"),
         (7, "1", "target", "小明", "较早的完整发言", "old", "2026-07-01 00:00:00"),
     ]
-    connection.executemany(
+    await connection.executemany(
         "INSERT INTO messages (id, group_id, user_id, nickname, content, message_id, timestamp) "
         "VALUES (?, ?, ?, ?, ?, ?, ?)",
         rows,
     )
 
-    history_rows, blocks = impression._load_impression_material(
-        connection,
+    await connection.commit()
+    reader = MessageReader(connection)
+    history_rows, blocks = await impression._load_impression_material(
+        reader,
         group_id="1",
         target_id="target",
         current_message_id="cmd-current",
@@ -219,7 +225,7 @@ def test_load_impression_material_builds_history_context_away_from_command():
         "六点起来继续",
         "行吧，加油",
     ]
-    connection.close()
+    await connection.close()
 
 
 def test_merge_context_windows_keeps_latest_six_blocks():

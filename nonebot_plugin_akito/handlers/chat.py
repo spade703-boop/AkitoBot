@@ -660,7 +660,7 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage()):
         pjsk_block = shared_prompt_context.pjsk_block
         song_context = shared_prompt_context.song_memories + shared_prompt_context.song_mention
         group_id = getattr(event, 'group_id', None)
-        group_context = get_group_context(group_id) if group_id else ""
+        group_context = await get_group_context(group_id) if group_id else ""
         time_gap_awareness = build_time_gap_prompt(group_id) if group_id else ""
         time_gap_awareness = _fold_stale_history_into_time_gap_prompt(user_mem, time_gap_awareness, group_id)
 
@@ -903,7 +903,7 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage()):
             AKITO_STATUS.setdefault("last_superuser_trigger_time", {})[str(group_id)] = time.time()
         if group_id:
             record_bot_response(group_id)
-            record_bot_message(group_id, result, str(bot.self_id))
+            await record_bot_message(group_id, result, str(bot.self_id))
         base_delay = random.uniform(0.8, 2.5)
         typing_delay = min(len(result) * 0.12, 5.0)
         await asyncio.sleep(base_delay + typing_delay)

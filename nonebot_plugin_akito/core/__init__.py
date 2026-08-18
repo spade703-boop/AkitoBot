@@ -74,9 +74,10 @@ if _raw_img.strip():
 # ── 子模块导入（必须放在常量定义之后） ────────────────────────────────
 
 from .memory import (
-    MEMORY_DB, load_memory, save_memory,
+    MEMORY_DB, MessageRow, load_memory, save_memory,
     get_memory_key, get_user_memory,
-    get_group_context, record_bot_message,
+    MessageReader, delete_group_messages, get_group_context, open_message_reader,
+    record_bot_message, record_message,
 )
 from .data import (
     load_json_file, load_prompt_template, reload_assets, find_data_path, get_data_dir,
@@ -129,8 +130,9 @@ __all__ = [
     "ALLOWED_CHAT_GROUPS", "ALLOWED_CP_GROUPS", "ALLOWED_MEMORY_GROUPS", "TARGET_GROUPS",
     "GROUP_IMAGE_PERMISSIONS",
     # memory
-    "MEMORY_DB", "load_memory", "save_memory", "get_memory_key", "get_user_memory",
-    "get_group_context", "record_bot_message",
+    "MEMORY_DB", "MessageRow", "load_memory", "save_memory", "get_memory_key", "get_user_memory",
+    "MessageReader", "delete_group_messages", "get_group_context", "open_message_reader",
+    "record_bot_message", "record_message",
     # data
     "load_json_file", "load_prompt_template", "reload_assets", "find_data_path", "get_data_dir",
     "SCRIPT_DB", "REACTIONS_DB", "PROMPTS_DB", "DIRECTOR_DB",

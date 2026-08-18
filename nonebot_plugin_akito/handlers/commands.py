@@ -1,7 +1,6 @@
 """管理指令：查看记忆、清空记忆、人设 / 数据热重载、临时设定植入等。"""
 
 import datetime
-import sqlite3
 import time
 
 from nonebot import on_command
@@ -14,9 +13,9 @@ from ..core import (
     AKITO_STATUS,
     ALLOWED_CHAT_GROUPS,
     ALLOWED_MEMORY_GROUPS,
-    DB_PATH,
     SUPERUSER_QQ,
     TZ_CN,
+    delete_group_messages,
     get_memory_key,
     get_user_memory,
     grant_safety_pass,
@@ -193,11 +192,7 @@ async def _(event: Event):
     group_id = getattr(event, 'group_id', None)
     if group_id:
         try:
-            conn = sqlite3.connect(DB_PATH)
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM messages WHERE group_id=?", (str(group_id),))
-            conn.commit()
-            conn.close()
+            await delete_group_messages(str(group_id))
             logger.info(f"💣 已彻底炸毁群 {group_id} 的数据库背景流记忆！")
         except Exception as e:
             logger.error(f"清理数据库背景流失败: {e}")

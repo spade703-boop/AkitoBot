@@ -7,7 +7,6 @@ import difflib
 import json
 import random
 import re
-import sqlite3
 import time
 from typing import Optional
 
@@ -18,7 +17,8 @@ from nonebot.log import logger
 
 from ...core import (
     ALLOWED_CP_GROUPS,
-    DB_PATH,
+    MessageReader,
+    MessageRow,
     PROMPTS_DB,
     TZ_CN,
     build_shared_prompt_context,
@@ -31,8 +31,10 @@ from ...core import (
     get_user_memory,
     is_sleeping,
     load_prompt_template,
+    open_message_reader,
     parse_json_object,
     record_bot_message,
+    record_message,
     render_auto_chat_prompt,
     render_impression_analysis_prompt,
     render_impression_reply_prompt,
@@ -89,9 +91,6 @@ BLOCK_KEYWORDS = [
 ]
 
 # ===========================================
-
-MessageRow = tuple[int, str, str, str, Optional[str], str]
-
 
 @dataclass(frozen=True)
 class ImpressionAnalysis:
@@ -212,23 +211,19 @@ def _build_impression_history_text(rows: list[MessageRow], target_name: str) -> 
     )
 
 
-def _load_context_window(
-    conn: sqlite3.Connection,
+async def _load_context_window(
+    reader: MessageReader,
     *,
     group_id: str,
     target_row: MessageRow,
     current_message_id: str,
 ) -> list[MessageRow]:
-    before_rows = conn.execute(
-        "SELECT id, user_id, nickname, content, message_id, timestamp "
-        "FROM messages WHERE group_id=? AND id<=? ORDER BY id DESC LIMIT ?",
-        (group_id, target_row[0], IMPRESSION_CONTEXT_SIDE_LIMIT + 1),
-    ).fetchall()
-    after_rows = conn.execute(
-        "SELECT id, user_id, nickname, content, message_id, timestamp "
-        "FROM messages WHERE group_id=? AND id>? ORDER BY id ASC LIMIT ?",
-        (group_id, target_row[0], IMPRESSION_CONTEXT_SIDE_LIMIT),
-    ).fetchall()
+    before_rows, after_rows = await reader.fetch_message_context_sides(
+        group_id,
+        target_row[0],
+        before_limit=IMPRESSION_CONTEXT_SIDE_LIMIT,
+        after_limit=IMPRESSION_CONTEXT_SIDE_LIMIT,
+    )
 
     target_time = _parse_message_timestamp(target_row[5])
     window: list[MessageRow] = []
@@ -274,20 +269,19 @@ def _merge_context_windows(windows: list[list[MessageRow]]) -> list[list[Message
     return merged[-IMPRESSION_CONTEXT_MAX_BLOCKS:]
 
 
-def _load_impression_material(
-    conn: sqlite3.Connection,
+async def _load_impression_material(
+    reader: MessageReader,
     *,
     group_id: str,
     target_id: str,
     current_message_id: str,
     now: Optional[datetime.datetime] = None,
 ) -> tuple[list[MessageRow], list[list[MessageRow]]]:
-    history_candidates = conn.execute(
-        "SELECT id, user_id, nickname, content, message_id, timestamp "
-        "FROM messages WHERE group_id=? AND user_id=? AND length(content)>2 "
-        "ORDER BY id DESC LIMIT ?",
-        (group_id, target_id, IMPRESSION_HISTORY_SCAN_LIMIT),
-    ).fetchall()
+    history_candidates = await reader.fetch_impression_history_candidates(
+        group_id,
+        target_id,
+        limit=IMPRESSION_HISTORY_SCAN_LIMIT,
+    )
     history_rows = _select_target_rows(
         history_candidates,
         current_message_id=current_message_id,
@@ -300,12 +294,12 @@ def _load_impression_material(
     if current.tzinfo is None:
         current = current.replace(tzinfo=datetime.timezone.utc)
     cutoff = current.astimezone(datetime.timezone.utc) - datetime.timedelta(days=IMPRESSION_RECENT_DAYS)
-    recent_candidates = conn.execute(
-        "SELECT id, user_id, nickname, content, message_id, timestamp "
-        "FROM messages WHERE group_id=? AND user_id=? AND length(trim(content))>0 AND timestamp>=? "
-        "ORDER BY id DESC LIMIT ?",
-        (group_id, target_id, cutoff.strftime("%Y-%m-%d %H:%M:%S"), IMPRESSION_RECENT_SCAN_LIMIT),
-    ).fetchall()
+    recent_candidates = await reader.fetch_recent_impression_candidates(
+        group_id,
+        target_id,
+        cutoff=cutoff.strftime("%Y-%m-%d %H:%M:%S"),
+        limit=IMPRESSION_RECENT_SCAN_LIMIT,
+    )
     recent_target_rows = _select_target_rows(
         recent_candidates,
         current_message_id=current_message_id,
@@ -313,15 +307,16 @@ def _load_impression_material(
         min_content_length=1,
         max_repeats=None,
     )
-    windows = [
-        _load_context_window(
-            conn,
-            group_id=group_id,
-            target_row=row,
-            current_message_id=current_message_id,
+    windows = []
+    for row in recent_target_rows:
+        windows.append(
+            await _load_context_window(
+                reader,
+                group_id=group_id,
+                target_row=row,
+                current_message_id=current_message_id,
+            )
         )
-        for row in recent_target_rows
-    ]
     return history_rows, _merge_context_windows(windows)
 
 
@@ -592,18 +587,17 @@ def _score_impression_style_reuse(reply: str, recent_replies: list[str]) -> Impr
     return ImpressionStyleScore(total=total, full=full, ending=ending, clause=clause)
 
 
-def _load_recent_impression_replies(
-    conn: sqlite3.Connection,
+async def _load_recent_impression_replies(
+    reader: MessageReader,
     *,
     group_id: str,
     bot_id: str,
 ) -> list[str]:
-    rows = conn.execute(
-        "SELECT content FROM messages WHERE group_id=? AND user_id=? AND content LIKE '对%印象是%' "
-        "ORDER BY id DESC LIMIT ?",
-        (group_id, bot_id, IMPRESSION_RECENT_REPLY_LIMIT),
-    ).fetchall()
-    return [str(row[0]).strip() for row in rows if row[0] and str(row[0]).strip()]
+    return await reader.fetch_recent_impression_reply_contents(
+        group_id,
+        bot_id,
+        limit=IMPRESSION_RECENT_REPLY_LIMIT,
+    )
 
 
 def _validate_impression_analysis(
@@ -768,9 +762,9 @@ async def is_exact_impression_request(event: GroupMessageEvent) -> bool:
     return await is_in_auto_group(event) and _is_exact_impression_request_message(event)
 
 
-def save_my_response(group_id: str, bot_qq: str, content: str) -> None:
+async def save_my_response(group_id: str, bot_qq: str, content: str) -> None:
     """将 bot 自己的回复写入 SQLite 群日志（转调 core.record_bot_message，单一真相源）。"""
-    record_bot_message(group_id, content, bot_qq)
+    await record_bot_message(group_id, content, bot_qq)
 
 
 # ================= 功能 1：默默记录群聊 =================
@@ -780,20 +774,13 @@ async def _(event: GroupMessageEvent):
     if event.group_id not in AUTO_CHAT_GROUPS: return
     msg = event.get_plaintext().strip()
     if not msg or msg.startswith("/"): return
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute(
-        "INSERT INTO messages (group_id, user_id, nickname, content, message_id) VALUES (?, ?, ?, ?, ?)",
-        (
-            str(event.group_id),
-            str(event.user_id),
-            event.sender.card or event.sender.nickname,
-            msg,
-            str(event.message_id),
-        ),
+    await record_message(
+        str(event.group_id),
+        str(event.user_id),
+        event.sender.card or event.sender.nickname,
+        msg,
+        str(event.message_id),
     )
-    conn.commit()
-    conn.close()
 
 
 # ================= 功能 2：生成印象 =================
@@ -832,15 +819,15 @@ async def _(bot: Bot, event: GroupMessageEvent):
 
     reply_segment = MessageSegment.reply(event.message_id)
     current_message_id = str(event.message_id)
-    with sqlite3.connect(DB_PATH) as conn:
-        history_rows, context_blocks = _load_impression_material(
-            conn,
+    async with open_message_reader() as reader:
+        history_rows, context_blocks = await _load_impression_material(
+            reader,
             group_id=group_id,
             target_id=target_id,
             current_message_id=current_message_id,
         )
-        recent_impression_replies = _load_recent_impression_replies(
-            conn,
+        recent_impression_replies = await _load_recent_impression_replies(
+            reader,
             group_id=group_id,
             bot_id=str(bot.self_id),
         )
@@ -1024,7 +1011,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
             else:
                 final_reply = f"对{target_name}的印象是……你最近留下的话还是太碎了，现在硬下结论也没意思。"
 
-        save_my_response(group_id, str(bot.self_id), final_reply)
+        await save_my_response(group_id, str(bot.self_id), final_reply)
 
         thinking_time = random.uniform(3.0, 5.0)
         await asyncio.sleep(thinking_time)
@@ -1063,7 +1050,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
     AUTO_CHAT_COOLDOWN[group_id] = now_ts
 
     reply_segment = MessageSegment.reply(event.message_id)
-    group_context = get_group_context(
+    group_context = await get_group_context(
         str(event.group_id),
         limit=12,
         max_age_seconds=180,
@@ -1214,7 +1201,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
         if not reply or reply.strip() == "……": return
         if len(reply) < 2: return
 
-        save_my_response(str(event.group_id), str(bot.self_id), reply)
+        await save_my_response(str(event.group_id), str(bot.self_id), reply)
 
         base_delay = random.uniform(1.5, 3.5)
         typing_delay = len(reply) * 0.15
