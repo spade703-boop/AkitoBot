@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import io
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
@@ -131,9 +130,3 @@ def build_placeholder_avatar(label: str, *, size: int, bg_color: str) -> Image.I
     draw.rectangle([(0, 0), (size - 1, size - 1)], outline="#dddddd", width=1)
     draw.text((size // 2, size // 2), label, font=font, fill="#ffffff", anchor="mm")
     return canvas
-
-
-def save_png(image: Image.Image) -> bytes:
-    buffer = io.BytesIO()
-    image.save(buffer, format="PNG")
-    return buffer.getvalue()

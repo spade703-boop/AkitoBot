@@ -33,6 +33,7 @@ from ...core import (
     load_prompt_template,
     open_message_reader,
     parse_json_object,
+    parse_sqlite_timestamp,
     record_bot_message,
     record_message,
     render_auto_chat_prompt,
@@ -140,18 +141,8 @@ def _resolve_impression_target(event: GroupMessageEvent, bot_self_id: str) -> tu
     return target_id, target_name, is_querying_other, is_querying_bot
 
 
-def _parse_message_timestamp(value: str) -> Optional[datetime.datetime]:
-    try:
-        parsed = datetime.datetime.fromisoformat(value)
-    except (TypeError, ValueError):
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=datetime.timezone.utc)
-    return parsed
-
-
 def _format_message_time(value: str) -> str:
-    parsed = _parse_message_timestamp(value)
+    parsed = parse_sqlite_timestamp(value)
     if parsed is None:
         return "时间未知"
     return parsed.astimezone(TZ_CN).strftime("%m-%d %H:%M")
@@ -225,12 +216,12 @@ async def _load_context_window(
         after_limit=IMPRESSION_CONTEXT_SIDE_LIMIT,
     )
 
-    target_time = _parse_message_timestamp(target_row[5])
+    target_time = parse_sqlite_timestamp(target_row[5])
     window: list[MessageRow] = []
     for row in list(reversed(before_rows)) + after_rows:
         if _is_current_impression_message(row, current_message_id) or _is_impression_noise(row[3]):
             continue
-        row_time = _parse_message_timestamp(row[5])
+        row_time = parse_sqlite_timestamp(row[5])
         if (
             target_time is not None
             and row_time is not None
@@ -252,8 +243,8 @@ def _merge_context_windows(windows: list[list[MessageRow]]) -> list[list[Message
             continue
 
         previous = merged[-1]
-        previous_time = _parse_message_timestamp(previous[-1][5])
-        current_time = _parse_message_timestamp(window[0][5])
+        previous_time = parse_sqlite_timestamp(previous[-1][5])
+        current_time = parse_sqlite_timestamp(window[0][5])
         overlaps = window[0][0] <= previous[-1][0]
         gap_is_close = (
             previous_time is not None
@@ -382,22 +373,6 @@ def _build_impression_reply_system_prompt(
         specific_max_length=IMPRESSION_SPECIFIC_MAX_LENGTH,
         limited_max_length=IMPRESSION_LIMITED_MAX_LENGTH,
         candidate_count=IMPRESSION_CANDIDATE_COUNT,
-    )
-
-
-def _build_impression_system_prompt(
-    *,
-    persona: str,
-    state_overlay_prompt: str,
-    target_name: str,
-    is_querying_other: bool,
-) -> str:
-    """Compatibility wrapper for tests and external imports."""
-    return _build_impression_reply_system_prompt(
-        persona=persona,
-        state_overlay_prompt=state_overlay_prompt,
-        target_name=target_name,
-        is_querying_other=is_querying_other,
     )
 
 
@@ -538,24 +513,6 @@ def _split_impression_clauses(reply: str) -> list[str]:
         for clause in re.split(r"[，,。！？!?；;…\n]+", body)
         if len(normalized := _normalize_impression_text(clause)) >= 4
     ]
-
-
-def _find_similar_impression_reply(reply: str, recent_replies: list[str]) -> tuple[str, float]:
-    normalized_reply = _normalize_impression_body(reply)
-    if len(normalized_reply) < 20:
-        return "", 0.0
-
-    closest_reply = ""
-    closest_ratio = 0.0
-    for recent_reply in recent_replies:
-        normalized_recent = _normalize_impression_body(recent_reply)
-        if len(normalized_recent) < 20:
-            continue
-        ratio = difflib.SequenceMatcher(None, normalized_reply, normalized_recent).ratio()
-        if ratio > closest_ratio:
-            closest_reply = recent_reply
-            closest_ratio = ratio
-    return closest_reply, closest_ratio
 
 
 def _max_similarity(value: str, candidates: list[str]) -> float:
@@ -720,12 +677,6 @@ def _build_impression_reply_user_prompt(*, target_name: str, analysis: Impressio
 只依据以上分析形成群印象。avoid_patterns 只表示本次表达需要避开的近期组织方式，不是新的事实材料。
 请输出 {IMPRESSION_CANDIDATE_COUNT} 条候选；候选之间要有真实的表达差异，而不是同一句话的近义词替换。
 """.strip()
-
-
-def _parse_impression_reply(raw_result: str) -> tuple[str, str]:
-    """Parse impression model output into final reply and inner thoughts."""
-    inner_os, candidates = _parse_impression_candidates(raw_result)
-    return (candidates[0] if candidates else ""), inner_os
 
 
 def _should_skip_random_chat(msg: str) -> bool:

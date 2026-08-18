@@ -78,7 +78,7 @@ from .memory import (
     MEMORY_DB, MessageRow, load_memory, save_memory,
     get_memory_key, get_user_memory,
     MessageReader, delete_group_messages, get_group_context, open_message_reader,
-    record_bot_message, record_message,
+    parse_sqlite_timestamp, record_bot_message, record_message,
 )
 from .data import (
     load_json_file, load_prompt_template, reload_assets, find_data_path, get_data_dir,
@@ -134,7 +134,7 @@ __all__ = [
     "BaseUserRecord", "GameData", "GroupRecord", "MemorySession",
     "MEMORY_DB", "MessageRow", "load_memory", "save_memory", "get_memory_key", "get_user_memory",
     "MessageReader", "delete_group_messages", "get_group_context", "open_message_reader",
-    "record_bot_message", "record_message",
+    "parse_sqlite_timestamp", "record_bot_message", "record_message",
     # data
     "load_json_file", "load_prompt_template", "reload_assets", "find_data_path", "get_data_dir",
     "SCRIPT_DB", "REACTIONS_DB", "PROMPTS_DB", "DIRECTOR_DB",

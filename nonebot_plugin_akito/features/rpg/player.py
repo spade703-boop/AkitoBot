@@ -125,11 +125,6 @@ def _combat_power(user: RpgUserRecord) -> int:
     return _equip_power(user)
 
 
-def _equip_intact(user: RpgUserRecord, today: str) -> bool:
-    """今日装备是否可用（今天发的且未损坏）。"""
-    return user.get("equip_date") == today and not user.get("equip_used")
-
-
 def _consume_equip(user: EquipmentRecord) -> None:
     user["equip_used"] = True
 

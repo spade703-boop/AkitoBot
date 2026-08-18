@@ -7,8 +7,8 @@ from nonebot.exception import FinishedException
 import pytest
 
 from nonebot_plugin_akito.core import game_store
-import nonebot_plugin_akito.features.bond_pages as bond_pages
-import nonebot_plugin_akito.features.bond_render as bond_render
+from nonebot_plugin_akito.features.gift import pages as bond_pages
+from nonebot_plugin_akito.features.gift import render as bond_render
 import nonebot_plugin_akito.features.rpg.boss as boss
 import nonebot_plugin_akito.features.rpg.config as rpg_config
 

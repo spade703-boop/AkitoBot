@@ -10,10 +10,10 @@ def test_rescue_impression_reply_handles_eof_truncation():
     assert rescue_field(raw, "reply") == "rescued at eof"
 
 
-def test_parse_impression_reply_uses_eof_rescue():
+def test_parse_impression_candidates_uses_eof_rescue():
     raw = '{\n  "inner_os": "x",\n  "reply": "rescued at eof'
 
-    reply, inner_os = impression._parse_impression_reply(raw)
+    inner_os, candidates = impression._parse_impression_candidates(raw)
 
-    assert reply == "rescued at eof"
+    assert candidates == ["rescued at eof"]
     assert inner_os == ""

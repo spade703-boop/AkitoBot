@@ -189,47 +189,6 @@ def _load_font(size: int):
     return load_msyhbd_font(size)
 
 
-SEQS = ["①", "②", "③"]
-
-
-def _render_keyword_result(keywords: list[str]) -> bytes:
-    font_title = _load_font(26)
-    font_item = _load_font(22)
-    font_footer = _load_font(18)
-
-    row_height = 46
-    top_pad = 36
-    title_gap = 20
-    sep_gap = 14
-    footer_gap = 18
-    bottom_pad = 30
-
-    n = len(keywords)
-    width = 580
-    height = top_pad + 30 + title_gap + sep_gap + n * row_height + footer_gap + 22 + bottom_pad
-
-    img = Image.new("RGB", (width, height), color="#ffffff")
-    draw = ImageDraw.Draw(img)
-
-    draw.text((width // 2, top_pad), "今日关键词", font=font_title, fill="#000000", anchor="ma")
-
-    y = top_pad + 30 + title_gap
-    draw.line([(60, y), (width - 60, y)], fill="#cccccc", width=1)
-
-    for i, kw in enumerate(keywords):
-        item_y = y + sep_gap + i * row_height
-        draw.text((80, item_y), SEQS[i], font=font_item, fill="#555555")
-        draw.text((130, item_y), kw, font=font_item, fill="#000000")
-
-    footer_y = y + sep_gap + n * row_height + footer_gap
-    draw.text((width // 2, footer_y), "已领取今日份关键词，明天再来吧！",
-              font=font_footer, fill="#999999", anchor="ma")
-
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    return buf.getvalue()
-
-
 def _render_categories_image() -> bytes:
     font_title = _load_font(28)
     font_cat_header = _load_font(22)

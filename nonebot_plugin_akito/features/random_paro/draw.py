@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import random
-import time
 
-from .stats import _cooldown_store
-from .store import PARO_DATA, _save_stats
+from .store import PARO_DATA
 
 EASTER_EGG_RATE = 0.03
 FOXRABBIT_RATE = 0.02
@@ -131,28 +129,6 @@ def draw_results(
                 foxrabbit_used = True
         results.append((akito_name, toya_name, is_egg, fox_type))
     return results
-
-
-def consume_cooldown(user_id: str, count: int, *, now_ts: float | None = None) -> tuple[int, str | None]:
-    now_ts = time.time() if now_ts is None else now_ts
-    cooldowns = _cooldown_store()
-    previous = list(cooldowns.get(user_id, []))
-    history = prune_draw_history(previous, now_ts)
-    cooldowns[user_id] = history
-    if history != previous:
-        _save_stats()
-    remaining_before = DRAW_LIMIT - len(history)
-    message = build_draw_limit_message(
-        remaining_before=remaining_before,
-        requested_count=count,
-        history=history,
-        now_ts=now_ts,
-    )
-    if message:
-        return remaining_before, message
-    history.extend([now_ts] * count)
-    cooldowns[user_id] = history
-    return DRAW_LIMIT - len(history), None
 
 
 __all__ = [name for name in globals() if not name.startswith("__")]

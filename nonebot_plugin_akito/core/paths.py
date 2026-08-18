@@ -52,8 +52,3 @@ def get_data_dir() -> Path:
         if base.exists() and base != Path("."):
             return base
     return Path("data")
-
-
-def get_data_file_path(filename: str) -> Path:
-    """Return an existing file path or the default writable target path."""
-    return find_data_path(filename) or (get_data_dir() / filename)

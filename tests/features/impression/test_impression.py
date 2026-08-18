@@ -340,14 +340,13 @@ def test_impression_style_filter_allows_multiple_specific_observations():
     assert impression._find_impression_style_issue(reply) == ""
 
 
-def test_impression_similarity_ignores_name_but_compares_reply_body():
+def test_impression_similarity_score_ignores_name_but_compares_reply_body():
     candidate = "对小明的印象是……聊游戏一来劲就停不下来，嘴上嫌麻烦，真开打又比谁都认真。"
     recent = ["对小红的印象是……聊游戏一来劲就停不下来，嘴上嫌麻烦，真开打又比谁都认真。"]
 
-    similar_reply, ratio = impression._find_similar_impression_reply(candidate, recent)
+    score = impression._score_impression_style_reuse(candidate, recent)
 
-    assert similar_reply == recent[0]
-    assert ratio == 1.0
+    assert score.full == 1.0
 
 
 def test_candidate_selection_prefers_a_fresh_ending_without_global_ban():
@@ -442,12 +441,12 @@ def test_validate_specific_impression_allows_detail_beyond_old_eighty_char_limit
     assert reason == ""
 
 
-def test_parse_impression_reply_rescues_broken_reply_field():
+def test_parse_impression_candidates_rescues_broken_reply_field():
     raw = '{"inner_os":"有点熟","reply":"对小明的印象是还算活跃","bad":"没关上}'
 
-    reply, inner_os = impression._parse_impression_reply(raw)
+    inner_os, candidates = impression._parse_impression_candidates(raw)
 
-    assert reply == "对小明的印象是还算活跃"
+    assert candidates == ["对小明的印象是还算活跃"]
     assert inner_os == ""
 
 

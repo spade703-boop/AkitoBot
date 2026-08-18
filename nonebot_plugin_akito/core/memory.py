@@ -186,7 +186,7 @@ def get_user_memory(unique_key: str) -> MemorySession:
     return MEMORY_DB[unique_key]
 
 
-def _parse_sqlite_timestamp(value: str) -> Optional[datetime.datetime]:
+def parse_sqlite_timestamp(value: str) -> Optional[datetime.datetime]:
     """解析 SQLite 时间戳；无时区的 CURRENT_TIMESTAMP 按 UTC 处理。"""
     try:
         parsed = datetime.datetime.fromisoformat(value)
@@ -199,7 +199,7 @@ def _parse_sqlite_timestamp(value: str) -> Optional[datetime.datetime]:
 
 def _relative_time_label(value: str, now: Optional[datetime.datetime] = None) -> str:
     """把 SQLite 时间戳转换为简短相对时间标签。"""
-    parsed = _parse_sqlite_timestamp(value)
+    parsed = parse_sqlite_timestamp(value)
     if parsed is None:
         return "时间未知"
     current = now or datetime.datetime.now(datetime.timezone.utc)
@@ -244,9 +244,9 @@ async def get_group_context(
 
         if max_gap_seconds is not None and len(rows) > 1:
             contiguous_rows = [rows[0]]
-            newer_time = _parse_sqlite_timestamp(rows[0][2])
+            newer_time = parse_sqlite_timestamp(rows[0][2])
             for row in rows[1:]:
-                older_time = _parse_sqlite_timestamp(row[2])
+                older_time = parse_sqlite_timestamp(row[2])
                 if (
                     newer_time is not None
                     and older_time is not None

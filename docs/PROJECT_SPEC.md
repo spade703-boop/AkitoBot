@@ -60,13 +60,12 @@ gemini_bot/
 │   └── CLAUDE.md
 │
 ├── docs/                         # 项目文档
-│   ├── PROJECT_SPEC.md           # 本规范文件
-│   └── FEATURE_LOGIC.md          # 功能逻辑全解（维护者本地参考，已 gitignore 不入库）
+│   └── PROJECT_SPEC.md           # 本规范文件
 │
-├── data/                         # 运行时数据（不可提交）
-│   ├── *.json                    # 人设/提示词/记忆/功能数据
-│   ├── *.txt                     # 人设文本
-│   └── images/                   # 图库素材
+├── data/                         # 本地语料/运行时数据；仅两份默认配置模板可提交
+│   ├── content/gift_config.json  # 送礼默认配置模板（纳入 Git）
+│   ├── content/rpg_config.json   # RPG 默认配置模板（纳入 Git）
+│   └── ...                       # 其余语料、索引、记忆、数据库与图片均不提交
 │
 ├── tests/                        # 测试代码（按源码功能分目录）
 │   ├── README.md                 # 测试入口说明（目录映射 / 命令 / 沙箱策略）
@@ -85,10 +84,15 @@ gemini_bot/
     │   ├── api.py                # API 封装
     │   ├── context.py            # Prompt 组装
     │   ├── data.py               # 数据加载 + 热重载
+    │   ├── game_store.py         # gift/rpg 共享存储层
     │   ├── life_state.py         # 状态机
     │   ├── memory.py             # 记忆系统
+    │   ├── paths.py              # 数据路径定位
+    │   ├── prompt_builder.py     # 共享 Prompt 骨架与 schema
     │   ├── retrieval.py          # 语义检索引擎
-    │   └── time_awareness.py     # 时间感知
+    │   ├── retrieval_assets.py   # 检索语料规范化
+    │   ├── time_awareness.py     # 时间感知
+    │   └── types.py              # core 数据结构类型
     ├── handlers/                 # 消息处理层
     │   ├── chat.py               # 主对话适配层、触发规则与发送出口
     │   ├── chat_pipeline.py      # 主对话回合流水线
@@ -103,10 +107,9 @@ gemini_bot/
         ├── impression/           # 群印象 + 随机插嘴
         ├── random_keyword/       # 今日关键词
         ├── random_paro/          # 抽派生
+        ├── rpg/                  # 文字 RPG（含 state.py / types.py）
         ├── scheduled/            # 定时任务
-        ├── verify/               # 加群审核
-        ├── bond_pages.py         # gift.pages 兼容导出
-        └── bond_render.py        # gift.render 兼容导出
+        └── verify/               # 加群审核
 ```
 
 ---
@@ -120,7 +123,7 @@ gemini_bot/
 | 常量 | `UPPER_SNAKE_CASE` | `MAX_HISTORY_LEN`, `TZ_CN`, `STATE_DURATION` |
 | 私有函数/变量 | `_leading_underscore` | `_normalize_period()`, `_find_data_path()` |
 | 模块级变量 | `UPPER_SNAKE_CASE` | `MEMORY_DB`, `AKITO_STATUS` |
-| 类 | `PascalCase` | 当前项目无类定义，预留规范 |
+| 类 | `PascalCase` | `RetrievalContext`, `ImpressionAnalysis` |
 
 > 例外：函数内部「常量性」局部变量（仅在该函数内使用、值固定）允许用 `UPPER_SNAKE_CASE`，如 `ITEMS_PER_PAGE`、`FR_TEXTS`；ruff 已忽略 `N806`。
 
@@ -483,19 +486,19 @@ def reload_assets():
 
 | 区域 | 路径 | 规则 |
 |------|------|------|
-| **版本控制区** | `/data` 以外所有文件 | 纳入 Git，随版本迭代更新 |
-| **本地调试区** | `/data` 全部内容 | **不纳入版本控制**，仅本地保留为调试样本；迁移到新环境需手动拷贝 |
+| **版本控制区** | 源码、测试、文档及两份默认配置模板 | 纳入 Git，随版本迭代更新 |
+| **本地数据区** | `/data` 中除 `content/gift_config.json`、`content/rpg_config.json` 外的内容 | **不纳入版本控制**；迁移到新环境需按需手动拷贝 |
 
 ### 15.1 绝不提交到 Git
 
 - `.env` — 含 DeepSeek / Tavily / 智谱 API Key
 - `.claude/settings.local.json` — 含本地 Auth Token
-- `data/` 目录的全部内容 — 运行时数据、本地素材
+- `data/` 中除两份默认配置模板外的内容 — 运行时数据、本地语料、索引与素材
 
 ### 15.2 可以提交
 
 - `.env.example` — 仅保留字段名和占位符值
-- `data/` 目录**不存在**于仓库中（`.gitignore` 已配置 `/data`）
+- `data/content/gift_config.json`、`data/content/rpg_config.json` — 可编辑的默认配置模板
 
 ### 15.3 代码中禁止
 
@@ -505,7 +508,7 @@ def reload_assets():
 ### 15.4 推送前检查清单
 
 1. 确认 `.env` 未被追踪（`git status` 中不出现）
-2. 确认 `/data` 下无新增被追踪文件
+2. 确认 `/data` 下除 `gift_config.json`、`rpg_config.json` 外无新增被追踪文件
 3. 确认 `.env.example` 已同步最新的可配置项
 4. `ruff check nonebot_plugin_akito/` 通过（必需，应为 0 错误）；`python -m mypy` 检查 M4 已传播模块（当前覆盖 17 个模块，可选，暂未纳入 CI）
 5. 测试执行遵循“**先测改动处，再看风险补全量**”：

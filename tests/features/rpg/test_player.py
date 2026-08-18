@@ -41,10 +41,7 @@ def test_equip_power_includes_roll_and_forge():
     assert player._equip_power(user) == expected
 
 
-def test_equip_intact_consume_status():
-    assert player._equip_intact({"equip_date": "D", "equip_used": False}, "D") is True
-    assert player._equip_intact({"equip_date": "D", "equip_used": True}, "D") is False
-    assert player._equip_intact({"equip_date": "X"}, "D") is False
+def test_equip_consume_status():
     u = {"equip_date": "D", "equip_used": False}
     player._consume_equip(u)
     assert u["equip_used"] is True

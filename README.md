@@ -197,7 +197,7 @@ python bot.py        # 或：nb run
 - RPG 的成长硬约束已单独整理在 `features/rpg/GROWTH_BASELINE.md`；可运行 `py tools/simulate_rpg_growth.py` 复现单人 30/90/180/270/360 天成长及 Lv30 到达时间。当前模拟中位约为第 271 天到达 Lv30
 - 常规怪池现有 16 只：Lv1-15 保留原有推进，Lv16-30 每 3 级逐步加入风暴狮鹫、魔化奇美拉、深渊骑士、冰霜巨人和远古巨龙；五只高阶怪依次提供 3%/5%/7%/9%/12% 经验修正，积分不额外增加；遭遇权重按怪物名配置，后续可继续追加等级分段与怪物
 - 普通打怪结算后现在有两层低频尾声：一层是轻量特判，单刷胜利时可能触发彰人追击补一笔额外经验/积分；单刷失败时，可能被冬弥援护或彰冬联携拉回成功；组队失败则有低概率在改单刷前被支援拉回成立。另一层是旅途小奇遇：主动单刷与成功组成的双人战斗都会低概率刷出，双人情况下道具奖励两人各发一份，数值奖励按总额对半到每个人
-- 冒险补给奖池为 `旅人的行囊` 35% / `龙骑士的地图` 30% / `厨子的美食` 20% / `神官的护符` 12% / `勇者的远征套装` 3%。战备先进入背包，需主动 `使用`；常规战备只能同时启用一种，护符使用独立槽位，且所有效果都明确排除世界 BOSS
+- 冒险补给奖池为 `旅人的行囊` 34% / `龙骑士的地图` 30% / `厨子的美食` 20% / `神官的护符` 12% / `勇者的远征套装` 3% / `大葱味蛋糕` 1%。战备先进入背包，需主动 `使用`；常规战备只能同时启用一种，护符使用独立槽位，大葱味蛋糕用于给群友的下一场普通挑战附加轻度减益，所有效果都明确排除世界 BOSS
 - 所有常规战备都优先于双倍经验卡：常规战备生效期间，卡片暂缓且不消耗，战备用完后继续结算。护符使用独立槽位且本身不压制卡片；没有常规战备时，护符救场可与双倍经验卡共同结算。组队时每人的战备只影响自己的战力贡献、经验和掉落；两人都有护符且战斗失败时优先消耗发起人的一枚，额外 50% 经验只给护符持有者
 - 冒险补给和付费送礼共用积分账本，不做硬路线锁定；系统按 ISO 周跨群记录两边实际投入供后台统计，不在角色面板展示。礼物券不计送礼投入，普通送礼按事件返还后的净消耗记录
 - 世界 BOSS 只会在普通 `今日打怪` / `组队@某人` 后以 `3%` 概率出现；强度按近 7 日活跃签到人数生成，12 人后血量继续软扩容，但奖励扩容更慢；基础奖励仍以经验和积分为主，不计入普通战绩
@@ -279,16 +279,19 @@ akito_bot/
 ├── tests/                          # 测试目录（pytest，详见 tests/README.md）
 ├── nonebot_plugin_akito/
 │   ├── __init__.py                 # 插件入口
-│   ├── core/                       # 基础层（无副作用，可被任意模块导入）
+│   ├── core/                       # 基础层（部分模块导入时会加载本地配置）
 │   │   ├── __init__.py             # 常量定义 & 统一导出
 │   │   ├── api.py                  # DeepSeek / 智谱 / Tavily API 封装
 │   │   ├── context.py              # Prompt 组装（人设 / 剧本 / 歌曲 / 关系）
 │   │   ├── data.py                 # JSON 数据文件加载 & 热重载
+│   │   ├── prompt_builder.py       # 主聊天 / 群印象 / 自动插嘴的 Prompt 骨架与 schema
 │   │   ├── life_state.py           # 状态机（routine / 睡眠 / 节日）
 │   │   ├── memory.py               # 长期记忆 & SQLite 群聊上下文
 │   │   ├── retrieval.py            # 语义检索引擎（BGE-M3 + 均值中心化）
+│   │   ├── retrieval_assets.py     # 检索语料规范化与 Prompt 文本构建
 │   │   ├── time_awareness.py       # 时间流逝感知
 │   │   ├── game_store.py           # 共享玩家存储层（gift/rpg 共用）
+│   │   ├── types.py                # core 层 TypedDict 数据结构
 │   │   └── paths.py                # 数据路径定位
 │   ├── handlers/                   # 主处理层
 │   │   ├── chat.py                 # 主对话适配、锁与发送出口
@@ -306,12 +309,11 @@ akito_bot/
 │       ├── event_mode/             # WL2 世界线开关
 │       ├── director/               # 导演骰子（可安全删除，删除后主对话自动降级）
 │       ├── gift/                   # 送礼系统（积分/送礼/偷分/羁绊/签到闸门）
-│       ├── bond_pages.py           # gift.pages 兼容导出
-│       ├── bond_render.py          # gift.render 兼容导出
-│       ├── random_paro_render.py   # random_paro.render 兼容导出
 │       └── rpg/                    # RPG 子包：签到/打怪/世界BOSS/组队/强化/背包/群排行榜
 │           ├── __init__.py
 │           ├── config.py           # 全部数值/文案/配置 + 热更新前强校验
+│           ├── types.py            # RPG 存档与结算 TypedDict
+│           ├── state.py            # RPG 玩家/群状态访问与规范化 helper
 │           ├── player.py           # 经验→等级/称号/装备/战力
 │           ├── fortune.py          # 隐藏运势 + 签到钩子
 │           ├── hunt.py             # 今日打怪指令 + 战斗结果播报
@@ -327,7 +329,7 @@ akito_bot/
 │           ├── supply.py           # 每周冒险补给 / 阶梯成本 / 战备投放
 │           ├── inventory.py        # 背包 / 使用道具
 │           └── character.py        # 角色面板 / 群排行榜 / 冒险帮助
-└── data/                           # 持久化数据 + 本地素材（不纳入 Git）
+└── data/                           # 持久化数据 + 本地素材；仅两份默认配置模板纳入 Git
 ```
 
 > 依赖方向：`features/` → `core/` ← `handlers/`，三层职责与每个文件的接口详见 `PLUGIN_MAINTENANCE.md`。
@@ -384,6 +386,8 @@ akito_bot/
 | `rpg_config.json` | RPG 全量配置（战斗/运势/强化/掉落/精英/小奇遇/世界BOSS/野怪/道具/文案/错误信息，热重载；仓库附带模板，缺省值内置于代码） |
 
 **`data/` 根目录（功能 / 运行时，多为自动读写）**：`paro_pools.json`、`fanfic_keywords.json`、`keyword_draws.json`、`gift_data.json`、`akito_memories.json`、`verify_*.json`、`last_interactions.json`、`impression_history.db`
+
+> 版本控制只收录 `data/content/gift_config.json` 与 `data/content/rpg_config.json` 两份可编辑默认配置模板；其余 `data/` 内容均为本地语料、素材、索引或运行时数据，不纳入 Git。
 
 > `core/data.py` 自动搜索 `persona/`、`content/` 子目录（兼容旧扁平布局）；`PROMPTS_DB` / `REACTIONS_DB` 由各自的拆分文件合并加载。
 

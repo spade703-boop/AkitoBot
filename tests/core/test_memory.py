@@ -2,6 +2,7 @@
 测试记忆模块的原子写入逻辑。
 """
 import asyncio
+import datetime
 import json
 import os
 from pathlib import Path
@@ -33,6 +34,24 @@ def test_get_user_memory_initializes_and_reuses_mutable_session(monkeypatch):
     assert session["temp_implants"] == []
     assert memory.get_user_memory("group_123") is session
     assert memory.get_user_memory("group_123")["history"][0]["content"] == "你好"
+
+
+def test_parse_sqlite_timestamp_treats_naive_value_as_utc():
+    parsed = memory.parse_sqlite_timestamp("2026-08-18 01:02:03")
+
+    assert parsed == datetime.datetime(2026, 8, 18, 1, 2, 3, tzinfo=datetime.timezone.utc)
+
+
+def test_parse_sqlite_timestamp_preserves_explicit_timezone():
+    parsed = memory.parse_sqlite_timestamp("2026-08-18T09:02:03+08:00")
+
+    assert parsed is not None
+    assert parsed.utcoffset() == datetime.timedelta(hours=8)
+
+
+@pytest.mark.parametrize("value", ["", "not-a-timestamp", None])
+def test_parse_sqlite_timestamp_rejects_invalid_values(value):
+    assert memory.parse_sqlite_timestamp(value) is None
 
 
 def test_atomic_write_creates_file(tmp_path: Path):

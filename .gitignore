@@ -2,8 +2,7 @@
 .env
 .claude/
 
-# Local-only reference docs (维护者个人参考，不入库)
-docs/FEATURE_LOGIC.md
+# Local-only card build workspace
 /tmp_pjsk/
 
 # Data (images, memories, DB)
@@ -22,6 +21,7 @@ __pycache__/
 *.egg-info/
 build/
 dist/
+node_modules/
 
 # Linter & type checker cache
 .mypy_cache/
