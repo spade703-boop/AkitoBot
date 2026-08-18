@@ -605,8 +605,12 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（戳一戳
 | `content/akito_songs.json` | 歌曲背景知识（song_name / description / keywords；其中 `keywords` 由 `get_song_mention` 消费，用于歌曲别名匹配） |
 | `content/akito_scripts.json` | 台词剧本库（每条含 `type`/`category`/`topics`/`cn_key`/`context`/`dialogue`；检索 key 为 `cn_key`，缺失回退 `context`） |
 | `content/pjsk_knowledge.json` | PJSK 黑话知识库（`introduction` + `knowledge_list` → `PJSK_INTRO` + `PJSK_ENTRIES`） |
+| `content/pjsk_cards.json` | VBS 四星卡面结构化目录（master data 元字段 + 花前/花后视觉初稿 + 有效发型事实；由 `tools/build_card_catalog.py` 生成，gitignore） |
+| `content/pjsk_card_aliases.json` | 群内人工别称；`card_aliases` 绑定单卡，`group_aliases` 绑定多卡组，可附 `note` 说明俗称由来（运行时可写回，gitignore） |
+| `content/pjsk_card_reviews.json` | 人工审核覆盖；当前用于覆盖重点限定卡的发型描述，构建时优先于视觉模型初稿且不会被工具写回（gitignore） |
 | `content/scripts_embeddings.npz` | 剧本语义向量库（`tools/build_embeddings.py` 生成；embed key=`cn_key`，gitignore） |
 | `content/pjsk_embeddings.npz` | PJSK 语义向量库（`tools/build_embeddings.py` 生成，gitignore） |
+| `content/cards_embeddings.npz` | 卡面描述语义向量库（`tools/build_embeddings.py cards` 生成，gitignore） |
 | `content/akito_director.json` | 导演骰子资产（toya_directions / dynamic_lexicon） |
 | `content/gift_config.json` | 送礼系统配置覆盖（礼物档位/随机事件权重/偷参数/签到延迟） |
 | `content/rpg_config.json` | RPG 全量配置覆盖（战斗/运势/强化/掉落/精英/小奇遇/世界BOSS/文案/错误）/ 热更可见 |
@@ -686,6 +690,7 @@ py tools/classify_scripts.py --write --yes
 py tools/build_embeddings.py all     # 全量构建
 py tools/build_embeddings.py scripts # 仅剧本
 py tools/build_embeddings.py pjsk    # 仅 PJSK
+py tools/build_embeddings.py cards   # 仅卡面
 
 # 检索精度评测（考题集 tools/eval_set.json；阈值调参看输出末尾的分数统计）
 py tools/eval_retrieval.py compare   # cosine 基线 vs 精排逐题对比
@@ -694,7 +699,56 @@ py tools/eval_retrieval.py rerank 0.2  # 用指定阈值试跑精排臂
 
 生成的 `data/content/*_embeddings.npz` 不纳入 Git（已在 `/data` gitignore）。服务器端部署：本地建好 `.npz` 上传到服务器 `data/content/` 目录，或服务器上直接运行 build 工具。
 
-**向后兼容**：若无 `.npz` 文件或未配置 `SILICONFLOW_API_KEY`，bot 自动降级为原有静态/随机行为，不影响正常对话。
+**向后兼容**：若无 `.npz` 文件或未配置 `SILICONFLOW_API_KEY`，剧本侧降级为带说话人/事实归因锁的随机语气样本；若精排正常但明确无相关命中，则不注入剧本。PJSK 侧仍按各自三态策略降级。
+
+### 维护 VBS 卡面知识库
+
+运行时代码集中在 `nonebot_plugin_akito/features/card/`：目录加载、别称解析、视觉质量闸门、卡面检索接入和维护指令均在此维护；`core` 只保留通用数据加载与检索注册能力。
+
+卡面知识分三层，不能混用：
+
+1. **官方背景**：角色、卡名、活动、书下曲、初始卡池、限定类型，由 master data 自动生成；书下曲和卡池名只作背景事实，不自动成为单卡俗称。
+2. **群内人工别称**：单卡别称与卡组别称分开保存。例如“老蛇”只绑定 `彰21`，由来是花后眼神像蛇；“烈火”绑定 `杏17/心羽17/冬17` 三张同期限定，单说时不能默认其中一人。
+3. **视觉与发型**：官方 master data 固定卡主身份；视觉模型只定位卡主并填写动作、位置、服装和显著锚点，不用花后发型、发色或瞳色重新判断角色。非限定卡明确为“无可解锁限定发型”；限定发型从花后单独生成结构化初稿并标记待复核。`pjsk_card_reviews.json` 的人工审核结论优先。
+
+视觉结果使用字段级质量状态：
+
+- `verified/reviewed`：允许进入卡面向量库和运行时 Prompt。
+- `needs_review/rejected`：保留在生成 JSON 和审核清单中，但不会进入 RAG，也不会把自动初稿注入回复。
+- 模型不再自报置信度；代码根据卡主可见性、画面位置、主体细节和显著锚点完整度裁决。
+- 限定发型固定以花后为来源，发型结构、头部配饰、观察色和环境光影响分开保存；自动初稿必须人工确认后才可供回复使用。
+
+构建命令：
+
+```bash
+# 只从 tmp_pjsk master data 重建 111 张 VBS 四星元数据
+py tools/build_card_catalog.py --metadata-only
+
+# 断点生成花前/花后；限定卡会追加一次花后发型专项识别（需 ZHIPU_API_KEY）
+py tools/build_card_catalog.py --resume --concurrency 2
+
+# 定向重跑指定卡，避免全库调用
+py tools/build_card_catalog.py --resume --card 冬17 --card 彰21
+
+# 启动仅监听本机的发型审核页，然后访问 http://127.0.0.1:8765
+py tools/card_review_server.py
+
+# 只有通过质量闸门的视觉字段会进入独立语义索引
+py tools/build_embeddings.py cards
+```
+
+审核页会并排显示花前、花后、自动发型初稿、结构字段、观察色和环境光提示。点击“确认并保存”后会原子写入 `pjsk_card_reviews.json`，同时把人工结论应用到 `pjsk_cards.json` 并刷新 `card_catalog_review.json`；不需要再手工运行合并命令。页面只监听 `127.0.0.1`，卡图直接读取素材 CDN，不在本机新增完整图片缓存。
+
+人工别称管理（仅超管）：
+
+```text
+绑定卡面别称 老蛇 彰21 | 因花后眼神像蛇，与官方标题无关
+解绑卡面别称 老蛇
+绑定卡组别称 烈火 杏17、心羽17、冬17 | 烈火活动同期三张限定
+解绑卡组别称 烈火
+```
+
+精确单卡/卡组别称、角色序号和官方卡名先于语义检索；别称未知或卡组未指定角色时会进入澄清，不允许用相似画面猜具体卡。
 
 ### 维护剧本语料（`akito_scripts.json`）
 

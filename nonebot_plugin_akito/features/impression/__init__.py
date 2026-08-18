@@ -70,6 +70,7 @@ IMPRESSION_STALE_PATTERNS = (
     re.compile(r"(?:挺|比较)(?:随和|好相处)"),
     re.compile(r"也就那样"),
 )
+from ..card import get_relevant_cards
 
 IMPRESSION_UNCERTAIN_PATTERN = re.compile(r"(?:暂时|目前|现在|还没|看不准|说不好|只看得出|能看出的|先不下结论)")
 
@@ -858,8 +859,9 @@ async def _(bot: Bot, event: GroupMessageEvent):
         msg,
         enable_expansion=bool(msg and len(msg.strip()) >= 3),
     )
-    script_examples, pjsk_block = await asyncio.gather(
+    script_examples, card_context, pjsk_block = await asyncio.gather(
         get_relevant_examples(msg, 5, retrieval_ctx=retrieval_ctx),
+        get_relevant_cards(msg, 3, retrieval_ctx=retrieval_ctx),
         get_relevant_pjsk(msg, 6, retrieval_ctx=retrieval_ctx),
     )
 
@@ -940,6 +942,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
     【人际资料】{relation_info}
     {song_info}
     {script_examples}
+    {card_context}
     🎮【PJSK 世界观/黑话库】：
     {pjsk_block}
     {cool_guy_filter}

@@ -247,6 +247,7 @@ def test_build_final_system_prompt_contains_all_major_sections():
         referenced_relationship_instruction="被谈论人物关系",
         base_persona="人设文本",
         script_examples="剧本示例",
+        card_context="卡面事实",
         pjsk_block="PJSK 内容",
         song_memories="歌曲记忆",
         long_term_memory_text="长期记忆",
@@ -266,6 +267,7 @@ def test_build_final_system_prompt_contains_all_major_sections():
     assert "物理现实与环境" in result
     assert "社交上下文" in result
     assert "核心人设与记忆" in result
+    assert "卡面事实" in result
     assert "被谈论人物关系" in result
     assert "事实归因规则" in result
     assert '"inner_os": "内心"' in result

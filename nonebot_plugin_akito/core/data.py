@@ -250,6 +250,13 @@ def reload_assets() -> int:
     count += 1
 
     try:
+        from ..features.card import reload_card_data
+        reload_card_data()
+        count += 1
+    except Exception as exc:
+        logger.debug(f"🔧 card 热重载跳过: {exc}")
+
+    try:
         from .retrieval import reload_indices
         loaded = reload_indices()
         count += 1

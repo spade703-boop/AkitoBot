@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PJSK 卡面发型审核台</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0d12;
+      --panel: #141821;
+      --panel-2: #1a202b;
+      --line: #293140;
+      --text: #f4f6fb;
+      --muted: #96a0b2;
+      --accent: #ff875f;
+      --accent-2: #ffbd73;
+      --good: #58d6a5;
+      --warn: #f2c05c;
+      --shadow: 0 20px 55px rgba(0, 0, 0, .34);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; }
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at 12% 0%, rgba(255, 135, 95, .13), transparent 27rem),
+        radial-gradient(circle at 88% 10%, rgba(79, 122, 255, .10), transparent 30rem),
+        var(--bg);
+      color: var(--text);
+      font: 15px/1.55 Inter, "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+    }
+
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; }
+
+    .app {
+      display: grid;
+      grid-template-columns: 310px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--line);
+      background: rgba(14, 17, 24, .93);
+      backdrop-filter: blur(18px);
+    }
+
+    .brand { padding: 24px 22px 18px; border-bottom: 1px solid var(--line); }
+    .eyebrow {
+      color: var(--accent-2);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+    }
+    h1 { margin: 4px 0 3px; font-size: 22px; line-height: 1.25; }
+    .subtle { color: var(--muted); font-size: 13px; }
+
+    .progress-wrap { margin-top: 17px; }
+    .progress-line {
+      height: 7px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: #242a36;
+    }
+    .progress-fill {
+      width: 0;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      transition: width .25s ease;
+    }
+    .progress-label { display: flex; justify-content: space-between; margin-top: 7px; color: var(--muted); font-size: 12px; }
+
+    .filters { display: grid; gap: 9px; padding: 15px; border-bottom: 1px solid var(--line); }
+    .field-control {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      outline: none;
+      background: #10141c;
+      color: var(--text);
+      padding: 10px 12px;
+    }
+    .field-control:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255, 135, 95, .12); }
+
+    .card-list { flex: 1; overflow: auto; padding: 8px; }
+    .list-card {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 42px 1fr auto;
+      gap: 10px;
+      align-items: center;
+      border: 1px solid transparent;
+      border-radius: 12px;
+      background: transparent;
+      color: inherit;
+      padding: 10px;
+      text-align: left;
+    }
+    .list-card:hover { background: var(--panel); }
+    .list-card.active { border-color: rgba(255, 135, 95, .55); background: rgba(255, 135, 95, .10); }
+    .alias-box {
+      display: grid;
+      place-items: center;
+      min-height: 37px;
+      border-radius: 9px;
+      background: #252c38;
+      color: var(--accent-2);
+      font-weight: 800;
+      font-size: 12px;
+    }
+    .list-title { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 13px; font-weight: 700; }
+    .list-character { color: var(--muted); font-size: 12px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); }
+    .dot.reviewed { background: var(--good); }
+
+    main { min-width: 0; padding: 26px clamp(18px, 3vw, 48px) 48px; }
+    .topbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 20px; }
+    .title-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+    h2 { margin: 0; font-size: clamp(24px, 3vw, 36px); line-height: 1.2; }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--panel);
+      color: var(--muted);
+      padding: 5px 9px;
+      font-size: 12px;
+    }
+    .pill.pending { border-color: rgba(242, 192, 92, .35); color: var(--warn); }
+    .pill.reviewed { border-color: rgba(88, 214, 165, .35); color: var(--good); }
+    .meta-line { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 9px; }
+
+    .nav-actions { display: flex; gap: 8px; }
+    .btn {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--panel);
+      color: var(--text);
+      padding: 9px 13px;
+      font-weight: 750;
+      transition: transform .12s ease, border-color .12s ease, background .12s ease;
+    }
+    .btn:hover { transform: translateY(-1px); border-color: #465064; }
+    .btn.primary { border-color: transparent; background: linear-gradient(135deg, var(--accent), #ff684f); color: #160d09; }
+    .btn.primary:hover { background: linear-gradient(135deg, #ff9b77, #ff765e); }
+    .btn:disabled { cursor: wait; opacity: .55; transform: none; }
+
+    .images {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+    .image-card {
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+    .image-label { display: flex; justify-content: space-between; padding: 11px 14px; color: var(--muted); font-size: 12px; }
+    .image-label strong { color: var(--text); }
+    .image-frame { display: block; aspect-ratio: 1.78; background: #090b0f; }
+    .image-frame img { width: 100%; height: 100%; display: block; object-fit: contain; }
+    .image-summary { min-height: 74px; padding: 12px 14px 14px; border-top: 1px solid var(--line); color: #c4cbd7; font-size: 13px; }
+
+    .workspace { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(320px, .65fr); gap: 16px; }
+    .panel { border: 1px solid var(--line); border-radius: 16px; background: rgba(20, 24, 33, .96); box-shadow: var(--shadow); }
+    .panel-head { padding: 17px 18px 12px; border-bottom: 1px solid var(--line); }
+    .panel-head h3 { margin: 0; font-size: 16px; }
+    .panel-body { display: grid; gap: 15px; padding: 17px 18px 19px; }
+    label { display: grid; gap: 7px; color: #d6dbe4; font-size: 13px; font-weight: 700; }
+    textarea { min-height: 112px; resize: vertical; }
+    #features { min-height: 130px; }
+    #review-note { min-height: 76px; }
+    .hint { color: var(--muted); font-size: 12px; font-weight: 400; }
+    .save-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 2px; }
+    .shortcut { color: var(--muted); font-size: 12px; }
+
+    .evidence-grid { display: grid; grid-template-columns: 112px 1fr; gap: 0; }
+    .evidence-grid dt, .evidence-grid dd { margin: 0; padding: 9px 0; border-bottom: 1px solid rgba(41, 49, 64, .72); }
+    .evidence-grid dt { color: var(--muted); font-size: 12px; }
+    .evidence-grid dd { color: #d8dde6; font-size: 13px; overflow-wrap: anywhere; }
+    .evidence-grid dt:last-of-type, .evidence-grid dd:last-of-type { border-bottom: 0; }
+    .quality-flags { display: flex; flex-wrap: wrap; gap: 6px; }
+
+    .empty { display: grid; place-items: center; min-height: 70vh; color: var(--muted); text-align: center; }
+    .toast {
+      position: fixed;
+      right: 24px;
+      bottom: 24px;
+      z-index: 20;
+      max-width: 420px;
+      transform: translateY(18px);
+      opacity: 0;
+      pointer-events: none;
+      border: 1px solid rgba(88, 214, 165, .45);
+      border-radius: 12px;
+      background: #16231f;
+      color: #bdf7df;
+      padding: 12px 16px;
+      box-shadow: var(--shadow);
+      transition: .2s ease;
+    }
+    .toast.show { transform: translateY(0); opacity: 1; }
+    .toast.error { border-color: rgba(255, 104, 79, .5); background: #2a1817; color: #ffc2b7; }
+
+    @media (max-width: 1050px) {
+      .app { grid-template-columns: 250px minmax(0, 1fr); }
+      .workspace { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 760px) {
+      .app { display: block; }
+      .sidebar { position: static; height: auto; max-height: 44vh; }
+      .images { grid-template-columns: 1fr; }
+      .topbar { align-items: stretch; flex-direction: column; }
+      .nav-actions { justify-content: flex-end; }
+      main { padding: 18px 14px 40px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="eyebrow">Local Review Desk</div>
+        <h1>限定发型审核</h1>
+        <div class="subtle">只在本机保存，不缓存卡图</div>
+        <div class="progress-wrap">
+          <div class="progress-line"><div class="progress-fill" id="progress-fill"></div></div>
+          <div class="progress-label"><span id="progress-text">读取中…</span><span id="progress-percent">0%</span></div>
+        </div>
+      </div>
+      <div class="filters">
+        <input class="field-control" id="search" type="search" placeholder="搜索：彰3 / 角色 / 卡名">
+        <select class="field-control" id="scope" aria-label="审核状态筛选">
+          <option value="pending">待审核</option>
+          <option value="reviewed">已审核</option>
+          <option value="all">全部限定</option>
+        </select>
+      </div>
+      <div class="card-list" id="card-list" aria-label="卡片列表"></div>
+    </aside>
+
+    <main id="main"><div class="empty">正在载入审核数据…</div></main>
+  </div>
+  <div class="toast" id="toast" role="status"></div>
+
+  <script>
+    const app = { cards: [], stats: { total: 0, reviewed: 0, pending: 0 }, selectedId: null, saving: false };
+    const $ = (selector) => document.querySelector(selector);
+    const escapeHtml = (value) => String(value ?? "")
+      .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;").replaceAll("'", "&#039;");
+
+    function filteredCards() {
+      const scope = $("#scope").value;
+      const query = $("#search").value.trim().toLowerCase();
+      return app.cards.filter((card) => {
+        const statusMatch = scope === "all" || card.review_status === scope;
+        const haystack = `${card.sequence_alias} ${card.character_name} ${card.title} ${card.event_name}`.toLowerCase();
+        return statusMatch && (!query || haystack.includes(query));
+      });
+    }
+
+    function updateProgress() {
+      const { total, reviewed, pending } = app.stats;
+      const percent = total ? Math.round(reviewed / total * 100) : 0;
+      $("#progress-fill").style.width = `${percent}%`;
+      $("#progress-text").textContent = `${reviewed} 已审 · ${pending} 待审`;
+      $("#progress-percent").textContent = `${percent}%`;
+    }
+
+    function renderList() {
+      const cards = filteredCards();
+      $("#card-list").innerHTML = cards.length ? cards.map((card) => `
+        <button class="list-card ${card.id === app.selectedId ? "active" : ""}" data-card-id="${card.id}">
+          <span class="alias-box">${escapeHtml(card.sequence_alias)}</span>
+          <span><span class="list-title">${escapeHtml(card.title)}</span><br><span class="list-character">${escapeHtml(card.character_name)}</span></span>
+          <span class="dot ${card.review_status}"></span>
+        </button>
+      `).join("") : '<div class="empty" style="min-height:180px">当前筛选没有卡片</div>';
+      $("#card-list").querySelectorAll("[data-card-id]").forEach((button) => {
+        button.addEventListener("click", () => selectCard(Number(button.dataset.cardId)));
+      });
+    }
+
+    function evidenceRows(hair) {
+      const structure = hair.structure || {};
+      const rows = [
+        ["定位", hair.owner_location], ["清晰度", hair.clarity], ["长度", structure.length],
+        ["整体轮廓", structure.silhouette], ["刘海", structure.bangs], ["侧发", structure.side_locks],
+        ["束发", structure.tied_part], ["后发", structure.rear_shape], ["挑染", structure.streaks],
+        ["发饰", (hair.hair_accessories || []).join("、")], ["头部配饰", (hair.headwear || []).join("、")],
+        ["观察色", hair.observed_color], ["环境光", hair.lighting_effect]
+      ];
+      return rows.map(([name, value]) => `<dt>${escapeHtml(name)}</dt><dd>${escapeHtml(value || "—")}</dd>`).join("");
+    }
+
+    function renderCard() {
+      const card = app.cards.find((item) => item.id === app.selectedId);
+      if (!card) {
+        $("#main").innerHTML = '<div class="empty"><div><strong>没有选中的卡片</strong><br>请从左侧选择一张。</div></div>';
+        return;
+      }
+      const hair = card.hairstyle || {};
+      const features = (hair.features || []).join("\n");
+      const note = hair.review_note || "";
+      const flags = hair.quality_flags || [];
+      $("#main").innerHTML = `
+        <div class="topbar">
+          <div>
+            <div class="title-row"><h2>${escapeHtml(card.sequence_alias)} · ${escapeHtml(card.title)}</h2><span class="pill ${card.review_status}">${card.review_status === "reviewed" ? "已人工审核" : "自动初稿待审"}</span></div>
+            <div class="meta-line"><span class="pill">${escapeHtml(card.character_name)}</span><span class="pill">${escapeHtml(card.supply_label)}</span><span class="pill">${escapeHtml(card.event_name || "无活动")}</span>${card.commissioned_song ? `<span class="pill">书下曲 ${escapeHtml(card.commissioned_song)}</span>` : ""}</div>
+          </div>
+          <div class="nav-actions"><button class="btn" id="previous-card">上一张</button><button class="btn" id="skip-card">跳过</button><button class="btn" id="next-card">下一张</button></div>
+        </div>
+        <section class="images">
+          <article class="image-card"><div class="image-label"><strong>花前</strong><span>身份与场景参考</span></div><a class="image-frame" href="${escapeHtml(card.normal_image)}" target="_blank" rel="noreferrer"><img src="${escapeHtml(card.normal_image)}" alt="${escapeHtml(card.sequence_alias)} 花前"></a><div class="image-summary">${escapeHtml(card.normal_summary || "暂无描述")}</div></article>
+          <article class="image-card"><div class="image-label"><strong>花后</strong><span>本次发型审核目标</span></div><a class="image-frame" href="${escapeHtml(card.trained_image)}" target="_blank" rel="noreferrer"><img src="${escapeHtml(card.trained_image)}" alt="${escapeHtml(card.sequence_alias)} 花后"></a><div class="image-summary">${escapeHtml(card.trained_summary || "暂无描述")}</div></article>
+        </section>
+        <section class="workspace">
+          <article class="panel"><div class="panel-head"><h3>人工结论</h3><div class="subtle">可直接通过初稿，也可以修改后保存</div></div><div class="panel-body">
+            <label>发型描述<textarea class="field-control" id="description">${escapeHtml(hair.description || "")}</textarea></label>
+            <label>检索特征 <span class="hint">每行一个短特征</span><textarea class="field-control" id="features">${escapeHtml(features)}</textarea></label>
+            <label>审核备注<textarea class="field-control" id="review-note" placeholder="说明修改依据或误识别点">${escapeHtml(note)}</textarea></label>
+            <div class="save-row"><span class="shortcut">Ctrl + Enter 保存</span><button class="btn primary" id="save-review" data-testid="save-review">确认并保存</button></div>
+          </div></article>
+          <aside class="panel"><div class="panel-head"><h3>模型观察证据</h3><div class="subtle">颜色受环境光影响，仅作参考</div></div><div class="panel-body"><dl class="evidence-grid">${evidenceRows(hair)}</dl><div><div class="subtle" style="margin-bottom:7px">质量标记</div><div class="quality-flags">${flags.length ? flags.map((flag) => `<span class="pill pending">${escapeHtml(flag)}</span>`).join("") : '<span class="pill reviewed">无</span>'}</div></div></div></aside>
+        </section>`;
+      $("#previous-card").addEventListener("click", () => moveSelection(-1));
+      $("#next-card").addEventListener("click", () => moveSelection(1));
+      $("#skip-card").addEventListener("click", () => moveSelection(1));
+      $("#save-review").addEventListener("click", saveReview);
+    }
+
+    function selectCard(cardId) {
+      app.selectedId = cardId;
+      renderList();
+      renderCard();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function moveSelection(direction) {
+      const cards = filteredCards();
+      if (!cards.length) return;
+      const index = Math.max(0, cards.findIndex((card) => card.id === app.selectedId));
+      selectCard(cards[(index + direction + cards.length) % cards.length].id);
+    }
+
+    function showToast(message, error = false) {
+      const toast = $("#toast");
+      toast.textContent = message;
+      toast.className = `toast show${error ? " error" : ""}`;
+      clearTimeout(showToast.timer);
+      showToast.timer = setTimeout(() => toast.className = "toast", 2600);
+    }
+
+    async function saveReview() {
+      if (app.saving) return;
+      const card = app.cards.find((item) => item.id === app.selectedId);
+      if (!card) return;
+      const description = $("#description").value.trim();
+      const features = $("#features").value.split(/\n|，|、|；|;/).map((item) => item.trim()).filter(Boolean);
+      const review_note = $("#review-note").value.trim();
+      if (!description) { showToast("发型描述不能为空", true); return; }
+      app.saving = true;
+      $("#save-review").disabled = true;
+      $("#save-review").textContent = "保存中…";
+      try {
+        const response = await fetch("/api/review", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ card_id: card.id, review: { description, features, review_note } })
+        });
+        const result = await response.json();
+        if (!response.ok || !result.ok) throw new Error(result.error || "保存失败");
+        const index = app.cards.findIndex((item) => item.id === card.id);
+        app.cards[index] = result.card;
+        app.stats = result.stats;
+        updateProgress();
+        showToast(`${card.sequence_alias} 已保存为人工审核结论`);
+        const nextPending = app.cards.find((item) => item.review_status === "pending" && item.release_at > card.release_at)
+          || app.cards.find((item) => item.review_status === "pending");
+        if ($("#scope").value === "pending") app.selectedId = nextPending?.id ?? null;
+        renderList();
+        renderCard();
+      } catch (error) {
+        showToast(error.message || String(error), true);
+        $("#save-review").disabled = false;
+        $("#save-review").textContent = "确认并保存";
+      } finally {
+        app.saving = false;
+      }
+    }
+
+    async function loadState() {
+      try {
+        const response = await fetch("/api/state", { cache: "no-store" });
+        const result = await response.json();
+        if (!response.ok || !result.ok) throw new Error(result.error || "读取失败");
+        app.cards = result.cards;
+        app.stats = result.stats;
+        const firstPending = app.cards.find((card) => card.review_status === "pending");
+        app.selectedId = firstPending?.id ?? app.cards[0]?.id ?? null;
+        updateProgress();
+        renderList();
+        renderCard();
+      } catch (error) {
+        $("#main").innerHTML = `<div class="empty"><div><strong>审核数据加载失败</strong><br>${escapeHtml(error.message || String(error))}</div></div>`;
+      }
+    }
+
+    $("#search").addEventListener("input", () => {
+      renderList();
+      const cards = filteredCards();
+      if (cards.length && !cards.some((card) => card.id === app.selectedId)) selectCard(cards[0].id);
+      if (!cards.length) { app.selectedId = null; renderCard(); }
+    });
+    $("#scope").addEventListener("change", () => { const cards = filteredCards(); if (cards.length) app.selectedId = cards[0].id; renderList(); renderCard(); });
+    document.addEventListener("keydown", (event) => {
+      if (event.ctrlKey && event.key === "Enter") { event.preventDefault(); saveReview(); }
+      if (!event.ctrlKey && !event.metaKey && !event.altKey && event.target === document.body && event.key === "]") moveSelection(1);
+      if (!event.ctrlKey && !event.metaKey && !event.altKey && event.target === document.body && event.key === "[") moveSelection(-1);
+    });
+    loadState();
+  </script>
+</body>
+</html>

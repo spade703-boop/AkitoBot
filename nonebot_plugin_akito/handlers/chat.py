@@ -63,6 +63,7 @@ from ..core import (
     smart_search,
     to_image_data,
 )
+from ..features.card import get_relevant_cards
 
 try:
     from ..features.director import build_director_note
@@ -326,6 +327,7 @@ def _build_final_system_prompt(
     referenced_relationship_instruction: str,
     base_persona: str,
     script_examples: str,
+    card_context: str,
     pjsk_block: str,
     song_memories: str,
     long_term_memory_text: str,
@@ -366,6 +368,7 @@ def _build_final_system_prompt(
         # 4. 核心人设与记忆
         {base_persona}
         {script_examples}
+        {card_context}
         🎮【PJSK 世界观/黑话库】：
         {pjsk_block}
         {song_memories}
@@ -682,9 +685,10 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage()):
             plain_text_content,
             enable_expansion=bool(plain_text_content and len(plain_text_content.strip()) >= 3),
         )
-        relationship_context, script_examples, pjsk_block = await asyncio.gather(
+        relationship_context, script_examples, card_context, pjsk_block = await asyncio.gather(
             get_hybrid_relationship(plain_text_content),
             get_relevant_examples(plain_text_content, 5, retrieval_ctx=retrieval_ctx),
+            get_relevant_cards(plain_text_content, 3, retrieval_ctx=retrieval_ctx),
             get_relevant_pjsk(plain_text_content, 6, retrieval_ctx=retrieval_ctx),
         )
         song_context = get_song_memories() + get_song_mention(plain_text_content)
@@ -772,6 +776,7 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage()):
             referenced_relationship_instruction=referenced_relationship_instruction,
             base_persona=get_base_persona(),
             script_examples=script_examples,
+            card_context=card_context,
             pjsk_block=pjsk_block,
             song_memories=song_context,
             long_term_memory_text=long_term_memory_text,

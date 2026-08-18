@@ -3,6 +3,7 @@
 用法：
   py tools/build_embeddings.py scripts   # 只构建剧本（home + story，排除 noise）
   py tools/build_embeddings.py pjsk      # 只构建 PJSK 黑话库
+  py tools/build_embeddings.py cards     # 只构建 VBS 四星卡面库
   py tools/build_embeddings.py all       # 全量构建
 
 前置条件：
@@ -45,6 +46,7 @@ load_dotenv()
 DATA_CONTENT = Path("data/content")
 SCRIPT_FILE = DATA_CONTENT / "akito_scripts.json"
 PJSK_FILE = DATA_CONTENT / "pjsk_knowledge.json"
+CARDS_FILE = DATA_CONTENT / "pjsk_cards.json"
 OUT_DIR = DATA_CONTENT
 _HELPER_PATH = Path(__file__).resolve().parents[1] / "nonebot_plugin_akito" / "core" / "retrieval_assets.py"
 _HELPER_SPEC = importlib.util.spec_from_file_location("akito_retrieval_assets", _HELPER_PATH)
@@ -57,6 +59,13 @@ flatten_pjsk_knowledge = _HELPER_MODULE.flatten_pjsk_knowledge
 pjsk_retrieval_text = _HELPER_MODULE.pjsk_retrieval_text
 script_retrieval_items = _HELPER_MODULE.script_retrieval_items
 script_retrieval_text = _HELPER_MODULE.script_retrieval_text
+_CARD_HELPER_PATH = Path(__file__).resolve().parents[1] / "nonebot_plugin_akito" / "features" / "card" / "retrieval.py"
+_CARD_HELPER_SPEC = importlib.util.spec_from_file_location("akito_card_retrieval", _CARD_HELPER_PATH)
+if _CARD_HELPER_SPEC is None or _CARD_HELPER_SPEC.loader is None:
+    raise RuntimeError(f"无法加载卡面检索助手: {_CARD_HELPER_PATH}")
+_CARD_HELPER_MODULE = importlib.util.module_from_spec(_CARD_HELPER_SPEC)
+_CARD_HELPER_SPEC.loader.exec_module(_CARD_HELPER_MODULE)
+card_retrieval_text = _CARD_HELPER_MODULE.card_retrieval_text
 
 
 def load_scripts():
@@ -84,6 +93,18 @@ def load_pjsk():
     return items, full_len
 
 
+def load_cards():
+    """返回结构化卡面条目与全量长度。"""
+    if not CARDS_FILE.exists():
+        print(f"❌ 未找到 {CARDS_FILE}")
+        sys.exit(1)
+    payload = json.loads(CARDS_FILE.read_text(encoding="utf-8-sig"))
+    cards = payload.get("cards", []) if isinstance(payload, dict) else payload
+    items = [(i, entry) for i, entry in enumerate(cards) if isinstance(entry, dict)]
+    print(f"📖 卡面: {len(items)} 条目")
+    return items, len(cards)
+
+
 def build(
     indexed_items: list[tuple[int, dict]],
     full_len: int,
@@ -104,7 +125,12 @@ def build(
     kept_vectors: list[np.ndarray] = []
     kept_indices: list[int] = []
     db_subset: list[dict] = [entry for _, entry in indexed_items]
-    text_builder = pjsk_retrieval_text if embed_key == "text" else script_retrieval_text
+    if embed_key == "card":
+        text_builder = card_retrieval_text
+    elif embed_key == "text":
+        text_builder = pjsk_retrieval_text
+    else:
+        text_builder = script_retrieval_text
     fingerprint = build_corpus_fingerprint(corpus_name or out_name, db_subset, text_builder)
     print(
         f"🔨 开始构建 {out_name} ({total} 条, key={embed_key}"
@@ -112,7 +138,9 @@ def build(
     )
 
     for row, (orig_i, entry) in enumerate(indexed_items):
-        if embed_key == "text":
+        if embed_key == "card":
+            text = card_retrieval_text(entry)
+        elif embed_key == "text":
             text = pjsk_retrieval_text(entry)
         else:
             text = script_retrieval_text(entry)
@@ -180,6 +208,10 @@ def main() -> None:
         items, full_len = load_pjsk()
         # PJSK intro 不参与检索（常驻注入），仅条目参与 embed
         build(items, full_len, "pjsk_embeddings.npz", embed_key="text", client=client, corpus_name="pjsk")
+
+    if target in ("cards", "all"):
+        items, full_len = load_cards()
+        build(items, full_len, "cards_embeddings.npz", embed_key="card", client=client, corpus_name="cards")
 
     print("\n🎉 构建完成。")
 

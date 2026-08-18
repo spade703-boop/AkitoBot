@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from nonebot.log import logger
 
@@ -48,6 +48,7 @@ def _live_retrieval_db(corpus: str, db: list[dict]) -> list[dict]:
 
 
 _registry: dict[str, dict[str, Any]] = {}
+_registered_corpora: dict[str, dict[str, Any]] = {}
 
 
 def _ensure_registry() -> None:
@@ -58,6 +59,24 @@ def _ensure_registry() -> None:
 
     _registry["scripts"] = {"db": SCRIPT_DB, "npz": "scripts_embeddings.npz", "doc_text": _script_doc_text}
     _registry["pjsk"] = {"db": PJSK_ENTRIES, "npz": "pjsk_embeddings.npz", "doc_text": _pjsk_doc_text}
+    _registry.update(_registered_corpora)
+
+
+def register_corpus(
+    name: str,
+    db: list[dict],
+    npz: str,
+    doc_text: Callable[[dict], str],
+    *,
+    rerank_min_score: float | None = None,
+) -> None:
+    """Register an optional feature-owned retrieval corpus."""
+    config: dict[str, Any] = {"db": db, "npz": npz, "doc_text": doc_text}
+    if rerank_min_score is not None:
+        config["rerank_min_score"] = rerank_min_score
+    _registered_corpora[name] = config
+    _ensure_registry()
+    _registry[name] = config
 
 
 # ── 缓存结构 ────────────────────────────────────────────────────────────────
@@ -225,7 +244,8 @@ async def _rerank_candidates(corpus: str, query: str, idx: _Index, rows: Any, to
         if ranked is None:
             return None
 
-        kept = [cand_ids[i] for i, score in ranked if 0 <= i < len(cand_ids) and score >= _RERANK_MIN_SCORE]
+        min_score = float(cfg.get("rerank_min_score", _RERANK_MIN_SCORE))
+        kept = [cand_ids[i] for i, score in ranked if 0 <= i < len(cand_ids) and score >= min_score]
         logger.debug(f"🔍 精排 [{corpus}] 召回{len(docs)} → 保留{len(kept)}")
         return kept[:top_k]
     except Exception as e:
