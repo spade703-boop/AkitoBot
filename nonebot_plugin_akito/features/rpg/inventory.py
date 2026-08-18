@@ -7,11 +7,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 import random
+from typing import Any, cast
 
 from nonebot import on_command
-from nonebot.adapters import Bot, Event, Message
-from nonebot.adapters.onebot.v11 import MessageSegment
+from nonebot.adapters import Bot, Message
+from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageSegment
 from nonebot.params import CommandArg
 
 from ...core import is_sleeping
@@ -36,6 +38,7 @@ from ..gift import (
 )
 from .config import _cfg, _copy, _error, _line
 from .player import _ensure_player, _resolve_group
+from .types import ActiveBattleView, RpgUserRecord
 
 # ==================== 道具定义 ====================
 
@@ -56,7 +59,7 @@ def _battle_effect(item: dict | None) -> dict:
     return effect if isinstance(effect, dict) else {}
 
 
-def _active_battle_supply(user: dict, *, guard: bool = False) -> dict | None:
+def _active_battle_supply(user: RpgUserRecord, *, guard: bool = False) -> ActiveBattleView | None:
     """返回当前已启用且仍有效的战备快照；配置删项时自动视为失效。"""
     key = "active_battle_guard" if guard else "active_battle_supply"
     record = user.get(key)
@@ -74,7 +77,7 @@ def _active_battle_supply(user: dict, *, guard: bool = False) -> dict | None:
     return {"name": name, "uses": uses, "effect": dict(effect)}
 
 
-def _activate_battle_supply(user: dict, item: dict) -> tuple[bool, str]:
+def _activate_battle_supply(user: RpgUserRecord, item: dict) -> tuple[bool, str]:
     """主动装备一件战备，返回是否成功及提示文案。"""
     name = str(item.get("name", ""))
     effect = _battle_effect(item)
@@ -87,28 +90,29 @@ def _activate_battle_supply(user: dict, item: dict) -> tuple[bool, str]:
     if active:
         error_key = "supply_guard_busy" if is_guard else "supply_slot_busy"
         return False, _error(error_key, name=active["name"])
-    user[slot] = {"name": name, "uses": max(1, int(effect.get("uses", 1)))}
+    user_values = cast(dict[str, Any], user)
+    user_values[slot] = {"name": name, "uses": max(1, int(effect.get("uses", 1)))}
     line_key = "use_battle_guard" if is_guard else "use_battle_supply"
     parts = " / ".join(_battle_supply_parts({"effect": effect}))
-    return True, _line(line_key, name=name, uses=user[slot]["uses"], parts=parts)
+    return True, _line(line_key, name=name, uses=user_values[slot]["uses"], parts=parts)
 
 
-def _consume_battle_supply(user: dict, *, guard: bool = False) -> int:
+def _consume_battle_supply(user: RpgUserRecord, *, guard: bool = False) -> int:
     """消耗一次已启用战备并返回剩余次数。"""
     key = "active_battle_guard" if guard else "active_battle_supply"
     active = _active_battle_supply(user, guard=guard)
     if not active:
-        user.pop(key, None)
+        cast(dict[str, Any], user).pop(key, None)
         return 0
     rest = active["uses"] - 1
     if rest > 0:
-        user[key] = {"name": active["name"], "uses": rest}
+        cast(dict[str, Any], user)[key] = {"name": active["name"], "uses": rest}
     else:
-        user.pop(key, None)
+        cast(dict[str, Any], user).pop(key, None)
     return rest
 
 
-def _active_battle_debuff(user: dict) -> dict | None:
+def _active_battle_debuff(user: RpgUserRecord) -> ActiveBattleView | None:
     """返回下一场普通挑战会生效的减益；配置删项时自动视为失效。"""
     record = user.get("active_battle_debuff")
     if not isinstance(record, dict):
@@ -124,7 +128,7 @@ def _active_battle_debuff(user: dict) -> dict | None:
     return {"name": name, "uses": uses, "effect": dict(effect)}
 
 
-def _queue_battle_debuff(user: dict, item: dict) -> int:
+def _queue_battle_debuff(user: RpgUserRecord, item: dict) -> int:
     """将赠送道具的减益按场次排队，同名道具不会叠加在同一场。"""
     name = str(item.get("name", ""))
     effect = _battle_effect(item)
@@ -136,7 +140,7 @@ def _queue_battle_debuff(user: dict, item: dict) -> int:
     return uses
 
 
-def _consume_battle_debuff(user: dict) -> int:
+def _consume_battle_debuff(user: RpgUserRecord) -> int:
     """消耗一场普通挑战减益并返回剩余场数。"""
     active = _active_battle_debuff(user)
     if not active:
@@ -150,7 +154,7 @@ def _consume_battle_debuff(user: dict) -> int:
     return rest
 
 
-def _battle_supply_parts(active: dict | None) -> list[str]:
+def _battle_supply_parts(active: Mapping[str, Any] | None) -> list[str]:
     if not active:
         return []
     effect = active.get("effect", {})
@@ -179,7 +183,7 @@ def _battle_supply_parts(active: dict | None) -> list[str]:
 
 # ==================== 背包存取（作用于传入的 user dict） ====================
 
-def _inv(user: dict) -> dict:
+def _inv(user: RpgUserRecord) -> dict[str, int]:
     inv = user.get("inventory")
     if not isinstance(inv, dict):
         inv = {}
@@ -187,17 +191,17 @@ def _inv(user: dict) -> dict:
     return inv
 
 
-def _item_count(user: dict, name: str) -> int:
+def _item_count(user: RpgUserRecord, name: str) -> int:
     return int(_inv(user).get(name, 0))
 
 
-def _add_item(user: dict, name: str, n: int = 1) -> int:
+def _add_item(user: RpgUserRecord, name: str, n: int = 1) -> int:
     inv = _inv(user)
     inv[name] = int(inv.get(name, 0)) + int(n)
     return inv[name]
 
 
-def _remove_item(user: dict, name: str, n: int = 1) -> bool:
+def _remove_item(user: RpgUserRecord, name: str, n: int = 1) -> bool:
     """扣除 n 个道具；不足返回 False（不改动）。扣空则移除该 key。"""
     inv = _inv(user)
     have = int(inv.get(name, 0))
@@ -225,7 +229,7 @@ def _roll_drops(monster: dict, rng=random, mult: float = 1.0) -> list[str]:
 
 # ==================== 道具效果分发 ====================
 
-def _apply_item_effect(user: dict, item: dict) -> tuple[bool, str]:
+def _apply_item_effect(user: RpgUserRecord, item: dict) -> tuple[bool, str]:
     """应用消耗品效果，返回 (是否消耗成功, 文案)。"""
     eff = item.get("effect", {}) if isinstance(item.get("effect"), dict) else {}
     etype = eff.get("type")
@@ -249,7 +253,7 @@ bag_cmd = on_command("我的背包", priority=5, block=True)
 
 
 @bag_cmd.handle()
-async def _(event: Event, args: Message = CommandArg()):
+async def _(event: GroupMessageEvent, args: Message = CommandArg()):
     group_id, rejection = _resolve_group(event)
     if rejection:
         await bag_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
@@ -289,7 +293,7 @@ def _is_battle_debuff_gift(item: dict) -> bool:
 
 
 @use_cmd.handle()
-async def _(bot: Bot, event: Event, args: Message = CommandArg()):
+async def _(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
     group_id, rejection = _resolve_group(event)
     if rejection:
         await use_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
@@ -305,6 +309,8 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
     item = _item_by_name(name)
     if not item:
         await use_cmd.finish(MessageSegment.reply(event.message_id) + _error("item_unknown", name=name))
+    if not item:
+        return
 
     if _is_battle_debuff_gift(item):
         target = _first_at_qq(getattr(event, "original_message", None))
@@ -348,6 +354,8 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
             await use_cmd.finish(
                 MessageSegment.reply(event.message_id) + _error("item_unknown", name=name)
             )
+        if not gift:
+            return
 
         sender_id = event.get_user_id()
         async with LOCK:

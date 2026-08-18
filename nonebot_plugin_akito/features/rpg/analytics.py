@@ -2,22 +2,27 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import date, timedelta
+from typing import Any
 
 from nonebot import on_command
-from nonebot.adapters import Event, Message
-from nonebot.adapters.onebot.v11 import MessageSegment
+from nonebot.adapters import Message
+from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageSegment
 from nonebot.log import logger
 from nonebot.params import CommandArg
 
 from ...core import SUPERUSER_QQ
 from ...core.game_store import LOCK, _get_group, _load_data, _today_str
+from ...core.types import GroupRecord
 from ..gift.render import render_bond_page
 from .player import _resolve_group
+from .state import _rpg_state
+from .types import MetricMemberField, MetricScalarField, RpgMetricDay, WorldBossRecord
 
 METRICS_RETENTION_DAYS = 30
 
-_SCALAR_FIELDS = (
+_SCALAR_FIELDS: tuple[MetricScalarField, ...] = (
     "battles",
     "wins",
     "solo_battles",
@@ -39,10 +44,15 @@ _SCALAR_FIELDS = (
     "world_boss_exp_gained",
     "world_boss_points_gained",
 )
+_MODE_FIELDS: dict[str, MetricScalarField] = {
+    "solo": "solo_battles",
+    "team": "team_battles",
+    "fallback": "fallback_battles",
+}
 
 
-def _metrics_days(group: dict) -> dict:
-    rpg = group.setdefault("rpg", {})
+def _metrics_days(group: GroupRecord) -> dict[str, RpgMetricDay]:
+    rpg = _rpg_state(group)
     metrics = rpg.get("metrics")
     if not isinstance(metrics, dict):
         metrics = {}
@@ -54,7 +64,7 @@ def _metrics_days(group: dict) -> dict:
     return days
 
 
-def _prune_metrics(group: dict, today: str) -> None:
+def _prune_metrics(group: GroupRecord, today: str) -> None:
     try:
         cutoff = (date.fromisoformat(today) - timedelta(days=METRICS_RETENTION_DAYS - 1)).isoformat()
     except ValueError:
@@ -65,7 +75,7 @@ def _prune_metrics(group: dict, today: str) -> None:
             days.pop(day, None)
 
 
-def _metric_day(group: dict, today: str) -> dict:
+def _metric_day(group: GroupRecord, today: str) -> RpgMetricDay:
     _prune_metrics(group, today)
     days = _metrics_days(group)
     entry = days.get(today)
@@ -73,14 +83,17 @@ def _metric_day(group: dict, today: str) -> dict:
         entry = {}
         days[today] = entry
     for field in _SCALAR_FIELDS:
-        entry.setdefault(field, 0)
-    entry.setdefault("players", [])
-    entry.setdefault("world_boss_players", [])
-    entry.setdefault("monsters", {})
+        if not isinstance(entry.get(field), int):
+            entry[field] = 0
+    for member_field in ("players", "world_boss_players"):
+        if not isinstance(entry.get(member_field), list):
+            entry[member_field] = []
+    if not isinstance(entry.get("monsters"), dict):
+        entry["monsters"] = {}
     return entry
 
 
-def _add_unique(entry: dict, key: str, user_ids) -> None:
+def _add_unique(entry: RpgMetricDay, key: MetricMemberField, user_ids: Iterable[object]) -> None:
     values = entry.get(key)
     if not isinstance(values, list):
         values = []
@@ -92,23 +105,19 @@ def _add_unique(entry: dict, key: str, user_ids) -> None:
 
 
 def record_battle(
-    group: dict,
+    group: GroupRecord,
     today: str,
     *,
     mode: str,
-    user_ids,
-    outcome: dict,
+    user_ids: Iterable[object],
+    outcome: dict[str, Any],
     exp_gained: int,
     points_gained: int,
 ) -> None:
     entry = _metric_day(group, today)
     entry["battles"] += 1
     entry["wins"] += int(bool(outcome.get("win")))
-    mode_field = {
-        "solo": "solo_battles",
-        "team": "team_battles",
-        "fallback": "fallback_battles",
-    }.get(mode)
+    mode_field = _MODE_FIELDS.get(mode)
     if mode_field:
         entry[mode_field] += 1
     entry["exp_gained"] += max(0, int(exp_gained))
@@ -127,33 +136,47 @@ def record_battle(
     monster_entry["elite"] = int(monster_entry.get("elite", 0)) + int(bool(outcome.get("elite")))
 
 
-def record_team_attempt(group: dict, today: str, *, formed: bool) -> None:
+def record_team_attempt(group: GroupRecord, today: str, *, formed: bool) -> None:
     entry = _metric_day(group, today)
     entry["team_attempts"] += 1
     entry["team_formed"] += int(bool(formed))
 
 
-def record_supply_open(group: dict, today: str, *, points_spent: int, exp_gained: int) -> None:
+def record_supply_open(group: GroupRecord, today: str, *, points_spent: int, exp_gained: int) -> None:
     entry = _metric_day(group, today)
     entry["supply_opens"] += 1
     entry["supply_points_spent"] += max(0, int(points_spent))
     entry["supply_exp_gained"] += max(0, int(exp_gained))
 
 
-def record_world_boss_spawn(group: dict, today: str, *, forced: bool = False) -> None:
+def record_world_boss_spawn(group: GroupRecord, today: str, *, forced: bool = False) -> None:
     entry = _metric_day(group, today)
-    field = "world_boss_forced_spawns" if forced else "world_boss_spawns"
-    entry[field] += 1
+    if forced:
+        entry["world_boss_forced_spawns"] += 1
+    else:
+        entry["world_boss_spawns"] += 1
 
 
-def record_world_boss_attack(group: dict, today: str, *, user_ids, damage: int) -> None:
+def record_world_boss_attack(
+    group: GroupRecord,
+    today: str,
+    *,
+    user_ids: Iterable[object],
+    damage: int,
+) -> None:
     entry = _metric_day(group, today)
     entry["world_boss_attacks"] += 1
     entry["world_boss_damage"] += max(0, int(damage))
     _add_unique(entry, "world_boss_players", user_ids)
 
 
-def record_world_boss_settlement(group: dict, boss: dict, rows: list[dict], *, killed: bool) -> None:
+def record_world_boss_settlement(
+    group: GroupRecord,
+    boss: WorldBossRecord,
+    rows: list[dict[str, Any]],
+    *,
+    killed: bool,
+) -> None:
     boss_day = str(boss.get("date") or _today_str())
     entry = _metric_day(group, boss_day)
     entry["world_boss_kills" if killed else "world_boss_expired"] += 1
@@ -161,13 +184,13 @@ def record_world_boss_settlement(group: dict, boss: dict, rows: list[dict], *, k
     entry["world_boss_points_gained"] += sum(max(0, int(row.get("points", 0))) for row in rows)
 
 
-def aggregate_metrics(group: dict, today: str, period_days: int) -> dict:
+def aggregate_metrics(group: GroupRecord, today: str, period_days: int) -> dict[str, Any]:
     period_days = max(1, int(period_days))
     try:
         cutoff = (date.fromisoformat(today) - timedelta(days=period_days - 1)).isoformat()
     except ValueError:
         cutoff = ""
-    aggregate = {field: 0 for field in _SCALAR_FIELDS}
+    aggregate: dict[str, int] = {field: 0 for field in _SCALAR_FIELDS}
     players: set[str] = set()
     boss_players: set[str] = set()
     monsters: dict[str, dict[str, int]] = {}
@@ -187,8 +210,9 @@ def aggregate_metrics(group: dict, today: str, period_days: int) -> dict:
             if not isinstance(raw_monster, dict):
                 continue
             target = monsters.setdefault(str(name), {"battles": 0, "wins": 0, "elite": 0})
-            for field in ("battles", "wins", "elite"):
-                target[field] += max(0, int(raw_monster.get(field, 0)))
+            target["battles"] += max(0, int(raw_monster.get("battles", 0)))
+            target["wins"] += max(0, int(raw_monster.get("wins", 0)))
+            target["elite"] += max(0, int(raw_monster.get("elite", 0)))
     return {
         **aggregate,
         "period_days": period_days,
@@ -229,7 +253,7 @@ def _summary_lines(summary: dict) -> list[str]:
     ]
 
 
-def build_metrics_report(group: dict, today: str) -> str:
+def build_metrics_report(group: GroupRecord, today: str) -> str:
     week = aggregate_metrics(group, today, 7)
     month = aggregate_metrics(group, today, 30)
     monster_rows = [
@@ -262,7 +286,7 @@ def _period_page_data(summary: dict) -> dict:
     }
 
 
-def build_metrics_page_data(group: dict, today: str) -> dict:
+def build_metrics_page_data(group: GroupRecord, today: str) -> dict:
     week = aggregate_metrics(group, today, 7)
     month = aggregate_metrics(group, today, 30)
     monster_rows = [
@@ -297,7 +321,7 @@ rpg_metrics_cmd = on_command("RPG数据", priority=5, block=True)
 
 
 @rpg_metrics_cmd.handle()
-async def _(event: Event, args: Message = CommandArg()):
+async def _(event: GroupMessageEvent, args: Message = CommandArg()):
     if str(event.get_user_id()) != SUPERUSER_QQ:
         return
     group_id, rejection = _resolve_group(event)

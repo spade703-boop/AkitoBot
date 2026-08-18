@@ -326,6 +326,20 @@ def test_global_profiles_round_trip_without_group_copies():
     assert gift._get_intimacy(other, "A", "B") == 400
 
 
+def test_group_runtime_views_share_top_level_objects_and_stay_out_of_json():
+    data = gift._normalize_data({"groups": {"1001": {"users": {"A": {"points": 5}}}}})
+    group = gift._get_group(data, "1001")
+
+    assert group["_global_users"] is data["users"]
+    assert group["users"]["A"] is data["users"]["A"]
+    assert group["intimacy"] is data["intimacy"]
+    assert group["counts"] is data["counts"]
+    assert group["wedding_invitations"] is data["wedding_invitations"]
+
+    stored = game_store._serializable_data(data)
+    assert set(stored["groups"]["1001"]) == {"user_ids", "rpg"}
+
+
 def test_normalize_data_preserves_counts_and_wedding_invitations():
     raw = {"groups": {"1001": {
         "users": {},

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 import random
+from typing import Any
 
 from ...core.game_store import _weighted_choice
 from .config import _cfg
@@ -43,14 +45,14 @@ def _roll_fail_flavor(rng=random) -> str:
     return _weighted_choice(cands, rng)
 
 
-def _fortune_combat_factor(user: dict, today: str, *, enabled: bool = True) -> float:
+def _fortune_combat_factor(user: Mapping[str, Any], today: str, *, enabled: bool = True) -> float:
     """当日隐藏运势给打怪/世界BOSS的战力系数（未签到则 1.0）。"""
     if not enabled or user.get("fortune_date") != today:
         return 1.0
     return float(_fortune_by_key(user.get("fortune", "")).get("combat_factor", 1.0))
 
 
-def _fortune_drop_factor(user: dict, today: str) -> float:
+def _fortune_drop_factor(user: Mapping[str, Any], today: str) -> float:
     """当日隐藏运势给掉落的概率系数（未签到则 1.0）。"""
     if user.get("fortune_date") != today:
         return 1.0

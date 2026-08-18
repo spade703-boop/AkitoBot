@@ -12,6 +12,7 @@ from nonebot_plugin_apscheduler import scheduler  # noqa: E402
 
 from ...core import MEMORY_DB, REACTIONS_DB, TARGET_GROUPS, TZ_CN, grant_safety_pass, save_memory  # noqa: E402
 from ...core.game_store import LOCK, _get_group, _load_data, _save_data, _today_str  # noqa: E402
+from ...core.types import GameData  # noqa: E402
 from ..rpg.boss import _cleanup_stale_world_boss  # noqa: E402
 
 # ==============================================================================
@@ -42,7 +43,11 @@ def _get_scheduled_greeting(period: str, reactions_db: dict) -> str:
     return random.choice(quotes)
 
 
-def _collect_world_boss_settlements(data: dict, today: str, target_groups: list[int]) -> list[tuple[int, str]]:
+def _collect_world_boss_settlements(
+    data: GameData,
+    today: str,
+    target_groups: list[int],
+) -> list[tuple[int, str]]:
     """Collect cross-day world boss settlement broadcasts for groups with stale bosses."""
     broadcasts: list[tuple[int, str]] = []
     changed = False

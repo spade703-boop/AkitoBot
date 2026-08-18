@@ -5,7 +5,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 import random
+from typing import Any
 
 from ...core.game_store import _today_str, _weighted_choice
 from .config import _cfg
@@ -79,7 +81,7 @@ def _pick_encounter(level: int, rng=random) -> tuple[dict, bool]:
     return monster, (rng.random() < chance)
 
 
-def _encounter_level(user: dict) -> int:
+def _encounter_level(user: Mapping[str, Any]) -> int:
     """遭遇池用装备等级分段；没装备等级时回落到当前角色等级。"""
     level = int(user.get("equip_level", 0))
     return max(1, level or _level_of(int(user.get("exp", 0))))
@@ -118,7 +120,9 @@ def _today_buff() -> dict:
 
 def _buff_active(buff: dict | None) -> bool:
     """今日增益是否真正生效（非平日）——决定是否在播报里揭示。"""
-    return bool(buff) and (float(buff.get("exp_mult", 1.0)) != 1.0 or float(buff.get("drop_mult", 1.0)) != 1.0)
+    if not buff:
+        return False
+    return float(buff.get("exp_mult", 1.0)) != 1.0 or float(buff.get("drop_mult", 1.0)) != 1.0
 
 
 def _eff_monster(monster: dict, is_elite: bool) -> dict:
@@ -140,7 +144,7 @@ def _reward_mults(buff: dict, is_elite: bool, win: bool) -> tuple[float, float]:
     return exp_mult, drop_mult
 
 
-def resolve_hunt(combat_power: int, monster: dict, *, power_factor: float,
+def resolve_hunt(combat_power: float, monster: dict, *, power_factor: float,
                  fortune_factor: float = 1.0, event: str | None = None) -> dict:
     """纯胜负判定：有效战力 vs 怪 power_req。返回 {win, effective, event, monster}（经验/掉落由调用方处理）。"""
     ev = _cfg("combat", {}).get("events", {}).get(event or "", {})

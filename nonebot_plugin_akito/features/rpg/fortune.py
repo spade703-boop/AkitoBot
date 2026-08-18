@@ -11,8 +11,10 @@ import random
 
 from ...core import TZ_CN
 from ...core.game_store import _today_str, _weighted_choice, register_signin_hook
+from ...core.types import GroupRecord
 from .config import _cfg, _line
 from .player import _ensure_player, _grant_equip, _level_of
+from .types import RpgUserRecord
 
 
 def _yesterday_str() -> str:
@@ -32,7 +34,7 @@ def _fortune_by_key(key: str) -> dict:
     return {}
 
 
-def _roll_fortune(user: dict, rng=random) -> str:
+def _roll_fortune(user: RpgUserRecord, rng=random) -> str:
     """按权重抽今日运势 key，叠加两条修正：连签保底 + 昨日大凶提大吉。"""
     fcfg = _cfg("fortune", {})
     weights = {lv["key"]: int(lv.get("weight", 0)) for lv in _fortune_levels()}
@@ -54,14 +56,14 @@ def _roll_fortune(user: dict, rng=random) -> str:
 
 # ==================== 签到钩子 ====================
 
-def _bump_streak(user: dict, today: str) -> int:
+def _bump_streak(user: RpgUserRecord, today: str) -> int:
     """更新连续签到：上次签到==昨天则 +1，否则重置为 1；写当日。返回当前连签天数。"""
     user["signin_streak"] = int(user.get("signin_streak", 0)) + 1 if user.get("signin_last_date") == _yesterday_str() else 1
     user["signin_last_date"] = today
     return int(user["signin_streak"])
 
 
-def on_signin(group: dict, user_id: str, rng=random) -> str:
+def on_signin(group: GroupRecord, user_id: str, rng=random) -> str:
     """签到结算：暗掷运势 + 发经验（基础 + 可选连签补偿）+ 发今日装备。返回追加播报行（当天已签到则返回空串）。"""
     user = _ensure_player(group, user_id)
     today = _today_str()

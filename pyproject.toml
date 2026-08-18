@@ -40,7 +40,7 @@ dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23.0",
     "ruff>=0.5.0",
-    "mypy>=1.10.0",
+    "mypy>=1.10.0,<2.0",
 ]
 
 # ── Ruff Linter ───────────────────────────────────────────────────────────
@@ -98,19 +98,61 @@ python_version = "3.9"
 warn_return_any = false
 warn_unused_configs = true
 ignore_missing_imports = true
+follow_imports = "silent"
 strict = false
 check_untyped_defs = false
 disallow_untyped_defs = false
+files = [
+    "nonebot_plugin_akito/core/types.py",
+    "nonebot_plugin_akito/core/game_store.py",
+    "nonebot_plugin_akito/core/memory.py",
+    "nonebot_plugin_akito/features/gift/types.py",
+    "nonebot_plugin_akito/features/gift/logic.py",
+    "nonebot_plugin_akito/features/rpg/types.py",
+    "nonebot_plugin_akito/features/rpg/player.py",
+    "nonebot_plugin_akito/features/rpg/inventory.py",
+    "nonebot_plugin_akito/features/rpg/fortune.py",
+    "nonebot_plugin_akito/features/rpg/rewards.py",
+    "nonebot_plugin_akito/features/rpg/state.py",
+    "nonebot_plugin_akito/features/rpg/utils.py",
+    "nonebot_plugin_akito/features/rpg/combat.py",
+    "nonebot_plugin_akito/features/rpg/boss.py",
+    "nonebot_plugin_akito/features/rpg/analytics.py",
+    "nonebot_plugin_akito/features/rpg/team.py",
+    "nonebot_plugin_akito/features/scheduled/__init__.py",
+]
 
 [[tool.mypy.overrides]]
 module = [
     "nonebot.*",
-    "nonebot_plugin_*",
+    "nonebot_plugin_alconna.*",
+    "nonebot_plugin_apscheduler.*",
+    "nonebot_plugin_htmlrender.*",
+    "nonebot_plugin_uninfo.*",
     "openai.*",
     "PIL.*",
     "aiohttp.*",
 ]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = [
+    "nonebot_plugin_akito.core.game_store",
+    "nonebot_plugin_akito.core.memory",
+    "nonebot_plugin_akito.features.gift.logic",
+    "nonebot_plugin_akito.features.rpg.player",
+    "nonebot_plugin_akito.features.rpg.inventory",
+    "nonebot_plugin_akito.features.rpg.fortune",
+    "nonebot_plugin_akito.features.rpg.rewards",
+    "nonebot_plugin_akito.features.rpg.state",
+    "nonebot_plugin_akito.features.rpg.utils",
+    "nonebot_plugin_akito.features.rpg.combat",
+    "nonebot_plugin_akito.features.rpg.boss",
+    "nonebot_plugin_akito.features.rpg.analytics",
+    "nonebot_plugin_akito.features.rpg.team",
+    "nonebot_plugin_akito.features.scheduled",
+]
+check_untyped_defs = true
 
 # ── Pytest ────────────────────────────────────────────────────────────────
 

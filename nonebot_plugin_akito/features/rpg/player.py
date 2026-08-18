@@ -7,14 +7,17 @@
 from __future__ import annotations
 
 import random
+from typing import cast
 
 from ...core.game_store import get_user, resolve_group_id
+from ...core.types import GroupRecord
 from .config import _cfg, _error
+from .types import EquipmentRecord, RpgUserRecord
 
 
-def _ensure_player(group: dict, user_id, display_name: str = "") -> dict:
+def _ensure_player(group: GroupRecord, user_id: object, display_name: str = "") -> RpgUserRecord:
     """在通用用户记录（points/display_name）上补齐 rpg 字段。"""
-    user = get_user(group, user_id, display_name)
+    user = cast(RpgUserRecord, get_user(group, user_id, display_name))
     user.setdefault("exp", 0)                 # 累计经验 → 等级
     user.setdefault("inventory", {})          # 背包：{道具名: 数量}
     # 今日装备（签到发放、打怪损坏、次日重发）
@@ -95,7 +98,7 @@ def _title_of(level: int) -> str:
 
 # ==================== 今日装备（战力为隐藏值） ====================
 
-def _grant_equip(user: dict, today: str, rng=random) -> None:
+def _grant_equip(user: RpgUserRecord, today: str, rng=random) -> None:
     """签到发放今日装备：等级取当前等级，随机浮动一次，重置损坏/强化。"""
     ecfg = _cfg("equip", {})
     user["equip_date"] = today
@@ -107,7 +110,7 @@ def _grant_equip(user: dict, today: str, rng=random) -> None:
     user["equip_rebuy_count"] = 0
 
 
-def _equip_power(user: dict) -> int:
+def _equip_power(user: EquipmentRecord) -> int:
     """今日装备战力（隐藏）：base + 等级*per + 随机浮动 + 强化次数*step。"""
     ecfg = _cfg("equip", {})
     fcfg = _cfg("forge", {})
@@ -117,21 +120,21 @@ def _equip_power(user: dict) -> int:
     return power
 
 
-def _combat_power(user: dict) -> int:
+def _combat_power(user: RpgUserRecord) -> int:
     """打怪用战力 = 今日装备战力（隐藏值）。"""
     return _equip_power(user)
 
 
-def _equip_intact(user: dict, today: str) -> bool:
+def _equip_intact(user: RpgUserRecord, today: str) -> bool:
     """今日装备是否可用（今天发的且未损坏）。"""
     return user.get("equip_date") == today and not user.get("equip_used")
 
 
-def _consume_equip(user: dict) -> None:
+def _consume_equip(user: EquipmentRecord) -> None:
     user["equip_used"] = True
 
 
-def _equip_status(user: dict, today: str) -> str:
+def _equip_status(user: RpgUserRecord, today: str) -> str:
     """面板用：未签到 / 已就绪(已强化×N) / 已损坏。"""
     if user.get("equip_date") != today:
         return "未签到"

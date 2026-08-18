@@ -7,7 +7,7 @@ import datetime
 import json
 import os
 import sqlite3
-from typing import Optional
+from typing import Optional, cast
 
 import aiosqlite
 from nonebot.adapters import Event
@@ -15,9 +15,9 @@ from nonebot.log import logger
 
 from . import DB_PATH
 from .data import find_data_path, get_data_dir
+from .types import MemorySession, MessageRow
 
-MEMORY_DB: dict = {}
-MessageRow = tuple[int, str, str, str, Optional[str], str]
+MEMORY_DB: dict[str, MemorySession] = {}
 _MESSAGE_WRITE_LOCK = asyncio.Lock()
 
 
@@ -76,7 +76,7 @@ class MessageReader:
             "ORDER BY id DESC LIMIT ?",
             (group_id, target_id, limit),
         ) as cursor:
-            return await cursor.fetchall()
+            return cast(list[MessageRow], await cursor.fetchall())
 
     async def fetch_recent_impression_candidates(
         self,
@@ -92,7 +92,7 @@ class MessageReader:
             "ORDER BY id DESC LIMIT ?",
             (group_id, target_id, cutoff, limit),
         ) as cursor:
-            return await cursor.fetchall()
+            return cast(list[MessageRow], await cursor.fetchall())
 
     async def fetch_message_context_sides(
         self,
@@ -107,13 +107,13 @@ class MessageReader:
             "FROM messages WHERE group_id=? AND id<=? ORDER BY id DESC LIMIT ?",
             (group_id, anchor_id, before_limit + 1),
         ) as cursor:
-            before_rows = await cursor.fetchall()
+            before_rows = cast(list[MessageRow], await cursor.fetchall())
         async with self._connection.execute(
             "SELECT id, user_id, nickname, content, message_id, timestamp "
             "FROM messages WHERE group_id=? AND id>? ORDER BY id ASC LIMIT ?",
             (group_id, anchor_id, after_limit),
         ) as cursor:
-            after_rows = await cursor.fetchall()
+            after_rows = cast(list[MessageRow], await cursor.fetchall())
         return before_rows, after_rows
 
     async def fetch_recent_impression_reply_contents(
@@ -147,7 +147,7 @@ def load_memory() -> None:
             with open(path, encoding="utf-8") as f:
                 loaded = json.load(f)
             MEMORY_DB.clear()
-            MEMORY_DB.update(loaded)
+            MEMORY_DB.update(cast(dict[str, MemorySession], loaded))
             logger.info(f"💾 长期记忆已加载！包含 {len(MEMORY_DB)} 个会话数据")
             return
         except Exception as e:
@@ -179,7 +179,7 @@ def get_memory_key(event: Event) -> str:
     return f"group_{group_id}" if group_id else f"private_{user_id}"
 
 
-def get_user_memory(unique_key: str) -> dict:
+def get_user_memory(unique_key: str) -> MemorySession:
     """取某会话的记忆字典，不存在时初始化 {"history": [], "temp_implants": []} 并返回。"""
     if unique_key not in MEMORY_DB:
         MEMORY_DB[unique_key] = {"history": [], "temp_implants": []}
@@ -238,7 +238,7 @@ async def get_group_context(
                 "ORDER BY id DESC LIMIT ?",
                 params,
             ) as cursor:
-                rows = await cursor.fetchall()
+                rows = cast(list[tuple[str, str, str]], await cursor.fetchall())
         if not rows:
             return ""
 

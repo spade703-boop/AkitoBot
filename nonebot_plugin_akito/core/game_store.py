@@ -11,16 +11,19 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from datetime import date, datetime
 import json
 import os
 import re
+from typing import Any, cast
 
 from nonebot.adapters.onebot.v11 import MessageSegment
 from nonebot.log import logger
 
 from . import ALLOWED_CHAT_GROUPS, TZ_CN
 from .paths import find_data_path, get_data_dir
+from .types import BaseUserRecord, GameData, GroupRecord, JsonRecord, WeeklyInvestmentRecord
 
 # 物理文件沿用 gift_data.json：现已是 gift + rpg 共享的玩家库，改名会让线上既有数据失联，故保持不变。
 DATA_FILE = "gift_data.json"
@@ -47,7 +50,7 @@ def _week_key(day: str) -> str:
     return f"{iso_year}-W{iso_week:02d}"
 
 
-def _weekly_investment(user: dict, day: str) -> dict:
+def _weekly_investment(user: BaseUserRecord, day: str) -> WeeklyInvestmentRecord:
     """读取当周的冒险补给/送礼投入；跨周时懒重置。"""
     week = _week_key(day)
     record = user.get("weekly_investment")
@@ -59,19 +62,20 @@ def _weekly_investment(user: dict, day: str) -> dict:
             "gift_spent": 0,
         }
         user["weekly_investment"] = record
+    record_values = cast(dict[str, Any], record)
     for key in ("supply_count", "supply_spent", "gift_spent"):
-        record[key] = max(0, int(record.get(key, 0)))
+        record_values[key] = max(0, int(record_values.get(key, 0)))
     return record
 
 
 def _record_weekly_investment(
-    user: dict,
+    user: BaseUserRecord,
     day: str,
     *,
     supply_count: int = 0,
     supply_spent: int = 0,
     gift_spent: int = 0,
-) -> dict:
+) -> WeeklyInvestmentRecord:
     """原子结算已持锁时，累加玩家本周两条积分去向。"""
     record = _weekly_investment(user, day)
     record["supply_count"] += max(0, int(supply_count))
@@ -82,7 +86,7 @@ def _record_weekly_investment(
 
 # ==================== 数据骨架与归一化 ====================
 
-def _new_data() -> dict:
+def _new_data() -> GameData:
     return {
         "schema_version": SCHEMA_VERSION,
         "users": {},
@@ -93,7 +97,7 @@ def _new_data() -> dict:
     }
 
 
-def _new_group() -> dict:
+def _new_group() -> GroupRecord:
     return {
         "user_ids": [],
         "users": {},
@@ -104,30 +108,30 @@ def _new_group() -> dict:
     }
 
 
-def _clean_users(value: object) -> dict:
+def _clean_users(value: object) -> dict[str, BaseUserRecord]:
     if not isinstance(value, dict):
         return {}
-    return {str(uid): dict(rec) for uid, rec in value.items() if isinstance(rec, dict)}
+    return {str(uid): cast(BaseUserRecord, dict(rec)) for uid, rec in value.items() if isinstance(rec, dict)}
 
 
-def _clean_int_map(value: object) -> dict:
+def _clean_int_map(value: object) -> dict[str, int]:
     if not isinstance(value, dict):
         return {}
     return {str(key): int(amount) for key, amount in value.items() if isinstance(amount, (int, float))}
 
 
-def _clean_record_map(value: object) -> dict:
+def _clean_record_map(value: object) -> dict[str, JsonRecord]:
     if not isinstance(value, dict):
         return {}
     return {str(key): dict(rec) for key, rec in value.items() if isinstance(rec, dict)}
 
 
-def _ordered_groups(groups: dict) -> list[tuple[object, dict]]:
+def _ordered_groups(groups: dict[object, object]) -> list[tuple[object, dict[object, object]]]:
     items = [(gid, group) for gid, group in groups.items() if isinstance(group, dict)]
     return sorted(items, key=lambda item: str(item[0]) != GLOBAL_PROFILE_SOURCE_GROUP)
 
 
-def _attach_group_views(data: dict, group: dict) -> dict:
+def _attach_group_views(data: GameData, group: GroupRecord) -> GroupRecord:
     global_users = data.setdefault("users", {})
     user_ids = [str(uid) for uid in group.get("user_ids", []) if str(uid)]
     local_users = _clean_users(group.get("users"))
@@ -147,51 +151,59 @@ def _attach_group_views(data: dict, group: dict) -> dict:
     return group
 
 
-def _normalize_data(raw: object) -> dict:
+def _normalize_data(raw: object) -> GameData:
     """容错归一并迁移旧结构：玩家档案和社交关系提升为全局状态。"""
     data = _new_data()
     if not isinstance(raw, dict):
         return data
-    groups = raw.get("groups") if isinstance(raw.get("groups"), dict) else {}
+    raw_map = cast(dict[str, object], raw)
+    raw_groups = raw_map.get("groups")
+    groups = cast(dict[object, object], raw_groups) if isinstance(raw_groups, dict) else {}
     ordered_groups = _ordered_groups(groups)
 
-    data["users"] = _clean_users(raw.get("users"))
-    data["intimacy"] = _clean_int_map(raw.get("intimacy"))
-    data["counts"] = _clean_int_map(raw.get("counts"))
-    data["wedding_invitations"] = _clean_record_map(raw.get("wedding_invitations"))
+    data["users"] = _clean_users(raw_map.get("users"))
+    data["intimacy"] = _clean_int_map(raw_map.get("intimacy"))
+    data["counts"] = _clean_int_map(raw_map.get("counts"))
+    data["wedding_invitations"] = _clean_record_map(raw_map.get("wedding_invitations"))
 
-    for _gid, group in ordered_groups:
-        for uid, rec in _clean_users(group.get("users")).items():
+    for _gid, raw_group in ordered_groups:
+        for uid, rec in _clean_users(raw_group.get("users")).items():
             if uid not in data["users"]:
                 data["users"][uid] = rec
             else:
-                for key, value in rec.items():
-                    data["users"][uid].setdefault(key, value)
-        for key, value in _clean_int_map(group.get("intimacy")).items():
+                target_record = cast(dict[str, Any], data["users"][uid])
+                for key, value in cast(dict[str, Any], rec).items():
+                    target_record.setdefault(key, value)
+        for key, value in _clean_int_map(raw_group.get("intimacy")).items():
             data["intimacy"].setdefault(key, value)
-        for key, value in _clean_int_map(group.get("counts")).items():
+        for key, value in _clean_int_map(raw_group.get("counts")).items():
             data["counts"].setdefault(key, value)
-        for key, value in _clean_record_map(group.get("wedding_invitations")).items():
+        for key, value in _clean_record_map(raw_group.get("wedding_invitations")).items():
             data["wedding_invitations"].setdefault(key, value)
 
-    for gid, group in groups.items():
-        if not isinstance(group, dict):
+    for gid, raw_group_value in groups.items():
+        if not isinstance(raw_group_value, dict):
             continue
-        user_ids = [str(uid) for uid in group.get("user_ids", []) if str(uid)]
-        for uid in _clean_users(group.get("users")):
+        raw_user_ids = cast(list[object], raw_group_value.get("user_ids", []))
+        user_ids = [str(uid) for uid in raw_user_ids if str(uid)]
+        for uid in _clean_users(raw_group_value.get("users")):
             if uid not in user_ids:
                 user_ids.append(uid)
         data["groups"][str(gid)] = {
             "user_ids": user_ids,
-            "rpg": group.get("rpg") if isinstance(group.get("rpg"), dict) else {},
+            "rpg": (
+                cast(JsonRecord, raw_group_value.get("rpg"))
+                if isinstance(raw_group_value.get("rpg"), dict)
+                else {}
+            ),
         }
 
-    for group in data["groups"].values():
-        _attach_group_views(data, group)
+    for normalized_group in data["groups"].values():
+        _attach_group_views(data, normalized_group)
     return data
 
 
-def _serializable_data(data: object) -> dict:
+def _serializable_data(data: object) -> GameData:
     normalized = _normalize_data(data)
     return {
         "schema_version": SCHEMA_VERSION,
@@ -209,7 +221,7 @@ def _serializable_data(data: object) -> dict:
     }
 
 
-def _load_data() -> dict:
+def _load_data() -> GameData:
     path = find_data_path(DATA_FILE)
     if not path:
         path = get_data_dir() / DATA_FILE
@@ -224,7 +236,7 @@ def _load_data() -> dict:
     return _normalize_data(raw)
 
 
-def _save_data(data: dict) -> None:
+def _save_data(data: GameData) -> None:
     path = find_data_path(DATA_FILE)
     if not path:
         path = get_data_dir() / DATA_FILE
@@ -237,7 +249,7 @@ def _save_data(data: dict) -> None:
 
 # ==================== 群 / 用户访问器 ====================
 
-def _get_group(data: dict, group_id) -> dict:
+def _get_group(data: GameData, group_id: object) -> GroupRecord:
     groups = data.setdefault("groups", {})
     group = groups.get(str(group_id))
     if not isinstance(group, dict):
@@ -246,7 +258,7 @@ def _get_group(data: dict, group_id) -> dict:
     return _attach_group_views(data, group)
 
 
-def get_user(group: dict, user_id, display_name: str = "") -> dict:
+def get_user(group: GroupRecord, user_id: object, display_name: str = "") -> BaseUserRecord:
     """取/建用户记录，仅保证**通用字段**（points / display_name）。
 
     各玩法模块在此基础上自行 setdefault 专属字段（gift 的偷窃字段、rpg 的经验/精力等），
@@ -270,7 +282,7 @@ def get_user(group: dict, user_id, display_name: str = "") -> dict:
     return user
 
 
-def _add_points(group: dict, user_id, amount: int) -> int:
+def _add_points(group: GroupRecord, user_id: object, amount: int) -> int:
     user = get_user(group, user_id)
     user["points"] = int(user.get("points", 0)) + int(amount)
     return user["points"]
@@ -282,14 +294,14 @@ def _pair_key(uid1, uid2) -> str:
     return "|||".join(sorted([str(uid1), str(uid2)]))
 
 
-def _add_intimacy(group: dict, uid1, uid2, amount: int) -> int:
+def _add_intimacy(group: GroupRecord, uid1: object, uid2: object, amount: int) -> int:
     intimacy = group.setdefault("intimacy", {})
     key = _pair_key(uid1, uid2)
     intimacy[key] = int(intimacy.get(key, 0)) + int(amount)
     return intimacy[key]
 
 
-def _get_intimacy(group: dict, uid1, uid2) -> int:
+def _get_intimacy(group: GroupRecord, uid1: object, uid2: object) -> int:
     return int(group.get("intimacy", {}).get(_pair_key(uid1, uid2), 0))
 
 
@@ -366,10 +378,11 @@ def _first_at_qq(original_message) -> str | None:
 
 # ==================== 签到钩子注册表（解耦：gift 触发，rpg 等订阅） ====================
 
-SIGNIN_HOOKS: list = []
+SigninHook = Callable[[GroupRecord, str, Any], str]
+SIGNIN_HOOKS: list[SigninHook] = []
 
 
-def register_signin_hook(fn) -> None:
+def register_signin_hook(fn: SigninHook) -> None:
     """注册签到附加钩子：fn(group, user_id, rng) -> str（返回追加播报行，空串忽略）。
 
     钩子在签到结算（持锁、group 已加载）期间被调用，须为纯内存操作：
@@ -379,7 +392,7 @@ def register_signin_hook(fn) -> None:
         SIGNIN_HOOKS.append(fn)
 
 
-def run_signin_hooks(group: dict, user_id: str, rng) -> list[str]:
+def run_signin_hooks(group: GroupRecord, user_id: str, rng: Any) -> list[str]:
     """运行所有已注册签到钩子，收集非空播报行。单个钩子异常被吞掉，不影响签到主流程。"""
     lines: list[str] = []
     for fn in list(SIGNIN_HOOKS):
@@ -395,16 +408,17 @@ def run_signin_hooks(group: dict, user_id: str, rng) -> list[str]:
 
 # ==================== 积分状态钩子注册表（解耦：gift 查询，rpg 等订阅） ====================
 
-POINTS_STATUS_HOOKS: list = []
+PointsStatusHook = Callable[[BaseUserRecord, str], str]
+POINTS_STATUS_HOOKS: list[PointsStatusHook] = []
 
 
-def register_points_status_hook(fn) -> None:
+def register_points_status_hook(fn: PointsStatusHook) -> None:
     """注册“我的积分”附加状态：fn(user, today) -> str，空串忽略。"""
     if fn not in POINTS_STATUS_HOOKS:
         POINTS_STATUS_HOOKS.append(fn)
 
 
-def run_points_status_hooks(user: dict, today: str) -> list[str]:
+def run_points_status_hooks(user: BaseUserRecord, today: str) -> list[str]:
     """运行已注册的只读积分状态钩子；单个钩子异常不影响基础查询。"""
     lines: list[str] = []
     for fn in list(POINTS_STATUS_HOOKS):

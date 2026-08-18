@@ -17,6 +17,7 @@ from nonebot.log import logger
 from openai import AsyncOpenAI
 
 from .paths import get_data_dir
+from .types import BaseUserRecord, GameData, GroupRecord, MemorySession
 
 load_dotenv()  # 显式将 .env 写入 os.environ（NoneBot2 自身不做这一步）
 
@@ -130,6 +131,7 @@ __all__ = [
     "ALLOWED_CHAT_GROUPS", "ALLOWED_CP_GROUPS", "ALLOWED_MEMORY_GROUPS", "TARGET_GROUPS",
     "GROUP_IMAGE_PERMISSIONS",
     # memory
+    "BaseUserRecord", "GameData", "GroupRecord", "MemorySession",
     "MEMORY_DB", "MessageRow", "load_memory", "save_memory", "get_memory_key", "get_user_memory",
     "MessageReader", "delete_group_messages", "get_group_context", "open_message_reader",
     "record_bot_message", "record_message",

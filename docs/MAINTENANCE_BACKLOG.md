@@ -45,14 +45,15 @@
 - **问题**：共享 `messages` 表的结构/列名知识被复制到跨三层的三个文件，违反 spec 自己声明的“core 是数据层”；连接管理不一致（部分 `with`、部分手动 `close()`）。
 - **影响**：一次 schema 迁移要动三处，容易漏改或出连接泄漏。
 - **建议**：`messages` 表的所有读写收敛到 `memory.py` 的函数里，features/handlers 只调函数、不碰 SQL。
-> 已处理：当前工作区变更（commit 待提交）：运行时 SQLite 访问已收口到 `core.memory`，改用 `aiosqlite`，群印象保留单连接异步读会话；依据 2026-08-18 线上库快照补充 `(group_id, id)` 索引，避免稀疏消息 ID 下的窗口查询临时排序，并以进程内写锁串行化消息写入与清群事务。
+> 已处理：`179061c`：运行时 SQLite 访问已收口到 `core.memory`，改用 `aiosqlite`，群印象保留单连接异步读会话；依据 2026-08-18 线上库快照补充 `(group_id, id)` 索引，避免稀疏消息 ID 下的窗口查询临时排序，并以进程内写锁串行化消息写入与清群事务。
 
 ### M4. 全局可变字典当数据模型，核心实体零类型
-- [ ] 待办
-- **证据**：全库无类定义（spec §3 亦承认）；`core/game_store.py:249 get_user()` 返回裸 dict，gift/rpg 各自往上挂私有键；`pyproject.toml:101-102` mypy `disallow_untyped_defs=false` + `check_untyped_defs=false`。
+- [x] 完成
+- **证据**：`core/game_store.py:get_user()` 原先返回裸 dict，gift/rpg 各自往上挂私有键；mypy 全局仍关闭 `disallow_untyped_defs`，但 M4 目标模块现已建立局部检查入口。
 - **问题**：User/Group/记忆会话/RPG·gift 记录全是无类型 `dict`，靠散落各处的 `setdefault` 拼字段。
 - **影响**：想知道“一条用户记录有哪些字段”必须全仓库 grep；字段拼错不报错；mypy 对这些 dict 完全失明。
 - **建议**：至少为共享记录（user / group / 记忆会话 / RPG state）引入 `TypedDict` 或 `dataclass`，并在 `core/` 逐步打开 mypy 的 untyped-def 检查。不必全仓重写，先给最常被传递的几个 dict 定形状。
+> 已处理：当前工作区变更（commit 待提交）：新增 core、gift、RPG 分层 `TypedDict`，标注共享存储、记忆、送礼和 RPG 高频入口；`MessageRow` 保持 SQLite 六元素元组协议。群内用户与顶层全局用户仍共享同一对象，运行时视图仍由序列化层过滤，JSON schema 与 `SCHEMA_VERSION` 均未改变。RPG 群状态通过专用 accessor 接入 boss/analytics/team/scheduled，`python -m mypy` 在 `follow_imports = "silent"` 下检查 17 个传播模块，CI 门禁仍留给 M13。
 
 ### M5. 人设 Prompt 文案在“代码硬编码”与“可热重载 JSON”之间随意分布
 - [ ] 待办

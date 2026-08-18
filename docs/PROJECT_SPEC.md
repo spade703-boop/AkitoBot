@@ -507,7 +507,7 @@ def reload_assets():
 1. 确认 `.env` 未被追踪（`git status` 中不出现）
 2. 确认 `/data` 下无新增被追踪文件
 3. 确认 `.env.example` 已同步最新的可配置项
-4. `ruff check nonebot_plugin_akito/` 通过（必需，应为 0 错误）；`mypy` 可选，未纳入日常推送流程
+4. `ruff check nonebot_plugin_akito/` 通过（必需，应为 0 错误）；`python -m mypy` 检查 M4 已传播模块（当前覆盖 17 个模块，可选，暂未纳入 CI）
 5. 测试执行遵循“**先测改动处，再看风险补全量**”：
    - 只改单个叶子模块时，至少跑对应测试文件；
    - 改到 `core/`、`tests/conftest.py`、多模块共享逻辑、或一次改了多个功能模块时，必须补跑全量；

@@ -6,8 +6,8 @@ from collections import Counter
 import random
 
 from nonebot import on_command
-from nonebot.adapters import Bot, Event, Message
-from nonebot.adapters.onebot.v11 import MessageSegment
+from nonebot.adapters import Bot, Message
+from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageSegment
 from nonebot.params import CommandArg
 
 from ...core import SUPERUSER_QQ, is_sleeping
@@ -25,6 +25,7 @@ from ...core.game_store import (
     _today_str,
     _weighted_choice,
 )
+from ...core.types import GroupRecord
 from ..gift import _bond_level
 from .analytics import record_battle, record_team_attempt
 from .boss import _cleanup_stale_world_boss, _maybe_spawn_world_boss_lines
@@ -33,6 +34,8 @@ from .config import _cfg, _copy, _error, _line
 from .hunt import _battle_debuff_line, _battle_supply_line, _hunt_result_lines, _team_minor_lines
 from .player import _ensure_player, _resolve_group
 from .rewards import _apply_team_minor_encounter, _settle_coop, _settle_solo
+from .state import _rpg_state
+from .types import RpgUserRecord
 from .utils import _roll_fail_flavor, _support_chance, _team_success_rate
 
 
@@ -104,9 +107,9 @@ def _roll_negative_team_event(intimacy: int, rng=random) -> str:
     return _weighted_choice(cands, rng)
 
 
-def _team_bond_daily_pairs(group: dict, today: str) -> dict:
+def _team_bond_daily_pairs(group: GroupRecord, today: str) -> dict[str, int]:
     """按天记录每对群友的组队羁绊增长次数，避免刷取。"""
-    rpg = group.setdefault("rpg", {})
+    rpg = _rpg_state(group)
     daily = rpg.get("team_bond_daily")
     if not isinstance(daily, dict) or daily.get("date") != today:
         daily = {"date": today, "pairs": {}}
@@ -118,7 +121,15 @@ def _team_bond_daily_pairs(group: dict, today: str) -> dict:
     return pairs
 
 
-def _grant_team_bond(group: dict, uid1: str, uid2: str, today: str, *, win: bool, extra: int = 0) -> int:
+def _grant_team_bond(
+    group: GroupRecord,
+    uid1: str,
+    uid2: str,
+    today: str,
+    *,
+    win: bool,
+    extra: int = 0,
+) -> int:
     """成功组队后，按天给该 pair 小幅增长羁绊。"""
     t = _cfg("team", {})
     limit = max(0, int(t.get("bond_gain_daily_limit", 1)))
@@ -237,7 +248,16 @@ def _build_fail_rescue_broadcast(
     return _join_broadcast_lines([fail_line, turn_line, rescue_line, coop])
 
 
-def _settle_team_result(group: dict, initiator: str, target: str, b: dict, a: dict, today: str, raw_intimacy: int, bond_level: int) -> dict:
+def _settle_team_result(
+    group: GroupRecord,
+    initiator: str,
+    target: str,
+    b: RpgUserRecord,
+    a: RpgUserRecord,
+    today: str,
+    raw_intimacy: int,
+    bond_level: int,
+) -> dict:
     """统一的组队结算入口：普通成功与援护拉回后的组队都共用。"""
     negative_event = _roll_negative_team_event(raw_intimacy, random)
     negative_spec = _negative_team_event_spec(negative_event)
@@ -265,13 +285,13 @@ def _settle_team_result(group: dict, initiator: str, target: str, b: dict, a: di
 
 
 def _record_team_metrics(
-    group: dict,
+    group: GroupRecord,
     today: str,
     outcome: dict,
     initiator: str,
     target: str,
-    b: dict,
-    a: dict,
+    b: RpgUserRecord,
+    a: RpgUserRecord,
     before: dict[str, tuple[int, int]],
     *,
     formed: bool,
@@ -293,7 +313,7 @@ team_cmd = on_command("组队", priority=5, block=True)
 
 
 @team_cmd.handle()
-async def _(bot: Bot, event: Event, args: Message = CommandArg()):
+async def _(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
     group_id, rejection = _resolve_group(event)
     if rejection:
         await team_cmd.finish(MessageSegment.reply(event.message_id) + rejection)

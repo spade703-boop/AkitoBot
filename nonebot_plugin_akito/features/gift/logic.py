@@ -5,17 +5,21 @@ from __future__ import annotations
 import asyncio
 import random
 import sys
+from typing import Any, cast
 
 from nonebot.adapters import Event
 from nonebot.adapters.onebot.v11 import MessageSegment
 
+from ...core.types import GroupRecord
+from .types import GiftUserRecord, WeddingInvitationRecord
 
-def _pkg():
+
+def _pkg() -> Any:
     return sys.modules[__package__]
 
 
-def _get_user(group: dict, user_id, display_name: str = "") -> dict:
-    user = _pkg().get_user(group, user_id, display_name)
+def _get_user(group: GroupRecord, user_id: object, display_name: str = "") -> GiftUserRecord:
+    user = cast(GiftUserRecord, _pkg().get_user(group, user_id, display_name))
     user.setdefault("last_sign_in", "")
     user.setdefault("last_gift", "")
     user.setdefault("steal_date", "")
@@ -26,23 +30,23 @@ def _get_user(group: dict, user_id, display_name: str = "") -> dict:
     return user
 
 
-def _count_key(frm, to) -> str:
+def _count_key(frm: object, to: object) -> str:
     return f"{frm}>{to}"
 
 
-def _bump_count(group: dict, frm, to) -> int:
+def _bump_count(group: GroupRecord, frm: object, to: object) -> int:
     counts = group.setdefault("counts", {})
     key = _count_key(frm, to)
     counts[key] = int(counts.get(key, 0)) + 1
     return counts[key]
 
 
-def _get_count(group: dict, frm, to) -> int:
+def _get_count(group: GroupRecord, frm: object, to: object) -> int:
     return int(group.get("counts", {}).get(_count_key(frm, to), 0))
 
 
 def _record_wedding_invitation(
-    group: dict,
+    group: GroupRecord,
     sender_id: str,
     recipient_id: str,
     date: str = "",
@@ -50,7 +54,7 @@ def _record_wedding_invitation(
     historical: bool = False,
     bonus: int = 0,
 ) -> None:
-    records = group.setdefault("wedding_invitations", {})
+    records = cast(dict[str, WeddingInvitationRecord], group.setdefault("wedding_invitations", {}))
     key = _pkg()._pair_key(sender_id, recipient_id)
     record = records.get(key)
     if not isinstance(record, dict):
@@ -75,8 +79,8 @@ def _record_wedding_invitation(
         record["has_1314"] = True
 
 
-def _wedding_pair_has_1314(group: dict, sender_id: str, recipient_id: str) -> bool:
-    records = group.get("wedding_invitations", {})
+def _wedding_pair_has_1314(group: GroupRecord, sender_id: str, recipient_id: str) -> bool:
+    records = cast(dict[str, WeddingInvitationRecord], group.get("wedding_invitations", {}))
     if not isinstance(records, dict):
         return False
     record = records.get(_pkg()._pair_key(sender_id, recipient_id))
@@ -90,17 +94,17 @@ def _wedding_pair_has_1314(group: dict, sender_id: str, recipient_id: str) -> bo
     return True
 
 
-def _global_user(group: dict, user_id: str) -> dict:
+def _global_user(group: GroupRecord, user_id: str) -> GiftUserRecord:
     users = group.get("_global_users")
     if not isinstance(users, dict):
         return _get_user(group, user_id)
-    user = users.setdefault(str(user_id), {})
+    user = cast(GiftUserRecord, users.setdefault(str(user_id), {}))
     user.setdefault("points", 0)
     user.setdefault("display_name", "")
     return user
 
 
-def _apply_historical_wedding_records(group: dict) -> int:
+def _apply_historical_wedding_records(group: GroupRecord) -> int:
     cfg = _pkg()._wedding_cfg()
     records = cfg.get("historical_records", [])
     if not isinstance(records, list):
@@ -123,7 +127,7 @@ def _apply_historical_wedding_records(group: dict) -> int:
 
 
 def _settle_wedding_invitation(
-    group: dict,
+    group: GroupRecord,
     sender_id: str,
     recipient_id: str,
     out: dict,
@@ -169,7 +173,7 @@ def _bond_level(value: int) -> dict:
     }
 
 
-def _bond_card(group: dict, me: str, other: str):
+def _bond_card(group: GroupRecord, me: str, other: str):
     pkg = _pkg()
     value = pkg._get_intimacy(group, me, other)
     level = _bond_level(value)
@@ -192,7 +196,7 @@ def _bond_card(group: dict, me: str, other: str):
 
 
 def _settle(
-    group: dict,
+    group: GroupRecord,
     sender_id: str,
     target_id: str,
     gift: dict,
@@ -275,13 +279,13 @@ def _steal_bond_loss(cfg: dict, outcome: str, amount: int, bond: int, rng=random
     return rng.randint(int(cfg.get("bond_neg_min", 10)), int(cfg.get("bond_neg_max", 30)))
 
 
-def _settle_steal(group: dict, thief_id: str, victim_id: str, outcome: str, rng=random) -> dict:
+def _settle_steal(group: GroupRecord, thief_id: str, victim_id: str, outcome: str, rng=random) -> dict:
     pkg = _pkg()
     cfg = pkg._steal_cfg()
     thief = _get_user(group, thief_id)
     victim = _get_user(group, victim_id)
     bond = pkg._get_intimacy(group, thief_id, victim_id)
-    out = {"outcome": outcome, "amount": 0, "bond": 0}
+    out: dict[str, Any] = {"outcome": outcome, "amount": 0, "bond": 0}
 
     if outcome == "success":
         victim_points = int(victim.get("points", 0))
@@ -356,18 +360,20 @@ def _resolve_group(event: Event) -> tuple[str | None, str | None]:
     return group_id, None
 
 
-def _reset_today_signins(group: dict, today: str) -> int:
+def _reset_today_signins(group: GroupRecord, today: str) -> int:
     cleared = 0
-    for user in group.get("users", {}).values():
+    for base_user in group.get("users", {}).values():
+        user = cast(GiftUserRecord, base_user)
         if isinstance(user, dict) and user.get("last_sign_in") == today:
             user["last_sign_in"] = ""
             cleared += 1
     return cleared
 
 
-def _reset_today_steals(group: dict, today: str) -> int:
+def _reset_today_steals(group: GroupRecord, today: str) -> int:
     cleared = 0
-    for user in group.get("users", {}).values():
+    for base_user in group.get("users", {}).values():
+        user = cast(GiftUserRecord, base_user)
         if not isinstance(user, dict):
             continue
         touched = False
@@ -392,7 +398,7 @@ async def _sign_in_delay() -> None:
     )
 
 
-def _top_partners(group: dict, user_id: str, limit: int = 5) -> list[tuple[str, int]]:
+def _top_partners(group: GroupRecord, user_id: str, limit: int = 5) -> list[tuple[str, int]]:
     result: list[tuple[str, int]] = []
     for key, value in group.get("intimacy", {}).items():
         ids = key.split("|||")
@@ -403,7 +409,7 @@ def _top_partners(group: dict, user_id: str, limit: int = 5) -> list[tuple[str, 
     return result[:limit]
 
 
-def _name_of(group: dict, user_id: str) -> str:
+def _name_of(group: GroupRecord, user_id: str) -> str:
     users = group.get("_global_users")
     if not isinstance(users, dict):
         users = group.get("users", {})

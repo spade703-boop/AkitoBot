@@ -5,10 +5,11 @@ from __future__ import annotations
 from datetime import date, timedelta
 import math
 import random
+from typing import Any, cast
 
 from nonebot import on_command
-from nonebot.adapters import Bot, Event, Message
-from nonebot.adapters.onebot.v11 import MessageSegment
+from nonebot.adapters import Bot, Message
+from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageSegment
 from nonebot.log import logger
 from nonebot.params import CommandArg
 
@@ -26,6 +27,7 @@ from ...core.game_store import (
     _save_data,
     _today_str,
 )
+from ...core.types import GroupRecord
 from ..gift import _bond_level
 from ..gift.pages import build_world_boss_rank_page_data
 from ..gift.render import render_bond_page
@@ -36,6 +38,8 @@ from .analytics import (
 )
 from .config import _cfg, _copy, _error, _line
 from .player import _consume_equip, _ensure_player, _equip_power, _level_of, _resolve_group
+from .state import _rpg_state
+from .types import BossParticipantRecord, RpgUserRecord, WorldBossRecord
 from .utils import (
     _fortune_combat_factor,
     _roll_fail_flavor,
@@ -58,19 +62,7 @@ def _soft_scale_count(active_count: int, *, base_cap: int, extra_rate: float, ma
     max_cap = max(base_cap, int(max_cap))
     return min(max_cap, base_cap + math.ceil((active_count - base_cap) * extra_rate))
 
-
-
-
-
-def _rpg_state(group: dict) -> dict:
-    state = group.get("rpg")
-    if not isinstance(state, dict):
-        state = {}
-        group["rpg"] = state
-    return state
-
-
-def _parse_iso_day(text) -> date | None:
+def _parse_iso_day(text: object) -> date | None:
     if not isinstance(text, str) or not text:
         return None
     try:
@@ -79,7 +71,7 @@ def _parse_iso_day(text) -> date | None:
         return None
 
 
-def _active_world_boss(group: dict, today: str) -> dict | None:
+def _active_world_boss(group: GroupRecord, today: str) -> WorldBossRecord | None:
     state = _rpg_state(group)
     boss = state.get("world_boss")
     if not isinstance(boss, dict):
@@ -98,7 +90,7 @@ def _active_world_boss(group: dict, today: str) -> dict | None:
     return boss
 
 
-def _recent_active_user_ids(group: dict, today: str) -> list[str]:
+def _recent_active_user_ids(group: GroupRecord, today: str) -> list[str]:
     cfg = _world_boss_cfg()
     window = max(1, int(cfg.get("activity_window_days", 7)))
     today_day = _parse_iso_day(today)
@@ -106,7 +98,8 @@ def _recent_active_user_ids(group: dict, today: str) -> list[str]:
         return []
     cutoff = today_day - timedelta(days=window - 1)
     user_ids: list[str] = []
-    for uid, rec in group.get("users", {}).items():
+    users = cast(dict[str, RpgUserRecord], group.get("users", {}))
+    for uid, rec in users.items():
         if not isinstance(rec, dict):
             continue
         last_days = [_parse_iso_day(rec.get("last_sign_in")), _parse_iso_day(rec.get("signin_last_date"))]
@@ -115,7 +108,7 @@ def _recent_active_user_ids(group: dict, today: str) -> list[str]:
     return user_ids
 
 
-def _expected_daily_power(user: dict) -> int:
+def _expected_daily_power(user: RpgUserRecord) -> int:
     ecfg = _cfg("equip", {})
     level = _level_of(int(user.get("exp", 0)))
     base = int(ecfg.get("base", 10))
@@ -124,7 +117,7 @@ def _expected_daily_power(user: dict) -> int:
     return max(1, base + level * per_level + expected_roll)
 
 
-def _world_boss_snapshot(group: dict, today: str) -> dict:
+def _world_boss_snapshot(group: GroupRecord, today: str) -> dict[str, Any]:
     cfg = _world_boss_cfg()
     active_ids = _recent_active_user_ids(group, today)
     active_count = len(active_ids)
@@ -167,11 +160,11 @@ def _world_boss_snapshot(group: dict, today: str) -> dict:
     }
 
 
-def _snapshot_averages(group: dict, user_ids: list[str]) -> tuple[int, int]:
+def _snapshot_averages(group: GroupRecord, user_ids: list[str]) -> tuple[int, int]:
     levels: list[int] = []
     powers: list[int] = []
     for uid in user_ids:
-        rec = group.get("users", {}).get(uid, {})
+        rec = cast(RpgUserRecord, group.get("users", {}).get(uid, {}))
         if not isinstance(rec, dict):
             continue
         levels.append(_level_of(int(rec.get("exp", 0))))
@@ -181,7 +174,7 @@ def _snapshot_averages(group: dict, user_ids: list[str]) -> tuple[int, int]:
     return avg_level, avg_power
 
 
-def _force_world_boss_snapshot(group: dict, today: str) -> dict:
+def _force_world_boss_snapshot(group: GroupRecord, today: str) -> dict[str, Any]:
     cfg = _world_boss_cfg()
     active_ids = _recent_active_user_ids(group, today)
     active_count = len(active_ids)
@@ -214,21 +207,21 @@ def _force_world_boss_snapshot(group: dict, today: str) -> dict:
 
 
 def _spawn_world_boss(
-    group: dict,
+    group: GroupRecord,
     today: str,
     user_id: str,
     rng=random,
-    snapshot: dict | None = None,
+    snapshot: dict[str, Any] | None = None,
     *,
     forced: bool = False,
-) -> dict | None:
+) -> WorldBossRecord | None:
     snap = snapshot or _world_boss_snapshot(group, today)
     if not snap.get("spawnable"):
         return None
     boss_names = _world_boss_cfg().get("boss_names", [])
     if not isinstance(boss_names, list) or not boss_names:
         boss_names = ["世界BOSS"]
-    boss = {
+    boss: WorldBossRecord = {
         "date": today,
         "name": str(rng.choice(boss_names)),
         "max_hp": int(snap["max_hp"]),
@@ -247,7 +240,12 @@ def _spawn_world_boss(
     return boss
 
 
-def _maybe_spawn_world_boss(group: dict, today: str, user_id: str, rng=random) -> dict | None:
+def _maybe_spawn_world_boss(
+    group: GroupRecord,
+    today: str,
+    user_id: str,
+    rng=random,
+) -> WorldBossRecord | None:
     if _active_world_boss(group, today):
         return None
     snapshot = _world_boss_snapshot(group, today)
@@ -258,12 +256,12 @@ def _maybe_spawn_world_boss(group: dict, today: str, user_id: str, rng=random) -
     return _spawn_world_boss(group, today, user_id, rng=rng, snapshot=snapshot)
 
 
-def _maybe_spawn_world_boss_lines(group: dict, today: str, user_id: str, rng=random) -> list[str]:
+def _maybe_spawn_world_boss_lines(group: GroupRecord, today: str, user_id: str, rng=random) -> list[str]:
     boss = _maybe_spawn_world_boss(group, today, user_id, rng=rng)
     return _world_boss_spawn_lines(boss) if boss else []
 
 
-def _boss_participants(boss: dict) -> dict:
+def _boss_participants(boss: WorldBossRecord) -> dict[str, BossParticipantRecord]:
     participants = boss.get("participants")
     if not isinstance(participants, dict):
         participants = {}
@@ -271,7 +269,14 @@ def _boss_participants(boss: dict) -> dict:
     return participants
 
 
-def _ensure_boss_participant(boss: dict, user_id: str, user: dict, today: str, *, rng=random) -> dict | None:
+def _ensure_boss_participant(
+    boss: WorldBossRecord,
+    user_id: str,
+    user: RpgUserRecord,
+    today: str,
+    *,
+    rng=random,
+) -> BossParticipantRecord | None:
     if user.get("equip_date") != today:
         return None
 
@@ -297,7 +302,13 @@ def _ensure_boss_participant(boss: dict, user_id: str, user: dict, today: str, *
     return rec
 
 
-def _boss_damage(equip_rec: dict, fortune_user: dict, today: str, *, rng=random) -> int:
+def _boss_damage(
+    equip_rec: BossParticipantRecord,
+    fortune_user: RpgUserRecord,
+    today: str,
+    *,
+    rng=random,
+) -> int:
     cfg = _world_boss_cfg()
     factor = rng.uniform(float(cfg.get("damage_factor_min", 0.92)), float(cfg.get("damage_factor_max", 1.08)))
     power = max(1, _equip_power(equip_rec))
@@ -341,7 +352,7 @@ def _apply_team_bonus(hits: dict[str, int]) -> tuple[dict[str, int], int]:
     return merged, bonus_total
 
 
-def _apply_world_boss_damage(boss: dict, hits: dict[str, int]) -> dict[str, int]:
+def _apply_world_boss_damage(boss: WorldBossRecord, hits: dict[str, int]) -> dict[str, int]:
     current_hp = max(0, int(boss.get("hp", 0)))
     positive_hits = {str(uid): max(0, int(dmg)) for uid, dmg in hits.items() if int(dmg) > 0}
     if current_hp <= 0 or not positive_hits:
@@ -393,7 +404,7 @@ def _world_boss_special_drop_cfg() -> dict:
     return cfg if isinstance(cfg, dict) else {}
 
 
-def _world_boss_contributors(boss: dict) -> dict[str, int]:
+def _world_boss_contributors(boss: WorldBossRecord) -> dict[str, int]:
     return {
         str(uid): max(0, int(dmg))
         for uid, dmg in boss.get("contributors", {}).items()
@@ -401,7 +412,7 @@ def _world_boss_contributors(boss: dict) -> dict[str, int]:
     }
 
 
-def _world_boss_bond_gains(boss: dict) -> dict[str, int]:
+def _world_boss_bond_gains(boss: WorldBossRecord) -> dict[str, int]:
     gains = boss.get("bond_gains")
     if not isinstance(gains, dict):
         gains = {}
@@ -409,7 +420,7 @@ def _world_boss_bond_gains(boss: dict) -> dict[str, int]:
     return gains
 
 
-def _world_boss_team_bond_daily_pairs(group: dict, today: str) -> dict:
+def _world_boss_team_bond_daily_pairs(group: GroupRecord, today: str) -> dict[str, int]:
     rpg = _rpg_state(group)
     daily = rpg.get("world_boss_team_bond_daily")
     if not isinstance(daily, dict) or daily.get("date") != today:
@@ -423,8 +434,8 @@ def _world_boss_team_bond_daily_pairs(group: dict, today: str) -> dict:
 
 
 def _grant_world_boss_team_bond(
-    group: dict,
-    boss: dict,
+    group: GroupRecord,
+    boss: WorldBossRecord,
     uid1: str,
     uid2: str,
     today: str,
@@ -459,7 +470,7 @@ def _grant_world_boss_team_bond(
     return gain
 
 
-def _world_boss_reward_values(boss: dict, *, reward_ratio: float = 1.0) -> dict[str, int]:
+def _world_boss_reward_values(boss: WorldBossRecord, *, reward_ratio: float = 1.0) -> dict[str, int]:
     rewards = _world_boss_reward_cfg()
     ratio = max(0.0, float(reward_ratio))
     reward_scale_count = max(1, int(boss.get("reward_scale_count", boss.get("scale_count", 1))))
@@ -471,7 +482,7 @@ def _world_boss_reward_values(boss: dict, *, reward_ratio: float = 1.0) -> dict[
     }
 
 
-def _world_boss_special_drop_name(boss: dict) -> str:
+def _world_boss_special_drop_name(boss: WorldBossRecord) -> str:
     cfg = _world_boss_special_drop_cfg()
     items = cfg.get("items", {})
     if not isinstance(items, dict):
@@ -479,7 +490,7 @@ def _world_boss_special_drop_name(boss: dict) -> str:
     return str(items.get(str(boss.get("name", "")), ""))
 
 
-def _roll_world_boss_special_drop(user: dict, boss: dict, *, rng=random) -> str:
+def _roll_world_boss_special_drop(user: RpgUserRecord, boss: WorldBossRecord, *, rng=random) -> str:
     item_name = _world_boss_special_drop_name(boss)
     if not item_name:
         return ""
@@ -500,10 +511,10 @@ def _roll_world_boss_special_drop(user: dict, boss: dict, *, rng=random) -> str:
 
 
 def _world_boss_reward_results(
-    group: dict,
+    group: GroupRecord,
     contributors: dict[str, int],
     *,
-    boss: dict | None = None,
+    boss: WorldBossRecord | None = None,
     exp_pool: int,
     points_pool: int,
     exp_fixed: int,
@@ -511,8 +522,8 @@ def _world_boss_reward_results(
     last_hit_uids: list[str] | tuple[str, ...] | set[str] | None = None,
     bond_gains: dict[str, int] | None = None,
     allow_special_drop: bool = False,
-) -> list[dict]:
-    rows: list[dict] = []
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
     exp_alloc = _allocate_exact(exp_pool, contributors)
     points_alloc = _allocate_exact(points_pool, contributors)
     reward_cfg = _world_boss_reward_cfg()
@@ -562,7 +573,7 @@ def _world_boss_reward_results(
     return rows
 
 
-def _world_boss_reward_lines(rows: list[dict]) -> list[str]:
+def _world_boss_reward_lines(rows: list[dict[str, Any]]) -> list[str]:
     lines: list[str] = []
     for row in rows:
         extra = ""
@@ -598,9 +609,14 @@ def _normalize_last_hit_uids(last_hit_ref) -> list[str]:
     return [text] if text else []
 
 
-def _world_boss_kill_settlement(group: dict, boss: dict, *, last_hit_uids: list[str] | tuple[str, ...] | set[str] | None = None) -> dict:
+def _world_boss_kill_settlement(
+    group: GroupRecord,
+    boss: WorldBossRecord,
+    *,
+    last_hit_uids: str | list[str] | tuple[str, ...] | set[str] | None = None,
+) -> dict[str, Any]:
     contributors = _world_boss_contributors(boss)
-    result = {
+    result: dict[str, Any] = {
         "monster": str(boss.get("name", "世界BOSS")),
         "rows": [],
         "last_hit_uids": [],
@@ -654,14 +670,14 @@ def _world_boss_kill_settlement(group: dict, boss: dict, *, last_hit_uids: list[
     return result
 
 
-def _world_boss_kill_lines(group: dict, boss: dict) -> list[str]:
+def _world_boss_kill_lines(group: GroupRecord, boss: WorldBossRecord) -> list[str]:
     settlement = _world_boss_kill_settlement(group, boss, last_hit_uids=boss.get("last_hit_uids") or boss.get("last_hit"))
     if not settlement["rows"]:
         return settlement["lines"]
     return [*settlement["lines"], *_world_boss_reward_lines(settlement["rows"])]
 
 
-def _world_boss_unfinished_lines(group: dict, boss: dict) -> list[str]:
+def _world_boss_unfinished_lines(group: GroupRecord, boss: WorldBossRecord) -> list[str]:
     contributors = _world_boss_contributors(boss)
     if not contributors:
         record_world_boss_settlement(group, boss, [], killed=False)
@@ -697,7 +713,7 @@ def _world_boss_unfinished_lines(group: dict, boss: dict) -> list[str]:
     return lines
 
 
-def _cleanup_stale_world_boss(group: dict, today: str) -> tuple[list[str], bool]:
+def _cleanup_stale_world_boss(group: GroupRecord, today: str) -> tuple[list[str], bool]:
     state = _rpg_state(group)
     boss = state.get("world_boss")
     if not isinstance(boss, dict):
@@ -713,7 +729,7 @@ def _cleanup_stale_world_boss(group: dict, today: str) -> tuple[list[str], bool]
     return lines, True
 
 
-def _world_boss_spawn_lines(boss: dict | None) -> list[str]:
+def _world_boss_spawn_lines(boss: WorldBossRecord | None) -> list[str]:
     if not boss:
         return []
     return [
@@ -729,7 +745,7 @@ def _world_boss_spawn_lines(boss: dict | None) -> list[str]:
     ]
 
 
-def _world_boss_status_lines(group: dict, today: str) -> list[str]:
+def _world_boss_status_lines(group: GroupRecord, today: str) -> list[str]:
     boss = _active_world_boss(group, today)
     if not boss:
         return [_error("boss_none")]
@@ -807,7 +823,7 @@ world_boss_cmd = on_command("世界BOSS", priority=5, block=True)
 
 
 @world_boss_cmd.handle()
-async def _(event: Event, args: Message = CommandArg()):
+async def _(event: GroupMessageEvent, args: Message = CommandArg()):
     group_id, rejection = _resolve_group(event)
     if rejection:
         await world_boss_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
@@ -833,7 +849,7 @@ force_world_boss_cmd = on_command("强制开启世界BOSS", priority=5, block=Tr
 
 
 @force_world_boss_cmd.handle()
-async def _(event: Event, args: Message = CommandArg()):
+async def _(event: GroupMessageEvent, args: Message = CommandArg()):
     if str(event.get_user_id()) != SUPERUSER_QQ:
         return
 
@@ -872,7 +888,7 @@ test_world_rank_cmd = on_command("test世界排行", aliases={"测试世界排�
 
 
 @test_world_rank_cmd.handle()
-async def _(event: Event, args: Message = CommandArg()):
+async def _(event: GroupMessageEvent, args: Message = CommandArg()):
     if str(event.get_user_id()) != SUPERUSER_QQ:
         return
 
@@ -918,7 +934,7 @@ attack_world_boss_cmd = on_command("攻击世界BOSS", priority=5, block=True)
 
 
 @attack_world_boss_cmd.handle()
-async def _(event: Event, args: Message = CommandArg()):
+async def _(event: GroupMessageEvent, args: Message = CommandArg()):
     group_id, rejection = _resolve_group(event)
     if rejection:
         await attack_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
@@ -999,7 +1015,7 @@ team_world_boss_cmd = on_command("组队世界BOSS", priority=5, block=True)
 
 
 @team_world_boss_cmd.handle()
-async def _(bot: Bot, event: Event, args: Message = CommandArg()):
+async def _(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
     group_id, rejection = _resolve_group(event)
     if rejection:
         await team_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
@@ -1032,8 +1048,8 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
         if not boss:
             if changed:
                 _save_data(data)
-            lines = [*settlement_lines, _error("boss_none")]
-            await team_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
+            no_boss_lines = [*settlement_lines, _error("boss_none")]
+            await team_world_boss_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(no_boss_lines))
 
         b = _ensure_player(group, initiator, _display_name(event))
         if b.get("equip_date") != today:

@@ -24,6 +24,17 @@ def atomic_save(data: dict, target_path: Path):
 
 # ── 测试 ───────────────────────────────────────────────────────────────────
 
+def test_get_user_memory_initializes_and_reuses_mutable_session(monkeypatch):
+    monkeypatch.setattr(memory, "MEMORY_DB", {})
+
+    session = memory.get_user_memory("group_123")
+    session["history"].append({"role": "user", "content": "你好"})
+
+    assert session["temp_implants"] == []
+    assert memory.get_user_memory("group_123") is session
+    assert memory.get_user_memory("group_123")["history"][0]["content"] == "你好"
+
+
 def test_atomic_write_creates_file(tmp_path: Path):
     """首次写入创建目标文件。"""
     target = tmp_path / "test_memory.json"

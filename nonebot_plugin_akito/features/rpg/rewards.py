@@ -10,6 +10,7 @@ import random
 from . import combat, events, inventory, utils
 from .config import _cfg
 from .player import _combat_power, _consume_equip, _level_of
+from .types import ActiveBattleView, RpgUserRecord
 
 
 def _challenge_exp(win: bool, level: int) -> int:
@@ -20,7 +21,7 @@ def _challenge_exp(win: bool, level: int) -> int:
     return int(c.get("lose_exp_base", 15)) + level * int(c.get("lose_exp_per_level", 2))
 
 
-def _challenge_points(win: bool, user: dict) -> int:
+def _challenge_points(win: bool, user: RpgUserRecord) -> int:
     """打怪积分（少量）：把「打怪赚分 → 送礼攒羁绊 → 组队」串成闭环。替换装（equip_rebought）积分打对折。"""
     c = _cfg("challenge", {})
     pts = int(c.get("win_points", 30)) if win else int(c.get("lose_points", 10))
@@ -52,7 +53,7 @@ def _solo_exp_bonus(win: bool) -> float:
     return max(0.0, float(_solo_cfg().get(key, 0.0)))
 
 
-def _battle_power(user: dict, active_supply: dict | None) -> float:
+def _battle_power(user: RpgUserRecord, active_supply: ActiveBattleView | None) -> float:
     """应用玩家自己的战备战力；组队时不会把效果扩散给队友。"""
     power = float(_combat_power(user))
     effect = active_supply.get("effect", {}) if active_supply else {}
@@ -65,7 +66,7 @@ def _battle_power(user: dict, active_supply: dict | None) -> float:
 
 
 def _apply_extra_rewards(
-    user: dict,
+    user: RpgUserRecord,
     *,
     exp: int = 0,
     points: int = 0,
@@ -88,9 +89,9 @@ def _apply_extra_rewards(
     return exp_gain, points_gain, level_before, level_after
 
 
-def _apply_rewards(user: dict, today: str, *, win: bool, monster: dict, event_key: str = "",
+def _apply_rewards(user: RpgUserRecord, today: str, *, win: bool, monster: dict, event_key: str = "",
                    exp_bonus: float = 0.0, exp_mult: float = 1.0, drop_mult: float = 1.0,
-                   battle_supply: dict | None = None, rescue_exp_mult: float = 1.0,
+                   battle_supply: ActiveBattleView | None = None, rescue_exp_mult: float = 1.0,
                    rng=random) -> dict:
     """给单个玩家结算（经验[含看破/单刷或组队额外加成/双倍卡/精英/今日增益] + 掉落 + 积分）并消耗其今日装备，记一次战绩。
 
@@ -174,7 +175,7 @@ def _apply_rewards(user: dict, today: str, *, win: bool, monster: dict, event_ke
     }
 
 
-def _support_bonus_exp(scene: str, user: dict, level: int) -> int:
+def _support_bonus_exp(scene: str, user: RpgUserRecord, level: int) -> int:
     ratio = float(events._support_spec(scene).get("exp_ratio", 0.0))
     if ratio <= 0:
         return 0
@@ -184,14 +185,14 @@ def _support_bonus_exp(scene: str, user: dict, level: int) -> int:
     return max(0, exp)
 
 
-def _support_bonus_points(scene: str, user: dict) -> int:
+def _support_bonus_points(scene: str, user: RpgUserRecord) -> int:
     ratio = float(events._support_spec(scene).get("points_ratio", 0.0))
     if ratio <= 0:
         return 0
     return max(0, int(_challenge_points(True, user) * ratio))
 
 
-def _apply_support_bonus(user: dict, out: dict) -> None:
+def _apply_support_bonus(user: RpgUserRecord, out: dict) -> None:
     scene = str(out.get("support_scene", ""))
     if scene not in {"akito_success", "akito_fail", "duo_combo"}:
         out["support_exp"] = 0
@@ -210,7 +211,7 @@ def _apply_support_bonus(user: dict, out: dict) -> None:
     out["new_level"] = _level_of(int(user.get("exp", 0)))
 
 
-def _apply_minor_encounter(user: dict, out: dict, *, rng=random) -> None:
+def _apply_minor_encounter(user: RpgUserRecord, out: dict, *, rng=random) -> None:
     out["minor_event"] = ""
     out["minor_reward_parts"] = []
     out["minor_old_level"] = int(out.get("new_level", out.get("old_level", 1)))
@@ -267,7 +268,7 @@ def _apply_minor_encounter(user: dict, out: dict, *, rng=random) -> None:
     out["new_level"] = level_after
 
 
-def _apply_team_minor_encounter(b: dict, a: dict, out: dict, *, rng=random) -> None:
+def _apply_team_minor_encounter(b: RpgUserRecord, a: RpgUserRecord, out: dict, *, rng=random) -> None:
     out["team_minor_event"] = ""
     out["team_minor_parts"] = []
     out["team_minor_b_parts"] = []
@@ -383,7 +384,14 @@ def _apply_team_minor_encounter(b: dict, a: dict, out: dict, *, rng=random) -> N
     }
 
 
-def _settle_solo(user: dict, today: str, *, direct: bool = False, rng=random, buff: dict | None = None) -> dict:
+def _settle_solo(
+    user: RpgUserRecord,
+    today: str,
+    *,
+    direct: bool = False,
+    rng=random,
+    buff: dict | None = None,
+) -> dict:
     """单刷完整结算：遭遇(含精英) → 事件 → 胜负（随机系数 + 隐藏运势）→ 发奖（含今日增益）→ 消耗装备。
 
     `direct=True` 仅用于直接执行「今日打怪」的主动单人线，吃到小额稳定性与经验补偿；
@@ -422,7 +430,7 @@ def _settle_solo(user: dict, today: str, *, direct: bool = False, rng=random, bu
     guard_triggered = bool(not res["win"] and battle_guard)
     guard_uses_left = 0
     guard_exp_mult = 1.0
-    if guard_triggered:
+    if guard_triggered and battle_guard is not None:
         res["win"] = True
         guard_exp_mult = float(battle_guard["effect"].get("rescue_exp_mult", 1.0))
         guard_uses_left = inventory._consume_battle_supply(user, guard=True)
@@ -434,7 +442,7 @@ def _settle_solo(user: dict, today: str, *, direct: bool = False, rng=random, bu
     out = {**res, **rew, "monster": monster, "event": event_key, "elite": is_elite, "buff": buff,
            "support_scene": support_scene, "base_win": base_win, "direct_solo": direct,
            "battle_guard_triggered": guard_triggered,
-           "battle_guard_name": str(battle_guard.get("name", "")) if guard_triggered else "",
+           "battle_guard_name": str(battle_guard.get("name", "")) if guard_triggered and battle_guard else "",
            "battle_guard_uses_left": guard_uses_left}
     _apply_support_bonus(user, out)
     out["reward_new_level"] = int(out.get("new_level", out.get("old_level", 1)))
@@ -443,8 +451,8 @@ def _settle_solo(user: dict, today: str, *, direct: bool = False, rng=random, bu
 
 
 def _settle_coop(
-    b: dict,
-    a: dict,
+    b: RpgUserRecord,
+    a: RpgUserRecord,
     today: str,
     *,
     exp_bonus: float = 0.0,
