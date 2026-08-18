@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 import nonebot_plugin_akito.features.random_paro as random_paro
-import nonebot_plugin_akito.features.random_paro_render as random_paro_render
+import nonebot_plugin_akito.features.random_paro.render as random_paro_render
 
 
 def test_page_width_values_from_builders():
@@ -16,7 +16,9 @@ def test_page_width_values_from_builders():
     rank_data = random_paro._build_paro_rank_page_data_from_stats(group_stats, period_stats, "daily")
     cook_data = random_paro._build_egg_rank_page_data_from_stats(group_stats, period_stats, "history")
     profile_data = random_paro._build_personal_paro_page_data_from_user_stats("42", "Tester", user_stats, egg_history)
-    draw_data = random_paro._build_draw_result_page_data([("Akito", "Toya", False, None)], remaining=2, nickname="Tester")
+    draw_data = random_paro._build_draw_result_page_data(
+        [("Akito", "Toya", False, None)], remaining=2, nickname="Tester"
+    )
 
     assert rank_data["page_width"] == 680
     assert cook_data["page_width"] == 680
@@ -88,7 +90,7 @@ def test_draw_result_template_uses_120px_pair_tiles():
     assert "background: linear-gradient(var(--card), var(--card)) padding-box," in template_text
     assert "linear-gradient(90deg, #FF7722 0%, #FF7722 40%, #0077DD 60%, #0077DD 100%) border-box;" in template_text
     assert "border: 2px solid transparent;" in template_text
-    assert '.x-badge::before {' in template_text
+    assert ".x-badge::before {" in template_text
     assert "margin: 12px auto 0;" in template_text
     assert "font-size: 20px;" in template_text
     assert "padding: 7px 18px;" in template_text

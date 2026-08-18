@@ -68,27 +68,15 @@
 
 ## 🟡 中优先级（重复与臃肿）
 
-### M6. HTML 渲染基础设施四处重复，且并发信号量没真正共享
-- [ ] 待办
-- **证据**：同一段 `render_*_page` + Jinja 环境 + `_RENDER_SEM = asyncio.Semaphore(2)` 复制在 `features/gift/render.py`、`features/random_paro/render.py`、`features/bond_render.py`、`features/random_paro_render.py`。
-- **实质缺陷**：每个 `render.py` 各自 `Semaphore(2)`，所以“全局最多 2 个无头 Chromium 并发渲染”实际是 **4 个**——Chromium 很吃内存，是真实资源风险。
-- **建议**：抽到 `features/_shared/htmlrender.py`，用**单个**模块级信号量，模板目录作参数传入。
-
 ### M7. 两个功能配置的访问器脚手架完全重复
 - [ ] 待办
 - **证据**：`features/gift/config.py:244-265` 与 `features/rpg/config.py:778-810` 各有一份一模一样的 `_cfg`/`_copy`/`_error`/`_load_config`/`reload_*` + `DEFAULT_*_CONFIG` 回退模式；`_weighted_choice` 亦有两份（`core/game_store.py:298` 与 gift）。
 - **建议**：抽一个共享的 config-base（加载+回退+`_line`/`_error` 格式化）放 core 或 `_shared`。
 
 ### M8. `random_paro/__init__.py` 是 1984 行的上帝模块
-- [ ] 待办
-- **证据**：`features/random_paro/__init__.py`——~30 个 PIL 渲染 helper、模糊匹配、抽卡逻辑、22 个命令，含 5 个面向线上的 `测试…` 预览孪生命令（`:1710-1774`）；`_render_X`/`_build_X`/`_..._from_stats` 四变体包装（`:1136-1224`）是纯样板膨胀。
-- **建议**：拆成 `draw.py` / `ranking.py` / `commands.py`（`render.py` 已存在但大部分 PIL 却在 `__init__`）；`测试…` 孪生命令合并进正式 handler，用调试开关或超管门控。
-
-### M9. 模型 ID 等魔法字符串散落
-- [ ] 待办
-- **证据**：`"deepseek-v4-flash"` 出现在 4 处（`core/api.py:91,112,148` + `features/impression/__init__.py:43`）；`glm-4.6v-flash`/`BAAI/bge-m3`/`BAAI/bge-reranker-v2-m3` 均为裸字面量（`core/api.py:213,594,604`）。
-- **影响**：换对话模型要改 4 个地方，且 `impression` 那份会和 `api.py` 悄悄漂移。
-- **建议**：core 里一处 `MODEL_CHAT`/`MODEL_VISION`/`MODEL_EMBED`/`MODEL_RERANK` 常量，最好支持 `.env` 覆盖。
+- [x] 完成
+- **证据**：原 `features/random_paro/__init__.py` 集中承载 PIL 渲染、抽取逻辑、数据状态和 22 个命令，维护边界不清晰。
+- **落地**：按职责拆成 `store.py` / `stats.py` / `draw.py` / `assets.py` / `draw_images.py` / `ranking_images.py` / `views.py` / `commands.py` / `preview.py` / `preview_commands.py`；模板移入功能目录，移除 `random_paro_render.py` 兼容壳，包根只保留命令加载与兼容导出。
 
 ### M10. 重复的小工具函数
 - [ ] 待办
@@ -104,12 +92,6 @@
 ---
 
 ## 🟢 低优先级（值得顺手收拾）
-
-### M12. 违反自己规范：源码里硬编码 QQ 号/群号
-- [ ] 待办
-- **证据**：`features/gift/config.py:34-37` 的 `wedding_invitation.historical_records` 内嵌真实 QQ 号；`core/game_store.py:28` 的 `GLOBAL_PROFILE_SOURCE_GROUP` 默认硬编码群号 `691188576`。
-- **问题**：spec §15.3 明令“代码中禁止硬编码 QQ 号”。虽非密钥，但既违规又本应属数据而非代码。
-- **建议**：移入 data 文件或 `.env`。
 
 ### M14. `SCHEMA_VERSION` 写而不用
 - [ ] 待办
@@ -127,9 +109,9 @@
 
 ## 建议的前三步（投入产出比最高）
 
-1. **统一 HTML 渲染并发控制（M6）** —— 限制无头 Chromium 的全局并发，降低峰值内存风险。
-2. **集中管理模型 ID（M9）** —— 避免不同功能的模型配置悄悄漂移，并支持环境变量覆盖。
-3. **移除源码中的真实 QQ/群号（M12）** —— 让运行环境配置与业务数据脱离源码，提升部署可移植性。
+1. **收敛可调 Prompt 文案（M5）** —— 只迁移确实需要热调整的语气文案，业务规则继续留在代码中。
+2. **明确数据 schema 版本策略（M14）** —— 在下一次数据结构变化前，决定接入版本迁移或移除误导字段。
+3. **拆分外部 API 封装（M11）** —— 优先迁出已经形成独立子系统的视觉调用。
 
 ---
 
@@ -142,12 +124,9 @@
 | M3 | 🔴 高 | SQLite 访问散落三层 | `core/memory.py`, `features/impression/__init__.py`, `handlers/commands.py` |
 | M4 | 🔴 高 | 无类型 dict 数据模型 | `core/game_store.py`, `pyproject.toml` |
 | M5 | 🔴 高 | 人设文案代码/JSON 混放 | `handlers/chat.py`, `core/life_state.py` |
-| M6 | 🟡 中 | HTML 渲染四处重复 + 信号量未共享 | `features/*/render.py`, `features/*_render.py` |
 | M7 | 🟡 中 | 功能配置访问器脚手架重复 | `features/gift/config.py`, `features/rpg/config.py` |
 | M8 | 🟡 中 | `random_paro` 1984 行上帝模块 | `features/random_paro/__init__.py` |
-| M9 | 🟡 中 | 模型 ID 魔法字符串散落 | `core/api.py`, `features/impression/__init__.py` |
 | M10 | 🟡 中 | 重复小工具函数 | `core/memory.py`, `features/impression/__init__.py` |
 | M11 | 🟡 中 | `api.py` 承载 5 类外部依赖 | `core/api.py` |
-| M12 | 🟢 低 | 硬编码 QQ/群号（违反 §15.3） | `features/gift/config.py`, `core/game_store.py` |
 | M14 | 🟢 低 | `SCHEMA_VERSION` 写而不用 | `core/game_store.py` |
 | M15 | 🟢 低 | 复读分支 JSON 解析不一致 | `handlers/chat.py` |

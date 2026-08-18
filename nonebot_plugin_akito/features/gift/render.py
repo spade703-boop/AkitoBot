@@ -1,6 +1,6 @@
 """HTML render helpers for bond (羁绊) pages.
 
-Mirrors random_paro_render.py: loads a Jinja2 template from templates/bond/,
+Mirrors random_paro.render: loads a Jinja2 template from templates/bond/,
 renders it with the given data dict, and rasterizes via headless Chromium.
 """
 

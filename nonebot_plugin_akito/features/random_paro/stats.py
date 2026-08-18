@@ -3,23 +3,33 @@
 from __future__ import annotations
 
 import json
-import sys
 
+from nonebot.log import logger
 
-def _pkg():
-    return sys.modules[__package__]
+from ...core import TZ_CN
+from . import store
+from .store import (
+    EGG_LOG_FILE,
+    PARO_STATS,
+    _new_group_stats,
+    _new_period_stats,
+    _normalize_group_stats,
+    _normalize_period_stats,
+    _normalize_user_stats,
+)
 
 
 def _today_str() -> str:
-    pkg = _pkg()
-    return pkg.datetime.now(pkg.TZ_CN).date().isoformat()
+    from datetime import datetime
+
+    return datetime.now(TZ_CN).date().isoformat()
 
 
 def _cooldown_store() -> dict[str, list[float]]:
-    cooldowns = _pkg().PARO_STATS.setdefault("cooldowns", {})
+    cooldowns = PARO_STATS.setdefault("cooldowns", {})
     if not isinstance(cooldowns, dict):
         cooldowns = {}
-        _pkg().PARO_STATS["cooldowns"] = cooldowns
+        PARO_STATS["cooldowns"] = cooldowns
     return cooldowns
 
 
@@ -84,24 +94,21 @@ def _get_fixed_side(fixed_a: str | None, fixed_b: str | None) -> str | None:
 def _roll_daily_stats(group_stats: dict, today_str: str) -> bool:
     daily_stats = group_stats.get("daily")
     if isinstance(daily_stats, dict) and daily_stats.get("date") == today_str:
-        from .store import _normalize_period_stats
-
         group_stats["daily"] = _normalize_period_stats(daily_stats, date=today_str)
         return False
-    group_stats["daily"] = _pkg()._new_period_stats(date=today_str)
+    group_stats["daily"] = _new_period_stats(date=today_str)
     return True
 
 
 def _get_or_create_group_stats(group_id: str, today_str: str) -> tuple[dict, bool]:
-    pkg = _pkg()
-    groups = pkg.PARO_STATS.setdefault("groups", {})
+    groups = PARO_STATS.setdefault("groups", {})
     group_stats = groups.get(group_id)
     if not isinstance(group_stats, dict):
-        group_stats = pkg._new_group_stats(today_str)
+        group_stats = _new_group_stats(today_str)
         groups[group_id] = group_stats
         return group_stats, True
 
-    normalized = pkg._normalize_group_stats(group_stats, today_str)
+    normalized = _normalize_group_stats(group_stats, today_str)
     normalized_changed = normalized != group_stats
     groups[group_id] = normalized
     rolled = _roll_daily_stats(normalized, today_str)
@@ -150,11 +157,10 @@ def _record_group_draw_stats(
     requested_count: int,
     now_ts: float,
 ) -> None:
-    pkg = _pkg()
     today_str = _today_str()
     group_stats, _rolled = _get_or_create_group_stats(str(group_id), today_str)
     group_stats["profiles"][user_id] = display_name
-    user_stats = pkg._normalize_user_stats(group_stats["users"].get(user_id))
+    user_stats = _normalize_user_stats(group_stats["users"].get(user_id))
     group_stats["users"][user_id] = user_stats
 
     _record_draw_stats_for_period(
@@ -174,7 +180,7 @@ def _record_group_draw_stats(
     for index, (akito_name, toya_name, is_egg, fox_type) in enumerate(results, 1):
         if not is_egg and fox_type != "foxbun":
             continue
-        pkg._append_egg_log(
+        store._append_egg_log(
             {
                 "ts": now_ts,
                 "date": today_str,
@@ -191,7 +197,7 @@ def _record_group_draw_stats(
             }
         )
 
-    pkg._save_stats()
+    store._save_stats()
 
 
 def _sorted_counter_items(counter: dict[str, int]) -> list[tuple[str, int]]:
@@ -292,9 +298,8 @@ def _record_user_egg_history_entry(
 
 
 def _collect_user_egg_history(group_id: int, user_id: str) -> dict:
-    pkg = _pkg()
     egg_history = _new_user_egg_history()
-    path = pkg._egg_log_path()
+    path = store._egg_log_path()
     if not path.exists():
         return egg_history
 
@@ -322,7 +327,7 @@ def _collect_user_egg_history(group_id: int, user_id: str) -> dict:
                     egg_type=egg_type,
                 )
     except Exception:
-        pkg.logger.warning(f"读取 {pkg.EGG_LOG_FILE} 失败，无法构建个人做饭彩蛋历史")
+        logger.warning(f"读取 {EGG_LOG_FILE} 失败，无法构建个人做饭彩蛋历史")
     return egg_history
 
 

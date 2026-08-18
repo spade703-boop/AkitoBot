@@ -2,41 +2,46 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 import json
 import os
 from pathlib import Path
-import sys
 
+from nonebot.log import logger
 
-def _pkg():
-    return sys.modules[__package__]
+from ...core import TZ_CN, find_data_path, get_data_dir, load_json_file
+
+DATA_FILE = "paro_pools.json"
+STATS_FILE = "paro_stats.json"
+EGG_LOG_FILE = "paro_egg_log.jsonl"
+DEFAULT_DATA = {"akito_pool": [], "toya_pool": []}
+
+PARO_DATA: dict = load_json_file(DATA_FILE, DEFAULT_DATA)
+PARO_STATS: dict = {}
 
 
 def _save():
-    pkg = _pkg()
-    path = pkg.find_data_path(pkg.DATA_FILE)
+    path = find_data_path(DATA_FILE)
     if not path:
-        path = pkg.get_data_dir() / pkg.DATA_FILE
+        path = get_data_dir() / DATA_FILE
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
     with open(tmp, "w", encoding="utf-8") as file:
-        json.dump(pkg.PARO_DATA, file, ensure_ascii=False, indent=2)
+        json.dump(PARO_DATA, file, ensure_ascii=False, indent=2)
     os.replace(tmp, path)
 
 
 def _stats_path() -> Path:
-    pkg = _pkg()
-    path = pkg.find_data_path(pkg.STATS_FILE)
+    path = find_data_path(STATS_FILE)
     if not path:
-        path = pkg.get_data_dir() / pkg.STATS_FILE
+        path = get_data_dir() / STATS_FILE
     return path
 
 
 def _egg_log_path() -> Path:
-    pkg = _pkg()
-    path = pkg.find_data_path(pkg.EGG_LOG_FILE)
+    path = find_data_path(EGG_LOG_FILE)
     if not path:
-        path = pkg.get_data_dir() / pkg.EGG_LOG_FILE
+        path = get_data_dir() / EGG_LOG_FILE
     return path
 
 
@@ -210,8 +215,7 @@ def _normalize_group_stats(raw: object, today_str: str) -> dict:
         }
     if isinstance(raw.get("users"), dict):
         stats["users"] = {
-            str(user_id): _normalize_user_stats(user_stats)
-            for user_id, user_stats in raw["users"].items()
+            str(user_id): _normalize_user_stats(user_stats) for user_id, user_stats in raw["users"].items()
         }
     stats["daily"] = _normalize_period_stats(raw.get("daily"), date=today_str)
     stats["history"] = _normalize_period_stats(raw.get("history"))
@@ -221,7 +225,6 @@ def _normalize_group_stats(raw: object, today_str: str) -> dict:
 
 
 def _load_stats() -> dict:
-    pkg = _pkg()
     path = _stats_path()
     if not path.exists():
         return _new_stats_state()
@@ -230,10 +233,10 @@ def _load_stats() -> dict:
         with open(path, encoding="utf-8") as file:
             raw = json.load(file)
     except Exception:
-        pkg.logger.warning(f"读取 {pkg.STATS_FILE} 失败，已重置派生统计数据")
+        logger.warning(f"读取 {STATS_FILE} 失败，已重置派生统计数据")
         return _new_stats_state()
 
-    today_str = pkg.datetime.now(pkg.TZ_CN).date().isoformat()
+    today_str = datetime.now(TZ_CN).date().isoformat()
     stats = _new_stats_state()
     if isinstance(raw, dict):
         stats["schema_version"] = max(2, _safe_int(raw.get("schema_version"), 2) or 2)
@@ -264,12 +267,11 @@ def _load_stats() -> dict:
 
 
 def _save_stats() -> None:
-    pkg = _pkg()
     path = _stats_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
     with open(tmp, "w", encoding="utf-8") as file:
-        json.dump(pkg.PARO_STATS, file, ensure_ascii=False, indent=2)
+        json.dump(PARO_STATS, file, ensure_ascii=False, indent=2)
     os.replace(tmp, path)
 
 
@@ -281,9 +283,11 @@ def _append_egg_log(entry: dict) -> None:
 
 
 def reload_paro_data() -> None:
-    pkg = _pkg()
-    pkg.PARO_DATA.clear()
-    pkg.PARO_DATA.update(pkg.load_json_file(pkg.DATA_FILE, pkg.DEFAULT_DATA))
-    pkg.PARO_STATS.clear()
-    pkg.PARO_STATS.update(_load_stats())
-    pkg.logger.info("🔄 派生池与排行榜数据已热重载")
+    PARO_DATA.clear()
+    PARO_DATA.update(load_json_file(DATA_FILE, DEFAULT_DATA))
+    PARO_STATS.clear()
+    PARO_STATS.update(_load_stats())
+    logger.info("🔄 派生池与排行榜数据已热重载")
+
+
+PARO_STATS.update(_load_stats())

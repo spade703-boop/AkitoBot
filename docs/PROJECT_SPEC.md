@@ -106,8 +106,7 @@ gemini_bot/
         ├── scheduled/            # 定时任务
         ├── verify/               # 加群审核
         ├── bond_pages.py         # gift.pages 兼容导出
-        ├── bond_render.py        # gift.render 兼容导出
-        └── random_paro_render.py # random_paro.render 兼容导出
+        └── bond_render.py        # gift.render 兼容导出
 ```
 
 ---

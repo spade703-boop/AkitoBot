@@ -8,7 +8,7 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from nonebot_plugin_htmlrender import html_to_pic
 
-TEMPLATE_DIR = Path(__file__).resolve().parents[2] / "templates" / "random_paro"
+TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
 _TEMPLATE_ENV = Environment(
     loader=FileSystemLoader(str(TEMPLATE_DIR)),
     autoescape=select_autoescape(("html", "xml")),
