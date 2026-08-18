@@ -29,11 +29,15 @@
 - **建议**：抽成显式流水线（parse → build_context → assemble_prompt → dispatch → parse_reply → post_process → persist → send），每段是可独立测试的纯函数。已抽出的 `_build_*` helper 是好开端，但真正的编排控制流仍全压在此函数里。
 
 ### M2. 系统提示词组装逻辑存在三份平行实现
-- [ ] 待办
-- **证据**：`handlers/chat.py:_build_final_system_prompt`、`features/impression/__init__.py:539`（群印象评价）、`features/impression/__init__.py:754`（随机插嘴）；检索组装块 `build_retrieval_context(...) + asyncio.gather(get_relevant_examples, get_relevant_pjsk)` 在 `chat.py:539-547` 与 `impression:678-684` 逐行复制。
+- [~] 进行中
+- **证据**：`handlers/chat.py:_build_final_system_prompt`、`features/impression/__init__.py:_build_impression_system_prompt`、`features/impression/__init__.py:_build_auto_chat_system_prompt`；共享上下文入口为 `core/prompt_builder.py:build_shared_prompt_context`。
 - **问题**：“人设 + 世界线覆写 + 检索片段 + JSON 输出 schema → system prompt”被手写了三遍。
 - **影响**：改人设结构、改 JSON 输出格式、改检索策略都要多处同步，极易漏改导致主对话与插嘴行为不一致。**架构整洁性上最实的缺口**——没有任何模块“拥有”彰人的系统提示词。
 - **建议**：新增 `core/prompt_builder.py`（或扩展 `context.py`），提供按“任务类型”参数化的 prompt 组装器，三个调用点都走它。
+- **已落地（共享上下文层）**：主聊天与自动插嘴已统一复用 `SharedPromptContext`，集中组装人设、关系匹配、剧本示例、PJSK 片段和歌曲片段；检索上下文只构建一次，两个检索源共享同一上下文。关系匹配和主聊天格式化也已收敛到 `core/context.py`。
+- **仍待补齐（任务 Prompt 层）**：三个任务的完整 system prompt 模板、世界线/群上下文注入和 JSON 输出 schema 仍由各自入口维护。后续若继续推进 M2，应引入按任务类型参数化的 renderer/builder，并在不改变各任务 schema、片段顺序和降级行为的前提下，逐步替换 `_build_final_system_prompt`、`_build_impression_system_prompt` 与 `_build_auto_chat_system_prompt`。
+- **验收记录**：已增加跨入口共享片段等价测试；当前全量 `pytest` 与 `ruff` 均通过。
+> 已处理：`464dcbd`（共享上下文层；任务级 Prompt renderer 仍待补齐）
 
 ### M3. 数据层泄漏：原始 SQLite 访问散落在全部三层
 - [ ] 待办
