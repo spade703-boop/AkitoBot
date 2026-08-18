@@ -85,9 +85,9 @@ def test_main_and_auto_chat_keep_shared_prompt_fragments_in_sync():
     assert main_prompt.index(context.script_examples) < main_prompt.index(context.pjsk_block)
     assert main_prompt.index(context.pjsk_block) < main_prompt.index(context.song_mention)
 
-    assert auto_prompt.index(context.persona) < auto_prompt.index(context.song_mention)
-    assert auto_prompt.index(context.song_mention) < auto_prompt.index(context.script_examples)
+    assert auto_prompt.index(context.persona) < auto_prompt.index(context.script_examples)
     assert auto_prompt.index(context.script_examples) < auto_prompt.index(context.pjsk_block)
+    assert auto_prompt.index(context.pjsk_block) < auto_prompt.index(context.song_mention)
 
     assert context.song_memories in main_prompt
     assert context.song_memories not in auto_prompt

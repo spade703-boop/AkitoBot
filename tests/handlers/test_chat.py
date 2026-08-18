@@ -263,11 +263,13 @@ def test_build_final_system_prompt_contains_all_major_sections():
     )
 
     assert "HEADER" in result
-    assert "物理现实与环境" in result
-    assert "社交上下文" in result
-    assert "核心人设与记忆" in result
+    assert "环境与状态" in result
+    assert "角色与知识" in result
+    assert "当前任务上下文" in result
+    assert "任务规则" in result
     assert "被谈论人物关系" in result
     assert "事实归因规则" in result
+    assert "强制输出格式 (JSON)" in result
     assert '"inner_os": "内心"' in result
 
 

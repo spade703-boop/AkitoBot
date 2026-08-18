@@ -88,3 +88,109 @@ async def test_build_shared_prompt_context_reuses_supplied_retrieval_context():
     assert result.relationship_match is None
     assert result.script_examples == ""
     assert result.pjsk_block == ""
+
+
+def test_render_json_schema_preserves_order_and_escapes_dynamic_values():
+    schema = prompt_builder.JsonSchemaSpec(
+        instruction="只输出 JSON",
+        fields=(
+            prompt_builder.JsonFieldSpec("inner_os", '说"你好"'),
+            prompt_builder.JsonFieldSpec("evidence", ["原话1", "原话2"]),
+        ),
+    )
+
+    result = prompt_builder.render_json_schema(schema)
+
+    assert result.splitlines() == [
+        "只输出 JSON",
+        "{",
+        '  "inner_os": "说\\"你好\\"",',
+        '  "evidence": ["原话1", "原话2"]',
+        "}",
+    ]
+
+
+def test_render_prompt_frame_uses_the_fixed_five_section_order():
+    frame = prompt_builder.PromptFrame(
+        system_header="HEADER",
+        environment_blocks=("ENV",),
+        role_knowledge_blocks=("ROLE",),
+        task_context_blocks=("CONTEXT",),
+        task_rule_blocks=("RULE",),
+    )
+    schema = prompt_builder.JsonSchemaSpec(
+        fields=(prompt_builder.JsonFieldSpec("reply", "REPLY"),)
+    )
+
+    result = prompt_builder.render_prompt_frame(frame, schema)
+    headings = ["环境与状态", "角色与知识", "当前任务上下文", "任务规则", "强制输出格式 (JSON)"]
+
+    assert all(value in result for value in ("HEADER", "ENV", "ROLE", "CONTEXT", "RULE", '"reply": "REPLY"'))
+    assert [result.index(heading) for heading in headings] == sorted(result.index(heading) for heading in headings)
+    normalized = " ".join(result.split())
+    assert (
+        "HEADER # 1. 环境与状态 ENV # 2. 角色与知识 ROLE # 3. 当前任务上下文 CONTEXT "
+        "# 4. 任务规则 RULE # 5. 强制输出格式 (JSON) { \"reply\": \"REPLY\" }"
+        in normalized
+    )
+
+
+def test_task_renderers_keep_distinct_json_field_sets():
+    main = prompt_builder.render_main_chat_prompt(
+        system_header="HEADER",
+        current_time="现在",
+        daily_status="状态",
+        toya_anchor="",
+        time_gap_awareness="",
+        festival_buff="",
+        morning_run_buff="",
+        sleep_buffer_buff="",
+        relationship_context="",
+        group_context="",
+        interact_instruction="",
+        referenced_relationship_instruction="",
+        base_persona="人设",
+        script_examples="",
+        pjsk_block="",
+        song_memories="",
+        long_term_memory_text="",
+        reality_overwrite_instruction="",
+        acting_guide="",
+        sleep_instruction="",
+        fact_grounding_instruction="",
+        vitality_guide="",
+        memory_capture_rule="",
+        tone_limiter="",
+        schema_inner_os="OS",
+        schema_action="ACTION",
+        schema_dialogue="DIALOGUE",
+    )
+    impression = prompt_builder.render_impression_prompt(
+        persona="人设",
+        state_overlay_prompt="",
+        target_name="小明",
+        is_querying_other=False,
+        specific_max_length=100,
+        limited_max_length=60,
+    )
+    auto = prompt_builder.render_auto_chat_prompt(
+        persona="人设",
+        time_str="现在",
+        toya_anchor="",
+        scene_desc="消息",
+        group_context="背景",
+        relation_info="",
+        song_info="",
+        script_examples="",
+        pjsk_block="",
+        cool_guy_filter="",
+        task_logic="规则",
+        inner_os_guide="OS",
+    )
+
+    assert '"action": "ACTION"' in main
+    assert '"dialogue": "DIALOGUE"' in main
+    assert '"evidence": [' in impression
+    assert '"mode": "材料足够时填 specific' in impression
+    assert '"anchor": "若要回复' in auto
+    assert '"reply": "你实际发在群里的话' in auto

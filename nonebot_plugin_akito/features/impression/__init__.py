@@ -32,6 +32,8 @@ from ...core import (
     load_prompt_template,
     parse_json_object,
     record_bot_message,
+    render_auto_chat_prompt,
+    render_impression_prompt,
     rescue_field,
     rescue_tail_after_field,
 )
@@ -341,68 +343,15 @@ def _build_impression_system_prompt(
     target_name: str,
     is_querying_other: bool,
 ) -> str:
-    if is_querying_other:
-        target_pronoun = "她"
-        scene_description = f"群友正在问你对【{target_name}】的印象；你是在向查询者谈论她。"
-        addressing_rule = (
-            f"固定开头之后，提到【{target_name}】时使用女性第三人称“她”。"
-            "不要把她当成当前对话者写成“你”，也不要称作“他、这个人、这人、这家伙”。"
-        )
-    else:
-        target_pronoun = "你"
-        scene_description = f"【{target_name}】本人正在当面问你对自己的印象；你是在直接对本人说话。"
-        addressing_rule = (
-            f"固定开头之后，提到【{target_name}】时使用第二人称“你”。"
-            "不要把对方写成“他、她、这个人、这人、这家伙”。"
-        )
-
-    return f"""
-    {persona}
-    {state_overlay_prompt}
-
-    【群印象任务】
-    {scene_description}
-    这不是针对“群印象”这条指令本身的即时回复，而是综合一段时间内的发言，形成带有东云彰人个人观察角度的整体评价。
-    材料分为“本人整体发言样本”和“近期对话片段”：整体样本用于观察一段时间内反复出现的关注点、态度和行为；近期片段只用于还原短句的前因后果。不要因为某一条最近消息很醒目，就把整段评价写成对那条消息的单句回复。
-
-    【观察与判断】
-    1. 先寻找跨多条发言能够成立的整体观察：反复关注什么、对什么特别上心、说话和参与群聊的方式、前后表现，或一段时间内比较稳定的倾向。
-    2. 群印象需要有“你的看法”，不能只把聊天记录换一种说法。允许从明确、反复的表现作克制推断，例如一个人持续惦记某张卡，可以说“看来里面大概有{target_pronoun}很喜欢的角色”；这类推断要保留“看来、大概、估计、感觉”等不确定性，不能把未知动机写成事实。
-    3. 兴趣类别本身不算观察。“玩游戏”“想抽卡”“聊吃的”要进一步说明{target_pronoun}表现出了怎样的投入、偏好、态度或变化。
-    4. 材料里有两三个互不重复、确实有辨识度的发现时，可以自然串起来；不需要为了完整而把所有话题列一遍，也不必强行寻找“嘴上怎样、实际上怎样”的反差。
-    5. 东云彰人的人设和当前世界线决定你的措辞、关注点和判断方式，不要求每次都显式评价自己是否喜欢、讨厌或认同对方。像“我倒不讨厌”“这种劲儿不赖”“至少不装”“跟我一样”这样的个人反应，只在它确实自然且能增加信息时使用，不能作为惯例收尾。
-    6. 不要按“兴趣标签 → 性格概括 → 好不好相处”写标准人物小传，也不要为了显得像东云彰人而在观察之后额外补一句态度。看法已经说清楚时就直接结束。
-    7. 基础人设里“对群友没兴趣”表示你保持距离、不会过度热情，不表示你眼里所有群友都一样，更不表示要把人概括成“普通人”。
-
-    【材料强弱分流】
-    - `specific`：材料支持至少一条稳定、具体、有辨识度的整体观察。可以围绕一个重点，也可以自然串起两三个可靠发现；允许加入有依据、措辞克制的理解和推断。
-    - `limited`：材料主要是孤立短句、常见话题、复读或缺少稳定表现，无法支持有辨识度的判断。此时直接说明目前看不准，可以附带一处确定能看出的现象，然后停下。
-    - `limited` 表达的是证据不足，不是这个人没有特点；不能换成“普通人、没什么特别、也就那样”。
-
-    【事实边界】
-    1. 对【{target_name}】的材料依据只能来自本人实际发言。近期片段里其他人的话只用于理解上下文，绝不能算到【{target_name}】头上。
-    2. 可以根据多条发言形成整体判断和克制推断，但不能凭空编造经历、关系、未出现的具体事件，或把不确定的动机和性格写成确定事实。
-    3. 不必为了显得有依据而逐条复述聊天记录；最终评价应当像自然对话，不像分析报告。
-    4. 材料不足或过于零碎时应保守评价，不要强行补全。
-
-    【称呼与回复要求】
-    1. {addressing_rule}
-    2. 必须符合东云彰人的口吻，并服从当前生效的世界线覆写。
-    3. 必须用“对{target_name}的印象是……”开头；固定开头之后直接进入整体观察或判断，不要接“一个……的人/网友/玩家”式定义。
-    4. `specific` 最多 {IMPRESSION_SPECIFIC_MAX_LENGTH} 字，`limited` 最多 {IMPRESSION_LIMITED_MAX_LENGTH} 字。通常一至三句，说清楚就停，不要为了字数补结论、补态度或强行升华。
-    5. 禁止用“普通人/普通网友/普通玩家”“没什么特别的/没什么值得说的”“挺随和/挺好相处”“也就那样”作为结论。这些话没有提供有效观察。
-    6. 少用“平时……偶尔……感觉……”的流水账句式，少连续使用“挺、感觉、不过、就是、偶尔”等模糊词。
-    7. reply 是发到群里的纯文本，不要括号动作；evidence、angle 和 inner_os 不会发到群里。
-
-    【================ 强制输出格式 (JSON) ================】
-    {{
-      "inner_os": "用简短几句归纳一段时间内有依据的整体观察，以及可以成立的克制推断。",
-      "evidence": ["从【{target_name}】本人发言中原样复制2-16个字", "再复制一处本人发言作为依据"],
-      "mode": "材料足够时填 specific；材料零碎、无法形成有辨识度判断时填 limited",
-      "angle": "specific 时写跨一段时间形成的整体观察主线和有依据的理解；limited 时留空",
-      "reply": "以‘对{target_name}的印象是……’开头，按照称呼规则自然说出整体看法，不写人物小传或分析报告"
-    }}
-    """
+    """Compatibility wrapper for the core impression renderer."""
+    return render_impression_prompt(
+        persona=persona,
+        state_overlay_prompt=state_overlay_prompt,
+        target_name=target_name,
+        is_querying_other=is_querying_other,
+        specific_max_length=IMPRESSION_SPECIFIC_MAX_LENGTH,
+        limited_max_length=IMPRESSION_LIMITED_MAX_LENGTH,
+    )
 
 
 def _build_auto_chat_system_prompt(
@@ -420,32 +369,21 @@ def _build_auto_chat_system_prompt(
     task_logic: str,
     inner_os_guide: str,
 ) -> str:
-    """Assemble the task-specific system prompt for random group interjections."""
-    return f"""
-    【系统级绝对指令：潜水思维链与格式强制】
-    {persona}
-    【系统物理时间】当前时间是：{time_str}。绝对不可弄错时间。
-    {toya_anchor}
-    【当前回复目标（唯一）】{scene_desc}
-    【近期群聊背景（仅用于理解当前目标，禁止回复其中旧消息）】\n{group_context}
-    【人际资料】{relation_info}
-    {song_info}
-    {script_examples}
-    🎮【PJSK 世界观/黑话库】：
-    {pjsk_block}
-    {cool_guy_filter}
-
-    【任务目标与回复逻辑 (极其重要)】
-    {task_logic}
-
-    【================ 强制输出格式 (JSON) ================】
-    你必须且只能输出合法的 JSON 格式。不要用 ```json 包裹！
-    {{
-      "inner_os": "{inner_os_guide}",
-      "anchor": "若要回复，从当前消息中原样复制至少2个字符作为依据；决定静默时留空。禁止复制历史消息。",
-      "reply": "你实际发在群里的话。要求：1. 纯文本，极少用(动作)。2. 善用逗号连接短句，语感流畅。3. 绝不乱接别人的话。4. 旁观模式下如果决定不理，必须输出空字符串。"
-    }}
-    """
+    """Compatibility wrapper for the core auto-chat renderer."""
+    return render_auto_chat_prompt(
+        persona=persona,
+        time_str=time_str,
+        toya_anchor=toya_anchor,
+        scene_desc=scene_desc,
+        group_context=group_context,
+        relation_info=relation_info,
+        song_info=song_info,
+        script_examples=script_examples,
+        pjsk_block=pjsk_block,
+        cool_guy_filter=cool_guy_filter,
+        task_logic=task_logic,
+        inner_os_guide=inner_os_guide,
+    )
 
 
 def _parse_impression_result(raw_result: str) -> tuple[str, str, list[str], str, str]:

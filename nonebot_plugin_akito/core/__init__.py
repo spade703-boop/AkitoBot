@@ -106,7 +106,11 @@ from .context import (
     get_hybrid_relationship,
     get_relevant_examples, get_relevant_pjsk,
 )
-from .prompt_builder import SharedPromptContext, build_shared_prompt_context
+from .prompt_builder import (
+    JsonFieldSpec, JsonSchemaSpec, PromptFrame, SharedPromptContext,
+    build_shared_prompt_context, render_auto_chat_prompt, render_impression_prompt,
+    render_json_schema, render_main_chat_prompt, render_prompt_frame,
+)
 from .time_awareness import (
     record_bot_response, build_time_gap_prompt,
 )
@@ -148,7 +152,9 @@ __all__ = [
     "get_random_examples", "get_base_persona", "reload_persona", "get_song_memories", "get_song_mention",
     "get_hybrid_relationship", "get_relevant_examples", "get_relevant_pjsk",
     # prompt_builder
-    "SharedPromptContext", "build_shared_prompt_context",
+    "PromptFrame", "JsonFieldSpec", "JsonSchemaSpec", "SharedPromptContext",
+    "build_shared_prompt_context", "render_json_schema", "render_prompt_frame",
+    "render_main_chat_prompt", "render_impression_prompt", "render_auto_chat_prompt",
     # time_awareness
     "record_bot_response", "build_time_gap_prompt",
     # retrieval

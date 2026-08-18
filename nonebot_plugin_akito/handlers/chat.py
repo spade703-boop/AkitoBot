@@ -52,6 +52,7 @@ from ..core import (
     parse_json_object,
     record_bot_message,
     record_bot_response,
+    render_main_chat_prompt,
     rescue_field,
     rescue_tail_after_field,
     save_memory,
@@ -335,56 +336,36 @@ def _build_final_system_prompt(
     schema_action: str,
     schema_dialogue: str,
 ) -> str:
-    """Assemble the final system prompt string sent to the model."""
-    return f"""
-        {system_header}
-
-        # 1. 物理现实与环境
-        - 当前系统时间：{current_time}
-        - 你的生物钟状态：{daily_status}
-        {toya_anchor}
-        {time_gap_awareness}
-        - 今日特殊日历：{festival_buff}
-        {morning_run_buff}
-        {sleep_buffer_buff}
-
-        # 2. 动态情报栈
-        {relationship_context}
-
-        # 3. 社交上下文
-        📜【群聊背景流】
-        {group_context}
-        🎯【当前交互对象】：
-        {interact_instruction}
-        {referenced_relationship_instruction}
-
-        # 4. 核心人设与记忆
-        {base_persona}
-        {script_examples}
-        🎮【PJSK 世界观/黑话库】：
-        {pjsk_block}
-        {song_memories}
-        🧠【你的长期记忆】：
-        {long_term_memory_text}
-        ⚡【强制临时状态/指令】：
-        {reality_overwrite_instruction}
-        {acting_guide}
-        {sleep_instruction}
-        {fact_grounding_instruction}
-
-        {vitality_guide}
-
-        {memory_capture_rule}
-
-        {tone_limiter}
-
-        # ================= 强制输出格式 (JSON) =================
-        {{
-          "inner_os": "{schema_inner_os}",
-          "action": "{schema_action}",
-          "dialogue": "{schema_dialogue}"
-        }}
-        """
+    """Compatibility wrapper for the core main-chat renderer."""
+    return render_main_chat_prompt(
+        system_header=system_header,
+        current_time=current_time,
+        daily_status=daily_status,
+        toya_anchor=toya_anchor,
+        time_gap_awareness=time_gap_awareness,
+        festival_buff=festival_buff,
+        morning_run_buff=morning_run_buff,
+        sleep_buffer_buff=sleep_buffer_buff,
+        relationship_context=relationship_context,
+        group_context=group_context,
+        interact_instruction=interact_instruction,
+        referenced_relationship_instruction=referenced_relationship_instruction,
+        base_persona=base_persona,
+        script_examples=script_examples,
+        pjsk_block=pjsk_block,
+        song_memories=song_memories,
+        long_term_memory_text=long_term_memory_text,
+        reality_overwrite_instruction=reality_overwrite_instruction,
+        acting_guide=acting_guide,
+        sleep_instruction=sleep_instruction,
+        fact_grounding_instruction=fact_grounding_instruction,
+        vitality_guide=vitality_guide,
+        memory_capture_rule=memory_capture_rule,
+        tone_limiter=tone_limiter,
+        schema_inner_os=schema_inner_os,
+        schema_action=schema_action,
+        schema_dialogue=schema_dialogue,
+    )
 
 
 def _parse_model_reply(raw_result: str, is_toya_context: bool) -> tuple[str, str]:
