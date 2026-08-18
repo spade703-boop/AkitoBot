@@ -2,15 +2,21 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 from collections.abc import Callable
+from dataclasses import dataclass
 from io import BytesIO
+import json
+import os
 from pathlib import Path
 import random
+import re
 import time
+import uuid
 
 import aiohttp
-from nonebot import on_command, on_message
+from nonebot import on_command, on_message, on_regex
 from nonebot.adapters import Event, Message
 from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, MessageSegment
 from nonebot.adapters.onebot.v11 import Message as OB11Message
@@ -23,9 +29,11 @@ from ...core import (
     GROUP_IMAGE_PERMISSIONS,
     IMAGE_BASE_PATH,
     REACTIONS_DB,
+    SUPERUSER_QQ,
     call_deepseek_api,
-    check_img_permission,
+    find_data_path,
     get_base_persona,
+    get_data_dir,
     get_memory_key,
     get_user_memory,
     grant_safety_pass,
@@ -36,16 +44,262 @@ from ...core import (
 # 模块 8：相册图库引擎 (IMAGE & GALLERY SYSTEM)
 # ==============================================================================
 
-IMAGE_CATEGORIES = ("toya", "self", "food", "groupmate", "vbs", "meme")
 ITEMS_PER_PAGE = 30
+GALLERY_REGISTRY_FILE = "gallery_registry.json"
+GALLERY_REGISTRY_VERSION = 1
+CUSTOM_GALLERY_NAME_RE = re.compile(r"^[A-Za-z0-9_\-\u3400-\u4dbf\u4e00-\u9fff]{1,20}$")
 
 
-def _match_category(text: str, rules: tuple[tuple[str, tuple[str, ...]], ...], default: str = "") -> str:
-    """Match the first category whose keyword appears in the input text."""
-    for category, keywords in rules:
-        if any(keyword in text for keyword in keywords):
-            return category
-    return default
+@dataclass(frozen=True)
+class GalleryDefinition:
+    storage_key: str
+    name: str
+    caption_enabled: bool = True
+    save_aliases: tuple[str, ...] = ()
+    send_aliases: tuple[str, ...] = ()
+    collect_aliases: tuple[str, ...] = ()
+    list_aliases: tuple[str, ...] = ()
+    prompt_hint: str = ""
+    caption_subject: str = "照片"
+    permission_tokens: tuple[str, ...] = ()
+    custom: bool = False
+
+
+FIXED_GALLERIES = (
+    GalleryDefinition(
+        storage_key="toya",
+        name="冬弥",
+        save_aliases=("冬弥", "搭档", "toya", "老婆"),
+        send_aliases=("冬弥", "搭档", "toya", "老婆"),
+        collect_aliases=("冬弥", "搭档", "toya", "老婆"),
+        list_aliases=("冬弥", "搭档", "toya"),
+        prompt_hint="表现：嘴上说'为什么要给你看'，但还是发了。",
+        caption_subject="搭档（青柳冬弥）的照片",
+        permission_tokens=("toya", "冬弥"),
+    ),
+    GalleryDefinition(
+        storage_key="self",
+        name="彰人",
+        save_aliases=("你自己", "彰人", "自拍", "akito"),
+        send_aliases=("你自己", "自拍", "彰人", "akito"),
+        collect_aliases=("你自己", "彰人", "自拍", "akito"),
+        list_aliases=("你", "彰人", "自拍", "self", "akito"),
+        prompt_hint="表现：稍微有点自恋但又装作不在意。",
+        caption_subject="自己的帅气自拍/单人照",
+        permission_tokens=("self", "彰人"),
+    ),
+    GalleryDefinition(
+        storage_key="food",
+        name="美食",
+        save_aliases=("松饼", "吃的", "蛋糕", "甜点"),
+        send_aliases=("松饼", "吃的", "蛋糕", "甜点"),
+        collect_aliases=("松饼", "吃的", "蛋糕", "甜点"),
+        list_aliases=("吃", "食", "food", "松饼", "蛋糕", "甜点"),
+        prompt_hint="发一张探店图并评价。",
+        caption_subject="刚吃过的甜点/松饼等美食照",
+        permission_tokens=("food", "美食"),
+    ),
+    GalleryDefinition(
+        storage_key="groupmate",
+        name="群友",
+        caption_enabled=False,
+        save_aliases=("群友",),
+        send_aliases=("群友",),
+        collect_aliases=("群友",),
+        list_aliases=("群友", "groupmate"),
+        permission_tokens=("groupmate", "群友"),
+    ),
+    GalleryDefinition(
+        storage_key="vbs",
+        name="合照",
+        save_aliases=("合照", "vbs", "队友"),
+        send_aliases=("合照", "vbs", "队友"),
+        collect_aliases=("合照", "vbs", "队友"),
+        list_aliases=("合照", "vbs", "队友"),
+        prompt_hint="发一张大家的日常。",
+        caption_subject="VBS小队成员的合照或日常",
+        permission_tokens=("vbs", "合照"),
+    ),
+    GalleryDefinition(
+        storage_key="meme",
+        name="表情",
+        save_aliases=("表情", "梗图", "meme"),
+        send_aliases=("表情", "梗图", "meme"),
+        collect_aliases=("表情", "meme", "梗图"),
+        list_aliases=("表情", "meme", "梗图"),
+        prompt_hint="随便发一张手机里存的表情。",
+        caption_subject="手机里存的搞笑表情包/梗图",
+        permission_tokens=("meme", "表情"),
+    ),
+    GalleryDefinition(
+        storage_key="pet",
+        name="宠物",
+        caption_enabled=False,
+        save_aliases=("宠物",),
+        send_aliases=("宠物",),
+        collect_aliases=("宠物",),
+        list_aliases=("宠物", "pet"),
+        permission_tokens=("pet", "宠物"),
+    ),
+)
+FIXED_GALLERY_BY_KEY = {gallery.storage_key: gallery for gallery in FIXED_GALLERIES}
+IMAGE_CATEGORIES = tuple(FIXED_GALLERY_BY_KEY)
+
+DEFAULT_SAVE_REPLIES = {
+    "toya": ["……哦，谢了。"],
+    "self": ["……发这个干嘛。"],
+    "food": ["……看起来还行。"],
+    "groupmate": ["又在说什么傻话？"],
+    "vbs": ["……哼。"],
+    "meme": ["……啧。"],
+    "pet": ["……行，存下了。", "收到了。", "这张我存了。"],
+    "captionless": ["……行，存下了。", "收到了。", "这张我存了。"],
+}
+DEFAULT_UNKNOWN_GALLERY_REPLIES = [
+    "哈？根本没有这种图库。别随便给我编啊。",
+    "没这类照片。换个名字再说。",
+    "你到底想看哪一类？先把图库名说对。",
+    "这种图库不存在。看清楚再发指令啊。",
+    "都说了没有。换一个。",
+]
+
+
+def _normalize_gallery_name(name: str) -> str:
+    return name.strip().casefold()
+
+
+def _definition_names(gallery: GalleryDefinition) -> set[str]:
+    values = {
+        gallery.storage_key,
+        gallery.name,
+        *gallery.save_aliases,
+        *gallery.send_aliases,
+        *gallery.collect_aliases,
+        *gallery.list_aliases,
+        *gallery.permission_tokens,
+    }
+    return {_normalize_gallery_name(value) for value in values}
+
+
+def _validate_custom_gallery_name(name: str, custom_galleries: list[GalleryDefinition]) -> str:
+    normalized = _normalize_gallery_name(name)
+    if not normalized:
+        return "missing"
+    if not CUSTOM_GALLERY_NAME_RE.fullmatch(name.strip()) or normalized == "all":
+        return "invalid"
+    for gallery in (*FIXED_GALLERIES, *custom_galleries):
+        if normalized in _definition_names(gallery):
+            return "duplicate"
+    return ""
+
+
+def _custom_gallery_from_record(record: dict) -> GalleryDefinition | None:
+    gallery_id = record.get("id")
+    name = record.get("name")
+    if not isinstance(gallery_id, str) or not re.fullmatch(r"[0-9a-f]{32}", gallery_id):
+        return None
+    if not isinstance(name, str):
+        return None
+    return GalleryDefinition(
+        storage_key=f"custom/{gallery_id}",
+        name=name.strip(),
+        caption_enabled=False,
+        permission_tokens=(name.strip(),),
+        custom=True,
+    )
+
+
+def _get_gallery_registry_path() -> Path:
+    return find_data_path(GALLERY_REGISTRY_FILE, subdirs=("",)) or get_data_dir() / GALLERY_REGISTRY_FILE
+
+
+def _load_custom_gallery_registry(path: Path) -> tuple[list[GalleryDefinition], bool]:
+    if not path.exists():
+        return [], False
+    try:
+        with open(path, encoding="utf-8-sig") as file:
+            payload = json.load(file)
+    except Exception as exc:
+        logger.error(f"读取动态图库注册表失败，已锁定新建操作: {exc}")
+        return [], True
+
+    if not isinstance(payload, dict) or payload.get("schema_version") != GALLERY_REGISTRY_VERSION:
+        logger.error("动态图库注册表格式或版本无效，已锁定新建操作")
+        return [], True
+    records = payload.get("custom_galleries")
+    if not isinstance(records, list):
+        logger.error("动态图库注册表缺少 custom_galleries 列表，已锁定新建操作")
+        return [], True
+
+    galleries: list[GalleryDefinition] = []
+    for record in records:
+        if not isinstance(record, dict):
+            logger.error("动态图库注册表包含无效记录，已锁定新建操作")
+            return [], True
+        gallery = _custom_gallery_from_record(record)
+        if gallery is None or _validate_custom_gallery_name(gallery.name, galleries):
+            logger.error("动态图库注册表包含无效或冲突名称，已锁定新建操作")
+            return [], True
+        galleries.append(gallery)
+    return galleries, False
+
+
+def _save_custom_gallery_registry(path: Path, galleries: list[GalleryDefinition]) -> None:
+    payload = {
+        "schema_version": GALLERY_REGISTRY_VERSION,
+        "custom_galleries": [
+            {"id": gallery.storage_key.removeprefix("custom/"), "name": gallery.name}
+            for gallery in galleries
+        ],
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(".tmp")
+    with open(tmp_path, "w", encoding="utf-8") as file:
+        json.dump(payload, file, ensure_ascii=False, indent=2)
+    os.replace(tmp_path, path)
+
+
+CUSTOM_GALLERIES, GALLERY_REGISTRY_LOAD_ERROR = _load_custom_gallery_registry(_get_gallery_registry_path())
+GALLERY_CREATE_LOCK = asyncio.Lock()
+
+
+def _all_galleries() -> tuple[GalleryDefinition, ...]:
+    return (*FIXED_GALLERIES, *CUSTOM_GALLERIES)
+
+
+def _get_gallery(storage_key: str) -> GalleryDefinition | None:
+    return next((gallery for gallery in _all_galleries() if gallery.storage_key == storage_key), None)
+
+
+def _find_custom_gallery_exact(text: str) -> GalleryDefinition | None:
+    normalized = _normalize_gallery_name(text)
+    if not normalized:
+        return None
+    return next(
+        (gallery for gallery in CUSTOM_GALLERIES if _normalize_gallery_name(gallery.name) == normalized),
+        None,
+    )
+
+
+def _match_fixed_gallery(text: str, aliases_attr: str) -> GalleryDefinition | None:
+    for gallery in FIXED_GALLERIES:
+        aliases = getattr(gallery, aliases_attr)
+        if any(alias in text for alias in aliases):
+            return gallery
+    return None
+
+
+def _gallery_allowed(group_id: int | None, gallery: GalleryDefinition) -> bool:
+    allowed = GROUP_IMAGE_PERMISSIONS.get(group_id, [])
+    normalized_allowed = {_normalize_gallery_name(str(token)) for token in allowed}
+    if "all" in normalized_allowed:
+        return True
+    return bool(normalized_allowed & _definition_names(gallery))
+
+
+def _allowed_galleries_from_tokens(allowed_categories: list[str]) -> list[GalleryDefinition]:
+    normalized_allowed = {_normalize_gallery_name(str(token)) for token in allowed_categories}
+    return [gallery for gallery in _all_galleries() if normalized_allowed & _definition_names(gallery)]
 
 
 def _resolve_save_category_and_reply(
@@ -54,28 +308,20 @@ def _resolve_save_category_and_reply(
     chooser: Callable[[list[str]], str] = random.choice,
 ) -> tuple[str, str]:
     """Resolve which category a manual save request targets and pick its reply."""
-    defaults = {
-        "toya": ["……哦，谢了。"],
-        "self": ["……发这个干嘛。"],
-        "food": ["……看起来还行。"],
-        "groupmate": ["又在说什么傻话？"],
-        "vbs": ["……哼。"],
-        "meme": ["……啧。"],
-    }
-    category = _match_category(
-        text,
-        (
-            ("toya", ("冬弥", "搭档", "toya", "老婆")),
-            ("self", ("你自己", "彰人", "自拍", "akito")),
-            ("food", ("松饼", "吃的", "蛋糕", "甜点")),
-            ("groupmate", ("群友",)),
-            ("vbs", ("合照", "vbs", "队友")),
-            ("meme", ("表情", "梗图", "meme")),
-        ),
-    )
-    if not category:
+    stripped = text.strip()
+    dynamic_target = ""
+    for prefix in ("收下", "投喂", "增加", "存"):
+        if stripped.startswith(prefix):
+            dynamic_target = stripped[len(prefix):].strip()
+            break
+    gallery = _find_custom_gallery_exact(dynamic_target) if dynamic_target else None
+    if gallery is None:
+        gallery = _match_fixed_gallery(text, "save_aliases")
+    if gallery is None:
         return "", ""
-    return category, chooser(replies_db.get(category, defaults[category]))
+    reply_key = "captionless" if gallery.custom else gallery.storage_key
+    replies = replies_db.get(reply_key) or DEFAULT_SAVE_REPLIES[reply_key]
+    return gallery.storage_key, chooser(replies)
 
 
 def _build_collect_session_key(group_id: int | None, user_id: str) -> str:
@@ -85,17 +331,8 @@ def _build_collect_session_key(group_id: int | None, user_id: str) -> str:
 
 def _resolve_collect_category(text: str) -> str:
     """Resolve the target category for collect mode, defaulting to toya."""
-    return _match_category(
-        text,
-        (
-            ("self", ("你自己", "彰人", "自拍", "akito")),
-            ("food", ("松饼", "吃的", "蛋糕", "甜点")),
-            ("groupmate", ("群友",)),
-            ("vbs", ("合照", "vbs", "队友")),
-            ("meme", ("表情", "meme", "梗图")),
-        ),
-        default="toya",
-    )
+    gallery = _find_custom_gallery_exact(text) or _match_fixed_gallery(text, "collect_aliases")
+    return gallery.storage_key if gallery else "toya"
 
 
 def _resolve_send_image_request(
@@ -105,22 +342,17 @@ def _resolve_send_image_request(
     chooser: Callable[[list[str]], str] = random.choice,
 ) -> tuple[str, str]:
     """Resolve the send-image category and prompt hint from user input."""
-    explicit_rules = (
-        ("toya", ("冬弥", "搭档", "toya", "老婆"), "表现：嘴上说'为什么要给你看'，但还是发了。"),
-        ("self", ("你自己", "自拍", "彰人", "akito"), "表现：稍微有点自恋但又装作不在意。"),
-        ("groupmate", ("群友",), ""),
-        ("food", ("松饼", "吃的", "蛋糕", "甜点"), "发一张探店图并评价。"),
-        ("vbs", ("合照", "vbs", "队友"), "发一张大家的日常。"),
-        ("meme", ("表情", "梗图", "meme"), "随便发一张手机里存的表情。"),
-    )
-    for category, keywords, prompt_hint in explicit_rules:
-        if any(keyword in text for keyword in keywords):
-            return category, prompt_hint
+    if text:
+        gallery = _find_custom_gallery_exact(text) or _match_fixed_gallery(text, "send_aliases")
+        if gallery:
+            return gallery.storage_key, gallery.prompt_hint
+        return "", ""
 
-    if "all" in allowed_categories:
+    normalized_allowed = {_normalize_gallery_name(str(token)) for token in allowed_categories}
+    if "all" in normalized_allowed:
         category = "self" if is_wl2_active else chooser(["toya", "self"])
     else:
-        valid_choices = [category for category in allowed_categories if category in IMAGE_CATEGORIES]
+        valid_choices = [gallery.storage_key for gallery in _allowed_galleries_from_tokens(allowed_categories)]
         if is_wl2_active:
             valid_choices = [category for category in valid_choices if category not in {"toya", "vbs"}]
         if not valid_choices:
@@ -132,17 +364,8 @@ def _resolve_send_image_request(
 
 def _resolve_gallery_category(text: str) -> str:
     """Resolve the category named in a gallery list request."""
-    return _match_category(
-        text,
-        (
-            ("toya", ("冬弥", "搭档", "toya")),
-            ("self", ("你", "彰人", "自拍", "self", "akito")),
-            ("food", ("吃", "食", "food", "松饼", "蛋糕", "甜点")),
-            ("groupmate", ("群友", "groupmate")),
-            ("vbs", ("合照", "vbs", "队友")),
-            ("meme", ("表情", "meme", "梗图")),
-        ),
-    )
+    gallery = _find_custom_gallery_exact(text) or _match_fixed_gallery(text, "list_aliases")
+    return gallery.storage_key if gallery else ""
 
 
 def _paginate_gallery(total_files: int, requested_page: int, items_per_page: int) -> tuple[int, int, int, int]:
@@ -152,6 +375,54 @@ def _paginate_gallery(total_files: int, requested_page: int, items_per_page: int
     start = (page - 1) * items_per_page
     end = page * items_per_page
     return page, total_pages, start, end
+
+
+create_gallery_cmd = on_regex(r"^新建图库\s*.*$", priority=5, block=True)
+
+
+@create_gallery_cmd.handle()
+async def _(event: Event):
+    if str(event.get_user_id()) != SUPERUSER_QQ:
+        return
+
+    name = re.sub(r"^新建图库\s*", "", event.get_plaintext().strip(), count=1).strip()
+    if not name:
+        await create_gallery_cmd.finish("图库名呢？格式是“新建图库XX”。")
+
+    async with GALLERY_CREATE_LOCK:
+        if GALLERY_REGISTRY_LOAD_ERROR:
+            await create_gallery_cmd.finish("……注册表读坏了，没法新建。先检查 gallery_registry.json。")
+
+        validation_error = _validate_custom_gallery_name(name, CUSTOM_GALLERIES)
+        if validation_error == "duplicate":
+            await create_gallery_cmd.finish(f"【{name}】已经有了。别让我重复建。")
+        if validation_error:
+            await create_gallery_cmd.finish("名字不合规。只能用 1 到 20 个中英文字、数字、下划线或短横线。")
+
+        gallery = GalleryDefinition(
+            storage_key=f"custom/{uuid.uuid4().hex}",
+            name=name,
+            caption_enabled=False,
+            permission_tokens=(name,),
+            custom=True,
+        )
+        save_dir = IMAGE_BASE_PATH / gallery.storage_key
+        try:
+            save_dir.mkdir(parents=True, exist_ok=False)
+            CUSTOM_GALLERIES.append(gallery)
+            _save_custom_gallery_registry(_get_gallery_registry_path(), CUSTOM_GALLERIES)
+        except Exception as exc:
+            if gallery in CUSTOM_GALLERIES:
+                CUSTOM_GALLERIES.remove(gallery)
+            try:
+                save_dir.rmdir()
+            except OSError:
+                pass
+            logger.error(f"新建图库失败: {exc}")
+            await create_gallery_cmd.finish("……没建成。稍后再试。")
+
+    await create_gallery_cmd.finish(f"……建好了。【{name}】图库，别乱塞东西进去。")
+
 
 def get_random_local_image(category: str) -> Path | None:
     """从某分类图库随机返回一张有效图片路径；目录不存在则创建后返回 None。"""
@@ -195,6 +466,8 @@ async def _(bot: Bot, event: GroupMessageEvent):
     replies_db = REACTIONS_DB.get("save_img_replies", {})
     category, save_msg = _resolve_save_category_and_reply(text, replies_db)
     if not category: return
+    gallery = _get_gallery(category)
+    if gallery is None or not _gallery_allowed(group_id, gallery): return
 
     try:
         save_dir = IMAGE_BASE_PATH / category
@@ -228,13 +501,15 @@ async def _(event: Event, args: Message = CommandArg()):
 
     target = args.extract_plain_text().strip()
     category = _resolve_collect_category(target)
+    gallery = _get_gallery(category)
 
-    if group_id and not check_img_permission(group_id, category):
+    if group_id and (gallery is None or not _gallery_allowed(group_id, gallery)):
         await collect_cmd.finish("（皱眉）……这是什么图。")
         return
 
     COLLECTING_MODE[session_key] = category
-    await collect_cmd.finish(f"""（拿出手机准备好）……行，发吧。现在开始自动存【{category}】的图。\n（发完记得说"停止进货"）""")
+    display_name = gallery.name if gallery else category
+    await collect_cmd.finish(f"""（拿出手机准备好）……行，发吧。现在开始自动存【{display_name}】的图。\n（发完记得说"停止进货"）""")
 
 auto_save_monitor = on_message(priority=7, block=False)
 @auto_save_monitor.handle()
@@ -293,6 +568,13 @@ async def _(event: Event, args: Message = CommandArg()):
     allowed = GROUP_IMAGE_PERMISSIONS.get(group_id, [])
     category, prompt_hint = _resolve_send_image_request(text, allowed, is_wl2_active)
     if not category:
+        if text:
+            replies = REACTIONS_DB.get("unknown_gallery_replies") or DEFAULT_UNKNOWN_GALLERY_REPLIES
+            grant_safety_pass(5)
+            await send_img_cmd.finish(random.choice(replies))
+        await send_img_cmd.finish("（摊手）……这儿没什么能发的。")
+    gallery = _get_gallery(category)
+    if gallery is None:
         await send_img_cmd.finish("（摊手）……这儿没什么能发的。")
 
     if is_wl2_active and category in ["toya", "vbs"]:
@@ -303,30 +585,22 @@ async def _(event: Event, args: Message = CommandArg()):
             "（瞥了一眼）……没有这种图可以发。"
         ]))
 
-    if not check_img_permission(group_id, category):
+    if not _gallery_allowed(group_id, gallery):
         await send_img_cmd.finish("（瞥了一眼）……没有这种图可以发。" if category in ["toya", "self"] else "（摆手）……不想发这个。")
 
     img_path = get_random_local_image(category)
-    if not img_path: await send_img_cmd.finish(f"（翻了翻相册）……啧，相册里还没存'{category}'的照片。你先发给我几张？")
+    if not img_path: await send_img_cmd.finish(f"（翻了翻相册）……啧，相册里还没存【{gallery.name}】的照片。你先发给我几张？")
 
     try:
-        if category == "groupmate":
+        if not gallery.caption_enabled:
             caption = ""
         else:
-            cat_cn_map = {
-                "toya": "搭档(青柳冬弥)的照片",
-                "self": "自己的帅气自拍/单人照",
-                "food": "刚吃过的甜点/松饼等美食照",
-                "vbs": "VBS小队成员的合照或日常",
-                "meme": "手机里存的搞笑表情包/梗图"
-            }
-            cat_cn = cat_cn_map.get(category, "照片")
             random_angles = REACTIONS_DB.get("send_img_angles") or ["语气切入点：随意的发言，像是随手丢过去的。"]
             current_angle = random.choice(random_angles)
 
             img_prompt = f"""
             {get_base_persona()}
-            【当前动作】：你从手机相册里翻出了一张【{cat_cn}】发送给对方。
+            【当前动作】：你从手机相册里翻出了一张【{gallery.caption_subject}】发送给对方。
             【导演要求】：{prompt_hint}
             【随机微表情】：{current_angle}
 
@@ -388,7 +662,6 @@ async def _(event: Event, args: Message = CommandArg()):
     if isinstance(event, GroupMessageEvent):
         gid = event.group_id
         if gid not in GROUP_IMAGE_PERMISSIONS: return
-        allowed_cats = GROUP_IMAGE_PERMISSIONS[gid]
     else: return
 
     params = args.extract_plain_text().strip().split()
@@ -397,10 +670,12 @@ async def _(event: Event, args: Message = CommandArg()):
 
     target_cat = _resolve_gallery_category(cat_raw)
     if not target_cat: await gallery_cmd.finish("请指定分类！例如：图库清单 表情")
-    if "all" not in allowed_cats and target_cat not in allowed_cats: await gallery_cmd.finish(f"🚫 本群没有查看【{target_cat}】的权限。")
+    gallery = _get_gallery(target_cat)
+    if gallery is None: await gallery_cmd.finish("请指定分类！例如：图库清单 表情")
+    if not _gallery_allowed(gid, gallery): await gallery_cmd.finish(f"🚫 本群没有查看【{gallery.name}】的权限。")
 
     all_files = get_file_list_safe(target_cat)
-    if not all_files: await gallery_cmd.finish(f"📂 【{target_cat}】相册是空的！")
+    if not all_files: await gallery_cmd.finish(f"📂 【{gallery.name}】相册是空的！")
 
     total_files = len(all_files)
     page, total_pages, start, end = _paginate_gallery(total_files, page, ITEMS_PER_PAGE)
@@ -420,7 +695,7 @@ async def _(event: Event, args: Message = CommandArg()):
     </head>
     <body>
         <div style="text-align:center; margin-bottom:10px;">
-            <b style="font-size:20px; color:#333;">📂 {target_cat} ({page}/{total_pages})</b><br>
+            <b style="font-size:20px; color:#333;">📂 {gallery.name} ({page}/{total_pages})</b><br>
             <span style="color:#888; font-size:12px;">共 {total_files} 张</span>
         </div>
         <div class="grid">

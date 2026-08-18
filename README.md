@@ -4,7 +4,7 @@
 
 - **CP 立场**：彰冬（不拆不逆）
 - **AI 后端**：DeepSeek API（对话）/ 智谱 GLM-4V（图片识别）/ Tavily（联网搜索）
-- **当前版本**：0.4.0
+- **当前版本**：0.4.5
 
 ---
 
@@ -230,8 +230,13 @@ AI 也会在对话中通过 `[[记下: ...]]` 标记自动提取长期记忆。
 | `图库清单 / 查看图库 [分类]` | HTML 缩略图浏览相册 |
 | `存 / 收下 / 投喂 / 增加 [分类]` | 手动存图 |
 | `开始进货 / 停止进货 [分类]` | 批量自动存图模式 |
+| `新建图库XX` | 新建全局无配文图库（**超管**，名称限 1–20 个中英文字、数字、下划线或短横线） |
 
-分类：冬弥(toya) / 彰人(self) / 美食(food) / 群友(groupmate) / 合照(vbs) / 表情(meme)
+分类：冬弥(toya) / 彰人(self) / 美食(food) / 群友(groupmate) / 合照(vbs) / 表情(meme) / 宠物(pet)
+
+- `发张宠物`、`发张群友` 及所有动态图库只发送图片，不附带配文；存图成功仍会简短确认
+- `发张X` 中的非空分类无法匹配时会直接拒绝，不再随机回落到其他图库；空参数 `发张` 保持原随机行为
+- 动态图库记录保存在 `data/gallery_registry.json`，图片保存在 `data/images/custom/`，重启后仍然有效
 
 ### 新人审核系统
 
@@ -374,7 +379,7 @@ akito_bot/
 | `akito_routine.json` / `wl2_routine.json` | 各时段日常状态（`status` + `poke`） |
 | `akito_sleep.json` | 睡眠文案（梦话 / 明确搜索被迫营业 / 各功能睡眠反应） |
 | `akito_reactions.json` | 被动反应（旧 flat 布局兼容保留；戳一戳兜底已移至 routine.json） |
-| `gallery_text.json` | 图库文案（存图回复 / 发图语气） |
+| `gallery_text.json` | 图库文案（存图回复 / 未知分类拒绝语 / 发图语气） |
 | `greetings.json` | 早晚安问候 |
 | `akito_scripts.json` | 台词剧本库（含 `type`/`category`/`topics`/`cn_key`/`context`/`dialogue`，检索键为 `cn_key`） |
 | `scripts_embeddings.npz` | 剧本语义向量库（`tools/build_embeddings.py` 生成，embed key=cn_key） |
@@ -407,7 +412,7 @@ TARGET_GROUPS=群号1,群号2
 GROUP_IMAGE_PERMISSIONS={"群号1":["all"],"群号2":["toya","self"]}
 ```
 
-修改后重启生效。
+修改后重启生效。图库权限为 `all` 的群会自动获得宠物及动态图库；显式分类群需加入 `pet`（或 `宠物`），动态图库则加入其完整名称。
 
 ---
 

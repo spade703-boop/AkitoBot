@@ -199,6 +199,7 @@ nonebot_mod = types.ModuleType("nonebot")
 nonebot_mod.on = _make_registration
 nonebot_mod.on_message = _make_registration
 nonebot_mod.on_command = _make_registration
+nonebot_mod.on_regex = _make_registration
 nonebot_mod.on_notice = _make_registration
 nonebot_mod.get_driver = lambda: _fake_driver
 nonebot_mod.get_bot = lambda: _fake_bot
