@@ -7,7 +7,44 @@ from unittest import mock
 
 import pytest
 
-from nonebot_plugin_akito.handlers import chat
+from nonebot_plugin_akito.handlers import chat, chat_pipeline
+
+
+def _incoming_turn(**overrides):
+    values = {
+        "session_key": "group_1001",
+        "message_id": "msg-1",
+        "user_id": "12345",
+        "group_id": 1001,
+        "sender_nickname": "测试群友",
+        "plain_text_content": "你好",
+        "has_image": False,
+        "current_image_identity": "",
+        "image_analysis": None,
+        "has_reply": False,
+        "reply_target_is_toya": False,
+        "origin_sender": "",
+    }
+    values.update(overrides)
+    return chat_pipeline.IncomingTurn(**values)
+
+
+def _prepared_turn(**overrides):
+    values = {
+        "turn": _incoming_turn(),
+        "user_mem": {"history": [], "temp_implants": [], "long_term_facts": []},
+        "messages_list": [
+            {"role": "system", "content": "SYSTEM"},
+            {"role": "user", "content": "[测试群友(12345)]: 你好"},
+        ],
+        "tagged_user_msg_for_llm": "[测试群友(12345)]: 你好",
+        "tagged_user_msg_for_history": "[测试群友(12345)]: 你好",
+        "is_toya_context": False,
+        "search_mode": "local",
+        "query_intent": SimpleNamespace(intent="mention", explicit_search=False, query=""),
+    }
+    values.update(overrides)
+    return chat_pipeline.PreparedTurn(**values)
 
 
 def test_build_interact_instruction_for_toya_reply_bridge():
@@ -349,3 +386,261 @@ async def test_smart_finish_without_message_id_keeps_text_fallback():
     await chat.smart_finish(matcher, "普通回复")
 
     assert matcher.finish.await_args.args[0] == "普通回复"
+
+
+def test_pipeline_gate_preserves_sleep_ignore_and_empty_message_paths():
+    with mock.patch.object(chat_pipeline, "check_sleep_status", return_value=(True, "ignore")):
+        ignored = chat_pipeline.decide_gate(_incoming_turn())
+
+    assert ignored.skip_send is True
+    assert ignored.text is None
+
+    with mock.patch.object(chat_pipeline, "check_sleep_status", return_value=(False, "")):
+        empty = chat_pipeline.decide_gate(_incoming_turn(plain_text_content=""))
+
+    assert empty.skip_send is False
+    assert empty.text == "干嘛……"
+    assert empty.delay_seconds == 0
+
+
+@pytest.mark.asyncio
+async def test_pipeline_collect_turn_strips_trigger_and_keeps_event_identity():
+    event = SimpleNamespace(
+        reply=None,
+        sender=SimpleNamespace(card="群名片", nickname="昵称"),
+        group_id=1001,
+        message_id="msg-9",
+        get_user_id=lambda: "12345",
+    )
+    with mock.patch.object(chat_pipeline, "get_memory_key", return_value="group_1001"):
+        result = await chat_pipeline.collect_turn_input(event, SimpleNamespace(), "小彰 你好")
+
+    assert result.session_key == "group_1001"
+    assert result.message_id == "msg-9"
+    assert result.sender_nickname == "群名片"
+    assert result.plain_text_content == "你好"
+    assert result.has_image is False
+
+
+@pytest.mark.asyncio
+async def test_pipeline_prepare_turn_preserves_message_order_and_prompt_input():
+    user_mem = {
+        "history": [{"role": "assistant", "content": '{"reply":"旧回复"}'}],
+        "temp_implants": [],
+        "long_term_facts": ["[08-01] 喜欢咖啡"],
+    }
+    shared_context = SimpleNamespace(
+        relationship_match=None,
+        persona="PERSONA",
+        script_examples="EXAMPLES",
+        pjsk_block="PJSK",
+        song_memories="SONG_MEMORY",
+        song_mention="SONG_MENTION",
+    )
+    query_intent = SimpleNamespace(intent="mention", explicit_search=False, query="")
+    with (
+        mock.patch.object(chat_pipeline, "get_daily_activity", return_value="DAILY"),
+        mock.patch.object(chat_pipeline, "get_festival_buff", return_value="FESTIVAL"),
+        mock.patch.object(chat_pipeline, "get_morning_run_buff", return_value="MORNING"),
+        mock.patch.object(chat_pipeline, "get_sleep_buffer_buff", return_value="SLEEP_BUFFER"),
+        mock.patch.object(chat_pipeline, "get_user_memory", return_value=user_mem),
+        mock.patch.object(
+            chat_pipeline,
+            "build_shared_prompt_context",
+            new=mock.AsyncMock(return_value=shared_context),
+        ),
+        mock.patch.object(chat_pipeline, "get_group_context", new=mock.AsyncMock(return_value="GROUP")),
+        mock.patch.object(chat_pipeline, "build_time_gap_prompt", return_value=""),
+        mock.patch.object(chat_pipeline, "classify_query_intent", return_value=query_intent),
+        mock.patch.object(chat, "build_director_note", return_value={}),
+        mock.patch.object(chat, "_build_final_system_prompt", return_value="SYSTEM") as prompt_mock,
+    ):
+        result = await chat_pipeline.prepare_turn(_incoming_turn(), "清醒提示")
+
+    assert result.search_mode == "local"
+    assert result.messages_list == [
+        {"role": "system", "content": "SYSTEM"},
+        {"role": "assistant", "content": '{"reply":"旧回复"}'},
+        {"role": "user", "content": "[测试群友(12345)]: 你好"},
+    ]
+    prompt_mock.assert_called_once()
+    assert prompt_mock.call_args.kwargs["sleep_instruction"] == "清醒提示"
+    assert prompt_mock.call_args.kwargs["long_term_memory_text"] == "[08-01] 喜欢咖啡"
+
+
+@pytest.mark.asyncio
+async def test_pipeline_dispatch_local_calls_standard_model_once():
+    prepared = _prepared_turn()
+    with (
+        mock.patch.object(chat_pipeline, "call_deepseek_api", new=mock.AsyncMock(return_value="LOCAL")) as call_mock,
+        mock.patch.object(chat_pipeline, "call_deepseek_api_agent", new=mock.AsyncMock()) as agent_mock,
+        mock.patch.object(chat_pipeline, "smart_search", new=mock.AsyncMock()) as search_mock,
+    ):
+        result = await chat_pipeline._dispatch_model(prepared)
+
+    assert result == "LOCAL"
+    call_mock.assert_awaited_once_with(prepared.messages_list, force_json=True)
+    agent_mock.assert_not_awaited()
+    search_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_pipeline_dispatch_forced_search_injects_result_before_generation():
+    prepared = _prepared_turn(
+        search_mode="forced",
+        query_intent=SimpleNamespace(intent="web_search", explicit_search=True, query="东京天气"),
+    )
+    with (
+        mock.patch.object(chat_pipeline, "smart_search", new=mock.AsyncMock(return_value="晴天")) as search_mock,
+        mock.patch.object(chat_pipeline, "call_deepseek_api", new=mock.AsyncMock(return_value="FORCED")) as call_mock,
+    ):
+        result = await chat_pipeline._dispatch_model(prepared)
+
+    assert result == "FORCED"
+    search_mock.assert_awaited_once_with("东京天气")
+    call_mock.assert_awaited_once_with(prepared.messages_list, force_json=True)
+    assert "晴天" in prepared.messages_list[-1]["content"]
+    assert "别照着原文念" in prepared.messages_list[-1]["content"]
+
+
+@pytest.mark.asyncio
+async def test_pipeline_dispatch_agent_preserves_tool_call_round_trip():
+    prepared = _prepared_turn(
+        search_mode="agent",
+        query_intent=SimpleNamespace(intent="web_search", explicit_search=False, query="赛事结果"),
+    )
+    tool_call = SimpleNamespace(
+        id="call-1",
+        type="function",
+        function=SimpleNamespace(name="search_internet", arguments='{"query":"赛事结果"}'),
+    )
+    agent_message = SimpleNamespace(tool_calls=[tool_call], content=None)
+    with (
+        mock.patch.object(
+            chat_pipeline,
+            "call_deepseek_api_agent",
+            new=mock.AsyncMock(return_value=agent_message),
+        ) as agent_mock,
+        mock.patch.object(chat_pipeline, "smart_search", new=mock.AsyncMock(return_value="冠军信息")) as search_mock,
+        mock.patch.object(chat_pipeline, "call_deepseek_api", new=mock.AsyncMock(return_value="AGENT")) as call_mock,
+    ):
+        result = await chat_pipeline._dispatch_model(prepared)
+
+    assert result == "AGENT"
+    agent_mock.assert_awaited_once_with(prepared.messages_list, tools=chat.AGENT_TOOLS)
+    search_mock.assert_awaited_once_with("赛事结果")
+    call_mock.assert_awaited_once_with(prepared.messages_list, force_json=True)
+    assert prepared.messages_list[-2]["tool_calls"][0]["id"] == "call-1"
+    assert prepared.messages_list[-1] == {
+        "role": "tool",
+        "tool_call_id": "call-1",
+        "content": "冠军信息",
+    }
+
+
+@pytest.mark.asyncio
+async def test_pipeline_post_process_keeps_memory_and_ooc_behavior():
+    prepared = _prepared_turn()
+    with mock.patch.object(chat_pipeline, "save_memory") as save_mock:
+        result = await chat_pipeline.post_process_reply(
+            prepared,
+            chat_pipeline.ChatReply(text="[[记下: 喜欢咖啡]]绘名姐啊喂", inner_os="记住了"),
+        )
+
+    assert result == chat_pipeline.ChatReply(text="绘名啊", inner_os="记住了")
+    assert prepared.user_mem["long_term_facts"][0].endswith("喜欢咖啡")
+    save_mock.assert_called_once_with()
+
+
+@pytest.mark.asyncio
+async def test_pipeline_post_process_regenerates_duplicate_reply():
+    prepared = _prepared_turn(
+        user_mem={
+            "history": [{"role": "assistant", "content": '{"reply":"重复回复"}'}],
+            "temp_implants": [],
+            "long_term_facts": [],
+        }
+    )
+    with mock.patch.object(
+        chat_pipeline,
+        "call_deepseek_api",
+        new=mock.AsyncMock(return_value='{"dialogue":"新的说法"}'),
+    ) as call_mock:
+        result = await chat_pipeline.post_process_reply(
+            prepared,
+            chat_pipeline.ChatReply(text="重复回复", inner_os=""),
+        )
+
+    assert result.text == "新的说法"
+    call_mock.assert_awaited_once_with(prepared.messages_list, force_json=True)
+    assert "绝对不能重复" in prepared.messages_list[-1]["content"]
+
+
+@pytest.mark.asyncio
+async def test_pipeline_commit_updates_history_and_group_records_once():
+    prepared = _prepared_turn()
+    reply = chat_pipeline.ChatReply(text="回复内容", inner_os="真实想法")
+    with (
+        mock.patch.object(chat_pipeline, "AKITO_STATUS", {}),
+        mock.patch.object(chat_pipeline, "save_memory") as save_mock,
+        mock.patch.object(chat_pipeline, "record_bot_response") as response_mock,
+        mock.patch.object(chat_pipeline, "record_bot_message", new=mock.AsyncMock()) as message_mock,
+    ):
+        await chat_pipeline.commit_turn(prepared, reply, "bot-1")
+        assert chat_pipeline.AKITO_STATUS["last_trigger_user"] == "12345"
+
+    assert prepared.user_mem["history"] == [
+        {"role": "user", "content": "[测试群友(12345)]: 你好"},
+        {"role": "assistant", "content": '{"inner_os": "真实想法", "reply": "回复内容"}'},
+    ]
+    save_mock.assert_called_once_with()
+    response_mock.assert_called_once_with(1001)
+    message_mock.assert_awaited_once_with(1001, "回复内容", "bot-1")
+
+
+@pytest.mark.asyncio
+async def test_pipeline_run_stops_before_prepare_for_silent_gate():
+    turn = _incoming_turn()
+    with (
+        mock.patch.object(chat_pipeline, "collect_turn_input", new=mock.AsyncMock(return_value=turn)),
+        mock.patch.object(
+            chat_pipeline,
+            "decide_gate",
+            return_value=chat_pipeline.GateDecision(
+                text=None,
+                delay_seconds=0,
+                skip_send=True,
+                sleep_instruction="",
+            ),
+        ),
+        mock.patch.object(chat_pipeline, "prepare_turn", new=mock.AsyncMock()) as prepare_mock,
+    ):
+        result = await chat_pipeline.run_chat_turn(SimpleNamespace(), SimpleNamespace(), SimpleNamespace())
+
+    assert result == chat_pipeline.PipelineResult(text=None, delay_seconds=0, finish_silently=True)
+    prepare_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_chat_handler_uses_matcher_finish_for_silent_pipeline_result():
+    event = SimpleNamespace(message_id="msg-silent")
+    finish_error = chat.FinishedException()
+    with (
+        mock.patch.object(chat, "get_memory_key", return_value="group_1001"),
+        mock.patch.object(
+            chat,
+            "run_chat_turn",
+            new=mock.AsyncMock(
+                return_value=chat_pipeline.PipelineResult(
+                    text=None,
+                    delay_seconds=0,
+                    finish_silently=True,
+                )
+            ),
+        ),
+        mock.patch.object(chat.chat, "finish", new=mock.AsyncMock(side_effect=finish_error)) as finish_mock,
+    ):
+        with pytest.raises(chat.FinishedException):
+            await chat._(event, SimpleNamespace(), SimpleNamespace())
+
+    finish_mock.assert_awaited_once_with()

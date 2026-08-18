@@ -90,7 +90,8 @@ gemini_bot/
     │   ├── retrieval.py          # 语义检索引擎
     │   └── time_awareness.py     # 时间感知
     ├── handlers/                 # 消息处理层
-    │   ├── chat.py               # 主对话引擎
+    │   ├── chat.py               # 主对话适配层、触发规则与发送出口
+    │   ├── chat_pipeline.py      # 主对话回合流水线
     │   ├── commands.py           # 管理指令
     │   └── reactions.py          # 被动反应
     └── features/                 # 独立功能模块（按功能分包）

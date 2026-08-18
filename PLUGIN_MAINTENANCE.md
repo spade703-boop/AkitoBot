@@ -25,7 +25,8 @@ nonebot_plugin_akito/
 │   └── paths.py              # 数据路径定位（find_data_path / get_data_dir）
 ├── handlers/                 # 主聊天处理层（响应群消息）
 │   ├── __init__.py
-│   ├── chat.py               # 主对话引擎（ReAct Agent 循环 + Python 端 MVVM 排版）
+│   ├── chat.py               # 主对话适配、会话锁与发送出口
+│   ├── chat_pipeline.py      # 回合流水线（上下文 + ReAct Agent + 后处理 + 提交）
 │   ├── commands.py           # 记忆管理指令（查看/植入/清除/遗忘/重置/热更新）
 │   └── reactions.py          # 被动反应（戳一戳 / 深夜自言自语）
 └── features/                 # 独立功能模块（按功能分包）
@@ -318,7 +319,7 @@ AKITO_SAFE_UNTIL = time.time() + 10   # 无效！
 
 ### chat.py
 
-主对话引擎。触发条件：消息以 `TRIGGER_NAMES`（`"小彰"` / `"东云小彰"`）开头，且发自 `ALLOWED_CHAT_GROUPS`。
+主对话适配层。触发条件：消息以 `TRIGGER_NAMES`（`"小彰"` / `"东云小彰"`）开头，且发自 `ALLOWED_CHAT_GROUPS`。实际回合编排位于同目录的 `chat_pipeline.py`；`chat.py` 负责 NoneBot 事件接入、会话锁、发送出口和最外层异常边界。
 
 **完整对话流程**：
 

@@ -291,7 +291,8 @@ akito_bot/
 │   │   ├── game_store.py           # 共享玩家存储层（gift/rpg 共用）
 │   │   └── paths.py                # 数据路径定位
 │   ├── handlers/                   # 主处理层
-│   │   ├── chat.py                 # 主对话引擎（ReAct Agent）
+│   │   ├── chat.py                 # 主对话适配、锁与发送出口
+│   │   ├── chat_pipeline.py        # 主对话回合流水线（ReAct Agent）
 │   │   ├── commands.py             # 记忆管理指令
 │   │   └── reactions.py            # 戳一戳 / 自我监控
 │   └── features/                   # 独立功能模块（按功能分包）

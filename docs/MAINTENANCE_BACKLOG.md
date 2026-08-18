@@ -22,11 +22,14 @@
 ## 🔴 高优先级（结构性、影响面大）
 
 ### M1. 主对话处理器是一个 ~410 行的上帝函数
-- [ ] 待办
+- [x] 完成
 - **证据**：`handlers/chat.py:393-804` 的单个 `@chat.handle()`。
 - **问题**：顺序编排了 13 个阶段（溯源回复→解析图文→睡眠拦截→算时间→交互对象→检索→记忆融合→导演骰子→拼 prompt→搜索/Agent 循环→解析回复→OOC 过滤→落库→发送），并在函数体内直接读写 `user_mem`、`messages_list` 等共享状态。
 - **影响**：最高频代码路径，却几乎无法单元测试；改任何一步都要通读全函数；异常边界只能靠最外层一个大 `try/except` 兜底。
 - **建议**：抽成显式流水线（parse → build_context → assemble_prompt → dispatch → parse_reply → post_process → persist → send），每段是可独立测试的纯函数。已抽出的 `_build_*` helper 是好开端，但真正的编排控制流仍全压在此函数里。
+- **落地**：新增 `handlers/chat_pipeline.py`，将输入采集、早退判定、上下文准备、模型生成、后处理和提交拆为请求级函数；`handlers/chat.py` 保留 NoneBot 适配、会话锁、发送和异常边界。旧 helper 入口继续兼容。
+- **验证**：`pytest -q tests/handlers/test_chat.py`（48 passed），`ruff check`（通过）。
+> 已处理：本次 M1 重构提交。
 
 ### M2. 系统提示词组装逻辑存在三份平行实现
 - [x] 完成
