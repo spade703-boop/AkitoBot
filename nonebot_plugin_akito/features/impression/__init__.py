@@ -1,6 +1,7 @@
 """群印象：默默记录群聊到 SQLite、生成「群印象」评价、低概率随机插嘴。"""
 
 import asyncio
+from dataclasses import asdict, dataclass
 import datetime
 import difflib
 import json
@@ -33,7 +34,8 @@ from ...core import (
     parse_json_object,
     record_bot_message,
     render_auto_chat_prompt,
-    render_impression_prompt,
+    render_impression_analysis_prompt,
+    render_impression_reply_prompt,
     rescue_field,
     rescue_tail_after_field,
 )
@@ -60,6 +62,8 @@ IMPRESSION_LIMITED_MAX_LENGTH = 120
 IMPRESSION_SPECIFIC_MAX_LENGTH = 180
 IMPRESSION_RECENT_REPLY_LIMIT = 8
 IMPRESSION_SIMILARITY_THRESHOLD = 0.72
+IMPRESSION_ENDING_SIMILARITY_THRESHOLD = 0.82
+IMPRESSION_CANDIDATE_COUNT = 3
 IMPRESSION_COMMANDS = ("群印象", "评价我", "说说印象", "我的印象")
 
 IMPRESSION_STALE_PATTERNS = (
@@ -87,6 +91,31 @@ BLOCK_KEYWORDS = [
 # ===========================================
 
 MessageRow = tuple[int, str, str, str, Optional[str], str]
+
+
+@dataclass(frozen=True)
+class ImpressionAnalysis:
+    mode: str
+    evidence: tuple[str, ...]
+    observations: tuple[str, ...]
+    uncertainties: tuple[str, ...]
+    avoid_patterns: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ImpressionStyleScore:
+    total: float
+    full: float
+    ending: float
+    clause: float
+
+
+@dataclass(frozen=True)
+class ImpressionCandidateEvaluation:
+    index: int
+    reply: str
+    score: ImpressionStyleScore
+    issue: str
 
 
 def _resolve_impression_target(event: GroupMessageEvent, bot_self_id: str) -> tuple[str, str, bool, bool]:
@@ -336,6 +365,31 @@ def _resolve_wl2_overlay(mem: dict, now_ts: Optional[float] = None) -> tuple[boo
     return False, ""
 
 
+def _build_impression_analysis_system_prompt(*, target_name: str) -> str:
+    return render_impression_analysis_prompt(
+        target_name=target_name,
+        recent_reply_limit=IMPRESSION_RECENT_REPLY_LIMIT,
+    )
+
+
+def _build_impression_reply_system_prompt(
+    *,
+    persona: str,
+    state_overlay_prompt: str,
+    target_name: str,
+    is_querying_other: bool,
+) -> str:
+    return render_impression_reply_prompt(
+        persona=persona,
+        state_overlay_prompt=state_overlay_prompt,
+        target_name=target_name,
+        is_querying_other=is_querying_other,
+        specific_max_length=IMPRESSION_SPECIFIC_MAX_LENGTH,
+        limited_max_length=IMPRESSION_LIMITED_MAX_LENGTH,
+        candidate_count=IMPRESSION_CANDIDATE_COUNT,
+    )
+
+
 def _build_impression_system_prompt(
     *,
     persona: str,
@@ -343,14 +397,12 @@ def _build_impression_system_prompt(
     target_name: str,
     is_querying_other: bool,
 ) -> str:
-    """Compatibility wrapper for the core impression renderer."""
-    return render_impression_prompt(
+    """Compatibility wrapper for tests and external imports."""
+    return _build_impression_reply_system_prompt(
         persona=persona,
         state_overlay_prompt=state_overlay_prompt,
         target_name=target_name,
         is_querying_other=is_querying_other,
-        specific_max_length=IMPRESSION_SPECIFIC_MAX_LENGTH,
-        limited_max_length=IMPRESSION_LIMITED_MAX_LENGTH,
     )
 
 
@@ -386,42 +438,52 @@ def _build_auto_chat_system_prompt(
     )
 
 
-def _parse_impression_result(raw_result: str) -> tuple[str, str, list[str], str, str]:
-    final_reply = ""
-    inner_os = ""
-    evidence: list[str] = []
-    mode = ""
-    angle = ""
+def _parse_string_tuple(value: object) -> tuple[str, ...]:
+    if isinstance(value, list):
+        return tuple(str(item).strip() for item in value if str(item).strip())
+    if isinstance(value, str) and value.strip():
+        return (value.strip(),)
+    return ()
 
+
+def _parse_impression_analysis(raw_result: str) -> Optional[ImpressionAnalysis]:
+    try:
+        response_data = parse_json_object(raw_result)
+        if response_data is None:
+            raise json.JSONDecodeError("invalid json object", raw_result, 0)
+        return ImpressionAnalysis(
+            mode=str(response_data.get("mode", "")).strip().lower(),
+            evidence=_parse_string_tuple(response_data.get("evidence", [])),
+            observations=_parse_string_tuple(response_data.get("observations", [])),
+            uncertainties=_parse_string_tuple(response_data.get("uncertainties", [])),
+            avoid_patterns=_parse_string_tuple(response_data.get("avoid_patterns", [])),
+        )
+    except (json.JSONDecodeError, TypeError, ValueError):
+        logger.warning(f"⚠️ [Impression] 材料分析未输出标准 JSON: {raw_result[:120]}")
+        return None
+
+
+def _parse_impression_candidates(raw_result: str) -> tuple[str, list[str]]:
+    inner_os = ""
+    candidates: tuple[str, ...] = ()
     try:
         response_data = parse_json_object(raw_result)
         if response_data is None:
             raise json.JSONDecodeError("invalid json object", raw_result, 0)
         inner_os = str(response_data.get("inner_os", "")).strip()
-        if inner_os:
-            logger.info(f"📝【小彰评价OS】: {inner_os}")
-        raw_evidence = response_data.get("evidence", [])
-        if isinstance(raw_evidence, list):
-            evidence = [str(item).strip() for item in raw_evidence if str(item).strip()]
-        elif isinstance(raw_evidence, str) and raw_evidence.strip():
-            evidence = [raw_evidence.strip()]
-        mode = str(response_data.get("mode", "")).strip().lower()
-        angle = str(response_data.get("angle", "")).strip()
-        final_reply = str(response_data.get("reply", "")).strip()
-        if not final_reply:
-            final_reply = "（打量了你一下）……没什么好说的。"
-    except json.JSONDecodeError:
-        logger.warning(f"⚠️ 评价系统未输出标准JSON: {raw_result[:120]}")
+        candidates = _parse_string_tuple(response_data.get("replies", []))
+        if not candidates:
+            candidates = _parse_string_tuple(response_data.get("reply", ""))
+    except (json.JSONDecodeError, TypeError, ValueError):
+        logger.warning(f"⚠️ [Impression] 表达阶段未输出标准 JSON: {raw_result[:120]}")
         rescued = rescue_field(raw_result, "reply")
         if rescued is None:
             rescued = rescue_tail_after_field(raw_result, "inner_os")
-        if rescued is not None:
-            final_reply = rescued.strip().strip('"')
-            logger.info(f"🔧 评价救援成功: {final_reply[:60]}")
-        else:
-            final_reply = "（上下打量了你一下）……啧，没什么特别的印象。"
+        if rescued is not None and rescued.strip():
+            candidates = (rescued.strip().strip('"'),)
 
-    return final_reply, inner_os, evidence, mode, angle
+    unique_candidates = list(dict.fromkeys(candidate for candidate in candidates if candidate))
+    return inner_os, unique_candidates
 
 
 def _find_impression_style_issue(reply: str) -> str:
@@ -467,7 +529,20 @@ def _find_impression_addressing_issue(reply: str, *, is_querying_other: bool) ->
 
 def _normalize_impression_body(reply: str) -> str:
     body = _extract_impression_body(reply)
-    return re.sub(r"[^\w\u4e00-\u9fff]", "", body).lower()
+    return _normalize_impression_text(body)
+
+
+def _normalize_impression_text(value: str) -> str:
+    return re.sub(r"[^\w\u4e00-\u9fff]", "", value).lower()
+
+
+def _split_impression_clauses(reply: str) -> list[str]:
+    body = _extract_impression_body(reply)
+    return [
+        normalized
+        for clause in re.split(r"[，,。！？!?；;…\n]+", body)
+        if len(normalized := _normalize_impression_text(clause)) >= 4
+    ]
 
 
 def _find_similar_impression_reply(reply: str, recent_replies: list[str]) -> tuple[str, float]:
@@ -488,6 +563,35 @@ def _find_similar_impression_reply(reply: str, recent_replies: list[str]) -> tup
     return closest_reply, closest_ratio
 
 
+def _max_similarity(value: str, candidates: list[str]) -> float:
+    if len(value) < 4:
+        return 0.0
+    return max(
+        (difflib.SequenceMatcher(None, value, candidate).ratio() for candidate in candidates if len(candidate) >= 4),
+        default=0.0,
+    )
+
+
+def _score_impression_style_reuse(reply: str, recent_replies: list[str]) -> ImpressionStyleScore:
+    if not recent_replies:
+        return ImpressionStyleScore(total=0.0, full=0.0, ending=0.0, clause=0.0)
+
+    body = _normalize_impression_body(reply)
+    recent_bodies = [_normalize_impression_body(item) for item in recent_replies]
+    full = _max_similarity(body, [item for item in recent_bodies if len(item) >= 20])
+
+    clauses = _split_impression_clauses(reply)
+    recent_clauses = [clause for item in recent_replies for clause in _split_impression_clauses(item)]
+    ending = _max_similarity(clauses[-1] if clauses else "", [
+        _split_impression_clauses(item)[-1]
+        for item in recent_replies
+        if _split_impression_clauses(item)
+    ])
+    clause = max((_max_similarity(item, recent_clauses) for item in clauses), default=0.0)
+    total = full * 0.35 + ending * 0.45 + clause * 0.20
+    return ImpressionStyleScore(total=total, full=full, ending=ending, clause=clause)
+
+
 def _load_recent_impression_replies(
     conn: sqlite3.Connection,
     *,
@@ -502,52 +606,132 @@ def _load_recent_impression_replies(
     return [str(row[0]).strip() for row in rows if row[0] and str(row[0]).strip()]
 
 
-def _validate_impression_result(
+def _validate_impression_analysis(
     *,
-    reply: str,
-    evidence: list[str],
-    mode: str,
-    angle: str,
-    target_name: str,
-    is_querying_other: bool,
+    analysis: ImpressionAnalysis,
     target_evidence_source: str,
-    recent_replies: Optional[list[str]] = None,
 ) -> tuple[bool, str]:
-    if not reply.startswith(f"对{target_name}的印象是"):
-        return False, "reply 未使用指定开头"
-    if mode not in {"specific", "limited"}:
+    if analysis.mode not in {"specific", "limited"}:
         return False, "mode 必须是 specific 或 limited"
-    max_reply_length = IMPRESSION_SPECIFIC_MAX_LENGTH if mode == "specific" else IMPRESSION_LIMITED_MAX_LENGTH
-    if len(reply) > max_reply_length:
-        return False, f"reply 超过 {max_reply_length} 字"
-    if mode == "specific" and len(angle) < 4:
-        return False, "angle 缺少有区分度的观察角度"
-    if mode == "limited" and not IMPRESSION_UNCERTAIN_PATTERN.search(reply):
-        return False, "limited 模式必须明确表达暂时看不准，而不是补全人格画像"
-    if not 2 <= len(evidence) <= 4:
+    if not 2 <= len(analysis.evidence) <= 4:
         return False, "evidence 必须包含 2-4 条本人原话"
 
     normalized_source = "".join(target_evidence_source.split())
-    for anchor in evidence:
+    for anchor in analysis.evidence:
         normalized_anchor = "".join(anchor.split())
         if len(normalized_anchor) < 2 or normalized_anchor not in normalized_source:
             return False, f"evidence 不在目标发言中: {anchor!r}"
+    if analysis.mode == "specific" and not 1 <= len(analysis.observations) <= 4:
+        return False, "specific 模式必须包含 1-4 条 observations"
+    if analysis.mode == "limited" and len(analysis.observations) > 1:
+        return False, "limited 模式最多保留一条确定现象"
+    if len(analysis.uncertainties) > 4:
+        return False, "uncertainties 最多包含 4 条"
+    if len(analysis.avoid_patterns) > 4:
+        return False, "avoid_patterns 最多包含 4 条"
+    return True, ""
+
+
+def _validate_impression_candidate(
+    *,
+    reply: str,
+    mode: str,
+    target_name: str,
+    is_querying_other: bool,
+    recent_replies: Optional[list[str]] = None,
+) -> tuple[bool, str, ImpressionStyleScore]:
+    score = _score_impression_style_reuse(reply, recent_replies or [])
+    if not reply.startswith(f"对{target_name}的印象是"):
+        return False, "reply 未使用指定开头", score
+    if mode not in {"specific", "limited"}:
+        return False, "mode 必须是 specific 或 limited", score
+    max_reply_length = IMPRESSION_SPECIFIC_MAX_LENGTH if mode == "specific" else IMPRESSION_LIMITED_MAX_LENGTH
+    if len(reply) > max_reply_length:
+        return False, f"reply 超过 {max_reply_length} 字", score
+    if mode == "limited" and not IMPRESSION_UNCERTAIN_PATTERN.search(reply):
+        return False, "limited 模式必须明确表达暂时看不准", score
     style_issue = _find_impression_style_issue(reply)
     if style_issue:
-        return False, style_issue
+        return False, style_issue, score
     addressing_issue = _find_impression_addressing_issue(reply, is_querying_other=is_querying_other)
     if addressing_issue:
-        return False, addressing_issue
-    similar_reply, similarity = _find_similar_impression_reply(reply, recent_replies or [])
-    if similarity >= IMPRESSION_SIMILARITY_THRESHOLD:
-        return False, f"reply 与近期评价过于相似（{similarity:.0%}）: {similar_reply[:36]!r}"
-    return True, ""
+        return False, addressing_issue, score
+    if score.full >= IMPRESSION_SIMILARITY_THRESHOLD:
+        return False, f"reply 与近期评价过于相似（{score.full:.0%}）", score
+    if score.ending >= IMPRESSION_ENDING_SIMILARITY_THRESHOLD:
+        return False, f"reply 结尾表达与近期评价过于相似（{score.ending:.0%}）", score
+    return True, "", score
+
+
+def _evaluate_impression_candidates(
+    candidates: list[str],
+    *,
+    analysis: ImpressionAnalysis,
+    target_name: str,
+    is_querying_other: bool,
+    recent_replies: list[str],
+) -> list[ImpressionCandidateEvaluation]:
+    evaluations: list[ImpressionCandidateEvaluation] = []
+    for index, candidate in enumerate(candidates):
+        valid, issue, score = _validate_impression_candidate(
+            reply=candidate,
+            mode=analysis.mode,
+            target_name=target_name,
+            is_querying_other=is_querying_other,
+            recent_replies=recent_replies,
+        )
+        evaluations.append(ImpressionCandidateEvaluation(index=index, reply=candidate, score=score, issue=issue if not valid else ""))
+    return evaluations
+
+
+def _select_impression_candidate(evaluations: list[ImpressionCandidateEvaluation]) -> Optional[ImpressionCandidateEvaluation]:
+    valid = [evaluation for evaluation in evaluations if not evaluation.issue]
+    if not valid:
+        return None
+    return min(valid, key=lambda evaluation: evaluation.score.total)
+
+
+def _build_impression_analysis_user_prompt(
+    *,
+    target_name: str,
+    history_text: str,
+    context_text: str,
+    recent_replies: list[str],
+) -> str:
+    recent_text = "\n".join(f"- {reply}" for reply in recent_replies) or "（暂无近期评价）"
+    return f"""
+【目标：{target_name}】
+
+【目标本人整体发言样本】
+{history_text}
+
+【近期对话片段】
+{context_text}
+
+【近期已发送群印象：只做表达结构审计，不可作为事实材料】
+{recent_text}
+
+请先核对 evidence 是否来自目标本人，再整理 observations、uncertainties 和近期需要避开的抽象表达结构。
+""".strip()
+
+
+def _build_impression_reply_user_prompt(*, target_name: str, analysis: ImpressionAnalysis) -> str:
+    analysis_payload = json.dumps(asdict(analysis), ensure_ascii=False)
+    return f"""
+【当前评价对象：{target_name}】
+
+【已完成的材料分析】
+{analysis_payload}
+
+只依据以上分析形成群印象。avoid_patterns 只表示本次表达需要避开的近期组织方式，不是新的事实材料。
+请输出 {IMPRESSION_CANDIDATE_COUNT} 条候选；候选之间要有真实的表达差异，而不是同一句话的近义词替换。
+""".strip()
 
 
 def _parse_impression_reply(raw_result: str) -> tuple[str, str]:
     """Parse impression model output into final reply and inner thoughts."""
-    final_reply, inner_os, _evidence, _mode, _angle = _parse_impression_result(raw_result)
-    return final_reply, inner_os
+    inner_os, candidates = _parse_impression_candidates(raw_result)
+    return (candidates[0] if candidates else ""), inner_os
 
 
 def _should_skip_random_chat(msg: str) -> bool:
@@ -702,78 +886,137 @@ async def _(bot: Bot, event: GroupMessageEvent):
     {wl2_overlay}
     """
 
-    system_prompt = _build_impression_system_prompt(
-        persona=persona,
-        state_overlay_prompt=state_overlay_prompt,
-        target_name=target_name,
-        is_querying_other=is_querying_other,
-    )
-
-    user_prompt = f"""
-    以下材料只用于评价【{target_name}】。
-
-    【本人整体发言样本（最近最多 {IMPRESSION_HISTORY_LIMIT} 条）】
-    {history_text}
-
-    【近期对话片段（最近 {IMPRESSION_RECENT_DAYS} 天，最多 {IMPRESSION_CONTEXT_MAX_BLOCKS} 段）】
-    {context_text}
-
-    请先从【{target_name}】本人的原话中选取 evidence，再综合一段时间内的表现形成整体印象。其他人的话只能帮助理解对话。
-    最终回复必须遵守 system 中的称呼方式：{"用“她”谈论目标" if is_querying_other else "直接用“你”对本人说"}。
-    """
-
     try:
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ]
         final_reply = ""
+        analysis = None
+        analysis_messages = [
+            {"role": "system", "content": _build_impression_analysis_system_prompt(target_name=target_name)},
+            {
+                "role": "user",
+                "content": _build_impression_analysis_user_prompt(
+                    target_name=target_name,
+                    history_text=history_text,
+                    context_text=context_text,
+                    recent_replies=recent_impression_replies,
+                ),
+            },
+        ]
         for attempt in range(2):
             raw_result = await call_deepseek_api(
-                messages,
+                analysis_messages,
                 model_name=MODEL_NAME,
                 force_json=True,
-                temperature=0.8,
-                presence_penalty=0.2,
-                frequency_penalty=0.2,
+                temperature=0.25,
+                presence_penalty=0.0,
+                frequency_penalty=0.0,
                 max_tokens=1024,
                 timeout=60.0,
             )
-            candidate_reply, _inner_os, evidence, mode, angle = _parse_impression_result(raw_result)
-            is_valid, invalid_reason = _validate_impression_result(
-                reply=candidate_reply,
-                evidence=evidence,
-                mode=mode,
-                angle=angle,
-                target_name=target_name,
-                is_querying_other=is_querying_other,
-                target_evidence_source=target_evidence_source,
-                recent_replies=recent_impression_replies,
-            )
-            if is_valid:
-                final_reply = candidate_reply
-                break
+            parsed_analysis = _parse_impression_analysis(raw_result)
+            if parsed_analysis is not None:
+                is_valid, invalid_reason = _validate_impression_analysis(
+                    analysis=parsed_analysis,
+                    target_evidence_source=target_evidence_source,
+                )
+                if is_valid:
+                    analysis = parsed_analysis
+                    logger.info(
+                        f"🧭 [Impression] 材料分析完成: mode={analysis.mode!r}, "
+                        f"observations={len(analysis.observations)}, avoid_patterns={len(analysis.avoid_patterns)}"
+                    )
+                    break
+            else:
+                invalid_reason = "分析结果不是合法 JSON"
 
-            logger.warning(
-                f"⚠️ [Impression] 结果校验失败（第 {attempt + 1} 次）: {invalid_reason}; "
-                f"reply_len={len(candidate_reply)}, mode={mode!r}, angle={angle!r}"
-            )
+            logger.warning(f"⚠️ [Impression] 材料分析校验失败（第 {attempt + 1} 次）: {invalid_reason}")
             if attempt == 0:
-                messages.extend(
+                analysis_messages.extend(
                     [
                         {"role": "assistant", "content": raw_result},
                         {
                             "role": "user",
                             "content": (
-                                f"上一次输出未通过校验：{invalid_reason}。请重新阅读材料并输出完整 JSON；"
-                                f"evidence 必须逐字来自【{target_name}】本人发言；angle 要写出不能套给别人的具体观察；"
-                                "材料足够就用 specific 自然发挥；材料太碎就用 limited 明说暂时看不准，"
-                                "不要写兴趣标签加性格结论的人物小传；"
-                                f"称呼目标时必须{('使用“她”' if is_querying_other else '直接使用“你”')}。"
+                                f"上一次分析未通过校验：{invalid_reason}。请重新输出完整 JSON；"
+                                f"evidence 必须逐字来自【{target_name}】本人发言，observations 只能总结目标材料，"
+                                "avoid_patterns 只能描述近期评价的表达结构，不能复制旧评价原句。"
                             ),
                         },
                     ]
                 )
+
+        if analysis is not None:
+            expression_messages = [
+                {
+                    "role": "system",
+                    "content": _build_impression_reply_system_prompt(
+                        persona=persona,
+                        state_overlay_prompt=state_overlay_prompt,
+                        target_name=target_name,
+                        is_querying_other=is_querying_other,
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": _build_impression_reply_user_prompt(target_name=target_name, analysis=analysis),
+                },
+            ]
+            for attempt in range(2):
+                raw_result = await call_deepseek_api(
+                    expression_messages,
+                    model_name=MODEL_NAME,
+                    force_json=True,
+                    temperature=0.95,
+                    presence_penalty=0.3,
+                    frequency_penalty=0.3,
+                    max_tokens=1536,
+                    timeout=60.0,
+                )
+                inner_os, candidates = _parse_impression_candidates(raw_result)
+                if inner_os:
+                    logger.info(f"📝【小彰评价OS】: {inner_os}")
+                evaluations: list[ImpressionCandidateEvaluation] = []
+                selected = None
+                if len(candidates) < IMPRESSION_CANDIDATE_COUNT and attempt == 0:
+                    invalid_reason = f"候选数量不足（需要 {IMPRESSION_CANDIDATE_COUNT} 条，实际 {len(candidates)} 条）"
+                else:
+                    evaluations = _evaluate_impression_candidates(
+                        candidates[:IMPRESSION_CANDIDATE_COUNT],
+                        analysis=analysis,
+                        target_name=target_name,
+                        is_querying_other=is_querying_other,
+                        recent_replies=recent_impression_replies,
+                    )
+                    selected = _select_impression_candidate(evaluations)
+                    invalid_reasons = [
+                        f"#{evaluation.index + 1}: {evaluation.issue}"
+                        for evaluation in evaluations
+                        if evaluation.issue
+                    ]
+                    invalid_reason = "；".join(invalid_reasons) or "没有可用候选"
+                    if selected is not None:
+                        final_reply = selected.reply
+                        logger.info(
+                            f"✅ [Impression] 选择候选 #{selected.index + 1}: "
+                            f"style={selected.score.total:.0%} full={selected.score.full:.0%} "
+                            f"ending={selected.score.ending:.0%} clause={selected.score.clause:.0%}"
+                        )
+                        break
+
+                logger.warning(f"⚠️ [Impression] 表达候选校验失败（第 {attempt + 1} 次）: {invalid_reason}")
+                if attempt == 0:
+                    expression_messages.extend(
+                        [
+                            {"role": "assistant", "content": raw_result},
+                            {
+                                "role": "user",
+                                "content": (
+                                    f"上一次候选未通过校验：{invalid_reason}。请重新输出完整 JSON；"
+                                    f"必须给出 {IMPRESSION_CANDIDATE_COUNT} 条候选，遵守目标称呼，"
+                                    "并避开分析结果中的近期重复表达结构。候选可以自然结束，不要补统一的态度收尾。"
+                                ),
+                            },
+                        ]
+                    )
 
         if not final_reply:
             if is_querying_other:

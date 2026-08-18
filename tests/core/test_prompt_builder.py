@@ -165,7 +165,11 @@ def test_task_renderers_keep_distinct_json_field_sets():
         schema_action="ACTION",
         schema_dialogue="DIALOGUE",
     )
-    impression = prompt_builder.render_impression_prompt(
+    impression_analysis = prompt_builder.render_impression_analysis_prompt(
+        target_name="小明",
+        recent_reply_limit=8,
+    )
+    impression_reply = prompt_builder.render_impression_reply_prompt(
         persona="人设",
         state_overlay_prompt="",
         target_name="小明",
@@ -190,7 +194,10 @@ def test_task_renderers_keep_distinct_json_field_sets():
 
     assert '"action": "ACTION"' in main
     assert '"dialogue": "DIALOGUE"' in main
-    assert '"evidence": [' in impression
-    assert '"mode": "材料足够时填 specific' in impression
+    assert '"evidence": [' in impression_analysis
+    assert '"observations": [' in impression_analysis
+    assert '"replies": [' in impression_reply
+    assert '"action":' not in impression_analysis
+    assert '"evidence":' not in impression_reply
     assert '"anchor": "若要回复' in auto
     assert '"reply": "你实际发在群里的话' in auto

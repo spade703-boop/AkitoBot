@@ -108,7 +108,8 @@ from .context import (
 )
 from .prompt_builder import (
     JsonFieldSpec, JsonSchemaSpec, PromptFrame, SharedPromptContext,
-    build_shared_prompt_context, render_auto_chat_prompt, render_impression_prompt,
+    build_shared_prompt_context, render_auto_chat_prompt, render_impression_analysis_prompt,
+    render_impression_prompt, render_impression_reply_prompt,
     render_json_schema, render_main_chat_prompt, render_prompt_frame,
 )
 from .time_awareness import (
@@ -154,7 +155,8 @@ __all__ = [
     # prompt_builder
     "PromptFrame", "JsonFieldSpec", "JsonSchemaSpec", "SharedPromptContext",
     "build_shared_prompt_context", "render_json_schema", "render_prompt_frame",
-    "render_main_chat_prompt", "render_impression_prompt", "render_auto_chat_prompt",
+    "render_main_chat_prompt", "render_impression_analysis_prompt", "render_impression_reply_prompt",
+    "render_impression_prompt", "render_auto_chat_prompt",
     # time_awareness
     "record_bot_response", "build_time_gap_prompt",
     # retrieval

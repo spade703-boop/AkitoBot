@@ -200,7 +200,48 @@ def render_main_chat_prompt(
     return render_prompt_frame(frame, schema)
 
 
-def render_impression_prompt(
+def render_impression_analysis_prompt(
+    *,
+    target_name: str,
+    recent_reply_limit: int,
+) -> str:
+    """Render the persona-free analysis stage for group impressions."""
+    frame = PromptFrame(
+        system_header="【系统级绝对指令：群印象材料分析】",
+        environment_blocks=("本阶段不注入角色人设、世界线或表达口吻。",),
+        role_knowledge_blocks=(
+            "你是中立的材料分析器。只整理材料中能够成立的事实、长期观察和不确定边界，不写最终回复。",
+        ),
+        task_context_blocks=(
+            f"分析对象是【{target_name}】。用户消息会分别提供目标本人的历史材料、近期上下文，以及最近最多 {recent_reply_limit} 条已发送群印象。",
+            "历史材料用于形成观察；近期已发送群印象只用于识别重复表达，绝不能作为目标事实。",
+        ),
+        task_rule_blocks=(
+            "【分析规则】\n"
+            "1. evidence 必须逐字来自目标本人发言，每条保留足以辨认含义的短片段。\n"
+            "2. observations 描述一段时间内能够成立的具体发现，不使用角色口吻，不写评价台词，也不把兴趣名称直接当作性格。\n"
+            "3. 可以记录有依据但尚不能确定的理解，将其放入 uncertainties，不得把推测写成事实。\n"
+            "4. avoid_patterns 只抽象描述近期评价反复使用的组织方式、转折方式或收尾方式，不复制旧评价原句，也不引入旧评价中的人物事实。\n"
+            "5. specific 需要 1-4 条 observations；limited 最多保留 1 条确定现象，并明确材料为何不足。",
+        ),
+    )
+    schema = JsonSchemaSpec(
+        fields=(
+            JsonFieldSpec("mode", "材料充分时填 specific；材料零碎时填 limited"),
+            JsonFieldSpec(
+                "evidence",
+                [f"从【{target_name}】本人发言中原样复制2-16个字", "再复制一处本人发言作为依据"],
+            ),
+            JsonFieldSpec("observations", ["跨多条材料能够成立的具体发现"]),
+            JsonFieldSpec("uncertainties", ["有依据但仍需保留不确定性的理解；没有则为空数组"]),
+            JsonFieldSpec("avoid_patterns", ["近期评价中已经重复出现的抽象表达结构；没有则为空数组"]),
+        ),
+        instruction="你必须且只能输出合法的 JSON 格式。不要用 ```json 包裹！",
+    )
+    return render_prompt_frame(frame, schema)
+
+
+def render_impression_reply_prompt(
     *,
     persona: str,
     state_overlay_prompt: str,
@@ -208,17 +249,16 @@ def render_impression_prompt(
     is_querying_other: bool,
     specific_max_length: int,
     limited_max_length: int,
+    candidate_count: int = 3,
 ) -> str:
-    """Render the group-impression system prompt using the shared frame."""
+    """Render the persona-aware expression stage for group impressions."""
     if is_querying_other:
-        target_pronoun = "她"
         scene_description = f"群友正在问你对【{target_name}】的印象；你是在向查询者谈论她。"
         addressing_rule = (
             f"固定开头之后，提到【{target_name}】时使用女性第三人称“她”。"
             "不要把她当成当前对话者写成“你”，也不要称作“他、这个人、这人、这家伙”。"
         )
     else:
-        target_pronoun = "你"
         scene_description = f"【{target_name}】本人正在当面问你对自己的印象；你是在直接对本人说话。"
         addressing_rule = (
             f"固定开头之后，提到【{target_name}】时使用第二人称“你”。"
@@ -226,40 +266,21 @@ def render_impression_prompt(
         )
 
     task_context = f"""
-【群印象任务】
+【群印象表达任务】
 {scene_description}
-这不是针对“群印象”这条指令本身的即时回复，而是综合一段时间内的发言，形成带有东云彰人个人观察角度的整体评价。
-材料分为“本人整体发言样本”和“近期对话片段”：整体样本用于观察一段时间内反复出现的关注点、态度和行为；近期片段只用于还原短句的前因后果。不要因为某一条最近消息很醒目，就把整段评价写成对那条消息的单句回复。
-
-【观察与判断】
-1. 先寻找跨多条发言能够成立的整体观察：反复关注什么、对什么特别上心、说话和参与群聊的方式、前后表现，或一段时间内比较稳定的倾向。
-2. 群印象需要有“你的看法”，不能只把聊天记录换一种说法。允许从明确、反复的表现作克制推断，例如一个人持续惦记某张卡，可以说“看来里面大概有{target_pronoun}很喜欢的角色”；这类推断要保留“看来、大概、估计、感觉”等不确定性，不能把未知动机写成事实。
-3. 兴趣类别本身不算观察。“玩游戏”“想抽卡”“聊吃的”要进一步说明{target_pronoun}表现出了怎样的投入、偏好、态度或变化。
-4. 材料里有两三个互不重复、确实有辨识度的发现时，可以自然串起来；不需要为了完整而把所有话题列一遍，也不必强行寻找“嘴上怎样、实际上怎样”的反差。
-5. 东云彰人的人设和当前世界线决定你的措辞、关注点和判断方式，不要求每次都显式评价自己是否喜欢、讨厌或认同对方。像“我倒不讨厌”“这种劲儿不赖”“至少不装”“跟我一样”这样的个人反应，只在它确实自然且能增加信息时使用，不能作为惯例收尾。
-6. 不要按“兴趣标签 → 性格概括 → 好不好相处”写标准人物小传，也不要为了显得像东云彰人而在观察之后额外补一句态度。看法已经说清楚时就直接结束。
-7. 基础人设里“对群友没兴趣”表示你保持距离、不会过度热情，不表示你眼里所有群友都一样，更不表示要把人概括成“普通人”。
-
-【材料强弱分流】
-- `specific`：材料支持至少一条稳定、具体、有辨识度的整体观察。可以围绕一个重点，也可以自然串起两三个可靠发现；允许加入有依据、措辞克制的理解和推断。
-- `limited`：材料主要是孤立短句、常见话题、复读或缺少稳定表现，无法支持有辨识度的判断。此时直接说明目前看不准，可以附带一处确定能看出的现象，然后停下。
-- `limited` 表达的是证据不足，不是这个人没有特点；不能换成“普通人、没什么特别、也就那样”。
-
-【事实边界】
-1. 对【{target_name}】的材料依据只能来自本人实际发言。近期片段里其他人的话只用于理解上下文，绝不能算到【{target_name}】头上。
-2. 可以根据多条发言形成整体判断和克制推断，但不能凭空编造经历、关系、未出现的具体事件，或把不确定的动机和性格写成确定事实。
-3. 不必为了显得有依据而逐条复述聊天记录；最终评价应当像自然对话，不像分析报告。
-4. 材料不足或过于零碎时应保守评价，不要强行补全。
+用户消息会提供已经通过事实校验的材料分析结果。你只根据该结果形成自己的整体看法，不重新分析原始聊天，也不补写分析中没有的经历、关系或确定动机。
+完整人设和当前世界线负责决定你关注什么、怎么措辞、在哪里停下；不要为了体现角色性格，把对方硬套进你自己的核心特质或固定价值判断。
 """.strip()
     task_rules = f"""
 【称呼与回复要求】
 1. {addressing_rule}
 2. 必须符合东云彰人的口吻，并服从当前生效的世界线覆写。
-3. 必须用“对{target_name}的印象是……”开头；固定开头之后直接进入整体观察或判断，不要接“一个……的人/网友/玩家”式定义。
-4. `specific` 最多 {specific_max_length} 字，`limited` 最多 {limited_max_length} 字。通常一至三句，说清楚就停，不要为了字数补结论、补态度或强行升华。
-5. 禁止用“普通人/普通网友/普通玩家”“没什么特别的/没什么值得说的”“挺随和/挺好相处”“也就那样”作为结论。这些话没有提供有效观察。
-6. 少用“平时……偶尔……感觉……”的流水账句式，少连续使用“挺、感觉、不过、就是、偶尔”等模糊词。
-7. reply 是发到群里的纯文本，不要括号动作；evidence、angle 和 inner_os 不会发到群里。
+3. 每条候选都必须用“对{target_name}的印象是……”开头，随后直接进入自然看法；不得写人物小传、分析报告或标签清单。
+4. 分析结果中的 avoid_patterns 是本次必须避开的近期表达习惯。规避的是句式组织和收尾方式，不得因此歪曲材料或强行制造不同结论。
+5. 生成 {candidate_count} 条事实结论一致、但侧重点、句法组织、停顿节奏和结束位置有实质差异的候选；不能只替换近义词。
+6. 不要求补充态度、转折、总结或收尾。一个观察已经说清楚时可以直接结束；确有自然看法时也可以表达。
+7. `specific` 每条最多 {specific_max_length} 字，`limited` 每条最多 {limited_max_length} 字；不设最低字数和固定句数。
+8. 纯文本，不要括号动作；inner_os 不会发到群里。
 """.strip()
     frame = PromptFrame(
         system_header="【系统级绝对指令：群印象任务】",
@@ -270,18 +291,35 @@ def render_impression_prompt(
     )
     schema = JsonSchemaSpec(
         fields=(
-            JsonFieldSpec("inner_os", "用简短几句归纳一段时间内有依据的整体观察，以及可以成立的克制推断。"),
+            JsonFieldSpec("inner_os", "说明本次选择了哪些观察，以及候选之间如何避免重复结构。"),
             JsonFieldSpec(
-                "evidence",
-                [f"从【{target_name}】本人发言中原样复制2-16个字", "再复制一处本人发言作为依据"],
+                "replies",
+                [f"第 {index + 1} 条以‘对{target_name}的印象是……’开头的完整候选" for index in range(candidate_count)],
             ),
-            JsonFieldSpec("mode", "材料足够时填 specific；材料零碎、无法形成有辨识度判断时填 limited"),
-            JsonFieldSpec("angle", "specific 时写跨一段时间形成的整体观察主线和有依据的理解；limited 时留空"),
-            JsonFieldSpec("reply", f"以‘对{target_name}的印象是……’开头，按照称呼规则自然说出整体看法，不写人物小传或分析报告"),
         ),
         instruction="你必须且只能输出合法的 JSON 格式。不要用 ```json 包裹！",
     )
     return render_prompt_frame(frame, schema)
+
+
+def render_impression_prompt(
+    *,
+    persona: str,
+    state_overlay_prompt: str,
+    target_name: str,
+    is_querying_other: bool,
+    specific_max_length: int,
+    limited_max_length: int,
+) -> str:
+    """Compatibility wrapper for the persona-aware impression renderer."""
+    return render_impression_reply_prompt(
+        persona=persona,
+        state_overlay_prompt=state_overlay_prompt,
+        target_name=target_name,
+        is_querying_other=is_querying_other,
+        specific_max_length=specific_max_length,
+        limited_max_length=limited_max_length,
+    )
 
 
 def render_auto_chat_prompt(

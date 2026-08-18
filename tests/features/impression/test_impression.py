@@ -57,13 +57,14 @@ def test_resolve_impression_target_detects_querying_bot():
 
 
 def test_impression_prompt_distinguishes_self_and_other_addressing():
-    self_prompt = impression._build_impression_system_prompt(
+    analysis_prompt = impression._build_impression_analysis_system_prompt(target_name="小明")
+    self_prompt = impression._build_impression_reply_system_prompt(
         persona="基础人设",
         state_overlay_prompt="",
         target_name="小明",
         is_querying_other=False,
     )
-    other_prompt = impression._build_impression_system_prompt(
+    other_prompt = impression._build_impression_reply_system_prompt(
         persona="基础人设",
         state_overlay_prompt="",
         target_name="小红",
@@ -72,9 +73,13 @@ def test_impression_prompt_distinguishes_self_and_other_addressing():
 
     assert "使用第二人称“你”" in self_prompt
     assert "使用女性第三人称“她”" in other_prompt
-    assert "综合一段时间内的发言" in self_prompt
-    assert "不要求每次都显式评价自己是否喜欢" in self_prompt
+    assert "中立的材料分析器" in analysis_prompt
+    assert "候选之间" in self_prompt
+    assert "focus" not in analysis_prompt
     assert "focus" not in self_prompt
+    for phrase in ("这种劲儿不赖", "至少不装", "嘴上怎样", "看来里面"):
+        assert phrase not in analysis_prompt
+        assert phrase not in self_prompt
 
 
 def test_auto_chat_prompt_keeps_task_schema_and_shared_sections():
@@ -244,23 +249,25 @@ def test_resolve_wl2_overlay_uses_active_stored_content():
     assert overlay == "当前世界线"
 
 
-def test_validate_impression_result_requires_target_evidence():
-    valid, reason = impression._validate_impression_result(
-        reply="对小明的印象是挺能熬的，明明还没练完，倒是已经把明早的安排想好了。",
-        evidence=["还有两首没练完", "六点起来继续"],
-        mode="specific",
-        angle="嘴上没说多认真，但已经把没练完的歌和明早安排接上了",
-        target_name="小明",
-        is_querying_other=False,
+def test_validate_impression_analysis_requires_target_evidence():
+    valid, reason = impression._validate_impression_analysis(
+        analysis=impression.ImpressionAnalysis(
+            mode="specific",
+            evidence=("还有两首没练完", "六点起来继续"),
+            observations=("没有练完却已经安排了下一次练习",),
+            uncertainties=(),
+            avoid_patterns=(),
+        ),
         target_evidence_source="还有两首没练完\n六点起来继续",
     )
-    invalid, invalid_reason = impression._validate_impression_result(
-        reply="对小明的印象是挺能熬的。",
-        evidence=["还有两首没练完", "明天不是要演出吗"],
-        mode="specific",
-        angle="熬夜练歌还安排了第二天继续",
-        target_name="小明",
-        is_querying_other=False,
+    invalid, invalid_reason = impression._validate_impression_analysis(
+        analysis=impression.ImpressionAnalysis(
+            mode="specific",
+            evidence=("还有两首没练完", "明天不是要演出吗"),
+            observations=("熬夜练歌还安排了第二天继续",),
+            uncertainties=(),
+            avoid_patterns=(),
+        ),
         target_evidence_source="还有两首没练完\n六点起来继续",
     )
 
@@ -270,20 +277,36 @@ def test_validate_impression_result_requires_target_evidence():
     assert "evidence 不在目标发言中" in invalid_reason
 
 
-def test_parse_impression_result_reads_evidence_mode_and_angle():
+def test_parse_impression_analysis_reads_observations_and_style_patterns():
     raw = (
-        '{"inner_os":"确实挺拼","evidence":["还有两首没练完","六点起来继续"],'
-        '"mode":"specific","angle":"没练完就打算早起接着练",'
-        '"reply":"对小明的印象是对练习还挺认真的。"}'
+        '{"mode":"specific","evidence":["还有两首没练完","六点起来继续"],'
+        '"observations":["没有练完却已经安排了下一次练习"],'
+        '"uncertainties":["动机无法确认"],"avoid_patterns":["固定的认可式收尾"]}'
     )
 
-    reply, inner_os, evidence, mode, angle = impression._parse_impression_result(raw)
+    analysis = impression._parse_impression_analysis(raw)
 
-    assert reply == "对小明的印象是对练习还挺认真的。"
-    assert inner_os == "确实挺拼"
-    assert evidence == ["还有两首没练完", "六点起来继续"]
-    assert mode == "specific"
-    assert angle == "没练完就打算早起接着练"
+    assert analysis is not None
+    assert analysis.mode == "specific"
+    assert analysis.evidence == ("还有两首没练完", "六点起来继续")
+    assert analysis.observations == ("没有练完却已经安排了下一次练习",)
+    assert analysis.uncertainties == ("动机无法确认",)
+    assert analysis.avoid_patterns == ("固定的认可式收尾",)
+
+
+def test_parse_impression_candidates_reads_multiple_replies():
+    raw = (
+        '{"inner_os":"先说观察就停","replies":['
+        '"对小明的印象是……你最近一直在盯那张卡。",'
+        '"对小明的印象是……那张卡你是真没放下。",'
+        '"对小明的印象是……能让你反复提起，看来确实很喜欢。"]}'
+    )
+
+    inner_os, candidates = impression._parse_impression_candidates(raw)
+
+    assert inner_os == "先说观察就停"
+    assert len(candidates) == 3
+    assert candidates[0].startswith("对小明的印象是")
 
 
 def test_impression_style_filter_rejects_generic_profile_templates():
@@ -320,42 +343,72 @@ def test_impression_similarity_ignores_name_but_compares_reply_body():
     assert ratio == 1.0
 
 
-def test_validate_impression_result_rejects_recently_reused_wording():
-    recent_reply = "对小红的印象是……聊游戏一来劲就停不下来，嘴上嫌麻烦，真开打又比谁都认真。"
-
-    valid, reason = impression._validate_impression_result(
-        reply="对小明的印象是……聊游戏一来劲就停不下来，嘴上嫌麻烦，真开打又比谁都认真。",
-        evidence=["不想打了", "再来一把"],
+def test_candidate_selection_prefers_a_fresh_ending_without_global_ban():
+    analysis = impression.ImpressionAnalysis(
         mode="specific",
-        angle="嘴上说不打，实际开局比谁都快",
+        evidence=("一直盯着排名", "再来一把"),
+        observations=("会持续关注游戏结果",),
+        uncertainties=(),
+        avoid_patterns=(),
+    )
+    recent = [
+        "对小红的印象是……她一直盯着排名，这种劲儿不赖。",
+        "对小蓝的印象是……她一直盯着排名，至少不装。",
+    ]
+    candidates = [
+        "对小明的印象是……你一直盯着排名，这种劲儿不赖。",
+        "对小明的印象是……你会把结果记下来，下一把还想继续试。",
+    ]
+
+    evaluations = impression._evaluate_impression_candidates(
+        candidates,
+        analysis=analysis,
         target_name="小明",
         is_querying_other=False,
-        target_evidence_source="不想打了\n再来一把",
+        recent_replies=recent,
+    )
+    selected = impression._select_impression_candidate(evaluations)
+
+    assert selected is not None
+    assert selected.reply == candidates[1]
+    allowed, reason, _score = impression._validate_impression_candidate(
+        reply="对小明的印象是……你一直盯着排名，至少不装。",
+        mode="specific",
+        target_name="小明",
+        is_querying_other=False,
+    )
+    assert allowed is True
+    assert reason == ""
+
+
+def test_validate_impression_candidate_rejects_recently_reused_wording():
+    recent_reply = "对小红的印象是……聊游戏一来劲就停不下来，嘴上嫌麻烦，真开打又比谁都认真。"
+
+    valid, reason, score = impression._validate_impression_candidate(
+        reply="对小明的印象是……聊游戏一来劲就停不下来，嘴上嫌麻烦，真开打又比谁都认真。",
+        mode="specific",
+        target_name="小明",
+        is_querying_other=False,
         recent_replies=[recent_reply],
     )
 
     assert valid is False
     assert "近期评价过于相似" in reason
+    assert score.full == 1.0
 
 
 def test_validate_limited_impression_requires_honest_uncertainty():
-    valid, reason = impression._validate_impression_result(
+    valid, reason, _score = impression._validate_impression_candidate(
         reply="对小明的印象是……目前能看出的只有你经常接游戏话题，再往下说就有点硬猜了。",
-        evidence=["开一把吗", "又歪了"],
         mode="limited",
-        angle="",
         target_name="小明",
         is_querying_other=False,
-        target_evidence_source="开一把吗\n又歪了",
     )
-    invalid, invalid_reason = impression._validate_impression_result(
+    invalid, invalid_reason, _invalid_score = impression._validate_impression_candidate(
         reply="对小明的印象是个普通玩家，应该挺好相处的。",
-        evidence=["开一把吗", "又歪了"],
         mode="limited",
-        angle="",
         target_name="小明",
         is_querying_other=False,
-        target_evidence_source="开一把吗\n又歪了",
     )
 
     assert valid is True
@@ -370,14 +423,11 @@ def test_validate_specific_impression_allows_detail_beyond_old_eighty_char_limit
         "嘴上总嫌麻烦，手上倒一次没停，连别人漏掉的小地方也会顺手指出来，至少对游戏这件事不是随便混混。"
     )
 
-    valid, reason = impression._validate_impression_result(
+    valid, reason, _score = impression._validate_impression_candidate(
         reply=reply,
-        evidence=["不打了", "配队得这么换"],
         mode="specific",
-        angle="嘴上喊停却总是最快开下一局，抱怨归抱怨，讲配队时又很细",
         target_name="小明",
         is_querying_other=False,
-        target_evidence_source="不打了\n配队得这么换",
     )
 
     assert 80 < len(reply) <= impression.IMPRESSION_SPECIFIC_MAX_LENGTH
