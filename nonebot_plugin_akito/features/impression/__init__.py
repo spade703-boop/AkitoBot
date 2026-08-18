@@ -924,7 +924,8 @@ async def _(bot: Bot, event: GroupMessageEvent):
                             "role": "user",
                             "content": (
                                 f"上一次分析未通过校验：{invalid_reason}。请重新输出完整 JSON；"
-                                f"evidence 必须逐字来自【{target_name}】本人发言，observations 只能总结目标材料，"
+                                f"evidence 必须是包含2-4条字符串的 JSON 数组，逐字来自【{target_name}】本人发言，不能输出单个字符串；"
+                                "observations 只能总结目标材料，"
                                 "avoid_patterns 只能描述近期评价的表达结构，不能复制旧评价原句。"
                             ),
                         },

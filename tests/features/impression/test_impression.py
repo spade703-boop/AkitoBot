@@ -77,6 +77,7 @@ def test_impression_prompt_distinguishes_self_and_other_addressing():
     assert "使用第二人称“你”" in self_prompt
     assert "使用女性第三人称“她”" in other_prompt
     assert "中立的材料分析器" in analysis_prompt
+    assert "包含2-4个字符串的 JSON 数组" in analysis_prompt
     assert "候选之间" in self_prompt
     assert "focus" not in analysis_prompt
     assert "focus" not in self_prompt

@@ -195,6 +195,7 @@ def test_task_renderers_keep_distinct_json_field_sets():
     assert '"action": "ACTION"' in main
     assert '"dialogue": "DIALOGUE"' in main
     assert '"evidence": [' in impression_analysis
+    assert "包含2-4个字符串的 JSON 数组" in impression_analysis
     assert '"observations": [' in impression_analysis
     assert '"replies": [' in impression_reply
     assert '"action":' not in impression_analysis
