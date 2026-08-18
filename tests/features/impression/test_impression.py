@@ -77,6 +77,41 @@ def test_impression_prompt_distinguishes_self_and_other_addressing():
     assert "focus" not in self_prompt
 
 
+def test_auto_chat_prompt_keeps_task_schema_and_shared_sections():
+    result = impression._build_auto_chat_system_prompt(
+        persona="基础人设",
+        time_str="上午8点00分",
+        toya_anchor="冬弥锚点",
+        scene_desc="当前消息",
+        group_context="群聊背景",
+        relation_info="关系资料",
+        song_info="歌曲命中",
+        script_examples="剧本示例",
+        pjsk_block="PJSK 内容",
+        cool_guy_filter="语气限制",
+        task_logic="决定是否回复",
+        inner_os_guide="分析当前消息",
+    )
+
+    for fragment in (
+        "基础人设",
+        "上午8点00分",
+        "冬弥锚点",
+        "当前消息",
+        "群聊背景",
+        "关系资料",
+        "歌曲命中",
+        "剧本示例",
+        "PJSK 内容",
+        "语气限制",
+        "决定是否回复",
+    ):
+        assert fragment in result
+    assert '"inner_os": "分析当前消息"' in result
+    assert '"anchor":' in result
+    assert '"reply":' in result
+
+
 def test_impression_addressing_filter_rejects_wrong_target_pronouns():
     assert impression._find_impression_addressing_issue(
         "对小明的印象是……你最近一直惦记那张卡。",

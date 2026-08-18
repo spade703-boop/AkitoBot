@@ -30,7 +30,7 @@ from ..core import (
     TZ_CN,
     TZ_JST,
     WL2_ROUTINE,
-    build_retrieval_context,
+    build_shared_prompt_context,
     build_time_gap_prompt,
     call_deepseek_api,
     call_deepseek_api_agent,
@@ -39,18 +39,13 @@ from ..core import (
     describe_image,
     extract_json_block,
     format_image_analysis_for_chat,
-    get_base_persona,
+    format_relationship_context,
     get_daily_activity,
     get_festival_buff,
     get_group_context,
-    get_hybrid_relationship,
     get_memory_key,
     get_morning_run_buff,
-    get_relevant_examples,
-    get_relevant_pjsk,
     get_sleep_buffer_buff,
-    get_song_memories,
-    get_song_mention,
     get_toya_anchor,
     get_user_memory,
     grant_safety_pass,
@@ -678,16 +673,11 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage()):
             is_wl2=is_wl2,
         )
 
-        retrieval_ctx = await build_retrieval_context(
-            plain_text_content,
-            enable_expansion=bool(plain_text_content and len(plain_text_content.strip()) >= 3),
-        )
-        relationship_context, script_examples, pjsk_block = await asyncio.gather(
-            get_hybrid_relationship(plain_text_content),
-            get_relevant_examples(plain_text_content, 5, retrieval_ctx=retrieval_ctx),
-            get_relevant_pjsk(plain_text_content, 6, retrieval_ctx=retrieval_ctx),
-        )
-        song_context = get_song_memories() + get_song_mention(plain_text_content)
+        shared_prompt_context = await build_shared_prompt_context(plain_text_content)
+        relationship_context = format_relationship_context(shared_prompt_context.relationship_match)
+        script_examples = shared_prompt_context.script_examples
+        pjsk_block = shared_prompt_context.pjsk_block
+        song_context = shared_prompt_context.song_memories + shared_prompt_context.song_mention
         group_id = getattr(event, 'group_id', None)
         group_context = get_group_context(group_id) if group_id else ""
         time_gap_awareness = build_time_gap_prompt(group_id) if group_id else ""
@@ -770,7 +760,7 @@ async def _(event: Event, bot: Bot, message: Message = EventMessage()):
             group_context=group_context,
             interact_instruction=interact_instruction,
             referenced_relationship_instruction=referenced_relationship_instruction,
-            base_persona=get_base_persona(),
+            base_persona=shared_prompt_context.persona,
             script_examples=script_examples,
             pjsk_block=pjsk_block,
             song_memories=song_context,

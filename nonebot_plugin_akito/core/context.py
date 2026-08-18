@@ -1,5 +1,6 @@
 """Prompt 组装：人设、示例台词、歌曲记忆、关系文本等上下文片段的拼装与缓存。"""
 
+from dataclasses import dataclass
 import random
 
 from nonebot.log import logger
@@ -22,6 +23,14 @@ from .retrieval import (
 
 # Backward-compatible re-export for tests/legacy patch points.
 expand_query_for_retrieval = None
+
+
+@dataclass(frozen=True)
+class RelationshipMatch:
+    """A relationship profile matched by one of its registered keywords."""
+
+    keyword: str
+    content: str
 
 
 _SCRIPT_ATTRIBUTION_RULE = (
@@ -136,35 +145,34 @@ def get_song_mention(text: str) -> str:
     return "\n🎵【歌曲话题】检测到在聊这些歌，回应时用上你的真实记忆：\n" + "\n".join(matched_lines) + "\n"
 
 
-async def get_hybrid_relationship(text: str) -> str:
-    """命中关系档案关键词时拼装本地认知提示；联网统一由 chat.py 调度。"""
-    text_lower = text.lower()
-
-    # --- Step 1: 本地关键词白名单扫描 ---
-    # 直接遍历 RELATIONSHIP_DATA，只认 JSON 里明确登记的角色名/别名
-    matched_entry = None
-    matched_name = ""
+def find_relationship_match(text: str) -> RelationshipMatch | None:
+    """Return the first local relationship profile matching the query."""
+    text_lower = (text or "").lower()
     if RELATIONSHIP_DATA:
         for entry in RELATIONSHIP_DATA:
             keywords = entry.get("keywords", [])
             for kw in keywords:
-                if kw.lower() in text_lower:
-                    matched_entry = entry
-                    matched_name = kw
-                    break
-            if matched_entry:
-                break
+                if not isinstance(kw, str) or kw.lower() not in text_lower:
+                    continue
+                content = entry.get("content", "")
+                if isinstance(content, str) and content:
+                    return RelationshipMatch(keyword=kw, content=content)
+    return None
 
-    if not matched_entry:
+
+def format_relationship_context(match: RelationshipMatch | None) -> str:
+    """Format a matched relationship profile for the main chat prompt."""
+    if match is None:
         return ""
+    return (
+        f'\n【检测到用户正在询问关于"{match.keyword}"的话题】\n'
+        f"📖【长期记忆库 (基础认知)】📖\n{match.content}\n"
+    )
 
-    local_info = matched_entry.get("content", "")
-    if not local_info:
-        return ""
 
-    final_prompt = f'\n【检测到用户正在询问关于"{matched_name}"的话题】\n'
-    final_prompt += f"📖【长期记忆库 (基础认知)】📖\n{local_info}\n"
-    return final_prompt
+async def get_hybrid_relationship(text: str) -> str:
+    """命中关系档案关键词时拼装本地认知提示；联网统一由 chat.py 调度。"""
+    return format_relationship_context(find_relationship_match(text))
 
 
 # 查询扩散增强开关（出问题一键回退原行为）

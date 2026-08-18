@@ -138,3 +138,15 @@ async def test_hybrid_relationship_uses_local_profile_without_web_content():
         result = await context.get_hybrid_relationship("你怎么看冬弥？")
     assert "冬弥是彰人的搭档。" in result
     assert "网络搜索结果" not in result
+
+
+def test_relationship_match_formats_main_chat_context():
+    fake = [{"keywords": ["冬弥", "Toya"], "content": "冬弥是彰人的搭档。"}]
+    with mock.patch.object(context, "RELATIONSHIP_DATA", fake):
+        match = context.find_relationship_match("TOYA 最近怎么样")
+
+    assert match == context.RelationshipMatch(keyword="Toya", content="冬弥是彰人的搭档。")
+    assert context.format_relationship_context(match) == (
+        '\n【检测到用户正在询问关于"Toya"的话题】\n'
+        "📖【长期记忆库 (基础认知)】📖\n冬弥是彰人的搭档。\n"
+    )

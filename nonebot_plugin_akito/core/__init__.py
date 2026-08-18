@@ -101,10 +101,12 @@ from .api import (
     rerank_documents, rescue_field, rescue_tail_after_field,
 )
 from .context import (
+    RelationshipMatch, find_relationship_match, format_relationship_context,
     get_random_examples, get_base_persona, reload_persona, get_song_memories, get_song_mention,
     get_hybrid_relationship,
     get_relevant_examples, get_relevant_pjsk,
 )
+from .prompt_builder import SharedPromptContext, build_shared_prompt_context
 from .time_awareness import (
     record_bot_response, build_time_gap_prompt,
 )
@@ -142,8 +144,11 @@ __all__ = [
     "expand_query_for_retrieval", "extract_json_block", "format_image_analysis_for_chat", "parse_json_object",
     "rerank_documents", "rescue_field", "rescue_tail_after_field",
     # context
+    "RelationshipMatch", "find_relationship_match", "format_relationship_context",
     "get_random_examples", "get_base_persona", "reload_persona", "get_song_memories", "get_song_mention",
     "get_hybrid_relationship", "get_relevant_examples", "get_relevant_pjsk",
+    # prompt_builder
+    "SharedPromptContext", "build_shared_prompt_context",
     # time_awareness
     "record_bot_response", "build_time_gap_prompt",
     # retrieval

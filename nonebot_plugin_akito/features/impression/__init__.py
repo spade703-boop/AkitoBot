@@ -19,17 +19,13 @@ from ...core import (
     ALLOWED_CP_GROUPS,
     DB_PATH,
     PROMPTS_DB,
-    RELATIONSHIP_DATA,
     TZ_CN,
-    build_retrieval_context,
+    build_shared_prompt_context,
     call_deepseek_api,
     get_base_persona,
     get_daily_activity,
     get_group_context,
-    get_relevant_examples,
-    get_relevant_pjsk,
     get_safe_until,
-    get_song_mention,
     get_toya_anchor,
     get_user_memory,
     is_sleeping,
@@ -405,6 +401,49 @@ def _build_impression_system_prompt(
       "mode": "材料足够时填 specific；材料零碎、无法形成有辨识度判断时填 limited",
       "angle": "specific 时写跨一段时间形成的整体观察主线和有依据的理解；limited 时留空",
       "reply": "以‘对{target_name}的印象是……’开头，按照称呼规则自然说出整体看法，不写人物小传或分析报告"
+    }}
+    """
+
+
+def _build_auto_chat_system_prompt(
+    *,
+    persona: str,
+    time_str: str,
+    toya_anchor: str,
+    scene_desc: str,
+    group_context: str,
+    relation_info: str,
+    song_info: str,
+    script_examples: str,
+    pjsk_block: str,
+    cool_guy_filter: str,
+    task_logic: str,
+    inner_os_guide: str,
+) -> str:
+    """Assemble the task-specific system prompt for random group interjections."""
+    return f"""
+    【系统级绝对指令：潜水思维链与格式强制】
+    {persona}
+    【系统物理时间】当前时间是：{time_str}。绝对不可弄错时间。
+    {toya_anchor}
+    【当前回复目标（唯一）】{scene_desc}
+    【近期群聊背景（仅用于理解当前目标，禁止回复其中旧消息）】\n{group_context}
+    【人际资料】{relation_info}
+    {song_info}
+    {script_examples}
+    🎮【PJSK 世界观/黑话库】：
+    {pjsk_block}
+    {cool_guy_filter}
+
+    【任务目标与回复逻辑 (极其重要)】
+    {task_logic}
+
+    【================ 强制输出格式 (JSON) ================】
+    你必须且只能输出合法的 JSON 格式。不要用 ```json 包裹！
+    {{
+      "inner_os": "{inner_os_guide}",
+      "anchor": "若要回复，从当前消息中原样复制至少2个字符作为依据；决定静默时留空。禁止复制历史消息。",
+      "reply": "你实际发在群里的话。要求：1. 纯文本，极少用(动作)。2. 善用逗号连接短句，语感流畅。3. 绝不乱接别人的话。4. 旁观模式下如果决定不理，必须输出空字符串。"
     }}
     """
 
@@ -853,27 +892,15 @@ async def _(bot: Bot, event: GroupMessageEvent):
     )
     current_user_name = event.sender.card or event.sender.nickname
 
-    # 语义检索：相关剧本样本 + 相关 PJSK（与主聊天一致；get_relevant_examples 内含 query 扩散）
-    retrieval_ctx = await build_retrieval_context(
-        msg,
-        enable_expansion=bool(msg and len(msg.strip()) >= 3),
+    shared_prompt_context = await build_shared_prompt_context(msg)
+    script_examples = shared_prompt_context.script_examples
+    pjsk_block = shared_prompt_context.pjsk_block
+    relation_info = (
+        shared_prompt_context.relationship_match.content
+        if shared_prompt_context.relationship_match is not None
+        else ""
     )
-    script_examples, pjsk_block = await asyncio.gather(
-        get_relevant_examples(msg, 5, retrieval_ctx=retrieval_ctx),
-        get_relevant_pjsk(msg, 6, retrieval_ctx=retrieval_ctx),
-    )
-
-    # 本地关键词白名单扫描
-    relation_info = ""
-    if RELATIONSHIP_DATA:
-        for entry in RELATIONSHIP_DATA:
-            for kw in entry.get("keywords", []):
-                if kw in msg:
-                    relation_info = entry.get("content", "")
-                    break
-            if relation_info:
-                break
-    song_info = get_song_mention(msg)
+    song_info = shared_prompt_context.song_mention
 
     cool_guy_filter = PROMPTS_DB.get("cool_guy_filter", "")
 
@@ -886,7 +913,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
     h12 = 12 if h24 % 12 == 0 else h24 % 12
     time_str = f"{period}{h12}点{now.minute:02d}分"
 
-    persona = get_base_persona()
+    persona = shared_prompt_context.persona
     is_wl2_active = False
     try:
         mem = get_user_memory(f"group_{group_id}")
@@ -930,31 +957,20 @@ async def _(bot: Bot, event: GroupMessageEvent):
         inner_os_guide = f'分析过程：1.这句话是对我说的吗？2.当前消息"{msg}"本身有槽点吗？3.决定回应当前消息或继续潜水。'
         user_content = f'你在群里潜水，看到【{current_user_name}】说了："{msg}"。这句话不是对你说的。决定是否插嘴点评，严格按JSON格式输出。'
 
-    system_prompt = f"""
-    【系统级绝对指令：潜水思维链与格式强制】
-    {persona}
-    【系统物理时间】当前时间是：{time_str}。绝对不可弄错时间。
-    {toya_anchor}
-    【当前回复目标（唯一）】{scene_desc}
-    【近期群聊背景（仅用于理解当前目标，禁止回复其中旧消息）】\n{group_context}
-    【人际资料】{relation_info}
-    {song_info}
-    {script_examples}
-    🎮【PJSK 世界观/黑话库】：
-    {pjsk_block}
-    {cool_guy_filter}
-
-    【任务目标与回复逻辑 (极其重要)】
-    {task_logic}
-
-    【================ 强制输出格式 (JSON) ================】
-    你必须且只能输出合法的 JSON 格式。不要用 ```json 包裹！
-    {{
-      "inner_os": "{inner_os_guide}",
-      "anchor": "若要回复，从当前消息中原样复制至少2个字符作为依据；决定静默时留空。禁止复制历史消息。",
-      "reply": "你实际发在群里的话。要求：1. 纯文本，极少用(动作)。2. 善用逗号连接短句，语感流畅。3. 绝不乱接别人的话。4. 旁观模式下如果决定不理，必须输出空字符串。"
-    }}
-    """
+    system_prompt = _build_auto_chat_system_prompt(
+        persona=persona,
+        time_str=time_str,
+        toya_anchor=toya_anchor,
+        scene_desc=scene_desc,
+        group_context=group_context,
+        relation_info=relation_info,
+        song_info=song_info,
+        script_examples=script_examples,
+        pjsk_block=pjsk_block,
+        cool_guy_filter=cool_guy_filter,
+        task_logic=task_logic,
+        inner_os_guide=inner_os_guide,
+    )
 
     try:
         raw_result = await call_deepseek_api(
