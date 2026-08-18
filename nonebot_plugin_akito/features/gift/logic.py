@@ -311,7 +311,7 @@ def _settle_steal(group: dict, thief_id: str, victim_id: str, outcome: str, rng=
         out["amount"] = amount
 
     drop = _steal_bond_loss(cfg, outcome, int(out["amount"]), bond, rng)
-    new_bond = max(int(cfg.get("bond_floor", -1000)), bond - drop)
+    new_bond = max(int(cfg.get("bond_floor", -3000)), bond - drop)
     out["bond"] = bond - new_bond
     pkg._add_intimacy(group, thief_id, victim_id, new_bond - bond)
     return out

@@ -142,22 +142,43 @@ def test_bond_level_progress_and_maxed():
 def test_bond_level_negative_tiers():
     assert gift._bond_level(0)["name"] == "Hot Dogs"
     assert gift._bond_level(0)["level"] == 1
-    assert gift._bond_level(-1)["name"] == "闹别扭"
-    assert gift._bond_level(-50)["name"] == "闹别扭"
+    assert gift._bond_level(-1)["name"] == "小有摩擦"
+    assert gift._bond_level(-50)["name"] == "小有摩擦"
     assert gift._bond_level(-50)["team_level"] == 0
-    assert gift._bond_level(-51)["name"] == "看不顺眼"
+    assert gift._bond_level(-51)["name"] == "心生芥蒂"
     assert gift._bond_level(-51)["team_level"] == -1
-    assert gift._bond_level(-100)["name"] == "看不顺眼"
-    assert gift._bond_level(-101)["name"] == "有过节"
-    assert gift._bond_level(-180)["name"] == "有过节"
-    assert gift._bond_level(-181)["name"] == "结了梁子"
-    assert gift._bond_level(-300)["name"] == "结了梁子"
-    assert gift._bond_level(-301)["name"] == "势同水火"
+    assert gift._bond_level(-100)["name"] == "心生芥蒂"
+    assert gift._bond_level(-101)["name"] == "渐行渐远"
+    assert gift._bond_level(-180)["name"] == "渐行渐远"
+    assert gift._bond_level(-181)["name"] == "积怨渐深"
+    assert gift._bond_level(-300)["name"] == "积怨渐深"
+    assert gift._bond_level(-301)["name"] == "关系破裂"
     assert gift._bond_level(-301)["team_level"] == -2
-    assert gift._bond_level(-650)["name"] == "势同水火"
-    assert gift._bond_level(-651)["name"] == "宿敌"
-    assert gift._bond_level(-99999)["name"] == "宿敌"  # 兜底到最低档
+    assert gift._bond_level(-650)["name"] == "关系破裂"
+    assert gift._bond_level(-651)["name"] == "反目成仇"
+    assert gift._bond_level(-1000)["name"] == "反目成仇"
+    assert gift._bond_level(-1001)["name"] == "势不两立"
+    assert gift._bond_level(-1800)["name"] == "势不两立"
+    assert gift._bond_level(-1801)["name"] == "不共戴天"
+    assert gift._bond_level(-3000)["name"] == "不共戴天"
+    assert gift._bond_level(-99999)["name"] == "不共戴天"  # 兜底到最低档
     assert gift._bond_level(-10)["level"] <= 0  # 负档不挂 Lv
+
+
+def test_bond_floor_matches_lowest_level():
+    lowest_level = min(int(level["min"]) for level in gift._bond_levels())
+    assert gift._steal_cfg()["bond_floor"] == lowest_level
+
+
+def test_negative_bond_page_progress_uses_expanded_floor():
+    people = ({"qq": "A", "name": "A"}, {"qq": "B", "name": "B"})
+    levels = gift._bond_levels()
+
+    former_floor = gift.build_bond_page_data(*people, -1000, levels=levels)
+    expanded_floor = gift.build_bond_page_data(*people, -3000, levels=levels)
+
+    assert former_floor["visual_progress_pct"] == 33
+    assert expanded_floor["visual_progress_pct"] == 100
 
 
 def test_count_directed_bump_and_get():

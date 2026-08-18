@@ -88,7 +88,7 @@ def _negative_progress_pct(intimacy: int, levels: list[dict]) -> int:
     """负羁绊的视觉进度：越负越长，按最低负档到 0 的区间折算。"""
     if intimacy >= 0:
         return 0
-    negative_floor = min((int(lv.get("min", 0)) for lv in levels if int(lv.get("min", 0)) < 0), default=-1000)
+    negative_floor = min((int(lv.get("min", 0)) for lv in levels if int(lv.get("min", 0)) < 0), default=-3000)
     span = max(1, abs(negative_floor))
     pct = round(abs(intimacy) / span * 100)
     return max(0, min(100, pct))
@@ -210,12 +210,14 @@ def build_bond_rank_page_data(
 def _default_levels() -> list[dict]:
     """内置默认等级表（当调用方未传入 levels 时使用）。"""
     return [
-        {"min": -1000, "name": "宿敌", "team_level": -2},
-        {"min": -650, "name": "势同水火", "team_level": -2},
-        {"min": -300, "name": "结了梁子", "team_level": -1},
-        {"min": -180, "name": "有过节", "team_level": -1},
-        {"min": -100, "name": "看不顺眼", "team_level": -1},
-        {"min": -50, "name": "闹别扭", "team_level": 0},
+        {"min": -3000, "name": "不共戴天", "team_level": -2},
+        {"min": -1800, "name": "势不两立", "team_level": -2},
+        {"min": -1000, "name": "反目成仇", "team_level": -2},
+        {"min": -650, "name": "关系破裂", "team_level": -2},
+        {"min": -300, "name": "积怨渐深", "team_level": -1},
+        {"min": -180, "name": "渐行渐远", "team_level": -1},
+        {"min": -100, "name": "心生芥蒂", "team_level": -1},
+        {"min": -50, "name": "小有摩擦", "team_level": 0},
         {"min": 0, "name": "Hot Dogs"},
         {"min": 100, "name": "大麦克风"},
         {"min": 400, "name": "能信赖的搭档"},

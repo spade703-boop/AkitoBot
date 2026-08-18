@@ -467,6 +467,8 @@ _TEST_MY_BOND_PARTNERS: list[dict] = [
     {"qq": "test14", "name": "测试同好14", "avatar": "", "intimacy": -300},
     {"qq": "test15", "name": "测试同好15", "avatar": "", "intimacy": -650},
     {"qq": "test16", "name": "测试同好16", "avatar": "", "intimacy": -1000},
+    {"qq": "test17", "name": "测试同好17", "avatar": "", "intimacy": -1800},
+    {"qq": "test18", "name": "测试同好18", "avatar": "", "intimacy": -3000},
 ]
 
 
