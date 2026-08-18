@@ -564,16 +564,71 @@ async def test_pipeline_post_process_regenerates_duplicate_reply():
     with mock.patch.object(
         chat_pipeline,
         "call_deepseek_api",
-        new=mock.AsyncMock(return_value='{"dialogue":"新的说法"}'),
+        new=mock.AsyncMock(return_value='{"inner_os":"换个思路","dialogue":"新的说法"}'),
     ) as call_mock:
         result = await chat_pipeline.post_process_reply(
             prepared,
-            chat_pipeline.ChatReply(text="重复回复", inner_os=""),
+            chat_pipeline.ChatReply(text="重复回复", inner_os="第一次想法"),
         )
 
-    assert result.text == "新的说法"
+    assert result == chat_pipeline.ChatReply(text="新的说法", inner_os="换个思路")
     call_mock.assert_awaited_once_with(prepared.messages_list, force_json=True)
     assert "绝对不能重复" in prepared.messages_list[-1]["content"]
+
+
+@pytest.mark.asyncio
+async def test_pipeline_post_process_rescues_broken_regenerated_json():
+    prepared = _prepared_turn(
+        user_mem={
+            "history": [{"role": "assistant", "content": '{"reply":"重复回复"}'}],
+            "temp_implants": [],
+            "long_term_facts": [],
+        }
+    )
+    raw_result = '{"inner_os":"换个思路","reply":"救援后的说法","bad":"未闭合}'
+    with mock.patch.object(
+        chat_pipeline,
+        "call_deepseek_api",
+        new=mock.AsyncMock(return_value=raw_result),
+    ):
+        result = await chat_pipeline.post_process_reply(
+            prepared,
+            chat_pipeline.ChatReply(text="重复回复", inner_os="第一次想法"),
+        )
+
+    assert result == chat_pipeline.ChatReply(text="救援后的说法", inner_os="")
+
+
+@pytest.mark.asyncio
+async def test_pipeline_post_process_passes_toya_context_to_regenerated_reply_parser():
+    prepared = _prepared_turn(
+        user_mem={
+            "history": [{"role": "assistant", "content": '{"reply":"重复回复"}'}],
+            "temp_implants": [],
+            "long_term_facts": [],
+        },
+        is_toya_context=True,
+    )
+    raw_result = '{"action":"递过去","dialogue":"换一种说法。"}'
+    with (
+        mock.patch.object(
+            chat_pipeline,
+            "call_deepseek_api",
+            new=mock.AsyncMock(return_value=raw_result),
+        ),
+        mock.patch.object(
+            chat,
+            "_parse_model_reply",
+            return_value=("(递过去)换一种说法。", "第二次想法"),
+        ) as parse_mock,
+    ):
+        result = await chat_pipeline.post_process_reply(
+            prepared,
+            chat_pipeline.ChatReply(text="重复回复", inner_os="第一次想法"),
+        )
+
+    assert result == chat_pipeline.ChatReply(text="(递过去)换一种说法。", inner_os="第二次想法")
+    parse_mock.assert_called_once_with(raw_result, True)
 
 
 @pytest.mark.asyncio

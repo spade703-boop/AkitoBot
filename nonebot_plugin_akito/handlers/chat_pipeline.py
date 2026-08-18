@@ -33,7 +33,6 @@ from ..core import (
     check_sleep_status,
     classify_query_intent,
     describe_image,
-    extract_json_block,
     format_image_analysis_for_chat,
     format_relationship_context,
     get_daily_activity,
@@ -476,6 +475,7 @@ async def generate_reply(prepared: PreparedTurn) -> ChatReply:
 
 async def post_process_reply(prepared: PreparedTurn, reply: ChatReply) -> ChatReply:
     result = reply.text
+    inner_os = reply.inner_os
 
     memory_pattern = r"\[\[记下[:：]\s*(.*?)\]\]"
     matches = re.findall(memory_pattern, result)
@@ -517,13 +517,8 @@ async def post_process_reply(prepared: PreparedTurn, reply: ChatReply) -> ChatRe
             "这次必须从完全不同的角度切入，换一种表达方式，绝对不能重复！"
         )
         raw_result = await call_deepseek_api(prepared.messages_list, force_json=True)
-        try:
-            response_data = json.loads(extract_json_block(raw_result))
-            result = response_data.get("dialogue", "") or response_data.get("reply", "") or raw_result
-        except Exception as exc:
-            logger.warning(f"⚠️ JSON解析失败，使用原始回复: {exc}")
-            result = raw_result
-    return ChatReply(text=result, inner_os=reply.inner_os)
+        result, inner_os = _chat_module()._parse_model_reply(raw_result, prepared.is_toya_context)
+    return ChatReply(text=result, inner_os=inner_os)
 
 
 async def commit_turn(prepared: PreparedTurn, reply: ChatReply, bot_self_id: str) -> None:

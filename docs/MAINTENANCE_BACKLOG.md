@@ -56,7 +56,7 @@
 - **问题**：User/Group/记忆会话/RPG·gift 记录全是无类型 `dict`，靠散落各处的 `setdefault` 拼字段。
 - **影响**：想知道“一条用户记录有哪些字段”必须全仓库 grep；字段拼错不报错；mypy 对这些 dict 完全失明。
 - **建议**：至少为共享记录（user / group / 记忆会话 / RPG state）引入 `TypedDict` 或 `dataclass`，并在 `core/` 逐步打开 mypy 的 untyped-def 检查。不必全仓重写，先给最常被传递的几个 dict 定形状。
-> 已处理：当前工作区变更（commit 待提交）：新增 core、gift、RPG 分层 `TypedDict`，标注共享存储、记忆、送礼和 RPG 高频入口；`MessageRow` 保持 SQLite 六元素元组协议。群内用户与顶层全局用户仍共享同一对象，运行时视图仍由序列化层过滤，JSON schema 与 `SCHEMA_VERSION` 均未改变。RPG 群状态通过专用 accessor 接入 boss/analytics/team/scheduled，`python -m mypy` 在 `follow_imports = "silent"` 下检查 17 个传播模块，CI 门禁仍留给 M13。
+> 已处理：当前工作区变更（commit 待提交）：新增 core、gift、RPG 分层 `TypedDict`，标注共享存储、记忆、送礼和 RPG 高频入口；`MessageRow` 保持 SQLite 六元素元组协议。群内用户与顶层全局用户仍共享同一对象，运行时视图仍由序列化层过滤，JSON schema 与 `SCHEMA_VERSION` 均未改变。RPG 群状态通过专用 accessor 接入 boss/analytics/team/scheduled，`python -m mypy` 在 `follow_imports = "silent"` 下检查 17 个传播模块。
 
 ### M5. 人设 Prompt 文案在“代码硬编码”与“可热重载 JSON”之间随意分布
 - [ ] 待办
@@ -111,29 +111,25 @@
 - **问题**：spec §15.3 明令“代码中禁止硬编码 QQ 号”。虽非密钥，但既违规又本应属数据而非代码。
 - **建议**：移入 data 文件或 `.env`。
 
-### M13. 有 ruff/pytest/mypy 配置，却无任何自动化质量门
-- [ ] 待办
-- **证据**：无 `.github/workflows`、无 `.pre-commit-config.yaml`；§15.4 的“推送前检查清单”全靠人肉执行。
-- **影响**：约 9200 行测试的价值被“可能忘了跑”稀释；lint/测试回归无法拦在合入前。
-- **建议**：加一个 GitHub Actions 跑 `ruff check` + `pytest`（mypy 可选），或加 pre-commit hook。**投入最小、收益最直接。**
-
 ### M14. `SCHEMA_VERSION` 写而不用
 - [ ] 待办
 - **证据**：`core/game_store.py:27` 定义并写入 `SCHEMA_VERSION = 3`，但 `_normalize_data` 从不按版本分支迁移，只做尽力归一化。
 - **建议**：要么接上真正的版本化迁移，要么删掉这个会误导后人的字段。
 
 ### M15. 复读重生成分支的 JSON 解析路径与主路径不一致
-- [ ] 待办
-- **证据**：主解析走 `_parse_model_reply → parse_json_object`（`handlers/chat.py:279`），但复读检测后的重生成分支 `handlers/chat.py:768-770` 改用 `json.loads(extract_json_block(...))`，对畸形输出的容错弱于主路径的 rescue 链。
+- [x] 完成
+- **证据**：主解析走 `_parse_model_reply → parse_json_object`，但复读检测后的重生成分支原先改用 `json.loads(extract_json_block(...))`，对畸形输出的容错弱于主路径的 rescue 链。
 - **建议**：两处统一走同一 `parse_json_object`/`rescue_*` 链。
+- **落地**：复读重生成现在直接复用 `_parse_model_reply`，统一字段别名、动作拼接、残缺 JSON 救援和原文兜底；最终台词与 `inner_os` 均采用第二次生成结果。
+> 已处理：本次 M15 解析链统一提交。
 
 ---
 
 ## 建议的前三步（投入产出比最高）
 
-1. **先加 CI（M13）** —— 最低成本，立刻让后续所有重构有安全网。
-2. **抽出统一的 prompt 组装器（M2）+ 收敛 SQLite 访问到 memory.py（M3）** —— 消除最大的两处跨模块复制，之后改人设/改表结构只需一处。
-3. **给共享 dict 记录定 `TypedDict`（M4）** —— 为拆分上帝函数（M1）和后续所有改动提供类型护栏。
+1. **统一 HTML 渲染并发控制（M6）** —— 限制无头 Chromium 的全局并发，降低峰值内存风险。
+2. **集中管理模型 ID（M9）** —— 避免不同功能的模型配置悄悄漂移，并支持环境变量覆盖。
+3. **移除源码中的真实 QQ/群号（M12）** —— 让运行环境配置与业务数据脱离源码，提升部署可移植性。
 
 ---
 
@@ -153,6 +149,5 @@
 | M10 | 🟡 中 | 重复小工具函数 | `core/memory.py`, `features/impression/__init__.py` |
 | M11 | 🟡 中 | `api.py` 承载 5 类外部依赖 | `core/api.py` |
 | M12 | 🟢 低 | 硬编码 QQ/群号（违反 §15.3） | `features/gift/config.py`, `core/game_store.py` |
-| M13 | 🟢 低 | 无 CI / pre-commit | 仓库根 |
 | M14 | 🟢 低 | `SCHEMA_VERSION` 写而不用 | `core/game_store.py` |
 | M15 | 🟢 低 | 复读分支 JSON 解析不一致 | `handlers/chat.py` |
