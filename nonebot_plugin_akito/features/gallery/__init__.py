@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import base64
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from io import BytesIO
 import json
 import os
@@ -37,6 +37,7 @@ from ...core import (
     get_memory_key,
     get_user_memory,
     grant_safety_pass,
+    is_sleeping,
     sleep_block,
 )
 
@@ -46,7 +47,8 @@ from ...core import (
 
 ITEMS_PER_PAGE = 30
 GALLERY_REGISTRY_FILE = "gallery_registry.json"
-GALLERY_REGISTRY_VERSION = 1
+GALLERY_REGISTRY_VERSION = 2
+SUPPORTED_GALLERY_REGISTRY_VERSIONS = {1, GALLERY_REGISTRY_VERSION}
 CUSTOM_GALLERY_NAME_RE = re.compile(r"^[A-Za-z0-9_\-\u3400-\u4dbf\u4e00-\u9fff]{1,20}$")
 
 
@@ -54,6 +56,7 @@ CUSTOM_GALLERY_NAME_RE = re.compile(r"^[A-Za-z0-9_\-\u3400-\u4dbf\u4e00-\u9fff]{
 class GalleryDefinition:
     storage_key: str
     name: str
+    gallery_id: str = ""
     caption_enabled: bool = True
     save_aliases: tuple[str, ...] = ()
     send_aliases: tuple[str, ...] = ()
@@ -135,11 +138,11 @@ FIXED_GALLERIES = (
         storage_key="pet",
         name="宠物",
         caption_enabled=False,
-        save_aliases=("宠物",),
-        send_aliases=("宠物",),
-        collect_aliases=("宠物",),
-        list_aliases=("宠物", "pet"),
-        permission_tokens=("pet", "宠物"),
+        save_aliases=("宠物", "卡车", "丑猫"),
+        send_aliases=("宠物", "卡车", "丑猫"),
+        collect_aliases=("宠物", "卡车", "丑猫"),
+        list_aliases=("宠物", "pet", "卡车", "丑猫"),
+        permission_tokens=("pet", "宠物", "卡车", "丑猫"),
     ),
 )
 FIXED_GALLERY_BY_KEY = {gallery.storage_key: gallery for gallery in FIXED_GALLERIES}
@@ -163,12 +166,37 @@ DEFAULT_UNKNOWN_GALLERY_REPLIES = [
     "都说了没有。换一个。",
 ]
 
+GALLERY_SLEEP_ENABLED = True
+
+
+def _gallery_sleep_block(
+    pool_key: str,
+    silent_chance: float = 0.0,
+    fallback: str = "……zzZ",
+) -> str | None:
+    """Apply the gallery-only sleep gate, unless the superuser disabled it."""
+    if not GALLERY_SLEEP_ENABLED:
+        return ""
+    return sleep_block(pool_key, silent_chance=silent_chance, fallback=fallback)
+
+
+def _grant_gallery_safety_pass(seconds: int = 5) -> None:
+    """Keep deep-night self-complaints enabled while gallery sleep is disabled."""
+    if not GALLERY_SLEEP_ENABLED and is_sleeping():
+        return
+    grant_safety_pass(seconds)
+
 
 def _normalize_gallery_name(name: str) -> str:
     return name.strip().casefold()
 
 
-def _definition_names(gallery: GalleryDefinition) -> set[str]:
+def _definition_names(
+    gallery: GalleryDefinition,
+    aliases_by_key: dict[str, list[str]] | None = None,
+) -> set[str]:
+    if aliases_by_key is None:
+        aliases_by_key = globals().get("GALLERY_ALIASES", {})
     values = {
         gallery.storage_key,
         gallery.name,
@@ -177,6 +205,7 @@ def _definition_names(gallery: GalleryDefinition) -> set[str]:
         *gallery.collect_aliases,
         *gallery.list_aliases,
         *gallery.permission_tokens,
+        *aliases_by_key.get(gallery.storage_key, []),
     }
     return {_normalize_gallery_name(value) for value in values}
 
@@ -200,9 +229,15 @@ def _custom_gallery_from_record(record: dict) -> GalleryDefinition | None:
         return None
     if not isinstance(name, str):
         return None
+    directory = record.get("directory", gallery_id)
+    if not isinstance(directory, str) or (
+        directory != gallery_id and not CUSTOM_GALLERY_NAME_RE.fullmatch(directory)
+    ):
+        return None
     return GalleryDefinition(
-        storage_key=f"custom/{gallery_id}",
+        storage_key=f"custom/{directory}",
         name=name.strip(),
+        gallery_id=gallery_id,
         caption_enabled=False,
         permission_tokens=(name.strip(),),
         custom=True,
@@ -213,44 +248,159 @@ def _get_gallery_registry_path() -> Path:
     return find_data_path(GALLERY_REGISTRY_FILE, subdirs=("",)) or get_data_dir() / GALLERY_REGISTRY_FILE
 
 
-def _load_custom_gallery_registry(path: Path) -> tuple[list[GalleryDefinition], bool]:
+def _would_create_gallery_cycle(child_key: str, parent_key: str, parents: dict[str, str]) -> bool:
+    current_key = parent_key
+    visited = {child_key}
+    while current_key:
+        if current_key in visited:
+            return True
+        visited.add(current_key)
+        current_key = parents.get(current_key, "")
+    return False
+
+
+def _migrate_custom_gallery_directory(gallery: GalleryDefinition) -> tuple[GalleryDefinition, bool]:
+    legacy_key = f"custom/{gallery.gallery_id}"
+    target_key = f"custom/{gallery.name}"
+    if gallery.storage_key != legacy_key:
+        return gallery, False
+
+    legacy_dir = IMAGE_BASE_PATH / legacy_key
+    target_dir = IMAGE_BASE_PATH / target_key
+    if legacy_dir.exists() and target_dir.exists():
+        logger.error(f"图库目录迁移冲突：{legacy_dir} 与 {target_dir} 同时存在，暂时保留 UUID 目录")
+        return gallery, False
+    try:
+        if legacy_dir.exists():
+            target_dir.parent.mkdir(parents=True, exist_ok=True)
+            legacy_dir.rename(target_dir)
+        return replace(gallery, storage_key=target_key), True
+    except OSError as exc:
+        logger.error(f"迁移图库目录 {legacy_dir} -> {target_dir} 失败，暂时保留 UUID 目录: {exc}")
+        return gallery, False
+
+
+def _load_custom_gallery_registry(
+    path: Path,
+) -> tuple[list[GalleryDefinition], dict[str, list[str]], dict[str, str], bool]:
     if not path.exists():
-        return [], False
+        return [], {}, {}, False
     try:
         with open(path, encoding="utf-8-sig") as file:
             payload = json.load(file)
     except Exception as exc:
         logger.error(f"读取动态图库注册表失败，已锁定新建操作: {exc}")
-        return [], True
+        return [], {}, {}, True
 
-    if not isinstance(payload, dict) or payload.get("schema_version") != GALLERY_REGISTRY_VERSION:
+    if not isinstance(payload, dict) or payload.get("schema_version") not in SUPPORTED_GALLERY_REGISTRY_VERSIONS:
         logger.error("动态图库注册表格式或版本无效，已锁定新建操作")
-        return [], True
+        return [], {}, {}, True
     records = payload.get("custom_galleries")
     if not isinstance(records, list):
         logger.error("动态图库注册表缺少 custom_galleries 列表，已锁定新建操作")
-        return [], True
+        return [], {}, {}, True
 
     galleries: list[GalleryDefinition] = []
     for record in records:
         if not isinstance(record, dict):
             logger.error("动态图库注册表包含无效记录，已锁定新建操作")
-            return [], True
+            return [], {}, {}, True
         gallery = _custom_gallery_from_record(record)
         if gallery is None or _validate_custom_gallery_name(gallery.name, galleries):
             logger.error("动态图库注册表包含无效或冲突名称，已锁定新建操作")
-            return [], True
+            return [], {}, {}, True
         galleries.append(gallery)
-    return galleries, False
+
+    key_migrations: dict[str, str] = {}
+    migrated_galleries: list[GalleryDefinition] = []
+    registry_needs_upgrade = payload.get("schema_version") != GALLERY_REGISTRY_VERSION
+    for gallery in galleries:
+        previous_key = gallery.storage_key
+        migrated_gallery, migrated = _migrate_custom_gallery_directory(gallery)
+        migrated_galleries.append(migrated_gallery)
+        if migrated:
+            key_migrations[previous_key] = migrated_gallery.storage_key
+            registry_needs_upgrade = True
+    galleries = migrated_galleries
+
+    gallery_by_key = {gallery.storage_key: gallery for gallery in (*FIXED_GALLERIES, *galleries)}
+    aliases_by_key: dict[str, list[str]] = {}
+    raw_aliases = payload.get("aliases", {})
+    if not isinstance(raw_aliases, dict):
+        logger.error("动态图库注册表 aliases 字段无效，已锁定管理操作")
+        return [], {}, {}, True
+    occupied_names = {
+        name
+        for gallery in gallery_by_key.values()
+        for name in _definition_names(gallery, aliases_by_key={})
+    }
+    for storage_key, aliases in raw_aliases.items():
+        storage_key = key_migrations.get(storage_key, storage_key)
+        if storage_key not in gallery_by_key or not isinstance(aliases, list):
+            logger.error("动态图库注册表包含未知图库或无效别名列表，已锁定管理操作")
+            return [], {}, {}, True
+        normalized_aliases: list[str] = []
+        for alias in aliases:
+            if not isinstance(alias, str) or not CUSTOM_GALLERY_NAME_RE.fullmatch(alias.strip()):
+                logger.error("动态图库注册表包含无效别名，已锁定管理操作")
+                return [], {}, {}, True
+            normalized = _normalize_gallery_name(alias)
+            if normalized in occupied_names:
+                logger.error("动态图库注册表包含冲突别名，已锁定管理操作")
+                return [], {}, {}, True
+            occupied_names.add(normalized)
+            normalized_aliases.append(alias.strip())
+        if normalized_aliases:
+            aliases_by_key[storage_key] = normalized_aliases
+
+    raw_parents = payload.get("parents", {})
+    if not isinstance(raw_parents, dict):
+        logger.error("动态图库注册表 parents 字段无效，已锁定管理操作")
+        return [], {}, {}, True
+    parents: dict[str, str] = {}
+    custom_keys = {gallery.storage_key for gallery in galleries}
+    for child_key, parent_key in raw_parents.items():
+        child_key = key_migrations.get(child_key, child_key)
+        parent_key = key_migrations.get(parent_key, parent_key)
+        if child_key not in custom_keys or parent_key not in gallery_by_key or child_key == parent_key:
+            logger.error("动态图库注册表包含无效父子关系，已锁定管理操作")
+            return [], {}, {}, True
+        parents[child_key] = parent_key
+    for child_key, parent_key in parents.items():
+        if _would_create_gallery_cycle(child_key, parent_key, parents):
+            logger.error("动态图库注册表包含循环父子关系，已锁定管理操作")
+            return [], {}, {}, True
+    if registry_needs_upgrade:
+        try:
+            _save_custom_gallery_registry(path, galleries, aliases_by_key, parents)
+        except OSError as exc:
+            logger.error(f"升级动态图库注册表失败，已锁定管理操作: {exc}")
+            return [], {}, {}, True
+    return galleries, aliases_by_key, parents, False
 
 
-def _save_custom_gallery_registry(path: Path, galleries: list[GalleryDefinition]) -> None:
+def _save_custom_gallery_registry(
+    path: Path,
+    galleries: list[GalleryDefinition],
+    aliases_by_key: dict[str, list[str]] | None = None,
+    parents: dict[str, str] | None = None,
+) -> None:
+    if aliases_by_key is None:
+        aliases_by_key = globals().get("GALLERY_ALIASES", {})
+    if parents is None:
+        parents = globals().get("GALLERY_PARENTS", {})
     payload = {
         "schema_version": GALLERY_REGISTRY_VERSION,
         "custom_galleries": [
-            {"id": gallery.storage_key.removeprefix("custom/"), "name": gallery.name}
+            {
+                "id": gallery.gallery_id or gallery.storage_key.removeprefix("custom/"),
+                "name": gallery.name,
+                "directory": gallery.storage_key.removeprefix("custom/"),
+            }
             for gallery in galleries
         ],
+        "aliases": {key: aliases for key, aliases in aliases_by_key.items() if aliases},
+        "parents": dict(parents),
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = path.with_suffix(".tmp")
@@ -259,7 +409,9 @@ def _save_custom_gallery_registry(path: Path, galleries: list[GalleryDefinition]
     os.replace(tmp_path, path)
 
 
-CUSTOM_GALLERIES, GALLERY_REGISTRY_LOAD_ERROR = _load_custom_gallery_registry(_get_gallery_registry_path())
+CUSTOM_GALLERIES, GALLERY_ALIASES, GALLERY_PARENTS, GALLERY_REGISTRY_LOAD_ERROR = (
+    _load_custom_gallery_registry(_get_gallery_registry_path())
+)
 GALLERY_CREATE_LOCK = asyncio.Lock()
 
 
@@ -271,22 +423,62 @@ def _get_gallery(storage_key: str) -> GalleryDefinition | None:
     return next((gallery for gallery in _all_galleries() if gallery.storage_key == storage_key), None)
 
 
+def _find_gallery_exact(text: str) -> GalleryDefinition | None:
+    normalized = _normalize_gallery_name(text)
+    if not normalized:
+        return None
+    return next((gallery for gallery in _all_galleries() if normalized in _definition_names(gallery)), None)
+
+
 def _find_custom_gallery_exact(text: str) -> GalleryDefinition | None:
     normalized = _normalize_gallery_name(text)
     if not normalized:
         return None
     return next(
-        (gallery for gallery in CUSTOM_GALLERIES if _normalize_gallery_name(gallery.name) == normalized),
+        (gallery for gallery in CUSTOM_GALLERIES if normalized in _definition_names(gallery)),
         None,
     )
 
 
 def _match_fixed_gallery(text: str, aliases_attr: str) -> GalleryDefinition | None:
     for gallery in FIXED_GALLERIES:
-        aliases = getattr(gallery, aliases_attr)
+        aliases = (*getattr(gallery, aliases_attr), *GALLERY_ALIASES.get(gallery.storage_key, []))
         if any(alias in text for alias in aliases):
             return gallery
     return None
+
+
+def _validate_gallery_alias(alias: str) -> str:
+    normalized = _normalize_gallery_name(alias)
+    if not normalized or normalized == "all" or not CUSTOM_GALLERY_NAME_RE.fullmatch(alias.strip()):
+        return "invalid"
+    if any(normalized in _definition_names(gallery) for gallery in _all_galleries()):
+        return "duplicate"
+    return ""
+
+
+def _gallery_storage_keys_for_read(storage_key: str) -> list[str]:
+    storage_keys: list[str] = []
+    pending = [storage_key]
+    while pending:
+        current_key = pending.pop(0)
+        if current_key in storage_keys:
+            continue
+        storage_keys.append(current_key)
+        pending.extend(
+            child_key
+            for child_key, parent_key in GALLERY_PARENTS.items()
+            if parent_key == current_key
+        )
+    return storage_keys
+
+
+def _get_direct_child_galleries(storage_key: str) -> list[GalleryDefinition]:
+    return [
+        gallery
+        for gallery in CUSTOM_GALLERIES
+        if GALLERY_PARENTS.get(gallery.storage_key) == storage_key
+    ]
 
 
 def _gallery_allowed(group_id: int | None, gallery: GalleryDefinition) -> bool:
@@ -378,6 +570,29 @@ def _paginate_gallery(total_files: int, requested_page: int, items_per_page: int
 
 
 create_gallery_cmd = on_regex(r"^新建图库\s*.*$", priority=5, block=True)
+add_gallery_alias_cmd = on_regex(r"^添加图库别名\s*.*$", priority=5, block=True)
+link_child_gallery_cmd = on_regex(r"^关联子图库\s*.*$", priority=5, block=True)
+unlink_child_gallery_cmd = on_regex(r"^取消子图库关联\s*.*$", priority=5, block=True)
+disable_gallery_sleep_cmd = on_regex(r"^关闭图库休眠\s*$", priority=5, block=True)
+enable_gallery_sleep_cmd = on_regex(r"^开启图库休眠\s*$", priority=5, block=True)
+
+
+@disable_gallery_sleep_cmd.handle()
+async def _(event: Event):
+    if str(event.get_user_id()) != SUPERUSER_QQ:
+        return
+    global GALLERY_SLEEP_ENABLED
+    GALLERY_SLEEP_ENABLED = False
+    await disable_gallery_sleep_cmd.finish("……行，图库休眠先关了。测试完记得开回来。")
+
+
+@enable_gallery_sleep_cmd.handle()
+async def _(event: Event):
+    if str(event.get_user_id()) != SUPERUSER_QQ:
+        return
+    global GALLERY_SLEEP_ENABLED
+    GALLERY_SLEEP_ENABLED = True
+    await enable_gallery_sleep_cmd.finish("图库休眠恢复。凌晨六点前别想让我发图。")
 
 
 @create_gallery_cmd.handle()
@@ -400,8 +615,9 @@ async def _(event: Event):
             await create_gallery_cmd.finish("名字不合规。只能用 1 到 20 个中英文字、数字、下划线或短横线。")
 
         gallery = GalleryDefinition(
-            storage_key=f"custom/{uuid.uuid4().hex}",
+            storage_key=f"custom/{name}",
             name=name,
+            gallery_id=uuid.uuid4().hex,
             caption_enabled=False,
             permission_tokens=(name,),
             custom=True,
@@ -424,16 +640,125 @@ async def _(event: Event):
     await create_gallery_cmd.finish(f"……建好了。【{name}】图库，别乱塞东西进去。")
 
 
-def get_random_local_image(category: str) -> Path | None:
-    """从某分类图库随机返回一张有效图片路径；目录不存在则创建后返回 None。"""
-    folder = IMAGE_BASE_PATH / category
-    if not folder.exists():
+@add_gallery_alias_cmd.handle()
+async def _(event: Event):
+    if str(event.get_user_id()) != SUPERUSER_QQ:
+        return
+    params = re.sub(r"^添加图库别名\s*", "", event.get_plaintext().strip(), count=1).split()
+    if len(params) != 2:
+        await add_gallery_alias_cmd.finish("格式是“添加图库别名 图库名 别名”。")
+    gallery_name, alias = params
+
+    async with GALLERY_CREATE_LOCK:
+        if GALLERY_REGISTRY_LOAD_ERROR:
+            await add_gallery_alias_cmd.finish("……注册表读坏了，先检查 gallery_registry.json。")
+        gallery = _find_gallery_exact(gallery_name)
+        if gallery is None:
+            await add_gallery_alias_cmd.finish(f"没有【{gallery_name}】这个图库。")
+        validation_error = _validate_gallery_alias(alias)
+        if validation_error == "duplicate":
+            await add_gallery_alias_cmd.finish(f"【{alias}】已经被图库名称或别名占用了。")
+        if validation_error:
+            await add_gallery_alias_cmd.finish("别名不合规。只能用 1 到 20 个中英文字、数字、下划线或短横线。")
+
+        aliases = GALLERY_ALIASES.setdefault(gallery.storage_key, [])
+        aliases.append(alias)
         try:
-            folder.mkdir(parents=True, exist_ok=True)
+            _save_custom_gallery_registry(_get_gallery_registry_path(), CUSTOM_GALLERIES)
+        except Exception as exc:
+            aliases.remove(alias)
+            if not aliases:
+                GALLERY_ALIASES.pop(gallery.storage_key, None)
+            logger.error(f"添加图库别名失败: {exc}")
+            await add_gallery_alias_cmd.finish("……别名没存上。稍后再试。")
+
+    await add_gallery_alias_cmd.finish(f"行。【{gallery.name}】以后也可以叫【{alias}】。")
+
+
+@link_child_gallery_cmd.handle()
+async def _(event: Event):
+    if str(event.get_user_id()) != SUPERUSER_QQ:
+        return
+    params = re.sub(r"^关联子图库\s*", "", event.get_plaintext().strip(), count=1).split()
+    if len(params) != 2:
+        await link_child_gallery_cmd.finish("格式是“关联子图库 子图库 父图库”。")
+    child_name, parent_name = params
+
+    async with GALLERY_CREATE_LOCK:
+        if GALLERY_REGISTRY_LOAD_ERROR:
+            await link_child_gallery_cmd.finish("……注册表读坏了，先检查 gallery_registry.json。")
+        child = _find_gallery_exact(child_name)
+        parent = _find_gallery_exact(parent_name)
+        if child is None:
+            await link_child_gallery_cmd.finish(f"没有【{child_name}】这个图库。")
+        if parent is None:
+            await link_child_gallery_cmd.finish(f"没有【{parent_name}】这个图库。")
+        if not child.custom:
+            await link_child_gallery_cmd.finish("只有自定义图库能作为子图库。")
+        if child.storage_key == parent.storage_key or _would_create_gallery_cycle(
+            child.storage_key,
+            parent.storage_key,
+            GALLERY_PARENTS,
+        ):
+            await link_child_gallery_cmd.finish("这样会形成循环关系，不能关联。")
+
+        previous_parent = GALLERY_PARENTS.get(child.storage_key)
+        GALLERY_PARENTS[child.storage_key] = parent.storage_key
+        try:
+            _save_custom_gallery_registry(_get_gallery_registry_path(), CUSTOM_GALLERIES)
+        except Exception as exc:
+            if previous_parent is None:
+                GALLERY_PARENTS.pop(child.storage_key, None)
+            else:
+                GALLERY_PARENTS[child.storage_key] = previous_parent
+            logger.error(f"关联子图库失败: {exc}")
+            await link_child_gallery_cmd.finish("……关联没存上。稍后再试。")
+
+    await link_child_gallery_cmd.finish(f"已把【{child.name}】关联为【{parent.name}】的子图库。")
+
+
+@unlink_child_gallery_cmd.handle()
+async def _(event: Event):
+    if str(event.get_user_id()) != SUPERUSER_QQ:
+        return
+    child_name = re.sub(r"^取消子图库关联\s*", "", event.get_plaintext().strip(), count=1).strip()
+    if not child_name:
+        await unlink_child_gallery_cmd.finish("格式是“取消子图库关联 子图库”。")
+
+    async with GALLERY_CREATE_LOCK:
+        if GALLERY_REGISTRY_LOAD_ERROR:
+            await unlink_child_gallery_cmd.finish("……注册表读坏了，先检查 gallery_registry.json。")
+        child = _find_gallery_exact(child_name)
+        if child is None:
+            await unlink_child_gallery_cmd.finish(f"没有【{child_name}】这个图库。")
+        previous_parent = GALLERY_PARENTS.pop(child.storage_key, None)
+        if previous_parent is None:
+            await unlink_child_gallery_cmd.finish(f"【{child.name}】目前没有关联父图库。")
+        try:
+            _save_custom_gallery_registry(_get_gallery_registry_path(), CUSTOM_GALLERIES)
+        except Exception as exc:
+            GALLERY_PARENTS[child.storage_key] = previous_parent
+            logger.error(f"取消子图库关联失败: {exc}")
+            await unlink_child_gallery_cmd.finish("……取消关联没存上。稍后再试。")
+
+    await unlink_child_gallery_cmd.finish(f"已取消【{child.name}】的子图库关联。")
+
+
+def get_random_local_image(category: str) -> Path | None:
+    """从图库及其全部子图库中随机返回一张有效图片。"""
+    folders = [IMAGE_BASE_PATH / storage_key for storage_key in _gallery_storage_keys_for_read(category)]
+    if not folders[0].exists():
+        try:
+            folders[0].mkdir(parents=True, exist_ok=True)
         except Exception as e:
             logger.debug(f"📁 创建图库目录 {category} 失败: {e}")
-        return None
-    images = list(folder.glob("*.jpg")) + list(folder.glob("*.png")) + list(folder.glob("*.gif")) + list(folder.glob("*.jpeg"))
+    images = [
+        image
+        for folder in folders
+        if folder.exists()
+        for pattern in ("*.jpg", "*.png", "*.gif", "*.jpeg")
+        for image in folder.glob(pattern)
+    ]
     valid_images = [img for img in images if img.stat().st_size > 0]
     return random.choice(valid_images) if valid_images else None
 
@@ -446,12 +771,12 @@ async def _(bot: Bot, event: GroupMessageEvent):
     text = event.get_plaintext().strip()
     if not any(k in text for k in ["存", "收下", "投喂", "增加"]): return
 
-    result = sleep_block("sleep_save_img", silent_chance=0.8,
-                         fallback="……明天再存……zzZ")
+    result = _gallery_sleep_block("sleep_save_img", silent_chance=0.8,
+                                  fallback="……明天再存……zzZ")
     if result is None:
         return
     if result:
-        grant_safety_pass(5)
+        _grant_gallery_safety_pass(5)
         await bot.send(event=event, message=result)
         return
 
@@ -476,7 +801,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
         async with aiohttp.ClientSession() as session, session.get(img_url) as resp:
             if resp.status == 200:
                 with open(save_dir / file_name, "wb") as f: f.write(await resp.read())
-                grant_safety_pass(5)
+                _grant_gallery_safety_pass(5)
                 await bot.send(event=event, message=save_msg)
     except Exception as e:
         logger.debug(f"💾 手动存图失败: {e}")
@@ -546,16 +871,16 @@ async def _(bot: Bot, event: Event):
         logger.debug(f"📥 自动进货批次失败: {e}")
 
     if count > 0 and random.random() < 0.3:
-        grant_safety_pass(5)
+        _grant_gallery_safety_pass(5)
         await bot.send(event=event, message="👌")
 
 # --- 3. 主动发图 ---
 send_img_cmd = on_command("看你的", aliases={"发张", "来张"}, priority=5, block=True)
 @send_img_cmd.handle()
 async def _(event: Event, args: Message = CommandArg()):
-    result = sleep_block("sleep_replies_img", silent_chance=0.0, fallback="……zzZ")
+    result = _gallery_sleep_block("sleep_replies_img", silent_chance=0.0, fallback="……zzZ")
     if result:
-        grant_safety_pass(5)
+        _grant_gallery_safety_pass(5)
         await send_img_cmd.finish(result)
 
     group_id = getattr(event, 'group_id', None)
@@ -570,7 +895,7 @@ async def _(event: Event, args: Message = CommandArg()):
     if not category:
         if text:
             replies = REACTIONS_DB.get("unknown_gallery_replies") or DEFAULT_UNKNOWN_GALLERY_REPLIES
-            grant_safety_pass(5)
+            _grant_gallery_safety_pass(5)
             await send_img_cmd.finish(random.choice(replies))
         await send_img_cmd.finish("（摊手）……这儿没什么能发的。")
     gallery = _get_gallery(category)
@@ -578,7 +903,7 @@ async def _(event: Event, args: Message = CommandArg()):
         await send_img_cmd.finish("（摊手）……这儿没什么能发的。")
 
     if is_wl2_active and category in ["toya", "vbs"]:
-        grant_safety_pass(5)
+        _grant_gallery_safety_pass(5)
         await send_img_cmd.finish(random.choice([
             "……手机里没那种照片了。早就删了。",
             "（直接锁上手机屏幕）……没有可以给你看的东西。",
@@ -627,15 +952,21 @@ async def _(event: Event, args: Message = CommandArg()):
     except Exception: await send_img_cmd.finish("（划手机）……啧，图片加载失败了。")
 
     if final_msg:
-        grant_safety_pass(5)
+        _grant_gallery_safety_pass(5)
         await send_img_cmd.finish(final_msg)
 
 # --- 4. 相册清单 ---
 def get_file_list_safe(category: str) -> list[Path] | None:
-    """返回某分类图库的全部图片路径（按修改时间倒序）；目录不存在返回 None。"""
-    folder = IMAGE_BASE_PATH / category
-    if not folder.exists(): return None
-    files = list(folder.glob("*.jpg")) + list(folder.glob("*.png")) + list(folder.glob("*.gif")) + list(folder.glob("*.jpeg"))
+    """返回图库及其全部子图库图片（按修改时间倒序）。"""
+    folders = [IMAGE_BASE_PATH / storage_key for storage_key in _gallery_storage_keys_for_read(category)]
+    if not any(folder.exists() for folder in folders): return None
+    files = [
+        image
+        for folder in folders
+        if folder.exists()
+        for pattern in ("*.jpg", "*.png", "*.gif", "*.jpeg")
+        for image in folder.glob(pattern)
+    ]
     files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
     return files
 
@@ -653,8 +984,8 @@ def get_thumbnail_safe(file_path: Path) -> str:
 gallery_cmd = on_command("图库清单", aliases={"查看图库", "库存", "相册"}, priority=5, block=True)
 @gallery_cmd.handle()
 async def _(event: Event, args: Message = CommandArg()):
-    result = sleep_block("sleep_gallery_list", silent_chance=0.0,
-                         fallback="💤 (小彰正在睡觉，请早上6点后再来...)")
+    result = _gallery_sleep_block("sleep_gallery_list", silent_chance=0.0,
+                                  fallback="💤 (小彰正在睡觉，请早上6点后再来...)")
     if result:
         await gallery_cmd.finish(result)
         return
@@ -709,7 +1040,7 @@ async def _(event: Event, args: Message = CommandArg()):
 
     try:
         pic = await html_to_pic(html, viewport={"width": 800, "height": 100})
-        grant_safety_pass(5)
+        _grant_gallery_safety_pass(5)
         await gallery_cmd.finish(MessageSegment.image(pic))
     except Exception as e:
         logger.error(f"渲染失败: {e}")
