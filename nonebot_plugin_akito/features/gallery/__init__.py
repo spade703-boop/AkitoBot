@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import random
 import re
+import shutil
 import time
 import uuid
 
@@ -573,6 +574,7 @@ create_gallery_cmd = on_regex(r"^新建图库\s*.*$", priority=5, block=True)
 add_gallery_alias_cmd = on_regex(r"^添加图库别名\s*.*$", priority=5, block=True)
 link_child_gallery_cmd = on_regex(r"^关联子图库\s*.*$", priority=5, block=True)
 unlink_child_gallery_cmd = on_regex(r"^取消子图库关联\s*.*$", priority=5, block=True)
+delete_gallery_cmd = on_regex(r"^删除图库\s*.*$", priority=5, block=True)
 disable_gallery_sleep_cmd = on_regex(r"^关闭图库休眠\s*$", priority=5, block=True)
 enable_gallery_sleep_cmd = on_regex(r"^开启图库休眠\s*$", priority=5, block=True)
 
@@ -742,6 +744,61 @@ async def _(event: Event):
             await unlink_child_gallery_cmd.finish("……取消关联没存上。稍后再试。")
 
     await unlink_child_gallery_cmd.finish(f"已取消【{child.name}】的子图库关联。")
+
+
+@delete_gallery_cmd.handle()
+async def _(event: Event):
+    if str(event.get_user_id()) != SUPERUSER_QQ:
+        return
+    name = re.sub(r"^删除图库\s*", "", event.get_plaintext().strip(), count=1).strip()
+    if not name:
+        await delete_gallery_cmd.finish("图库名呢？格式是“删除图库XX”。")
+
+    async with GALLERY_CREATE_LOCK:
+        if GALLERY_REGISTRY_LOAD_ERROR:
+            await delete_gallery_cmd.finish("……注册表读坏了，没法删除。先检查 gallery_registry.json。")
+
+        gallery = _find_custom_gallery_exact(name)
+        if gallery is None:
+            fixed = _find_gallery_exact(name)
+            if fixed is not None:
+                await delete_gallery_cmd.finish(f"【{fixed.name}】是固定图库，删不掉。")
+            await delete_gallery_cmd.finish(f"没有【{name}】这个图库。")
+
+        child_keys = [child.storage_key for child in _get_direct_child_galleries(gallery.storage_key)]
+        own_parent = GALLERY_PARENTS.get(gallery.storage_key)
+        aliases = GALLERY_ALIASES.get(gallery.storage_key)
+
+        CUSTOM_GALLERIES.remove(gallery)
+        GALLERY_PARENTS.pop(gallery.storage_key, None)
+        for child_key in child_keys:
+            GALLERY_PARENTS.pop(child_key, None)
+        GALLERY_ALIASES.pop(gallery.storage_key, None)
+
+        try:
+            _save_custom_gallery_registry(_get_gallery_registry_path(), CUSTOM_GALLERIES)
+        except Exception as exc:
+            CUSTOM_GALLERIES.append(gallery)
+            if own_parent is not None:
+                GALLERY_PARENTS[gallery.storage_key] = own_parent
+            for child_key in child_keys:
+                GALLERY_PARENTS[child_key] = gallery.storage_key
+            if aliases is not None:
+                GALLERY_ALIASES[gallery.storage_key] = aliases
+            logger.error(f"删除图库失败: {exc}")
+            await delete_gallery_cmd.finish("……没删成。稍后再试。")
+
+        save_dir = IMAGE_BASE_PATH / gallery.storage_key
+        if save_dir.exists():
+            try:
+                shutil.rmtree(save_dir)
+            except OSError as exc:
+                logger.error(f"删除图库目录 {save_dir} 失败: {exc}")
+                await delete_gallery_cmd.finish(
+                    f"已从图库清单删除【{gallery.name}】，但目录删除失败，需手动清理 {save_dir}。"
+                )
+
+    await delete_gallery_cmd.finish(f"……删掉了。【{gallery.name}】图库，子图库关联也一并解除了。")
 
 
 def get_random_local_image(category: str) -> Path | None:

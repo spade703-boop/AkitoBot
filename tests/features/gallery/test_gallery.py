@@ -530,3 +530,126 @@ async def test_pet_send_outputs_only_image_and_skips_caption_api(monkeypatch, tm
 
     assert str(exc.value.result) == "[image]"
     caption_api.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_delete_gallery_command_is_silent_for_non_superuser(monkeypatch, tmp_path):
+    registry_path = tmp_path / "gallery_registry.json"
+    custom = gallery.GalleryDefinition(
+        storage_key="custom/猫猫",
+        name="猫猫",
+        caption_enabled=False,
+        permission_tokens=("猫猫",),
+        custom=True,
+    )
+    monkeypatch.setattr(gallery, "CUSTOM_GALLERIES", [custom])
+    monkeypatch.setattr(gallery, "GALLERY_ALIASES", {})
+    monkeypatch.setattr(gallery, "GALLERY_PARENTS", {})
+    monkeypatch.setattr(gallery, "GALLERY_REGISTRY_LOAD_ERROR", False)
+    monkeypatch.setattr(gallery, "GALLERY_CREATE_LOCK", asyncio.Lock())
+    monkeypatch.setattr(gallery, "IMAGE_BASE_PATH", tmp_path / "images")
+    monkeypatch.setattr(gallery, "_get_gallery_registry_path", lambda: registry_path)
+
+    result = await gallery.delete_gallery_cmd.handlers[0](
+        Event(plain_text="删除图库 猫猫", user_id="10001")
+    )
+
+    assert result is None
+    assert [custom] == gallery.CUSTOM_GALLERIES
+    assert not registry_path.exists()
+
+
+@pytest.mark.asyncio
+async def test_delete_gallery_command_removes_gallery_children_links_and_folder(monkeypatch, tmp_path):
+    registry_path = tmp_path / "gallery_registry.json"
+    target = gallery.GalleryDefinition(
+        storage_key="custom/猫猫",
+        name="猫猫",
+        caption_enabled=False,
+        permission_tokens=("猫猫",),
+        custom=True,
+    )
+    child = gallery.GalleryDefinition(
+        storage_key="custom/小猫",
+        name="小猫",
+        caption_enabled=False,
+        permission_tokens=("小猫",),
+        custom=True,
+    )
+    grandchild = gallery.GalleryDefinition(
+        storage_key="custom/孙猫",
+        name="孙猫",
+        caption_enabled=False,
+        permission_tokens=("孙猫",),
+        custom=True,
+    )
+    monkeypatch.setattr(gallery, "CUSTOM_GALLERIES", [target, child, grandchild])
+    monkeypatch.setattr(gallery, "GALLERY_ALIASES", {})
+    monkeypatch.setattr(gallery, "GALLERY_PARENTS", {
+        target.storage_key: "groupmate",
+        child.storage_key: target.storage_key,
+        grandchild.storage_key: child.storage_key,
+    })
+    monkeypatch.setattr(gallery, "GALLERY_REGISTRY_LOAD_ERROR", False)
+    monkeypatch.setattr(gallery, "GALLERY_CREATE_LOCK", asyncio.Lock())
+    image_root = tmp_path / "images"
+    monkeypatch.setattr(gallery, "IMAGE_BASE_PATH", image_root)
+    monkeypatch.setattr(gallery, "_get_gallery_registry_path", lambda: registry_path)
+
+    target_dir = image_root / target.storage_key
+    target_dir.mkdir(parents=True)
+    (target_dir / "a.png").write_bytes(b"x")
+
+    with pytest.raises(FinishedException) as exc:
+        await gallery.delete_gallery_cmd.handlers[0](
+            Event(plain_text="删除图库 猫猫", user_id=gallery.SUPERUSER_QQ)
+        )
+
+    assert "删掉了" in str(exc.value.result)
+    assert [child, grandchild] == gallery.CUSTOM_GALLERIES
+    assert {grandchild.storage_key: child.storage_key} == gallery.GALLERY_PARENTS
+    assert not target_dir.exists()
+    saved = json.loads(registry_path.read_text(encoding="utf-8"))
+    assert [record["name"] for record in saved["custom_galleries"]] == ["小猫", "孙猫"]
+    assert saved["parents"] == {grandchild.storage_key: child.storage_key}
+
+
+@pytest.mark.asyncio
+async def test_delete_gallery_command_rejects_fixed_gallery(monkeypatch, tmp_path):
+    registry_path = tmp_path / "gallery_registry.json"
+    monkeypatch.setattr(gallery, "CUSTOM_GALLERIES", [])
+    monkeypatch.setattr(gallery, "GALLERY_ALIASES", {})
+    monkeypatch.setattr(gallery, "GALLERY_PARENTS", {})
+    monkeypatch.setattr(gallery, "GALLERY_REGISTRY_LOAD_ERROR", False)
+    monkeypatch.setattr(gallery, "GALLERY_CREATE_LOCK", asyncio.Lock())
+    monkeypatch.setattr(gallery, "IMAGE_BASE_PATH", tmp_path / "images")
+    monkeypatch.setattr(gallery, "_get_gallery_registry_path", lambda: registry_path)
+
+    with pytest.raises(FinishedException) as exc:
+        await gallery.delete_gallery_cmd.handlers[0](
+            Event(plain_text="删除图库 宠物", user_id=gallery.SUPERUSER_QQ)
+        )
+
+    assert "固定图库" in str(exc.value.result)
+    assert gallery.CUSTOM_GALLERIES == []
+    assert not registry_path.exists()
+
+
+@pytest.mark.asyncio
+async def test_delete_gallery_command_reports_missing_gallery(monkeypatch, tmp_path):
+    registry_path = tmp_path / "gallery_registry.json"
+    monkeypatch.setattr(gallery, "CUSTOM_GALLERIES", [])
+    monkeypatch.setattr(gallery, "GALLERY_ALIASES", {})
+    monkeypatch.setattr(gallery, "GALLERY_PARENTS", {})
+    monkeypatch.setattr(gallery, "GALLERY_REGISTRY_LOAD_ERROR", False)
+    monkeypatch.setattr(gallery, "GALLERY_CREATE_LOCK", asyncio.Lock())
+    monkeypatch.setattr(gallery, "IMAGE_BASE_PATH", tmp_path / "images")
+    monkeypatch.setattr(gallery, "_get_gallery_registry_path", lambda: registry_path)
+
+    with pytest.raises(FinishedException) as exc:
+        await gallery.delete_gallery_cmd.handlers[0](
+            Event(plain_text="删除图库 不存在的图库", user_id=gallery.SUPERUSER_QQ)
+        )
+
+    assert "没有" in str(exc.value.result)
+    assert gallery.CUSTOM_GALLERIES == []
