@@ -422,8 +422,8 @@ async def test_team_fail_rescue_runs_normal_coop_settlement(monkeypatch):
 @pytest.mark.parametrize(
     ("fail_event", "marker"),
     [
-        ("hesitate", "一起吃松饼吃得错过组队"),
-        ("late_reply", "飘荡着一股松饼的香气"),
+        ("hesitate", "飘荡着一股松饼的香气"),
+        ("late_reply", "一起吃松饼吃得错过组队"),
         ("out_of_step", "一千个松饼挡住了敌人"),
     ],
 )

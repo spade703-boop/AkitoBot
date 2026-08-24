@@ -486,10 +486,10 @@ DEFAULT_RPG_CONFIG: dict = {
             "【支援】橙发的勇者先行稳住敌人攻势，{b_name}得以及时加入战场。\n· 本次组队成立"
         ],
         "team_support_dogbin_fox_hesitate": [
-            "狗宾快速地将跟自己在冬弥店里一起吃松饼吃得错过组队的 {b_name} 丢到了战场中央。"
+            "妖狐借术将 {b_name} 送到 {a_name} 身边，但不知为何 {b_name} 身上飘荡着一股松饼的香气。"
         ],
         "team_support_dogbin_fox_late_reply": [
-            "妖狐借术将 {b_name} 送到 {a_name} 身边，但不知为何 {b_name} 身上飘荡着一股松饼的香气。"
+            "狗宾快速地将跟自己在冬弥店里一起吃松饼吃得错过组队的 {b_name} 丢到了战场中央。"
         ],
         "team_support_dogbin_fox_out_of_step": [
             "战场上突然出现了一千个松饼挡住了敌人！拜一千个松饼所赐，{b_name} 及时加入了战场。"
