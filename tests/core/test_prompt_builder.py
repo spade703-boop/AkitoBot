@@ -168,6 +168,7 @@ def test_task_renderers_keep_distinct_json_field_sets():
     impression_analysis = prompt_builder.render_impression_analysis_prompt(
         target_name="小明",
         recent_reply_limit=8,
+        relationship_context="自我归因与冬弥关系资料",
     )
     impression_reply = prompt_builder.render_impression_reply_prompt(
         persona="人设",
@@ -176,6 +177,7 @@ def test_task_renderers_keep_distinct_json_field_sets():
         is_querying_other=False,
         specific_max_length=100,
         limited_max_length=60,
+        relationship_context="自我归因与冬弥关系资料",
     )
     auto = prompt_builder.render_auto_chat_prompt(
         persona="人设",
@@ -196,8 +198,10 @@ def test_task_renderers_keep_distinct_json_field_sets():
     assert '"dialogue": "DIALOGUE"' in main
     assert '"evidence": [' in impression_analysis
     assert "包含2-4个字符串的 JSON 数组" in impression_analysis
+    assert "自我归因与冬弥关系资料" in impression_analysis
     assert '"observations": [' in impression_analysis
     assert '"replies": [' in impression_reply
+    assert "自我归因与冬弥关系资料" in impression_reply
     assert '"action":' not in impression_analysis
     assert '"evidence":' not in impression_reply
     assert '"anchor": "若要回复' in auto

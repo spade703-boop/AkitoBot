@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime
 import types
+from unittest import mock
 
 import aiosqlite
 import pytest
@@ -84,6 +85,24 @@ def test_impression_prompt_distinguishes_self_and_other_addressing():
     for phrase in ("这种劲儿不赖", "至少不装", "嘴上怎样", "看来里面"):
         assert phrase not in analysis_prompt
         assert phrase not in self_prompt
+
+
+def test_impression_relationship_context_resolves_self_and_all_matching_people():
+    relationship_data = [
+        {"keywords": ["冬弥", "青柳"], "content": "【关系：青柳冬弥】搭档资料"},
+        {"keywords": ["青柳春道"], "content": "【关系：青柳春道】关系资料"},
+    ]
+
+    with mock.patch.object(impression, "RELATIONSHIP_DATA", relationship_data):
+        context = impression._build_impression_relationship_context(
+            "她说akt最近又提到彰人和冬弥，也提过青柳春道。"
+        )
+
+    assert "东云彰人（你自己）" in context
+    assert "材料命中：彰人、akt" in context
+    assert "【关系：青柳冬弥】" in context
+    assert "【关系：青柳春道】" in context
+    assert "【关系：青柳】" not in context
 
 
 def test_auto_chat_prompt_keeps_task_schema_and_shared_sections():

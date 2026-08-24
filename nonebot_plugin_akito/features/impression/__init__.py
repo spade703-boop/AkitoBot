@@ -20,6 +20,7 @@ from ...core import (
     MessageReader,
     MessageRow,
     PROMPTS_DB,
+    RELATIONSHIP_DATA,
     TZ_CN,
     build_shared_prompt_context,
     call_deepseek_api,
@@ -68,6 +69,7 @@ IMPRESSION_SIMILARITY_THRESHOLD = 0.72
 IMPRESSION_ENDING_SIMILARITY_THRESHOLD = 0.82
 IMPRESSION_CANDIDATE_COUNT = 3
 IMPRESSION_COMMANDS = ("群印象", "评价我", "说说印象", "我的印象")
+IMPRESSION_SELF_ALIASES = ("东云彰人", "彰人", "Akito", "akito", "小彰", "akt")
 
 IMPRESSION_STALE_PATTERNS = (
     re.compile(r"普通(?:人|网友|玩家)"),
@@ -116,6 +118,103 @@ class ImpressionCandidateEvaluation:
     reply: str
     score: ImpressionStyleScore
     issue: str
+
+
+@dataclass(frozen=True)
+class ImpressionRelationshipReference:
+    label: str
+    matched_aliases: tuple[str, ...]
+    content: str
+
+
+def _normalize_impression_entity_text(value: str) -> str:
+    return re.sub(r"\s+", "", value or "").casefold()
+
+
+def _collect_impression_relationship_references(material_text: str) -> tuple[ImpressionRelationshipReference, ...]:
+    normalized_material = _normalize_impression_entity_text(material_text)
+    if not normalized_material:
+        return ()
+
+    candidates: list[tuple[int, int, int, str, object]] = []
+    for entry_index, entry in enumerate(RELATIONSHIP_DATA):
+        if not isinstance(entry, dict):
+            continue
+        content = str(entry.get("content", "")).strip()
+        raw_keywords = entry.get("keywords", [])
+        if not content or not isinstance(raw_keywords, list):
+            continue
+        for raw_keyword in raw_keywords:
+            keyword = str(raw_keyword).strip()
+            normalized_keyword = _normalize_impression_entity_text(keyword)
+            if not normalized_keyword:
+                continue
+            start = normalized_material.find(normalized_keyword)
+            while start >= 0:
+                candidates.append((start, -len(normalized_keyword), entry_index, keyword, entry))
+                start = normalized_material.find(normalized_keyword, start + 1)
+
+    accepted_spans: list[tuple[int, int]] = []
+    accepted: dict[int, tuple[dict, list[str]]] = {}
+    for start, negative_length, entry_index, keyword, entry in sorted(candidates, key=lambda item: item[:4]):
+        end = start - negative_length
+        if any(start < accepted_end and end > accepted_start for accepted_start, accepted_end in accepted_spans):
+            continue
+        accepted_spans.append((start, end))
+        if entry_index not in accepted:
+            accepted[entry_index] = (entry, [])
+        if keyword not in accepted[entry_index][1]:
+            accepted[entry_index][1].append(keyword)
+
+    references: list[ImpressionRelationshipReference] = []
+    self_aliases = tuple(
+        alias for alias in IMPRESSION_SELF_ALIASES
+        if _normalize_impression_entity_text(alias) in normalized_material
+    )
+    if self_aliases:
+        references.append(
+            ImpressionRelationshipReference(
+                label="东云彰人（你自己）",
+                matched_aliases=self_aliases,
+                content=(
+                    "材料中的这些称呼指向你本人，不是目标之外的第三方角色。"
+                    "目标群友提到彰人时，应理解为她/他正在谈到你、你们之间的互动或对你的看法。"
+                ),
+            )
+        )
+
+    for entry, matched_aliases in (accepted[index] for index in sorted(accepted)):
+        label_match = re.search(r"【关系：([^】]+)", str(entry.get("content", "")))
+        label = label_match.group(1).strip() if label_match else matched_aliases[0]
+        references.append(
+            ImpressionRelationshipReference(
+                label=label,
+                matched_aliases=tuple(matched_aliases),
+                content=str(entry["content"]).strip(),
+            )
+        )
+    return tuple(references)
+
+
+def _build_impression_relationship_context(material_text: str) -> str:
+    references = _collect_impression_relationship_references(material_text)
+    lines = [
+        "【群印象人物指代与关系资料】",
+        "材料中的角色名称必须先按以下归因处理；不要把这些人物当成与彰人毫无关系的普通第三方。",
+        "东云彰人相关别名指向彰人自己；其他命中的角色是彰人认识的人，态度必须服从对应关系资料。",
+    ]
+    if not references:
+        lines.append("本次材料未命中可用的自我别名或关系资料；不要凭空补充角色关系。")
+        return "\n".join(lines)
+    for reference in references:
+        aliases = "、".join(reference.matched_aliases)
+        lines.extend(
+            [
+                f"\n【识别人物：{reference.label}；材料命中：{aliases}】",
+                reference.content,
+            ]
+        )
+    return "\n".join(lines)
 
 
 def _resolve_impression_target(event: GroupMessageEvent, bot_self_id: str) -> tuple[str, str, bool, bool]:
@@ -351,10 +450,11 @@ def _resolve_wl2_overlay(mem: dict, now_ts: Optional[float] = None) -> tuple[boo
     return False, ""
 
 
-def _build_impression_analysis_system_prompt(*, target_name: str) -> str:
+def _build_impression_analysis_system_prompt(*, target_name: str, relationship_context: str = "") -> str:
     return render_impression_analysis_prompt(
         target_name=target_name,
         recent_reply_limit=IMPRESSION_RECENT_REPLY_LIMIT,
+        relationship_context=relationship_context,
     )
 
 
@@ -364,6 +464,7 @@ def _build_impression_reply_system_prompt(
     state_overlay_prompt: str,
     target_name: str,
     is_querying_other: bool,
+    relationship_context: str = "",
 ) -> str:
     return render_impression_reply_prompt(
         persona=persona,
@@ -373,6 +474,7 @@ def _build_impression_reply_system_prompt(
         specific_max_length=IMPRESSION_SPECIFIC_MAX_LENGTH,
         limited_max_length=IMPRESSION_LIMITED_MAX_LENGTH,
         candidate_count=IMPRESSION_CANDIDATE_COUNT,
+        relationship_context=relationship_context,
     )
 
 
@@ -801,6 +903,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
         context_blocks,
         target_id=target_id,
     )
+    relationship_context = _build_impression_relationship_context(target_evidence_source)
 
     persona = get_base_persona()
     is_wl2_active = False
@@ -828,7 +931,13 @@ async def _(bot: Bot, event: GroupMessageEvent):
         final_reply = ""
         analysis = None
         analysis_messages = [
-            {"role": "system", "content": _build_impression_analysis_system_prompt(target_name=target_name)},
+            {
+                "role": "system",
+                "content": _build_impression_analysis_system_prompt(
+                    target_name=target_name,
+                    relationship_context=relationship_context,
+                ),
+            },
             {
                 "role": "user",
                 "content": _build_impression_analysis_user_prompt(
@@ -892,6 +1001,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
                         state_overlay_prompt=state_overlay_prompt,
                         target_name=target_name,
                         is_querying_other=is_querying_other,
+                        relationship_context=relationship_context,
                     ),
                 },
                 {

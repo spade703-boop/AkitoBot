@@ -204,6 +204,7 @@ def render_impression_analysis_prompt(
     *,
     target_name: str,
     recent_reply_limit: int,
+    relationship_context: str = "",
 ) -> str:
     """Render the persona-free analysis stage for group impressions."""
     frame = PromptFrame(
@@ -215,6 +216,7 @@ def render_impression_analysis_prompt(
         task_context_blocks=(
             f"分析对象是【{target_name}】。用户消息会分别提供目标本人的历史材料、近期上下文，以及最近最多 {recent_reply_limit} 条已发送群印象。",
             "历史材料用于形成观察；近期已发送群印象只用于识别重复表达，绝不能作为目标事实。",
+            relationship_context or "本次没有可用的人物关系资料；不要凭空补充角色关系。",
         ),
         task_rule_blocks=(
             "【分析规则】\n"
@@ -222,7 +224,8 @@ def render_impression_analysis_prompt(
             "2. observations 描述一段时间内能够成立的具体发现，不使用角色口吻，不写评价台词，也不把兴趣名称直接当作性格。\n"
             "3. 可以记录有依据但尚不能确定的理解，将其放入 uncertainties，不得把推测写成事实。\n"
             "4. avoid_patterns 只抽象描述近期评价反复使用的组织方式、转折方式或收尾方式，不复制旧评价原句，也不引入旧评价中的人物事实。\n"
-            "5. specific 需要 1-4 条 observations；limited 最多保留 1 条确定现象，并明确材料为何不足。",
+            "5. 材料中出现东云彰人、彰人、Akito、akito、小彰或akt时，按人物资料理解为你自己；出现冬弥或其他已识别角色时，按对应关系资料理解，不能写成陌生第三方。\n"
+            "6. specific 需要 1-4 条 observations；limited 最多保留 1 条确定现象，并明确材料为何不足。",
         ),
     )
     schema = JsonSchemaSpec(
@@ -250,6 +253,7 @@ def render_impression_reply_prompt(
     specific_max_length: int,
     limited_max_length: int,
     candidate_count: int = 3,
+    relationship_context: str = "",
 ) -> str:
     """Render the persona-aware expression stage for group impressions."""
     if is_querying_other:
@@ -281,11 +285,12 @@ def render_impression_reply_prompt(
 6. 不要求补充态度、转折、总结或收尾。一个观察已经说清楚时可以直接结束；确有自然看法时也可以表达。
 7. `specific` 每条最多 {specific_max_length} 字，`limited` 每条最多 {limited_max_length} 字；不设最低字数和固定句数。
 8. 纯文本，不要括号动作；inner_os 不会发到群里。
+9. 材料提到彰人相关别名时，把他当作你自己；提到冬弥或其他已识别角色时，按关系资料理解，不要在候选中把他们写成毫无关联的陌生第三方。
 """.strip()
     frame = PromptFrame(
         system_header="【系统级绝对指令：群印象任务】",
         environment_blocks=(state_overlay_prompt,),
-        role_knowledge_blocks=(persona,),
+        role_knowledge_blocks=(persona, relationship_context or "本次没有可用的人物关系资料；不要凭空补充角色关系。"),
         task_context_blocks=(task_context,),
         task_rule_blocks=(task_rules,),
     )
@@ -310,6 +315,7 @@ def render_impression_prompt(
     is_querying_other: bool,
     specific_max_length: int,
     limited_max_length: int,
+    relationship_context: str = "",
 ) -> str:
     """Compatibility wrapper for the persona-aware impression renderer."""
     return render_impression_reply_prompt(
@@ -319,6 +325,7 @@ def render_impression_prompt(
         is_querying_other=is_querying_other,
         specific_max_length=specific_max_length,
         limited_max_length=limited_max_length,
+        relationship_context=relationship_context,
     )
 
 
