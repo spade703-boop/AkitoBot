@@ -159,14 +159,24 @@ DEFAULT_SAVE_REPLIES = {
     "pet": ["……行，存下了。", "收到了。", "这张我存了。"],
     "captionless": ["……行，存下了。", "收到了。", "这张我存了。"],
 }
-DEFAULT_UNKNOWN_GALLERY_REPLIES = [
-    "哈？根本没有这种图库。别随便给我编啊。",
-    "没这类照片。换个名字再说。",
-    "你到底想看哪一类？先把图库名说对。",
-    "这种图库不存在。看清楚再发指令啊。",
-    "都说了没有。换一个。",
-]
-
+GALLERY_USER_HELP_ROWS = (
+    ("发张[图库名]", "严格匹配已有图库名称或别名，随机发送其中一张图片。"),
+    ("存[图库名]", "保存本条消息或引用消息中的图片；没有图片时静默。"),
+    ("开始收图 [图库名]", "进入连续收图模式，之后发送的图片会自动存入该图库。"),
+    ("停止收图", "结束当前会话的连续收图模式。"),
+    ("图库清单 [图库名] [页码]", "生成指定图库的缩略图清单；页码可省略。"),
+    ("查看图库指令", "查看这张普通图库指令说明图。"),
+)
+GALLERY_SUPERUSER_HELP_ROWS = (
+    ("新建图库[名称]", "创建一个不附带发图配文的自定义图库。"),
+    ("添加图库别名 [图库] [别名]", "给固定或自定义图库添加一个全局唯一别名。"),
+    ("关联子图库 [子图库] [父图库]", "让父图库抽图和清单递归包含指定自定义子图库。"),
+    ("取消子图库关联 [子图库]", "解除指定自定义图库与父图库的关系。"),
+    ("删除图库[名称]", "删除自定义图库、目录和图片，并解除相关子图库关联。"),
+    ("关闭图库休眠", "临时绕过凌晨 0–6 点的图库睡眠拦截。"),
+    ("开启图库休眠", "恢复凌晨 0–6 点的图库睡眠拦截。"),
+    ("查看超管图库指令", "查看这张超管图库指令说明图。"),
+)
 GALLERY_SLEEP_ENABLED = True
 
 
@@ -490,26 +500,14 @@ def _gallery_allowed(group_id: int | None, gallery: GalleryDefinition) -> bool:
     return bool(normalized_allowed & _definition_names(gallery))
 
 
-def _allowed_galleries_from_tokens(allowed_categories: list[str]) -> list[GalleryDefinition]:
-    normalized_allowed = {_normalize_gallery_name(str(token)) for token in allowed_categories}
-    return [gallery for gallery in _all_galleries() if normalized_allowed & _definition_names(gallery)]
-
-
 def _resolve_save_category_and_reply(
     text: str,
     replies_db: dict,
     chooser: Callable[[list[str]], str] = random.choice,
 ) -> tuple[str, str]:
     """Resolve which category a manual save request targets and pick its reply."""
-    stripped = text.strip()
-    dynamic_target = ""
-    for prefix in ("收下", "投喂", "增加", "存"):
-        if stripped.startswith(prefix):
-            dynamic_target = stripped[len(prefix):].strip()
-            break
-    gallery = _find_custom_gallery_exact(dynamic_target) if dynamic_target else None
-    if gallery is None:
-        gallery = _match_fixed_gallery(text, "save_aliases")
+    match = re.fullmatch(r"存\s*(\S+)", text.strip())
+    gallery = _find_gallery_exact(match.group(1)) if match else None
     if gallery is None:
         return "", ""
     reply_key = "captionless" if gallery.custom else gallery.storage_key
@@ -523,36 +521,15 @@ def _build_collect_session_key(group_id: int | None, user_id: str) -> str:
 
 
 def _resolve_collect_category(text: str) -> str:
-    """Resolve the target category for collect mode, defaulting to toya."""
-    gallery = _find_custom_gallery_exact(text) or _match_fixed_gallery(text, "collect_aliases")
-    return gallery.storage_key if gallery else "toya"
+    """Resolve an exact gallery name or alias for collect mode."""
+    gallery = _find_gallery_exact(text)
+    return gallery.storage_key if gallery else ""
 
 
-def _resolve_send_image_request(
-    text: str,
-    allowed_categories: list[str],
-    is_wl2_active: bool,
-    chooser: Callable[[list[str]], str] = random.choice,
-) -> tuple[str, str]:
-    """Resolve the send-image category and prompt hint from user input."""
-    if text:
-        gallery = _find_custom_gallery_exact(text) or _match_fixed_gallery(text, "send_aliases")
-        if gallery:
-            return gallery.storage_key, gallery.prompt_hint
-        return "", ""
-
-    normalized_allowed = {_normalize_gallery_name(str(token)) for token in allowed_categories}
-    if "all" in normalized_allowed:
-        category = "self" if is_wl2_active else chooser(["toya", "self"])
-    else:
-        valid_choices = [gallery.storage_key for gallery in _allowed_galleries_from_tokens(allowed_categories)]
-        if is_wl2_active:
-            valid_choices = [category for category in valid_choices if category not in {"toya", "vbs"}]
-        if not valid_choices:
-            return "", ""
-        category = chooser(valid_choices)
-
-    return category, "用户只说了看看。随机发一张，并问他想干嘛。"
+def _resolve_send_image_request(text: str) -> tuple[str, str]:
+    """Resolve only an exact existing gallery name or alias."""
+    gallery = _find_gallery_exact(text)
+    return (gallery.storage_key, gallery.prompt_hint) if gallery else ("", "")
 
 
 def _resolve_gallery_category(text: str) -> str:
@@ -570,6 +547,97 @@ def _paginate_gallery(total_files: int, requested_page: int, items_per_page: int
     return page, total_pages, start, end
 
 
+def _build_gallery_command_help_html(
+    title: str,
+    rows: tuple[tuple[str, str], ...],
+    note: str,
+) -> str:
+    cards = "".join(
+        f"""
+        <div class="command-card">
+            <div class="command">{command}</div>
+            <div class="description">{description}</div>
+        </div>
+        """
+        for command, description in rows
+    )
+    return f"""
+    <!doctype html>
+    <html lang="zh-CN">
+    <head>
+        <meta charset="utf-8">
+        <style>
+            * {{ box-sizing: border-box; }}
+            body {{
+                width: 860px;
+                margin: 0;
+                padding: 34px;
+                color: #352f33;
+                background: linear-gradient(145deg, #fff7ef 0%, #f5e8e4 100%);
+                font-family: "Microsoft YaHei", "Noto Sans SC", sans-serif;
+            }}
+            .sheet {{
+                padding: 30px;
+                border: 2px solid #e7a26f;
+                border-radius: 24px;
+                background: rgba(255, 255, 255, 0.9);
+                box-shadow: 0 14px 36px rgba(111, 65, 50, 0.14);
+            }}
+            h1 {{ margin: 0 0 8px; color: #b45d38; font-size: 34px; }}
+            .subtitle {{ margin-bottom: 24px; color: #7c6c68; font-size: 15px; }}
+            .commands {{ display: grid; gap: 12px; }}
+            .command-card {{
+                display: grid;
+                grid-template-columns: 280px 1fr;
+                gap: 18px;
+                align-items: center;
+                padding: 16px 18px;
+                border-left: 6px solid #e88a52;
+                border-radius: 12px;
+                background: #fffaf6;
+            }}
+            .command {{ color: #9f4726; font-size: 19px; font-weight: 700; }}
+            .description {{ color: #51474a; font-size: 16px; line-height: 1.6; }}
+            .note {{
+                margin-top: 22px;
+                padding: 14px 16px;
+                border-radius: 10px;
+                color: #6a554e;
+                background: #f8ece3;
+                font-size: 14px;
+                line-height: 1.7;
+            }}
+        </style>
+    </head>
+    <body>
+        <main class="sheet">
+            <h1>{title}</h1>
+            <div class="subtitle">AkitoBot Gallery Commands</div>
+            <div class="commands">{cards}</div>
+            <div class="note">{note}</div>
+        </main>
+    </body>
+    </html>
+    """
+
+
+async def _finish_gallery_command_help(
+    matcher,
+    title: str,
+    rows: tuple[tuple[str, str], ...],
+    note: str,
+) -> None:
+    try:
+        html = _build_gallery_command_help_html(title, rows, note)
+        pic = await html_to_pic(html, viewport={"width": 930, "height": 100})
+    except Exception as exc:
+        logger.error(f"图库指令说明图渲染失败: {exc}")
+        await matcher.finish("……指令图没生成出来。稍后再试。")
+        return
+    _grant_gallery_safety_pass(5)
+    await matcher.finish(MessageSegment.image(pic))
+
+
 create_gallery_cmd = on_regex(r"^新建图库\s*.*$", priority=5, block=True)
 add_gallery_alias_cmd = on_regex(r"^添加图库别名\s*.*$", priority=5, block=True)
 link_child_gallery_cmd = on_regex(r"^关联子图库\s*.*$", priority=5, block=True)
@@ -577,6 +645,32 @@ unlink_child_gallery_cmd = on_regex(r"^取消子图库关联\s*.*$", priority=5,
 delete_gallery_cmd = on_regex(r"^删除图库\s*.*$", priority=5, block=True)
 disable_gallery_sleep_cmd = on_regex(r"^关闭图库休眠\s*$", priority=5, block=True)
 enable_gallery_sleep_cmd = on_regex(r"^开启图库休眠\s*$", priority=5, block=True)
+gallery_help_cmd = on_regex(r"^查看图库指令\s*$", priority=5, block=True)
+superuser_gallery_help_cmd = on_regex(r"^查看超管图库指令\s*$", priority=5, block=True)
+
+
+@gallery_help_cmd.handle()
+async def _(event: Event):
+    if not isinstance(event, GroupMessageEvent) or event.group_id not in GROUP_IMAGE_PERMISSIONS:
+        return
+    await _finish_gallery_command_help(
+        gallery_help_cmd,
+        "普通图库指令",
+        GALLERY_USER_HELP_ROWS,
+        "图库名和别名必须完整匹配。固定图库：冬弥、彰人、美食、群友、合照、表情、宠物。",
+    )
+
+
+@superuser_gallery_help_cmd.handle()
+async def _(event: Event):
+    if str(event.get_user_id()) != SUPERUSER_QQ:
+        return
+    await _finish_gallery_command_help(
+        superuser_gallery_help_cmd,
+        "超管图库指令",
+        GALLERY_SUPERUSER_HELP_ROWS,
+        "仅超管可用；其他用户发送这些指令时会静默处理。",
+    )
 
 
 @disable_gallery_sleep_cmd.handle()
@@ -820,13 +914,36 @@ def get_random_local_image(category: str) -> Path | None:
     return random.choice(valid_images) if valid_images else None
 
 # --- 1. 手动存图 ---
-save_img_cmd = on_message(priority=6, block=False)
+save_img_cmd = on_regex(r"^存\s*\S+\s*$", priority=5, block=True)
 @save_img_cmd.handle()
 async def _(bot: Bot, event: GroupMessageEvent):
-    group_id = getattr(event, 'group_id', None)
-    if group_id and group_id not in GROUP_IMAGE_PERMISSIONS: return
+    if not isinstance(event, GroupMessageEvent):
+        return
+    group_id = event.group_id
+    if group_id not in GROUP_IMAGE_PERMISSIONS:
+        return
+
+    img_url = ""
+    for seg in event.message:
+        if getattr(seg, "type", "") == "image":
+            img_url = seg.data.get("url", "")
+            break
+    if not img_url and event.reply and event.reply.message:
+        for seg in event.reply.message:
+            if getattr(seg, "type", "") == "image":
+                img_url = seg.data.get("url", "")
+                break
+    if not img_url:
+        return
+
     text = event.get_plaintext().strip()
-    if not any(k in text for k in ["存", "收下", "投喂", "增加"]): return
+    replies_db = REACTIONS_DB.get("save_img_replies", {})
+    category, save_msg = _resolve_save_category_and_reply(text, replies_db)
+    if not category:
+        return
+    gallery = _get_gallery(category)
+    if gallery is None or not _gallery_allowed(group_id, gallery):
+        return
 
     result = _gallery_sleep_block("sleep_save_img", silent_chance=0.8,
                                   fallback="……明天再存……zzZ")
@@ -836,20 +953,6 @@ async def _(bot: Bot, event: GroupMessageEvent):
         _grant_gallery_safety_pass(5)
         await bot.send(event=event, message=result)
         return
-
-    img_url = ""
-    for seg in event.message:
-        if seg.type == "image": img_url = seg.data.get("url"); break
-    if not img_url and event.reply and event.reply.message:
-        for seg in event.reply.message:
-            if seg.type == "image": img_url = seg.data.get("url"); break
-    if not img_url: return
-
-    replies_db = REACTIONS_DB.get("save_img_replies", {})
-    category, save_msg = _resolve_save_category_and_reply(text, replies_db)
-    if not category: return
-    gallery = _get_gallery(category)
-    if gallery is None or not _gallery_allowed(group_id, gallery): return
 
     try:
         save_dir = IMAGE_BASE_PATH / category
@@ -865,7 +968,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
 
 # --- 2. 自动进货模式 ---
 COLLECTING_MODE = {}
-collect_cmd = on_command("开始进货", aliases={"开始收图", "停止进货", "停止收图"}, priority=5, block=True)
+collect_cmd = on_command("开始收图", aliases={"停止收图"}, priority=5, block=True)
 @collect_cmd.handle()
 async def _(event: Event, args: Message = CommandArg()):
     group_id, user_id = getattr(event, 'group_id', None), event.get_user_id()
@@ -875,7 +978,7 @@ async def _(event: Event, args: Message = CommandArg()):
     else: session_key = _build_collect_session_key(group_id, user_id)
 
     text = event.get_plaintext()
-    if "停止" in text or "结束" in text:
+    if text.strip().startswith("停止收图"):
         if session_key in COLLECTING_MODE:
             del COLLECTING_MODE[session_key]
             await collect_cmd.finish("（合上相册）……收工。刚才发的图都存好了。")
@@ -885,13 +988,16 @@ async def _(event: Event, args: Message = CommandArg()):
     category = _resolve_collect_category(target)
     gallery = _get_gallery(category)
 
-    if group_id and (gallery is None or not _gallery_allowed(group_id, gallery)):
+    if gallery is None:
+        await collect_cmd.finish("先把图库名说清楚。格式是“开始收图 图库名”。")
+
+    if group_id and not _gallery_allowed(group_id, gallery):
         await collect_cmd.finish("（皱眉）……这是什么图。")
         return
 
     COLLECTING_MODE[session_key] = category
     display_name = gallery.name if gallery else category
-    await collect_cmd.finish(f"""（拿出手机准备好）……行，发吧。现在开始自动存【{display_name}】的图。\n（发完记得说"停止进货"）""")
+    await collect_cmd.finish(f"""（拿出手机准备好）……行，发吧。现在开始自动存【{display_name}】的图。\n（发完记得说"停止收图"）""")
 
 auto_save_monitor = on_message(priority=7, block=False)
 @auto_save_monitor.handle()
@@ -899,7 +1005,7 @@ async def _(bot: Bot, event: Event):
     group_id, user_id = getattr(event, 'group_id', None), event.get_user_id()
     session_key = _build_collect_session_key(group_id, user_id)
     if session_key not in COLLECTING_MODE: return
-    if any(k in event.get_plaintext().strip() for k in ["存", "收下", "投喂", "增加"]): return
+    if re.fullmatch(r"存\s*\S+\s*", event.get_plaintext().strip()): return
 
     img_urls = []
     try:
@@ -932,32 +1038,30 @@ async def _(bot: Bot, event: Event):
         await bot.send(event=event, message="👌")
 
 # --- 3. 主动发图 ---
-send_img_cmd = on_command("看你的", aliases={"发张", "来张"}, priority=5, block=True)
+send_img_cmd = on_regex(r"^发张\s*\S+\s*$", priority=5, block=True)
 @send_img_cmd.handle()
-async def _(event: Event, args: Message = CommandArg()):
+async def _(event: Event):
+    if not isinstance(event, GroupMessageEvent):
+        return
+    group_id = event.group_id
+    if group_id not in GROUP_IMAGE_PERMISSIONS:
+        return
+
+    target = re.sub(r"^发张\s*", "", event.get_plaintext().strip(), count=1).strip()
+    category, prompt_hint = _resolve_send_image_request(target)
+    if not category:
+        return
+    gallery = _get_gallery(category)
+    if gallery is None:
+        return
+
     result = _gallery_sleep_block("sleep_replies_img", silent_chance=0.0, fallback="……zzZ")
     if result:
         _grant_gallery_safety_pass(5)
         await send_img_cmd.finish(result)
 
-    group_id = getattr(event, 'group_id', None)
-    if group_id and group_id not in GROUP_IMAGE_PERMISSIONS: return
-
     mem = get_user_memory(get_memory_key(event))
     is_wl2_active = any(item.get("id") == "WL2" for item in mem.get("temp_implants", []))
-
-    text = args.extract_plain_text().strip()
-    allowed = GROUP_IMAGE_PERMISSIONS.get(group_id, [])
-    category, prompt_hint = _resolve_send_image_request(text, allowed, is_wl2_active)
-    if not category:
-        if text:
-            replies = REACTIONS_DB.get("unknown_gallery_replies") or DEFAULT_UNKNOWN_GALLERY_REPLIES
-            _grant_gallery_safety_pass(5)
-            await send_img_cmd.finish(random.choice(replies))
-        await send_img_cmd.finish("（摊手）……这儿没什么能发的。")
-    gallery = _get_gallery(category)
-    if gallery is None:
-        await send_img_cmd.finish("（摊手）……这儿没什么能发的。")
 
     if is_wl2_active and category in ["toya", "vbs"]:
         _grant_gallery_safety_pass(5)
@@ -1038,7 +1142,7 @@ def get_thumbnail_safe(file_path: Path) -> str:
             return base64.b64encode(buffer.getvalue()).decode()
     except Exception: return ""
 
-gallery_cmd = on_command("图库清单", aliases={"查看图库", "库存", "相册"}, priority=5, block=True)
+gallery_cmd = on_command("图库清单", priority=5, block=True)
 @gallery_cmd.handle()
 async def _(event: Event, args: Message = CommandArg()):
     result = _gallery_sleep_block("sleep_gallery_list", silent_chance=0.0,

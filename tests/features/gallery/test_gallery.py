@@ -5,9 +5,11 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-from nonebot.adapters import Event, Message
+from nonebot.adapters import Event
+from nonebot.adapters.onebot.v11 import Bot
 from nonebot.exception import FinishedException
 import pytest
 
@@ -20,7 +22,7 @@ def _pick_first(options: list[str]) -> str:
 
 def test_resolve_save_category_and_reply_uses_matching_bucket():
     category, reply = gallery._resolve_save_category_and_reply(
-        "这张松饼也给你存一下",
+        "存松饼",
         {"food": ["收到了", "第二条"]},
         chooser=_pick_first,
     )
@@ -41,9 +43,10 @@ def test_build_collect_session_key_supports_group_and_private():
     assert gallery._build_collect_session_key(None, "2002") == "private_2002"
 
 
-def test_resolve_collect_category_defaults_to_toya():
-    assert gallery._resolve_collect_category("彰人自拍") == "self"
-    assert gallery._resolve_collect_category("随便发吧") == "toya"
+def test_resolve_collect_category_requires_exact_existing_gallery():
+    assert gallery._resolve_collect_category("自拍") == "self"
+    assert gallery._resolve_collect_category("彰人自拍") == ""
+    assert gallery._resolve_collect_category("随便发吧") == ""
 
 
 def test_pet_gallery_is_available_across_gallery_resolvers():
@@ -56,50 +59,33 @@ def test_pet_gallery_is_available_across_gallery_resolvers():
     assert category == "pet"
     assert reply == "存好了"
     assert gallery._resolve_collect_category("宠物") == "pet"
-    assert gallery._resolve_send_image_request("宠物", ["all"], False, _pick_first) == ("pet", "")
+    assert gallery._resolve_send_image_request("宠物") == ("pet", "")
     assert gallery._resolve_gallery_category("宠物") == "pet"
     assert gallery._resolve_collect_category("卡车") == "pet"
-    assert gallery._resolve_send_image_request("丑猫照片", ["all"], False, _pick_first) == ("pet", "")
+    assert gallery._resolve_send_image_request("丑猫") == ("pet", "")
+    assert gallery._resolve_send_image_request("丑猫照片") == ("", "")
     assert gallery._resolve_gallery_category("卡车") == "pet"
 
 
-def test_resolve_send_image_request_handles_explicit_and_fallback_cases():
-    explicit_category, explicit_hint = gallery._resolve_send_image_request(
-        "来张表情",
-        allowed_categories=[],
-        is_wl2_active=False,
-        chooser=_pick_first,
-    )
-    fallback_category, fallback_hint = gallery._resolve_send_image_request(
-        "",
-        allowed_categories=["toya", "vbs", "meme"],
-        is_wl2_active=True,
-        chooser=_pick_first,
-    )
+def test_resolve_send_image_request_only_accepts_exact_gallery_name_or_alias():
+    explicit_category, explicit_hint = gallery._resolve_send_image_request("表情")
+    fallback_category, fallback_hint = gallery._resolve_send_image_request("")
 
     assert explicit_category == "meme"
     assert "表情" in explicit_hint
-    assert fallback_category == "meme"
-    assert fallback_hint == "用户只说了看看。随机发一张，并问他想干嘛。"
+    assert fallback_category == ""
+    assert fallback_hint == ""
 
 
 def test_resolve_send_image_request_rejects_unknown_non_empty_category():
-    category, hint = gallery._resolve_send_image_request(
-        "根本不存在的图库",
-        allowed_categories=["all"],
-        is_wl2_active=False,
-        chooser=_pick_first,
-    )
-    compatible_category, _ = gallery._resolve_send_image_request(
-        "冬弥照片",
-        allowed_categories=["all"],
-        is_wl2_active=False,
-        chooser=_pick_first,
-    )
+    category, hint = gallery._resolve_send_image_request("根本不存在的图库")
+    compatible_category, _ = gallery._resolve_send_image_request("冬弥照片")
+    exact_category, _ = gallery._resolve_send_image_request("冬弥")
 
     assert category == ""
     assert hint == ""
-    assert compatible_category == "toya"
+    assert compatible_category == ""
+    assert exact_category == "toya"
 
 
 def test_custom_gallery_uses_exact_name_and_captionless_save_reply(monkeypatch):
@@ -120,8 +106,8 @@ def test_custom_gallery_uses_exact_name_and_captionless_save_reply(monkeypatch):
 
     assert save_category == custom.storage_key
     assert reply == "收到了"
-    assert gallery._resolve_send_image_request("猫猫", ["all"], False, _pick_first)[0] == custom.storage_key
-    assert gallery._resolve_send_image_request("猫猫照片", ["all"], False, _pick_first)[0] == ""
+    assert gallery._resolve_send_image_request("猫猫")[0] == custom.storage_key
+    assert gallery._resolve_send_image_request("猫猫照片")[0] == ""
 
 
 def test_gallery_permissions_accept_fixed_keys_and_custom_names(monkeypatch):
@@ -259,7 +245,7 @@ def test_gallery_aliases_resolve_and_must_be_unique(monkeypatch):
     monkeypatch.setattr(gallery, "GALLERY_ALIASES", {custom.storage_key: ["三三"]})
 
     assert gallery._find_gallery_exact("三三") == custom
-    assert gallery._resolve_send_image_request("三三", ["all"], False, _pick_first)[0] == custom.storage_key
+    assert gallery._resolve_send_image_request("三三")[0] == custom.storage_key
     assert gallery._validate_gallery_alias("三三") == "duplicate"
     assert gallery._validate_gallery_alias("群友") == "duplicate"
     assert gallery._validate_gallery_alias("新别名") == ""
@@ -386,7 +372,7 @@ async def test_add_gallery_alias_command_persists_alias(monkeypatch, tmp_path):
     assert "也可以叫【毛孩子】" in str(exc.value.result)
     assert gallery.GALLERY_ALIASES == {"pet": ["毛孩子"]}
     assert json.loads(registry_path.read_text(encoding="utf-8"))["aliases"] == {"pet": ["毛孩子"]}
-    assert gallery._resolve_send_image_request("毛孩子", ["all"], False, _pick_first)[0] == "pet"
+    assert gallery._resolve_send_image_request("毛孩子")[0] == "pet"
 
 
 @pytest.mark.asyncio
@@ -525,11 +511,113 @@ async def test_pet_send_outputs_only_image_and_skips_caption_api(monkeypatch, tm
     with pytest.raises(FinishedException) as exc:
         await gallery.send_img_cmd.handlers[0](
             Event(plain_text="发张宠物", group_id=1001),
-            Message("宠物"),
         )
 
     assert str(exc.value.result) == "[image]"
     caption_api.assert_not_awaited()
+
+
+def test_gallery_command_registrations_only_keep_supported_entrypoints():
+    assert gallery.send_img_cmd.args == (r"^发张\s*\S+\s*$",)
+    assert gallery.save_img_cmd.args == (r"^存\s*\S+\s*$",)
+    assert gallery.collect_cmd.args == ("开始收图",)
+    assert gallery.collect_cmd.kwargs["aliases"] == {"停止收图"}
+    assert gallery.gallery_cmd.args == ("图库清单",)
+    assert "aliases" not in gallery.gallery_cmd.kwargs
+
+
+@pytest.mark.asyncio
+async def test_unknown_or_non_exact_send_request_is_silent(monkeypatch):
+    monkeypatch.setattr(gallery, "GROUP_IMAGE_PERMISSIONS", {1001: ["all"]})
+
+    def fail_sleep_block(*args, **kwargs):
+        pytest.fail("invalid send requests must be discarded before the sleep gate")
+
+    monkeypatch.setattr(gallery, "_gallery_sleep_block", fail_sleep_block)
+
+    result = await gallery.send_img_cmd.handlers[0](
+        Event(plain_text="发张宠物照片", group_id=1001)
+    )
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_save_request_without_image_is_silent_before_sleep_gate(monkeypatch):
+    monkeypatch.setattr(gallery, "GROUP_IMAGE_PERMISSIONS", {1001: ["all"]})
+
+    def fail_sleep_block(*args, **kwargs):
+        pytest.fail("image-free save requests must be discarded before the sleep gate")
+
+    monkeypatch.setattr(gallery, "_gallery_sleep_block", fail_sleep_block)
+    bot = Bot()
+
+    result = await gallery.save_img_cmd.handlers[0](
+        bot,
+        Event(plain_text="存宠物", group_id=1001),
+    )
+
+    assert result is None
+    bot.send.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_save_request_accepts_image_from_quoted_message(monkeypatch):
+    monkeypatch.setattr(gallery, "GROUP_IMAGE_PERMISSIONS", {1001: ["all"]})
+    monkeypatch.setattr(gallery, "_gallery_sleep_block", lambda *args, **kwargs: "……在睡。")
+    quoted_image = SimpleNamespace(type="image", data={"url": "https://example.com/pet.jpg"})
+    bot = Bot()
+
+    await gallery.save_img_cmd.handlers[0](
+        bot,
+        Event(
+            plain_text="存宠物",
+            group_id=1001,
+            reply=SimpleNamespace(message=[quoted_image]),
+        ),
+    )
+
+    bot.send.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_gallery_command_help_images_and_superuser_access(monkeypatch):
+    render = AsyncMock(return_value=b"command-help")
+    monkeypatch.setattr(gallery, "html_to_pic", render)
+    monkeypatch.setattr(gallery, "GROUP_IMAGE_PERMISSIONS", {1001: ["all"]})
+    monkeypatch.setattr(gallery, "_grant_gallery_safety_pass", lambda seconds: None)
+
+    with pytest.raises(FinishedException) as user_exc:
+        await gallery.gallery_help_cmd.handlers[0](
+            Event(plain_text="查看图库指令", group_id=1001, user_id="10001")
+        )
+
+    assert str(user_exc.value.result) == "[image]"
+    user_html = render.await_args.args[0]
+    assert "发张[图库名]" in user_html
+    assert "开始收图 [图库名]" in user_html
+    assert "新建图库[名称]" not in user_html
+
+    render.reset_mock()
+    non_superuser_result = await gallery.superuser_gallery_help_cmd.handlers[0](
+        Event(plain_text="查看超管图库指令", group_id=1001, user_id="10001")
+    )
+    assert non_superuser_result is None
+    render.assert_not_awaited()
+
+    with pytest.raises(FinishedException) as superuser_exc:
+        await gallery.superuser_gallery_help_cmd.handlers[0](
+            Event(
+                plain_text="查看超管图库指令",
+                group_id=1001,
+                user_id=gallery.SUPERUSER_QQ,
+            )
+        )
+
+    assert str(superuser_exc.value.result) == "[image]"
+    superuser_html = render.await_args.args[0]
+    assert "新建图库[名称]" in superuser_html
+    assert "关闭图库休眠" in superuser_html
 
 
 @pytest.mark.asyncio
