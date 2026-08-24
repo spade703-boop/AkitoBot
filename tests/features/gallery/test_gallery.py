@@ -527,19 +527,30 @@ def test_gallery_command_registrations_only_keep_supported_entrypoints():
 
 
 @pytest.mark.asyncio
-async def test_unknown_or_non_exact_send_request_is_silent(monkeypatch):
+async def test_unknown_send_request_is_rejected_but_extra_text_and_empty_are_silent(monkeypatch):
     monkeypatch.setattr(gallery, "GROUP_IMAGE_PERMISSIONS", {1001: ["all"]})
+    monkeypatch.setattr(gallery, "REACTIONS_DB", {"unknown_gallery_replies": ["没有这个图库。"]})
 
     def fail_sleep_block(*args, **kwargs):
         pytest.fail("invalid send requests must be discarded before the sleep gate")
 
     monkeypatch.setattr(gallery, "_gallery_sleep_block", fail_sleep_block)
 
-    result = await gallery.send_img_cmd.handlers[0](
+    extra_text_result = await gallery.send_img_cmd.handlers[0](
         Event(plain_text="发张宠物照片", group_id=1001)
     )
+    empty_result = await gallery.send_img_cmd.handlers[0](
+        Event(plain_text="发张", group_id=1001)
+    )
 
-    assert result is None
+    with pytest.raises(FinishedException) as unknown_exc:
+        await gallery.send_img_cmd.handlers[0](
+            Event(plain_text="发张不存在图库", group_id=1001)
+        )
+
+    assert extra_text_result is None
+    assert empty_result is None
+    assert str(unknown_exc.value.result) == "没有这个图库。"
 
 
 @pytest.mark.asyncio
@@ -583,8 +594,16 @@ async def test_save_request_accepts_image_from_quoted_message(monkeypatch):
 @pytest.mark.asyncio
 async def test_gallery_command_help_images_and_superuser_access(monkeypatch):
     render = AsyncMock(return_value=b"command-help")
+    custom = gallery.GalleryDefinition(
+        storage_key="custom/33",
+        name="33",
+        caption_enabled=False,
+        permission_tokens=("33",),
+        custom=True,
+    )
     monkeypatch.setattr(gallery, "html_to_pic", render)
     monkeypatch.setattr(gallery, "GROUP_IMAGE_PERMISSIONS", {1001: ["all"]})
+    monkeypatch.setattr(gallery, "CUSTOM_GALLERIES", [custom])
     monkeypatch.setattr(gallery, "_grant_gallery_safety_pass", lambda seconds: None)
 
     with pytest.raises(FinishedException) as user_exc:
@@ -596,6 +615,8 @@ async def test_gallery_command_help_images_and_superuser_access(monkeypatch):
     user_html = render.await_args.args[0]
     assert "发张[图库名]" in user_html
     assert "开始收图 [图库名]" in user_html
+    assert "固定图库：</span>冬弥、彰人、美食、群友、合照、表情、宠物" in user_html
+    assert "自定义图库：</span>33" in user_html
     assert "新建图库[名称]" not in user_html
 
     render.reset_mock()

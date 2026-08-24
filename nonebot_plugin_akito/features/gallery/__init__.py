@@ -159,8 +159,15 @@ DEFAULT_SAVE_REPLIES = {
     "pet": ["……行，存下了。", "收到了。", "这张我存了。"],
     "captionless": ["……行，存下了。", "收到了。", "这张我存了。"],
 }
+DEFAULT_UNKNOWN_GALLERY_REPLIES = [
+    "哈？根本没有这种图库。别随便给我编啊。",
+    "没这类照片。换个名字再说。",
+    "你到底想看哪一类？先把图库名说对。",
+    "这种图库不存在。看清楚再发指令啊。",
+    "都说了没有。换一个。",
+]
 GALLERY_USER_HELP_ROWS = (
-    ("发张[图库名]", "严格匹配已有图库名称或别名，随机发送其中一张图片。"),
+    ("发张[图库名]", "严格匹配后随机发图；未知图库会拒绝，附加文字或空参数静默。"),
     ("存[图库名]", "保存本条消息或引用消息中的图片；没有图片时静默。"),
     ("开始收图 [图库名]", "进入连续收图模式，之后发送的图片会自动存入该图库。"),
     ("停止收图", "结束当前会话的连续收图模式。"),
@@ -532,6 +539,16 @@ def _resolve_send_image_request(text: str) -> tuple[str, str]:
     return (gallery.storage_key, gallery.prompt_hint) if gallery else ("", "")
 
 
+def _has_gallery_name_prefix(text: str) -> bool:
+    """Return whether text starts with a gallery name but contains extra content."""
+    normalized = _normalize_gallery_name(text)
+    return any(
+        normalized.startswith(name) and normalized != name
+        for gallery in _all_galleries()
+        for name in _definition_names(gallery)
+    )
+
+
 def _resolve_gallery_category(text: str) -> str:
     """Resolve the category named in a gallery list request."""
     gallery = _find_custom_gallery_exact(text) or _match_fixed_gallery(text, "list_aliases")
@@ -607,6 +624,9 @@ def _build_gallery_command_help_html(
                 font-size: 14px;
                 line-height: 1.7;
             }}
+            .note strong {{ color: #a84f2d; font-size: 17px; }}
+            .inventory-label {{ color: #8f513a; font-weight: 700; }}
+            .inventory-tip {{ margin-top: 6px; color: #89736b; font-size: 13px; }}
         </style>
     </head>
     <body>
@@ -619,6 +639,20 @@ def _build_gallery_command_help_html(
     </body>
     </html>
     """
+
+
+def _build_gallery_inventory_note() -> str:
+    fixed_names = "、".join(gallery.name for gallery in FIXED_GALLERIES)
+    custom_names = "、".join(
+        gallery.name
+        for gallery in sorted(CUSTOM_GALLERIES, key=lambda item: item.name.casefold())
+    ) or "暂无"
+    return (
+        "<strong>已有图库</strong><br>"
+        f"<span class=\"inventory-label\">固定图库：</span>{fixed_names}<br>"
+        f"<span class=\"inventory-label\">自定义图库：</span>{custom_names}"
+        "<div class=\"inventory-tip\">图库名和别名必须完整匹配。</div>"
+    )
 
 
 async def _finish_gallery_command_help(
@@ -657,7 +691,7 @@ async def _(event: Event):
         gallery_help_cmd,
         "普通图库指令",
         GALLERY_USER_HELP_ROWS,
-        "图库名和别名必须完整匹配。固定图库：冬弥、彰人、美食、群友、合照、表情、宠物。",
+        _build_gallery_inventory_note(),
     )
 
 
@@ -1050,7 +1084,11 @@ async def _(event: Event):
     target = re.sub(r"^发张\s*", "", event.get_plaintext().strip(), count=1).strip()
     category, prompt_hint = _resolve_send_image_request(target)
     if not category:
-        return
+        if not target or _has_gallery_name_prefix(target):
+            return
+        replies = REACTIONS_DB.get("unknown_gallery_replies") or DEFAULT_UNKNOWN_GALLERY_REPLIES
+        _grant_gallery_safety_pass(5)
+        await send_img_cmd.finish(random.choice(replies))
     gallery = _get_gallery(category)
     if gallery is None:
         return
