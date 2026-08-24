@@ -219,6 +219,7 @@ DEFAULT_RPG_CONFIG: dict = {
     # ---- 战斗特判：普通 RPG 战斗专用。单刷胜利 / 单刷失败 / 组队失败都有独立 3% 援护判定 ----
     "support": {
         "chance": 0.03,
+        "variant_weights": {"default": 1, "dogbin_fox": 1},
         "akito_success": {"exp_ratio": 0.35, "points_ratio": 0.30},
         "akito_fail": {"exp_ratio": 0.35, "points_ratio": 0.30},
         "duo_combo": {"exp_ratio": 0.35, "points_ratio": 0.30},
@@ -463,6 +464,18 @@ DEFAULT_RPG_CONFIG: dict = {
         "support_duo_combo": [
             "【联携】双色发神官在远处施放了支援魔法稳住阵型，橙色的勇者趁机挥剑突入追击。\n【{monster}】被一举击破。\n· 本次挑战转为成功\n· 额外获得经验 +{exp}、积分 +{points}"
         ],
+        "support_dogbin_fox_akito_success": [
+            "【追击】路过的狗宾给了怪物致命一击。\n“啧，怎么有拦路的家伙，碍着我去冬弥那儿吃松饼了。”\n【{monster}】被这一击彻底击溃。\n· 额外获得经验 +{exp}、积分 +{points}"
+        ],
+        "support_dogbin_fox_akito_fail": [
+            "【追击】橙色头发的狗宾突然出现，挡在怪物面前。\n“喂，不是说好了要一起去吃冬弥的松饼吗！别在这里输了！”\n【{monster}】被这一击逼退。\n· 额外获得经验 +{exp}、积分 +{points}"
+        ],
+        "support_dogbin_fox_toya_rescue": [
+            "【援护】突然出现在战场中间的九尾妖狐以狐火逼退敌人，转身却递来一份刚出炉的松饼。\n“要试试这份松饼吗？是彰人非常喜欢的新配方哦。”\n美妙松饼的香气令人充满了力量！\n· 本次挑战转为成功"
+        ],
+        "support_dogbin_fox_duo_combo": [
+            "【联携】幽蓝色的狐火将怪物身形定住，狗宾从空中突入，一击致命。\n“冬弥，回去以后我要吃五份松饼。”\n“好，今天彰人想吃什么味道的？”\n【{monster}】被一举击破。\n· 本次挑战转为成功\n· 额外获得经验 +{exp}、积分 +{points}"
+        ],
         "team_support_hesitate": [
             "【支援】路过的勇者与神官的鼓励重新使{b_name}充满了勇气。\n· 本次组队成立"
         ],
@@ -471,6 +484,15 @@ DEFAULT_RPG_CONFIG: dict = {
         ],
         "team_support_out_of_step": [
             "【支援】橙发的勇者先行稳住敌人攻势，{b_name}得以及时加入战场。\n· 本次组队成立"
+        ],
+        "team_support_dogbin_fox_hesitate": [
+            "妖狐借术将 {b_name} 送到 {a_name} 身边，但不知为何 {b_name} 身上飘荡着一股松饼的香气。"
+        ],
+        "team_support_dogbin_fox_late_reply": [
+            "狗宾快速地将跟自己在冬弥店里一起吃松饼吃得错过组队的 {b_name} 丢到了战场中央。"
+        ],
+        "team_support_dogbin_fox_out_of_step": [
+            "战场上突然出现了一千个松饼挡住了敌人！拜一千个松饼所赐，{b_name} 及时加入了战场。"
         ],
         # 世界 BOSS
         "world_boss_spawn": ["🌍 世界BOSS【{monster}】出现了。"],
@@ -816,6 +838,15 @@ def _line(key: str, **fmt) -> str:
         return template.format(**fmt)
     except (KeyError, IndexError):
         return template
+
+
+def _variant_line(prefix: str, event_key: str, variant: str = "", **fmt) -> str:
+    """按支援版本读取文案，缺少派生版本时回退到旧文案。"""
+    key = f"{prefix}_{variant}_{event_key}" if variant and variant != "default" else f"{prefix}_{event_key}"
+    table = _cfg("copy", {})
+    if variant and variant != "default" and (not isinstance(table, dict) or not table.get(key)):
+        key = f"{prefix}_{event_key}"
+    return _line(key, **fmt)
 
 
 def reload_rpg_config() -> None:

@@ -390,6 +390,7 @@ async def test_team_fail_rescue_runs_normal_coop_settlement(monkeypatch):
     monkeypatch.setattr(team, "random", _Rng(0.999))
     monkeypatch.setattr(team, "_roll_fail_flavor", lambda rng=team.random: "late_reply")
     monkeypatch.setattr(team, "_roll_team_fail_rescue", lambda rng=team.random: True)
+    monkeypatch.setattr(rpg_events, "_roll_support_variant", lambda rng=rpg_events.random: "default")
     _stub_hunt_rng(monkeypatch, {"name": "史莱姆", "power_req": 1, "drops": []})
     monkeypatch.setattr(rpg_events, "_roll_coop_event", lambda rng=rpg_events.random: "")
 
@@ -416,6 +417,36 @@ async def test_team_fail_rescue_runs_normal_coop_settlement(monkeypatch):
     assert "[CQ:at" not in result
     assert "独自前往" not in result
     assert "[at:u1]" in result and "[at:u2]" in result
+
+
+@pytest.mark.parametrize(
+    ("fail_event", "marker"),
+    [
+        ("hesitate", "飘荡着一股松饼的香气"),
+        ("late_reply", "一起吃松饼吃得错过组队"),
+        ("out_of_step", "一千个松饼挡住了敌人"),
+    ],
+)
+def test_team_fail_rescue_dogbin_fox_variant_renders(fail_event, marker):
+    member = {"exp_gain": 0, "points_gain": 0, "drops": [], "old_level": 1, "new_level": 1}
+    out = {
+        "monster": {"name": "史莱姆"},
+        "win": True,
+        "team_support_variant": "dogbin_fox",
+        "team_event": "",
+        "negative_event": "",
+        "battle_guard_owner": "",
+        "power_bonus": 0,
+        "exp_bonus": 0,
+        "drop_bonus": 0,
+        "bond_gain": 0,
+        "b": member,
+        "a": member,
+    }
+
+    result = str(team._build_fail_rescue_broadcast(out, "u1", "u2", "甲", "乙", fail_event))
+
+    assert marker in result
 
 
 @pytest.mark.asyncio

@@ -673,11 +673,78 @@ def test_roll_solo_support_scene_uses_fixed_three_percent_bands():
     assert rpg_events._roll_solo_support_scene(False, _SeqRng(0.12)) == ""
 
 
+def test_roll_support_variant_uses_equal_default_weights():
+    captured = {}
+
+    class _ChoicesRng:
+        def choices(self, seq, *, weights, k):
+            captured["seq"] = list(seq)
+            captured["weights"] = list(weights)
+            return [seq[-1]]
+
+    assert rpg_events._roll_support_variant(_ChoicesRng()) == "dogbin_fox"
+    assert captured == {"seq": ["default", "dogbin_fox"], "weights": [1, 1]}
+
+
+def test_roll_support_variant_falls_back_for_invalid_weights(monkeypatch):
+    captured = {}
+
+    class _ChoicesRng:
+        def choices(self, seq, *, weights, k):
+            captured["seq"] = list(seq)
+            captured["weights"] = list(weights)
+            return [seq[0]]
+
+    monkeypatch.setattr(rpg_events, "_support_cfg", lambda: {"variant_weights": {"dogbin_fox": "bad"}})
+
+    assert rpg_events._roll_support_variant(_ChoicesRng()) == "default"
+    assert captured == {"seq": ["default", "dogbin_fox"], "weights": [1, 1]}
+
+
+@pytest.mark.parametrize(
+    ("scene", "marker"),
+    [
+        ("akito_success", "路过的狗宾给了怪物致命一击"),
+        ("akito_fail", "橙色头发的狗宾突然出现"),
+        ("toya_rescue", "九尾妖狐以狐火逼退敌人"),
+        ("duo_combo", "五份松饼"),
+    ],
+)
+def test_hunt_support_dogbin_fox_variant_renders(scene, marker):
+    lines = hunt._hunt_support_lines(
+        {
+            "monster": {"name": "史莱姆"},
+            "support_scene": scene,
+            "support_variant": "dogbin_fox",
+            "support_exp": 3,
+            "support_points": 2,
+            "base_win": False,
+            "win": scene in {"toya_rescue", "duo_combo"},
+        }
+    )
+
+    assert marker in "\n".join(lines)
+
+
+def test_settle_solo_skips_support_variant_without_support_scene(monkeypatch):
+    user = _equipped_user()
+    _stub_hunt_rng(monkeypatch, {"name": "史莱姆", "power_req": 1, "drops": []})
+
+    def _unexpected_variant_roll(*args, **kwargs):
+        raise AssertionError("support variant should not roll without a support scene")
+
+    monkeypatch.setattr(rpg_events, "_roll_support_variant", _unexpected_variant_roll)
+    out = rewards._settle_solo(user, "2026-06-22")
+
+    assert out["support_variant"] == ""
+
+
 @pytest.mark.asyncio
 async def test_hunt_support_akito_success_adds_bonus_rewards(monkeypatch):
     state = _patch_io(monkeypatch, hunt, store={"groups": {"1001": {"users": {"u1": _equipped_user(points=0)}}}})
     _stub_hunt_rng(monkeypatch, {"name": "史莱姆", "power_req": 1, "drops": []})
     monkeypatch.setattr(rpg_events, "_roll_solo_support_scene", lambda win, rng=rpg_events.random: "akito_success")
+    monkeypatch.setattr(rpg_events, "_roll_support_variant", lambda rng=rpg_events.random: "default")
 
     with pytest.raises(FinishedException) as exc:
         await hunt.hunt_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="u1"))
@@ -697,6 +764,7 @@ async def test_hunt_support_akito_fail_keeps_failure_with_bonus(monkeypatch):
     state = _patch_io(monkeypatch, hunt, store={"groups": {"1001": {"users": {"u1": _equipped_user(points=0)}}}})
     _stub_hunt_rng(monkeypatch, {"name": "座狼", "power_req": 999, "drops": []})
     monkeypatch.setattr(rpg_events, "_roll_solo_support_scene", lambda win, rng=rpg_events.random: "akito_fail")
+    monkeypatch.setattr(rpg_events, "_roll_support_variant", lambda rng=rpg_events.random: "default")
 
     with pytest.raises(FinishedException) as exc:
         await hunt.hunt_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="u1"))
@@ -745,6 +813,7 @@ async def test_hunt_support_duo_combo_turns_loss_into_win_with_bonus(monkeypatch
     _stub_hunt_rng(monkeypatch, {"name": "食人魔", "power_req": 999, "drops": []})
     monkeypatch.setattr(rpg_events, "_roll_hunt_event", lambda margin, rng=rpg_events.random: "desperate")
     monkeypatch.setattr(rpg_events, "_roll_solo_support_scene", lambda win, rng=rpg_events.random: "duo_combo")
+    monkeypatch.setattr(rpg_events, "_roll_support_variant", lambda rng=rpg_events.random: "default")
 
     with pytest.raises(FinishedException) as exc:
         await hunt.hunt_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="u1"))

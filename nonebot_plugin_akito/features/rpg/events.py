@@ -60,6 +60,25 @@ def _support_spec(scene: str) -> dict:
     return spec if isinstance(spec, dict) else {}
 
 
+def _roll_support_variant(rng=random) -> str:
+    """在支援场景确定后抽取展示版本，不参与支援概率判定。"""
+    defaults = {"default": 1, "dogbin_fox": 1}
+    raw = _support_cfg().get("variant_weights", defaults)
+    if not isinstance(raw, dict):
+        raw = defaults
+    cands: dict[str, int] = {}
+    for key, weight in raw.items():
+        try:
+            parsed = int(weight)
+        except (TypeError, ValueError):
+            continue
+        if str(key).strip() and parsed > 0:
+            cands[str(key)] = parsed
+    if not cands:
+        cands = defaults
+    return _weighted_choice(cands, rng)
+
+
 def _roll_solo_support_scene(win: bool, rng=random) -> str:
     """单刷特判：胜利仅彰人追击；失败时三种场景各占固定 3% 档位。"""
     chance = _support_chance()

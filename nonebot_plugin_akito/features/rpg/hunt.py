@@ -27,7 +27,7 @@ from ...core.game_store import (
 from .analytics import record_battle
 from .boss import _cleanup_stale_world_boss, _maybe_spawn_world_boss_lines
 from .combat import _buff_active, _eff_monster, _monsters, _today_buff
-from .config import _cfg, _copy, _error, _line
+from .config import _cfg, _copy, _error, _line, _variant_line
 from .inventory import _roll_drops
 from .player import _ensure_player, _resolve_group
 from .rewards import _settle_solo
@@ -83,16 +83,18 @@ def _hunt_support_lines(out: dict) -> list[str]:
         turn_line = _line("hunt_fail_turn")
         if turn_line:
             lines.append(turn_line)
-    key = {
-        "akito_success": "support_akito_success",
-        "akito_fail": "support_akito_fail",
-        "toya_rescue": "support_toya_rescue",
-        "duo_combo": "support_duo_combo",
+    event_key = {
+        "akito_success": "akito_success",
+        "akito_fail": "akito_fail",
+        "toya_rescue": "toya_rescue",
+        "duo_combo": "duo_combo",
     }.get(scene, "")
-    if not key:
+    if not event_key:
         return lines
-    line = _line(
-        key,
+    line = _variant_line(
+        "support",
+        event_key,
+        str(out.get("support_variant", "")),
         monster=out["monster"].get("name", ""),
         exp=int(out.get("support_exp", 0)),
         points=int(out.get("support_points", 0)),

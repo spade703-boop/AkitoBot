@@ -27,10 +27,11 @@ from ...core.game_store import (
 )
 from ...core.types import GroupRecord
 from ..gift import _bond_level
+from . import events
 from .analytics import record_battle, record_team_attempt
 from .boss import _cleanup_stale_world_boss, _maybe_spawn_world_boss_lines
 from .combat import _buff_active
-from .config import _cfg, _copy, _error, _line
+from .config import _cfg, _copy, _error, _line, _variant_line
 from .hunt import _battle_debuff_line, _battle_supply_line, _hunt_result_lines, _team_minor_lines
 from .player import _ensure_player, _resolve_group
 from .rewards import _apply_team_minor_encounter, _settle_coop, _settle_solo
@@ -243,7 +244,13 @@ def _build_fail_rescue_broadcast(
     key = fail_event or "out_of_step"
     fail_line = _line(f"team_fail_event_{key}", b_name=target_name)
     turn_line = _render_with_ats(random.choice(_copy("team_fail_turn")), {"a": initiator_id, "b_name": target_name})
-    rescue_line = _line(f"team_support_{key}", a_name=initiator_name, b_name=target_name)
+    rescue_line = _variant_line(
+        "team_support",
+        key,
+        str(out.get("team_support_variant", "")),
+        a_name=initiator_name,
+        b_name=target_name,
+    )
     coop = _build_coop_broadcast(out, initiator_id, target_id, initiator_name, target_name)
     return _join_broadcast_lines([fail_line, turn_line, rescue_line, coop])
 
@@ -387,6 +394,7 @@ async def _(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
             fail_flavor = _roll_fail_flavor()
             if _roll_team_fail_rescue(random):
                 out = _settle_team_result(group, initiator, target, b, a, today, raw_intimacy, bond_level)
+                out["team_support_variant"] = events._roll_support_variant(random)
                 _record_team_metrics(group, today, out, initiator, target, b, a, before, formed=True)
                 boss_lines = _maybe_spawn_world_boss_lines(group, today, initiator, rng=random)
                 _save_data(data)

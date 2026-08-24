@@ -424,6 +424,7 @@ def _settle_solo(
     )
     base_win = bool(res["win"])
     support_scene = events._roll_solo_support_scene(bool(res["win"]), rng)
+    support_variant = events._roll_support_variant(rng) if support_scene else ""
     if not res["win"] and support_scene in {"toya_rescue", "duo_combo"}:
         res["win"] = True
     battle_guard = inventory._active_battle_supply(user, guard=True)
@@ -440,7 +441,8 @@ def _settle_solo(
                          exp_bonus=exp_bonus, exp_mult=exp_mult, drop_mult=drop_mult,
                          battle_supply=battle_supply, rescue_exp_mult=guard_exp_mult, rng=rng)
     out = {**res, **rew, "monster": monster, "event": event_key, "elite": is_elite, "buff": buff,
-           "support_scene": support_scene, "base_win": base_win, "direct_solo": direct,
+           "support_scene": support_scene, "support_variant": support_variant,
+           "base_win": base_win, "direct_solo": direct,
            "battle_guard_triggered": guard_triggered,
            "battle_guard_name": str(battle_guard.get("name", "")) if guard_triggered and battle_guard else "",
            "battle_guard_uses_left": guard_uses_left}
