@@ -522,6 +522,23 @@ def _resolve_save_category_and_reply(
     return gallery.storage_key, chooser(replies)
 
 
+def _extract_image_url(message: object) -> str:
+    """Extract a usable image URL/file value from an OneBot message."""
+    try:
+        segments = iter(message)  # type: ignore[arg-type]
+    except TypeError:
+        return ""
+    for segment in segments:
+        if getattr(segment, "type", "") != "image":
+            continue
+        data = getattr(segment, "data", {})
+        if isinstance(data, dict):
+            image_value = data.get("url") or data.get("file")
+            if image_value:
+                return str(image_value)
+    return ""
+
+
 def _build_collect_session_key(group_id: int | None, user_id: str) -> str:
     """Build the collecting session key for a group or private chat."""
     return f"group_{group_id}" if group_id else f"private_{user_id}"
@@ -948,7 +965,7 @@ def get_random_local_image(category: str) -> Path | None:
     return random.choice(valid_images) if valid_images else None
 
 # --- 1. 手动存图 ---
-save_img_cmd = on_regex(r"^存\s*\S+\s*$", priority=5, block=True)
+save_img_cmd = on_message(priority=6, block=False)
 @save_img_cmd.handle()
 async def _(bot: Bot, event: GroupMessageEvent):
     if not isinstance(event, GroupMessageEvent):
@@ -957,26 +974,22 @@ async def _(bot: Bot, event: GroupMessageEvent):
     if group_id not in GROUP_IMAGE_PERMISSIONS:
         return
 
-    img_url = ""
-    for seg in event.message:
-        if getattr(seg, "type", "") == "image":
-            img_url = seg.data.get("url", "")
-            break
-    if not img_url and event.reply and event.reply.message:
-        for seg in event.reply.message:
-            if getattr(seg, "type", "") == "image":
-                img_url = seg.data.get("url", "")
-                break
-    if not img_url:
+    text = event.get_plaintext().strip()
+    if not re.fullmatch(r"存\s*\S+", text):
         return
 
-    text = event.get_plaintext().strip()
     replies_db = REACTIONS_DB.get("save_img_replies", {})
     category, save_msg = _resolve_save_category_and_reply(text, replies_db)
     if not category:
         return
     gallery = _get_gallery(category)
     if gallery is None or not _gallery_allowed(group_id, gallery):
+        return
+
+    img_url = _extract_image_url(event.message)
+    if not img_url and event.reply and event.reply.message:
+        img_url = _extract_image_url(event.reply.message)
+    if not img_url:
         return
 
     result = _gallery_sleep_block("sleep_save_img", silent_chance=0.8,

@@ -6,7 +6,7 @@ import asyncio
 import json
 import re
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 from nonebot.adapters import Event
 from nonebot.adapters.onebot.v11 import Bot
@@ -519,7 +519,8 @@ async def test_pet_send_outputs_only_image_and_skips_caption_api(monkeypatch, tm
 
 def test_gallery_command_registrations_only_keep_supported_entrypoints():
     assert gallery.send_img_cmd.args == (r"^发张\s*\S+\s*$",)
-    assert gallery.save_img_cmd.args == (r"^存\s*\S+\s*$",)
+    assert gallery.save_img_cmd.args == ()
+    assert gallery.save_img_cmd.kwargs == {"priority": 6, "block": False}
     assert gallery.collect_cmd.args == ("开始收图",)
     assert gallery.collect_cmd.kwargs["aliases"] == {"停止收图"}
     assert gallery.gallery_cmd.args == ("图库清单",)
@@ -589,6 +590,83 @@ async def test_save_request_accepts_image_from_quoted_message(monkeypatch):
     )
 
     bot.send.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("segments", "expected_url"),
+    [
+        (
+            [
+                SimpleNamespace(type="text", data={"text": "存月城"}),
+                SimpleNamespace(type="image", data={"url": "https://example.com/moon.jpg"}),
+            ],
+            "https://example.com/moon.jpg",
+        ),
+        (
+            [
+                SimpleNamespace(type="image", data={"file": "https://example.com/moon-file.jpg"}),
+                SimpleNamespace(type="text", data={"text": "存月城"}),
+            ],
+            "https://example.com/moon-file.jpg",
+        ),
+    ],
+)
+async def test_save_custom_gallery_accepts_image_in_same_message(
+    monkeypatch,
+    tmp_path,
+    segments,
+    expected_url,
+):
+    custom = gallery.GalleryDefinition(
+        storage_key="custom/月城",
+        name="月城",
+        caption_enabled=False,
+        permission_tokens=("月城",),
+        custom=True,
+    )
+    response = MagicMock(status=200)
+    response.read = AsyncMock(return_value=b"moon-image")
+    response.__aenter__.return_value = response
+    session = MagicMock()
+    session.get.return_value = response
+    session.__aenter__.return_value = session
+    monkeypatch.setattr(gallery, "CUSTOM_GALLERIES", [custom])
+    monkeypatch.setattr(gallery, "GROUP_IMAGE_PERMISSIONS", {1001: ["all"]})
+    monkeypatch.setattr(gallery, "IMAGE_BASE_PATH", tmp_path)
+    monkeypatch.setattr(gallery, "_gallery_sleep_block", lambda *args, **kwargs: "")
+    monkeypatch.setattr(gallery, "_grant_gallery_safety_pass", lambda seconds: None)
+    monkeypatch.setattr(gallery.aiohttp, "ClientSession", lambda: session)
+    bot = Bot()
+
+    await gallery.save_img_cmd.handlers[0](
+        bot,
+        Event(plain_text="存月城", group_id=1001, message=segments),
+    )
+
+    assert next((tmp_path / custom.storage_key).glob("*.jpg")).read_bytes() == b"moon-image"
+    session.get.assert_called_once_with(expected_url)
+    bot.send.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_unknown_gallery_with_image_is_silent_before_sleep_gate(monkeypatch):
+    monkeypatch.setattr(gallery, "GROUP_IMAGE_PERMISSIONS", {1001: ["all"]})
+
+    def fail_sleep_block(*args, **kwargs):
+        pytest.fail("unknown galleries must be discarded before the sleep gate")
+
+    monkeypatch.setattr(gallery, "_gallery_sleep_block", fail_sleep_block)
+    image = SimpleNamespace(type="image", data={"url": "https://example.com/unknown.jpg"})
+    bot = Bot()
+
+    result = await gallery.save_img_cmd.handlers[0](
+        bot,
+        Event(plain_text="存不存在图库", group_id=1001, message=[image]),
+    )
+
+    assert result is None
+    bot.send.assert_not_awaited()
 
 
 @pytest.mark.asyncio
