@@ -1044,11 +1044,20 @@
     "use_exp_buff": [
       "📖 【{name}】已储备。会在没有常规战备生效的下一次普通挑战中使经验 ×{mult}。"
     ],
+    "use_exp_buff_many": [
+      "📖 【{name}】×{count} 已储备。普通挑战经验 ×{mult} 当前剩余 {uses} 场；常规战备生效期间会暂缓且不消耗。"
+    ],
     "use_exp_grant": [
       "📖 【{name}】用了。经验 +{amount}。"
     ],
+    "use_exp_grant_many": [
+      "📖 【{name}】×{count} 已使用。经验 +{amount}。"
+    ],
     "supply_open": [
       "📦 冒险补给已开启。\n· 消耗 {cost} 积分（本周 {count}/{max}）\n· 获得【{name}】×1\n（效果：{effect}）\n· 经验 +{exp}，发送“{usage}”后生效{levelup}"
+    ],
+    "supply_open_many": [
+      "📦 冒险补给已开启 ×{draws}\n· 消耗 {cost} 积分（本周 {count}/{max}）\n{rewards}\n· 经验 +{exp}{levelup}"
     ],
     "gift_battle_debuff": [
       "🥬 {a} 把【{name}】送给了 {b}。大葱味已经腌进去了：对方下一场普通个人/组队挑战经验 -15%、积分 -10%、掉落率 -20%（当前排队 {uses} 场；世界BOSS不生效）。"
@@ -1264,10 +1273,15 @@
     "rebuy_limit": "今天已经买过 {max} 套替换装了，明天再来。",
     "bag_empty": "🎒 背包是空的。先去打一趟再说。",
     "use_need_name": "要用什么？比如：使用 经验书。",
+    "use_bad_quantity": "使用数量要写成空格后的正整数，例如：使用经验书 3。",
     "item_unknown": "没这个道具：{name}。",
     "item_none": "你背包里没有【{name}】。",
+    "item_not_enough": "你只有【{name}】×{have}，不能一次使用 {count} 个。",
+    "item_batch_forbidden": "【{name}】不能一次使用多个，请逐个使用。",
     "supply_limit": "这周已经开过 {max} 次冒险补给了，下周再来。",
     "supply_poor": "积分不够。第 {count} 次冒险补给需要 {cost} 积分，你现在只有 {total}。",
+    "supply_batch_poor": "积分不够。一次开启 {count} 次冒险补给需要 {cost} 积分，你现在只有 {total}。本次没有开启任何补给。",
+    "supply_remaining": "本周还可以开启 {remaining} 次冒险补给，不能一次开启 {count} 次。",
     "supply_slot_busy": "【{name}】还在生效，先用完再启用新的常规战备。",
     "supply_guard_busy": "【{name}】还在待命，暂时不能再装备新的护符。",
     "debuff_gift_bot": "小彰不吃这个。去 @ 一个群友。",

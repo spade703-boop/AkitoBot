@@ -142,9 +142,16 @@ def record_team_attempt(group: GroupRecord, today: str, *, formed: bool) -> None
     entry["team_formed"] += int(bool(formed))
 
 
-def record_supply_open(group: GroupRecord, today: str, *, points_spent: int, exp_gained: int) -> None:
+def record_supply_open(
+    group: GroupRecord,
+    today: str,
+    *,
+    points_spent: int,
+    exp_gained: int,
+    count: int = 1,
+) -> None:
     entry = _metric_day(group, today)
-    entry["supply_opens"] += 1
+    entry["supply_opens"] += max(0, int(count))
     entry["supply_points_spent"] += max(0, int(points_spent))
     entry["supply_exp_gained"] += max(0, int(exp_gained))
 

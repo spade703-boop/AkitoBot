@@ -98,8 +98,8 @@ async def test_help_cmd_falls_back_to_text(monkeypatch):
     assert "　——大葱味蛋糕（1%）" in result
     assert "　——神官的护符（12%）" in result
     assert "　——补给袋：提供少量经验与积分。" in result
-    assert "　——破旧积分卡：使用后获得 5 积分。" in result
-    assert "　——破旧经验券：使用后获得 10 经验。" in result
+    assert "　——破旧积分卡：抽到后立即获得 5 积分，不进入背包。" in result
+    assert "　——破旧经验券：抽到后立即获得 10 经验，不进入背包。" in result
     assert "　——彰冬无料券：使用后可向一名群友赠送彰冬无料。" in result
     assert "常规战备共享一个槽位" in result
     assert "先结算战备增益，再结算蛋糕" in result
@@ -117,7 +117,7 @@ def test_help_items_cover_public_and_admin_commands():
         "签到",
         "今日打怪",
         "组队@某人",
-        "开启冒险补给",
+        "开启冒险补给 [数量]",
         "攻击世界BOSS",
         "组队世界BOSS@某人",
         "强化世界BOSS装备",
@@ -133,7 +133,7 @@ def test_help_items_cover_public_and_admin_commands():
         for item in character._HELP_ITEMS
     }
     assert {"战后小奇遇", "小奇遇奖励"} <= sections["今日打怪"]
-    assert {"战备使用规则", "战备列表"} <= sections["开启冒险补给"]
+    assert {"战备使用规则", "战备列表"} <= sections["开启冒险补给 [数量]"]
 
 
 @pytest.mark.asyncio

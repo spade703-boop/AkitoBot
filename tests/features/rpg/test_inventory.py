@@ -45,6 +45,36 @@ def test_apply_item_effect_exp_buff_and_grant():
     assert ok2 and u2["exp"] == 10 + int(book["effect"]["amount"])
 
 
+def test_apply_item_effect_batches_exp_items_without_stacking_multiplier():
+    card = inventory._item_by_name("双倍经验卡")
+    book = inventory._item_by_name("经验书")
+    user = {"exp": 10, "exp_buff_uses": 2, "exp_buff_mult": 2}
+
+    card_ok, card_message = inventory._apply_item_effect(user, card, 3)
+    book_ok, book_message = inventory._apply_item_effect(user, book, 3)
+
+    assert card_ok and user["exp_buff_uses"] == 5 and user["exp_buff_mult"] == 2
+    assert "×3" in card_message and "剩余 5 场" in card_message
+    assert book_ok and user["exp"] == 250
+    assert "×3" in book_message and "经验 +240" in book_message
+
+
+def test_only_exp_items_support_batch_use():
+    assert inventory._supports_batch_use(inventory._item_by_name("双倍经验卡"))
+    assert inventory._supports_batch_use(inventory._item_by_name("经验书"))
+    for name in ("彰冬无料券", "旅人的行囊", "神官的护符", "大葱味蛋糕"):
+        assert not inventory._supports_batch_use(inventory._item_by_name(name))
+
+
+def test_parse_use_args_accepts_only_space_separated_positive_quantity():
+    assert inventory._parse_use_args(Message("经验书")) == ("经验书", 1)
+    assert inventory._parse_use_args(Message("经验书 3")) == ("经验书", 3)
+    assert inventory._parse_use_args(Message("经验书×3")) == ("经验书×3", 1)
+    assert inventory._parse_use_args(Message("经验书 0")) is None
+    assert inventory._parse_use_args(Message("经验书 -1")) is None
+    assert inventory._parse_use_args(Message("经验书 1.5")) is None
+
+
 def test_battle_supply_slots_are_independent_and_regular_slot_is_exclusive():
     user: dict = {}
     bag = inventory._item_by_name("旅人的行囊")
@@ -102,6 +132,50 @@ async def test_bag_and_use_book(monkeypatch):
         await inventory.use_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="u1"), Message("经验书"))
     user = state["groups"]["1001"]["users"]["u1"]
     assert user["exp"] == int(book["effect"]["amount"]) and "经验书" not in user.get("inventory", {})
+
+
+@pytest.mark.asyncio
+async def test_use_command_batches_exp_items(monkeypatch):
+    state = _patch_io(monkeypatch, inventory, store={"groups": {"1001": {"users": {
+        "u1": {
+            "exp": 10,
+            "exp_buff_uses": 1,
+            "exp_buff_mult": 2,
+            "inventory": {"经验书": 3, "双倍经验卡": 3},
+        }
+    }}}})
+
+    with pytest.raises(FinishedException) as book_exc:
+        await inventory.use_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="u1"), Message("经验书 3"))
+    with pytest.raises(FinishedException) as card_exc:
+        await inventory.use_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="u1"), Message("双倍经验卡 3"))
+
+    user = state["users"]["u1"]
+    assert user["exp"] == 250 and "经验书" not in user["inventory"]
+    assert user["exp_buff_uses"] == 4 and user["exp_buff_mult"] == 2
+    assert "经验 +240" in str(book_exc.value.result)
+    assert "剩余 4 场" in str(card_exc.value.result)
+
+
+@pytest.mark.asyncio
+async def test_use_command_batch_failures_do_not_consume_items(monkeypatch):
+    state = _patch_io(monkeypatch, inventory, store={"groups": {"1001": {"users": {
+        "u1": {"exp": 0, "inventory": {"经验书": 2, "旅人的行囊": 2}},
+    }}}})
+
+    with pytest.raises(FinishedException) as shortage_exc:
+        await inventory.use_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="u1"), Message("经验书 3"))
+    with pytest.raises(FinishedException) as forbidden_exc:
+        await inventory.use_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="u1"), Message("旅人的行囊 2"))
+    with pytest.raises(FinishedException) as invalid_exc:
+        await inventory.use_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="u1"), Message("经验书 0"))
+
+    user = state["users"]["u1"]
+    assert user["exp"] == 0
+    assert user["inventory"] == {"经验书": 2, "旅人的行囊": 2}
+    assert "只有【经验书】×2" in str(shortage_exc.value.result)
+    assert "不能一次使用多个" in str(forbidden_exc.value.result)
+    assert "正整数" in str(invalid_exc.value.result)
 
 
 def test_is_gift_item():

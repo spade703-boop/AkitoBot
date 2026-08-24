@@ -41,6 +41,14 @@ def test_supply_pool_gives_scallion_cake_exactly_one_percent_weight():
     assert weights["大葱味蛋糕"] == 1
 
 
+def test_parse_supply_count_only_accepts_one_positive_integer():
+    assert supply._parse_supply_count(Message("")) == 1
+    assert supply._parse_supply_count(Message("3")) == 3
+    assert supply._parse_supply_count(Message("0")) is None
+    assert supply._parse_supply_count(Message("-1")) is None
+    assert supply._parse_supply_count(Message("2 次")) is None
+
+
 @pytest.mark.asyncio
 async def test_supply_uses_cross_group_weekly_costs_and_limit(monkeypatch):
     state = _patch_io(
@@ -107,6 +115,88 @@ async def test_supply_sixth_cost_rejects_without_partial_rewards(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_supply_batch_crosses_price_tiers_and_aggregates_rewards(monkeypatch):
+    state = _patch_io(
+        monkeypatch,
+        supply,
+        store={"groups": {"1001": {"users": {"u1": {
+            "points": 1000,
+            "exp": 0,
+            "weekly_investment": {
+                "week": "2026-W26",
+                "supply_count": 4,
+                "supply_spent": 560,
+                "gift_spent": 0,
+            },
+        }}}}},
+    )
+    items = iter(["旅人的行囊", "旅人的行囊", "神官的护符"])
+    monkeypatch.setattr(supply, "_pick_supply_item", lambda rng=supply.random: next(items))
+
+    with pytest.raises(FinishedException) as exc:
+        await supply.supply_cmd.handlers[0](Event(group_id=1001, user_id="u1"), Message("3"))
+
+    result = str(exc.value.result)
+    user = state["users"]["u1"]
+    assert "冒险补给已开启 ×3" in result
+    assert "消耗 640 积分（本周 7/7）" in result
+    assert "获得【旅人的行囊】×2" in result and "获得【神官的护符】×1" in result
+    assert "经验 +90" in result
+    assert user["points"] == 360 and user["exp"] == 90
+    assert user["inventory"] == {"旅人的行囊": 2, "神官的护符": 1}
+    assert user["weekly_investment"] == {
+        "week": "2026-W26",
+        "supply_count": 7,
+        "supply_spent": 1200,
+        "gift_spent": 0,
+    }
+    metric = state["groups"]["1001"]["rpg"]["metrics"]["days"]["2026-06-22"]
+    assert metric["supply_opens"] == 3
+    assert metric["supply_points_spent"] == 640
+    assert metric["supply_exp_gained"] == 90
+
+
+@pytest.mark.asyncio
+async def test_supply_batch_rejects_remaining_limit_and_insufficient_total(monkeypatch):
+    store = {"groups": {"1001": {"users": {
+        "u1": {
+            "points": 1000,
+            "exp": 0,
+            "weekly_investment": {
+                "week": "2026-W26",
+                "supply_count": 5,
+                "supply_spent": 700,
+                "gift_spent": 0,
+            },
+        },
+        "u2": {
+            "points": 639,
+            "exp": 0,
+            "weekly_investment": {
+                "week": "2026-W26",
+                "supply_count": 4,
+                "supply_spent": 560,
+                "gift_spent": 0,
+            },
+        },
+    }}}}
+    state = _patch_io(monkeypatch, supply, store=store)
+
+    with pytest.raises(FinishedException) as remaining_exc:
+        await supply.supply_cmd.handlers[0](Event(group_id=1001, user_id="u1"), Message("3"))
+    with pytest.raises(FinishedException) as points_exc:
+        await supply.supply_cmd.handlers[0](Event(group_id=1001, user_id="u2"), Message("3"))
+
+    assert "还可以开启 2 次" in str(remaining_exc.value.result)
+    assert "需要 640 积分" in str(points_exc.value.result)
+    for uid, points, count in (("u1", 1000, 5), ("u2", 639, 4)):
+        user = state["users"][uid]
+        assert user["points"] == points and user["exp"] == 0
+        assert user["weekly_investment"]["supply_count"] == count
+        assert not user.get("inventory")
+
+
+@pytest.mark.asyncio
 async def test_supply_open_scallion_cake_shows_gift_usage(monkeypatch):
     state = _patch_io(
         monkeypatch,
@@ -150,3 +240,8 @@ async def test_supply_command_requires_exact_phrase(monkeypatch):
         Message("测试"),
     )
     assert result is None
+    invalid_quantity = await supply.supply_cmd.handlers[0](
+        Event(group_id=1001, user_id="u1"),
+        Message("0"),
+    )
+    assert invalid_quantity is None

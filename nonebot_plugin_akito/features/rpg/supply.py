@@ -48,6 +48,37 @@ def _pick_supply_item(rng=random) -> str:
     return _weighted_choice(weights, rng)
 
 
+def _parse_supply_count(args: Message) -> int | None:
+    text = args.extract_plain_text().strip()
+    if not text:
+        return 1
+    parts = text.split()
+    if len(parts) != 1 or not parts[0].isdecimal():
+        return None
+    try:
+        count = int(parts[0])
+    except ValueError:
+        return None
+    return count if count > 0 else None
+
+
+def _supply_reward_lines(item_counts: dict[str, int]) -> str:
+    lines: list[str] = []
+    for item_name, amount in item_counts.items():
+        item = _item_by_name(item_name) or {}
+        item_effect = str(item.get("desc", "详见冒险帮助"))
+        effect = item.get("effect", {})
+        target_hint = "@某人" if effect.get("type") == "battle_debuff_gift" else ""
+        usage = f"使用{item_name}{target_hint}"
+        lines.extend(
+            [
+                f"· 获得【{item_name}】×{amount}",
+                f"（效果：{item_effect}；使用方式：发送“{usage}”）",
+            ]
+        )
+    return "\n".join(lines)
+
+
 def _supply_points_status(user: dict, today: str) -> str:
     costs = _supply_costs()
     if not costs:
@@ -80,7 +111,8 @@ async def _(event: Event, args: Message = CommandArg()):
         await supply_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
     if group_id is None:
         return
-    if args and args.extract_plain_text().strip():
+    requested = _parse_supply_count(args)
+    if requested is None:
         return
 
     user_id = event.get_user_id()
@@ -100,45 +132,75 @@ async def _(event: Event, args: Message = CommandArg()):
                 MessageSegment.reply(event.message_id) + _error("supply_limit", max=len(costs))
             )
 
-        cost = costs[used]
-        points = int(user.get("points", 0))
-        if points < cost:
+        remaining = len(costs) - used
+        if requested > remaining:
             await supply_cmd.finish(
                 MessageSegment.reply(event.message_id)
-                + _error("supply_poor", count=used + 1, cost=cost, total=points)
+                + _error("supply_remaining", remaining=remaining, count=requested)
             )
 
-        item_name = _pick_supply_item(random)
-        item = _item_by_name(item_name) or {}
-        item_effect = str(item.get("desc", "详见冒险帮助"))
-        effect = item.get("effect", {})
-        target_hint = "@某人" if effect.get("type") == "battle_debuff_gift" else ""
-        usage = f"使用{item_name}{target_hint}"
-        exp_gain = max(0, int(_supply_cfg().get("exp", 0)))
+        cost = sum(costs[used:used + requested])
+        points = int(user.get("points", 0))
+        if points < cost:
+            error_key = "supply_poor" if requested == 1 else "supply_batch_poor"
+            await supply_cmd.finish(
+                MessageSegment.reply(event.message_id)
+                + _error(error_key, count=requested if requested > 1 else used + 1, cost=cost, total=points)
+            )
+
+        item_counts: dict[str, int] = {}
+        for _ in range(requested):
+            item_name = _pick_supply_item(random)
+            item_counts[item_name] = int(item_counts.get(item_name, 0)) + 1
+        exp_gain = max(0, int(_supply_cfg().get("exp", 0))) * requested
         old_level = _level_of(int(user.get("exp", 0)))
         user["points"] = points - cost
         user["exp"] = int(user.get("exp", 0)) + exp_gain
-        _add_item(user, item_name, 1)
+        for item_name, amount in item_counts.items():
+            _add_item(user, item_name, amount)
         weekly = _record_weekly_investment(
             user,
             today,
-            supply_count=1,
+            supply_count=requested,
             supply_spent=cost,
         )
-        record_supply_open(group, today, points_spent=cost, exp_gained=exp_gain)
+        record_supply_open(
+            group,
+            today,
+            points_spent=cost,
+            exp_gained=exp_gain,
+            count=requested,
+        )
         new_level = _level_of(int(user.get("exp", 0)))
         _save_data(data)
 
     levelup = f"，升级 Lv{old_level}→Lv{new_level}" if new_level > old_level else ""
-    result = _line(
-        "supply_open",
-        cost=cost,
-        count=int(weekly["supply_count"]),
-        max=len(costs),
-        name=item_name,
-        effect=item_effect,
-        exp=exp_gain,
-        levelup=levelup,
-        usage=usage,
-    )
+    if requested == 1:
+        item_name = next(iter(item_counts))
+        item = _item_by_name(item_name) or {}
+        item_effect = str(item.get("desc", "详见冒险帮助"))
+        effect = item.get("effect", {})
+        target_hint = "@某人" if effect.get("type") == "battle_debuff_gift" else ""
+        result = _line(
+            "supply_open",
+            cost=cost,
+            count=int(weekly["supply_count"]),
+            max=len(costs),
+            name=item_name,
+            effect=item_effect,
+            exp=exp_gain,
+            levelup=levelup,
+            usage=f"使用{item_name}{target_hint}",
+        )
+    else:
+        result = _line(
+            "supply_open_many",
+            draws=requested,
+            cost=cost,
+            count=int(weekly["supply_count"]),
+            max=len(costs),
+            rewards=_supply_reward_lines(item_counts),
+            exp=exp_gain,
+            levelup=levelup,
+        )
     await supply_cmd.finish(MessageSegment.reply(event.message_id) + result)

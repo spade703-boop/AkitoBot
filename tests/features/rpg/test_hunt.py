@@ -526,7 +526,7 @@ def test_double_exp_card_applies_before_scallion_cake():
 def test_double_exp_card_resumes_after_regular_supply_is_consumed():
     user = _equipped_user(
         exp=0,
-        exp_buff_uses=1,
+        exp_buff_uses=3,
         exp_buff_mult=2,
         active_battle_supply={"name": "厨子的美食", "uses": 1},
     )
@@ -550,7 +550,7 @@ def test_double_exp_card_resumes_after_regular_supply_is_consumed():
     assert first["exp_gain"] == int(rewards._challenge_exp(True, 1) * 1.4)
     assert second["exp_buffed"] is True
     assert second["exp_gain"] == rewards._challenge_exp(True, 1) * 2
-    assert user["exp_buff_uses"] == 0
+    assert user["exp_buff_uses"] == 2
 
 
 def test_expedition_supply_treats_equipment_as_fully_forged():

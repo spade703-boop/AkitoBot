@@ -229,18 +229,31 @@ def _roll_drops(monster: dict, rng=random, mult: float = 1.0) -> list[str]:
 
 # ==================== 道具效果分发 ====================
 
-def _apply_item_effect(user: RpgUserRecord, item: dict) -> tuple[bool, str]:
+def _apply_item_effect(user: RpgUserRecord, item: dict, quantity: int = 1) -> tuple[bool, str]:
     """应用消耗品效果，返回 (是否消耗成功, 文案)。"""
     eff = item.get("effect", {}) if isinstance(item.get("effect"), dict) else {}
     etype = eff.get("type")
     name = item.get("name", "")
+    quantity = max(1, int(quantity))
     if etype == "exp_buff":
-        user["exp_buff_uses"] = int(user.get("exp_buff_uses", 0)) + int(eff.get("uses", 1))
+        user["exp_buff_uses"] = (
+            int(user.get("exp_buff_uses", 0)) + int(eff.get("uses", 1)) * quantity
+        )
         user["exp_buff_mult"] = int(eff.get("mult", 2))
+        if quantity > 1:
+            return True, _line(
+                "use_exp_buff_many",
+                name=name,
+                count=quantity,
+                mult=user["exp_buff_mult"],
+                uses=user["exp_buff_uses"],
+            )
         return True, _line("use_exp_buff", name=name, mult=user["exp_buff_mult"])
     if etype == "exp_grant":
-        amount = int(eff.get("amount", 0))
+        amount = int(eff.get("amount", 0)) * quantity
         user["exp"] = int(user.get("exp", 0)) + amount
+        if quantity > 1:
+            return True, _line("use_exp_grant_many", name=name, count=quantity, amount=amount)
         return True, _line("use_exp_grant", name=name, amount=amount)
     if etype in {"battle_supply", "battle_guard"}:
         return _activate_battle_supply(user, item)
@@ -275,7 +288,7 @@ async def _(event: GroupMessageEvent, args: Message = CommandArg()):
         it = _item_by_name(name)
         desc = f"　{it.get('desc', '')}" if it else ""
         lines.append(f"· {name} ×{cnt}{desc}")
-    lines.append("要用就发：使用 [道具名]")
+    lines.append("要用就发：使用 [道具名]；经验书和双倍经验卡可用“使用 [道具名] [数量]”。")
     await bag_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
 
 
@@ -292,6 +305,27 @@ def _is_battle_debuff_gift(item: dict) -> bool:
     return item.get("effect", {}).get("type") == "battle_debuff_gift"
 
 
+def _supports_batch_use(item: dict) -> bool:
+    return item.get("effect", {}).get("type") in {"exp_buff", "exp_grant"}
+
+
+def _parse_use_args(args: Message) -> tuple[str, int] | None:
+    parts = args.extract_plain_text().strip().split()
+    if not parts:
+        return "", 1
+    if len(parts) == 1:
+        return parts[0], 1
+    if len(parts) != 2 or not parts[1].isdecimal():
+        return None
+    try:
+        quantity = int(parts[1])
+    except ValueError:
+        return None
+    if quantity <= 0:
+        return None
+    return parts[0], quantity
+
+
 @use_cmd.handle()
 async def _(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
     group_id, rejection = _resolve_group(event)
@@ -302,15 +336,23 @@ async def _(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
     if is_sleeping():
         await use_cmd.finish(MessageSegment.reply(event.message_id) + _error("sleeping"))
 
-    parts = args.extract_plain_text().strip().split()
-    if not parts:
+    parsed = _parse_use_args(args)
+    if parsed is None:
+        await use_cmd.finish(MessageSegment.reply(event.message_id) + _error("use_bad_quantity"))
+    if not parsed:
+        return
+    name, quantity = parsed
+    if not name:
         await use_cmd.finish(MessageSegment.reply(event.message_id) + _error("use_need_name"))
-    name = parts[0]
     item = _item_by_name(name)
     if not item:
         await use_cmd.finish(MessageSegment.reply(event.message_id) + _error("item_unknown", name=name))
     if not item:
         return
+    if quantity > 1 and not _supports_batch_use(item):
+        await use_cmd.finish(
+            MessageSegment.reply(event.message_id) + _error("item_batch_forbidden", name=name)
+        )
 
     if _is_battle_debuff_gift(item):
         target = _first_at_qq(getattr(event, "original_message", None))
@@ -386,11 +428,16 @@ async def _(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
         data = _load_data()
         group = _get_group(data, group_id)
         user = _ensure_player(group, event.get_user_id(), _display_name(event))
-        if _item_count(user, name) <= 0:
-            result = _error("item_none", name=name)
+        have = _item_count(user, name)
+        if have < quantity:
+            result = (
+                _error("item_none", name=name)
+                if have <= 0
+                else _error("item_not_enough", name=name, have=have, count=quantity)
+            )
         else:
-            ok, result = _apply_item_effect(user, item)
+            ok, result = _apply_item_effect(user, item, quantity)
             if ok:
-                _remove_item(user, name, 1)
+                _remove_item(user, name, quantity)
                 _save_data(data)
     await use_cmd.finish(MessageSegment.reply(event.message_id) + result)
