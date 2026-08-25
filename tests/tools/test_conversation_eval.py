@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from tools.conversation_eval import (
+    ANALYSIS_JUDGE_DIMENSIONS,
     build_judge_prompt,
     load_eval_set,
     parse_judge_result,
@@ -19,8 +20,15 @@ def test_m0_eval_set_has_required_coverage_and_valid_references():
     data = load_eval_set(ROOT / "tools/conversation_eval_set.json")
 
     assert validate_eval_set(data) == []
-    assert len(data["cases"]) == 60
+    assert len(data["cases"]) == 68
     assert sum(case["category"] == "plot_recall" for case in data["cases"]) == 12
+    assert {case["surface"] for case in data["cases"]} == {
+        "main_chat",
+        "auto_chat",
+        "impression_analysis",
+        "impression_reply",
+    }
+    assert all(case["task"] for case in data["cases"])
 
 
 def test_judge_prompt_treats_original_line_as_evidence_not_exact_answer():
@@ -34,12 +42,50 @@ def test_judge_prompt_treats_original_line_as_evidence_not_exact_answer():
     assert "不要求逐字复刻" in prompt
 
 
+def test_impression_analysis_judge_uses_neutral_material_rubric():
+    case = {
+        "id": "analysis-001",
+        "category": "impression",
+        "surface": "impression_analysis",
+        "task": "material_grounding",
+        "user_message": "整理材料",
+        "expected_signals": ["证据"],
+        "forbidden_signals": ["彰人口吻"],
+    }
+
+    prompt = build_judge_prompt(case, '{"evidence": ["今天好累"]}')
+
+    assert "中性材料分析阶段" in prompt
+    assert "不要把彰人语气或角色扮演作为本阶段评分标准" in prompt
+    assert "evidence_grounding" in prompt
+    assert "persona_voice" not in prompt
+
+
+def test_auto_chat_judge_allows_correct_silence_and_current_message_anchor():
+    case = {
+        "id": "auto-001",
+        "category": "auto_chat",
+        "surface": "auto_chat",
+        "task": "interject_observer",
+        "user_message": "大家继续聊天",
+        "expected_signals": ["静默"],
+        "forbidden_signals": ["旧话题"],
+    }
+
+    prompt = build_judge_prompt(case, "")
+
+    assert "空回复/静默可以是正确结果" in prompt
+    assert "只能锚定当前消息" in prompt
+
+
 def test_judge_result_parser_requires_all_dimensions():
     valid = """{"factual_grounding":2,"relationship_consistency":2,"emotional_direction":1,"persona_voice":2,"scene_naturalness":2,"invention_control":2,"verdict":"pass","short_reason":"自然接住"}"""
 
     assert parse_judge_result(valid)["verdict"] == "pass"
     assert parse_judge_result("not json") is None
     assert parse_judge_result('{"verdict":"pass"}') is None
+    analysis = '{"evidence_grounding":2,"observation_quality":2,"uncertainty_control":1,"attribution_accuracy":2,"verdict":"pass","short_reason":"边界清楚"}'
+    assert parse_judge_result(analysis, ANALYSIS_JUDGE_DIMENSIONS)["verdict"] == "pass"
 
 
 def test_signal_diagnostics_is_transparent_and_not_final_judge():
@@ -78,6 +124,8 @@ def test_trace_summary_calculates_runtime_rates_and_percentiles():
     summary = summarize_traces(
         [
             {
+                "surface": "main_chat",
+                "stage": "response",
                 "outcome": "completed",
                 "elapsed_ms": 100,
                 "model_calls": 1,
@@ -88,9 +136,14 @@ def test_trace_summary_calculates_runtime_rates_and_percentiles():
                 "memory_hit": True,
                 "repeat_detected": False,
                 "retries": 0,
+                "context_shadow": [
+                    {"total_blocks": 3, "estimated_tokens": 30, "omitted_sources": ["old_history"]}
+                ],
                 "tool_calls": [{"name": "search", "status": "success"}],
             },
             {
+                "surface": "auto_chat",
+                "stage": "response",
                 "outcome": "failed",
                 "elapsed_ms": 200,
                 "model_calls": 1,
@@ -109,3 +162,7 @@ def test_trace_summary_calculates_runtime_rates_and_percentiles():
     assert summary["search_success_rate"] == 0.5
     assert summary["p50_latency_ms"] == 150.0
     assert summary["p95_latency_ms"] == 195.0
+    assert summary["surface_counts"] == {"auto_chat": 1, "main_chat": 1}
+    assert summary["surface_metrics"]["auto_chat"]["silent_turns"] == 0
+    assert summary["context_shadow_reports"] == 1
+    assert summary["context_shadow_omitted_sources"] == {"old_history": 1}

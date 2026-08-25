@@ -4,8 +4,9 @@
 
 ## 评测集
 
-- 样例总数：60
-- 类别分布：{"casual": 8, "follow_up": 6, "group_relay": 6, "memory": 4, "output_robustness": 4, "plot_recall": 12, "time_gap": 4, "toya_interaction": 8, "vision": 4, "web_search": 4}
+- 样例总数：68
+- 类别分布：{"auto_chat": 4, "casual": 8, "follow_up": 6, "group_relay": 6, "impression": 4, "memory": 4, "output_robustness": 4, "plot_recall": 12, "time_gap": 4, "toya_interaction": 8, "vision": 4, "web_search": 4}
+- 表面分布：{"auto_chat": 4, "impression_analysis": 2, "impression_reply": 2, "main_chat": 60}
 - 已提供回复：0
 - 剧情回忆样例：12 条，均绑定原作场景证据
 

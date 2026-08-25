@@ -36,12 +36,21 @@ from ...core import (
     parse_json_object,
     parse_sqlite_timestamp,
     record_bot_message,
+    record_context_shadow,
     record_message,
     render_auto_chat_prompt,
     render_impression_analysis_prompt,
     render_impression_reply_prompt,
     rescue_field,
     rescue_tail_after_field,
+    finish_turn_trace,
+    new_request_id,
+    record_context_sources,
+    record_intent,
+    record_parse_result,
+    set_trace_stage,
+    shadow_context,
+    start_turn_trace,
 )
 
 # ================= 配置区域 =================
@@ -848,6 +857,9 @@ um_cmd = on_command(
 
 @um_cmd.handle()
 async def _(bot: Bot, event: GroupMessageEvent):
+    trace_request_id = new_request_id()
+    start_turn_trace(trace_request_id, surface="impression", stage="analysis")
+    record_intent(trace_request_id, "impression")
     group_id = str(event.group_id)
 
     target_id, target_name, is_querying_other, is_querying_bot = _resolve_impression_target(event, str(bot.self_id))
@@ -859,6 +871,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
             "……啧，查我干嘛，你现在没事干？",
             "无可奉告。"
         ]
+        finish_turn_trace(trace_request_id, outcome="completed")
         await um_cmd.finish(reply_segment + random.choice(refusals))
         return
 
@@ -886,6 +899,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
         )
 
     if len(history_rows) < 10:
+        finish_turn_trace(trace_request_id, outcome="completed")
         if is_querying_other:
             await um_cmd.finish(reply_segment + f"对{target_name}还没什么印象……让她多说点话吧。")
         else:
@@ -904,6 +918,11 @@ async def _(bot: Bot, event: GroupMessageEvent):
         target_id=target_id,
     )
     relationship_context = _build_impression_relationship_context(target_evidence_source)
+    context_sources = ["impression_history", "impression_context", "group_context"]
+    if relationship_context:
+        context_sources.append("relationship")
+    if recent_impression_replies:
+        context_sources.append("recent_impression_replies")
 
     persona = get_base_persona()
     is_wl2_active = False
@@ -926,6 +945,22 @@ async def _(bot: Bot, event: GroupMessageEvent):
     以下状态覆盖基础人设中与其冲突的世界观、关系和情绪设定：
     {wl2_overlay}
     """
+    context_sources.append("persona")
+    if wl2_overlay:
+        context_sources.append("temporary_state")
+    record_context_sources(trace_request_id, context_sources)
+    analysis_shadow = shadow_context(
+        [
+            {"kind": "impression_history", "source": "impression_history", "content": history_text, "priority": 850},
+            {"kind": "impression_context", "source": "impression_context", "content": context_text, "priority": 800},
+            {"kind": "relationship", "source": "relationship", "content": relationship_context, "priority": 900},
+            {"kind": "recent_impression_replies", "source": "recent_impression_replies", "content": "\n".join(recent_impression_replies), "priority": 500},
+            {"kind": "persona", "source": "persona", "content": persona, "priority": 950},
+            {"kind": "temporary_state", "source": "temporary_state", "content": state_overlay_prompt, "priority": 980},
+        ],
+        stage="impression_analysis",
+    )
+    record_context_shadow(trace_request_id, analysis_shadow.as_dict())
 
     try:
         final_reply = ""
@@ -967,13 +1002,16 @@ async def _(bot: Bot, event: GroupMessageEvent):
                 )
                 if is_valid:
                     analysis = parsed_analysis
+                    record_parse_result(trace_request_id, success=True)
                     logger.info(
                         f"🧭 [Impression] 材料分析完成: mode={analysis.mode!r}, "
                         f"observations={len(analysis.observations)}, avoid_patterns={len(analysis.avoid_patterns)}"
                     )
                     break
+                record_parse_result(trace_request_id, success=False)
             else:
                 invalid_reason = "分析结果不是合法 JSON"
+                record_parse_result(trace_request_id, success=False)
 
             logger.warning(f"⚠️ [Impression] 材料分析校验失败（第 {attempt + 1} 次）: {invalid_reason}")
             if attempt == 0:
@@ -993,6 +1031,17 @@ async def _(bot: Bot, event: GroupMessageEvent):
                 )
 
         if analysis is not None:
+            set_trace_stage(trace_request_id, "reply")
+            reply_shadow = shadow_context(
+                [
+                    {"kind": "persona", "source": "persona", "content": persona, "priority": 950},
+                    {"kind": "relationship", "source": "relationship", "content": relationship_context, "priority": 900},
+                    {"kind": "analysis_result", "source": "analysis_result", "content": json.dumps(asdict(analysis), ensure_ascii=False), "priority": 850},
+                    {"kind": "temporary_state", "source": "temporary_state", "content": state_overlay_prompt, "priority": 980},
+                ],
+                stage="impression_reply",
+            )
+            record_context_shadow(trace_request_id, reply_shadow.as_dict())
             expression_messages = [
                 {
                     "role": "system",
@@ -1021,6 +1070,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
                     timeout=60.0,
                 )
                 inner_os, candidates = _parse_impression_candidates(raw_result)
+                record_parse_result(trace_request_id, success=bool(candidates))
                 if inner_os:
                     logger.info(f"📝【小彰评价OS】: {inner_os}")
                 evaluations: list[ImpressionCandidateEvaluation] = []
@@ -1077,10 +1127,13 @@ async def _(bot: Bot, event: GroupMessageEvent):
 
         thinking_time = random.uniform(3.0, 5.0)
         await asyncio.sleep(thinking_time)
+        finish_turn_trace(trace_request_id, outcome="completed")
         await um_cmd.finish(reply_segment + final_reply)
     except FinishedException:
+        finish_turn_trace(trace_request_id, outcome="completed")
         raise
     except Exception as e:
+        finish_turn_trace(trace_request_id, outcome="failed")
         logger.exception(f"群印象生成失败: {e}")
         await um_cmd.finish(reply_segment + "脑子短路了...")
 
@@ -1202,6 +1255,33 @@ async def _(bot: Bot, event: GroupMessageEvent):
         inner_os_guide=inner_os_guide,
     )
 
+    trace_request_id = new_request_id()
+    start_turn_trace(trace_request_id, surface="auto_chat", stage="response")
+    record_intent(trace_request_id, "auto_chat")
+    context_sources = ["current_message", "group_context", "persona"]
+    if relation_info:
+        context_sources.append("relationship")
+    if script_examples:
+        context_sources.append("script_retrieval")
+    if pjsk_block:
+        context_sources.append("pjsk_retrieval")
+    if toya_anchor:
+        context_sources.append("toya_anchor")
+    record_context_sources(trace_request_id, context_sources)
+    context_shadow = shadow_context(
+        [
+            {"kind": "current_message", "source": "current_message", "content": msg, "priority": 1000},
+            {"kind": "persona", "source": "persona", "content": persona, "priority": 950},
+            {"kind": "group_context", "source": "group_context", "content": group_context, "priority": 700},
+            {"kind": "relationship", "source": "relationship", "content": relation_info, "priority": 850},
+            {"kind": "script_retrieval", "source": "script_retrieval", "content": script_examples, "priority": 650},
+            {"kind": "pjsk_retrieval", "source": "pjsk_retrieval", "content": pjsk_block, "priority": 550},
+            {"kind": "toya_anchor", "source": "toya_anchor", "content": toya_anchor, "priority": 800},
+        ],
+        stage="auto_chat",
+    )
+    record_context_shadow(trace_request_id, context_shadow.as_dict())
+
     try:
         raw_result = await call_deepseek_api(
             [
@@ -1222,6 +1302,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
             response_data = parse_json_object(raw_result)
             if response_data is None:
                 raise json.JSONDecodeError("invalid json object", raw_result, 0)
+            record_parse_result(trace_request_id, success=True)
             inner_os = response_data.get("inner_os", "")
             if inner_os:
                 logger.info(f"💦【小彰潜水OS】: {inner_os}")
@@ -1230,6 +1311,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
 
             if not _is_grounded_random_reply(msg, anchor, reply):
                 logger.warning(f"⚠️ [AutoChat] 当前消息锚点校验失败，静音丢弃: anchor={anchor!r} reply={reply[:40]!r}")
+                finish_turn_trace(trace_request_id, outcome="silent")
                 return
 
             clean_msg = msg.strip("。，！？.!?~ \n\r")
@@ -1237,9 +1319,11 @@ async def _(bot: Bot, event: GroupMessageEvent):
 
             if len(clean_reply) >= 4 and (clean_reply in clean_msg or clean_msg in clean_reply):
                 logger.warning(f"⚠️ [AutoChat] 触发片段/缝合复读拦截！静音丢弃: {reply}")
+                finish_turn_trace(trace_request_id, outcome="silent")
                 return
 
         except json.JSONDecodeError:
+            record_parse_result(trace_request_id, success=False)
             logger.warning(f"⚠️ 插嘴系统未输出标准JSON: {raw_result[:120]}")
             # 救援：提取 reply 字段（最常见原因：inner_os 内部引号未转义）
             rescued_os = rescue_field(raw_result, "inner_os")
@@ -1253,15 +1337,23 @@ async def _(bot: Bot, event: GroupMessageEvent):
                 anchor = rescue_field(raw_result, "anchor") or ""
                 if not _is_grounded_random_reply(msg, anchor, reply):
                     logger.warning("⚠️ [AutoChat] 救援结果缺少有效当前消息锚点，静音丢弃")
+                    finish_turn_trace(trace_request_id, outcome="silent")
                     return
                 logger.info(f"🔧 插嘴救援成功，reply={repr(reply[:40])}")
                 # reply 为空 = 模型决定静默，走正常静默流程
             else:
+                finish_turn_trace(trace_request_id, outcome="silent")
                 return
 
-        if "念叨" in reply or "自言自语" in reply: return
-        if not reply or reply.strip() == "……": return
-        if len(reply) < 2: return
+        if "念叨" in reply or "自言自语" in reply:
+            finish_turn_trace(trace_request_id, outcome="silent")
+            return
+        if not reply or reply.strip() == "……":
+            finish_turn_trace(trace_request_id, outcome="silent")
+            return
+        if len(reply) < 2:
+            finish_turn_trace(trace_request_id, outcome="silent")
+            return
 
         await save_my_response(str(event.group_id), str(bot.self_id), reply)
 
@@ -1271,9 +1363,12 @@ async def _(bot: Bot, event: GroupMessageEvent):
         if total_delay > 8: total_delay = 8
 
         await asyncio.sleep(total_delay)
+        finish_turn_trace(trace_request_id, outcome="completed")
         await random_chat.finish(reply_segment + reply)
     except FinishedException:
+        finish_turn_trace(trace_request_id, outcome="completed")
         raise
     except Exception as e:
         # 随机插嘴是尽力而为的可选行为：失败只记日志，不打扰群聊
+        finish_turn_trace(trace_request_id, outcome="failed")
         logger.debug(f"💦 随机插嘴流程异常，本次静默放弃: {e}")

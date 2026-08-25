@@ -2,6 +2,7 @@
 
 from nonebot_plugin_akito.core.observability import (
     finish_turn_trace,
+    record_context_shadow,
     record_context_sources,
     record_intent,
     record_memory_hit,
@@ -11,6 +12,7 @@ from nonebot_plugin_akito.core.observability import (
     record_retry,
     record_tool_call,
     reset_metrics,
+    set_trace_stage,
     snapshot_metrics,
     start_turn_trace,
 )
@@ -18,7 +20,19 @@ from nonebot_plugin_akito.core.observability import (
 
 def test_turn_trace_collects_structured_fields_and_metrics():
     reset_metrics()
-    trace = start_turn_trace("m0-test-001")
+    trace = start_turn_trace("m0-test-001", surface="auto_chat", stage="response")
+    set_trace_stage(trace.request_id, "reply")
+    record_context_shadow(
+        trace.request_id,
+        {
+            "stage": "reply",
+            "budget_tokens": 100,
+            "total_blocks": 2,
+            "estimated_tokens": 20,
+            "selected_sources": ["current_turn"],
+            "omitted_sources": ["old_history"],
+        },
+    )
     record_intent(trace.request_id, "web_search")
     record_context_sources(trace.request_id, ["persona", "persona", "group_context"])
     record_model_call(trace.request_id, usage={"prompt_tokens": 10, "completion_tokens": 4, "total_tokens": 14})
@@ -32,6 +46,9 @@ def test_turn_trace_collects_structured_fields_and_metrics():
     metrics = snapshot_metrics()
 
     assert payload is not None
+    assert payload["surface"] == "auto_chat"
+    assert payload["stage"] == "reply"
+    assert payload["context_shadow"][0]["selected_sources"] == ["current_turn"]
     assert payload["intent"] == "web_search"
     assert payload["context_sources"] == ["persona", "group_context"]
     assert payload["total_tokens"] == 14
@@ -49,7 +66,7 @@ def test_trace_can_persist_sanitized_jsonl(monkeypatch, tmp_path):
     trace_path = tmp_path / "traces" / "conversation.jsonl"
     monkeypatch.setenv("AKITO_CONVERSATION_TRACE_PATH", str(trace_path))
     reset_metrics()
-    trace = start_turn_trace("m0-test-002")
+    trace = start_turn_trace("m0-test-002", surface="impression", stage="analysis")
     record_intent(trace.request_id, "mention")
 
     finish_turn_trace(trace.request_id, outcome="completed")

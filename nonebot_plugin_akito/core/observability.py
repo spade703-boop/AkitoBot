@@ -21,9 +21,12 @@ class TurnTrace:
     """In-memory trace for one turn; user text is intentionally not retained."""
 
     request_id: str
+    surface: str = "main_chat"
+    stage: str = "response"
     started_at: float = field(default_factory=time.perf_counter)
     intent: str = ""
     context_sources: list[str] = field(default_factory=list)
+    context_shadow: list[dict[str, Any]] = field(default_factory=list)
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     model_calls: int = 0
     prompt_tokens: int = 0
@@ -67,9 +70,18 @@ def new_request_id() -> str:
     return uuid.uuid4().hex[:12]
 
 
-def start_turn_trace(request_id: str | None = None) -> TurnTrace:
+def start_turn_trace(
+    request_id: str | None = None,
+    *,
+    surface: str = "main_chat",
+    stage: str = "response",
+) -> TurnTrace:
     """Start and register a turn trace."""
-    trace = TurnTrace(request_id=request_id or new_request_id())
+    trace = TurnTrace(
+        request_id=request_id or new_request_id(),
+        surface=surface or "main_chat",
+        stage=stage or "response",
+    )
     _CURRENT_REQUEST_ID.set(trace.request_id)
     with _LOCK:
         _ACTIVE[trace.request_id] = trace
@@ -98,10 +110,24 @@ def record_intent(request_id: str, intent: str) -> None:
         trace.intent = intent
 
 
+def set_trace_stage(request_id: str | None, stage: str) -> None:
+    """Update the current processing stage without changing the request id."""
+    trace = _get_trace(request_id)
+    if trace is not None and stage:
+        trace.stage = stage
+
+
 def record_context_sources(request_id: str, sources: list[str]) -> None:
     trace = _get_trace(request_id)
     if trace is not None:
         trace.context_sources = list(dict.fromkeys(source for source in sources if source))
+
+
+def record_context_shadow(request_id: str | None, report: dict[str, Any]) -> None:
+    """Append privacy-safe hypothetical context selection metadata to a trace."""
+    trace = _get_trace(request_id)
+    if trace is not None and report:
+        trace.context_shadow.append(dict(report))
 
 
 def record_model_call(request_id: str | None, *, usage: Any = None) -> None:

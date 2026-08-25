@@ -21,6 +21,13 @@ REQUIRED_CATEGORIES = {
     "output_robustness",
 }
 
+EVAL_SURFACES = {
+    "main_chat",
+    "auto_chat",
+    "impression_analysis",
+    "impression_reply",
+}
+
 JUDGE_DIMENSIONS = (
     "factual_grounding",
     "relationship_consistency",
@@ -30,6 +37,20 @@ JUDGE_DIMENSIONS = (
     "invention_control",
 )
 
+ANALYSIS_JUDGE_DIMENSIONS = (
+    "evidence_grounding",
+    "observation_quality",
+    "uncertainty_control",
+    "attribution_accuracy",
+)
+
+
+def judge_dimensions_for_surface(surface: str) -> tuple[str, ...]:
+    """Return the rubric for a surface without judging neutral analysis as roleplay."""
+    if surface == "impression_analysis":
+        return ANALYSIS_JUDGE_DIMENSIONS
+    return JUDGE_DIMENSIONS
+
 
 def load_eval_set(path: str | Path) -> dict[str, Any]:
     """Load the JSON evaluation set without importing the bot runtime."""
@@ -37,6 +58,10 @@ def load_eval_set(path: str | Path) -> dict[str, Any]:
         data = json.load(handle)
     if not isinstance(data, dict):
         raise ValueError("评测集根节点必须是对象")
+    for case in data.get("cases", []):
+        if isinstance(case, dict):
+            case.setdefault("surface", "main_chat")
+            case.setdefault("task", case.get("category", ""))
     return data
 
 
@@ -58,6 +83,8 @@ def validate_eval_set(data: dict[str, Any]) -> list[str]:
             continue
         case_id = case.get("id")
         category = case.get("category")
+        surface = case.get("surface", "main_chat")
+        task = case.get("task", category)
         if not isinstance(case_id, str) or not case_id.strip():
             errors.append(f"{prefix}.id 缺失")
         elif case_id in ids:
@@ -68,6 +95,10 @@ def validate_eval_set(data: dict[str, Any]) -> list[str]:
             errors.append(f"{prefix}.category 缺失")
         else:
             categories.add(category)
+        if surface not in EVAL_SURFACES:
+            errors.append(f"{prefix}.surface 无效: {surface}")
+        if not isinstance(task, str) or not task.strip():
+            errors.append(f"{prefix}.task 缺失")
         if not isinstance(case.get("user_message"), str) or not case["user_message"].strip():
             errors.append(f"{prefix}.user_message 缺失")
         if not isinstance(case.get("expected_signals"), list) or not case["expected_signals"]:
@@ -116,6 +147,51 @@ def build_judge_prompt(case: dict[str, Any], response: str) -> str:
     speaker = reference.get("speaker", "（未标注）")
     expected = "、".join(str(item) for item in case.get("expected_signals", [])) or "无"
     forbidden = "、".join(str(item) for item in case.get("forbidden_signals", [])) or "无"
+    surface = str(case.get("surface", "main_chat"))
+    task = str(case.get("task", case.get("category", "")))
+    if surface == "impression_analysis":
+        return f"""你是独立的材料质量评测员。请评估群印象的中性材料分析阶段输出。
+
+评测原则：
+1. 原始群聊材料是唯一事实来源；不要把彰人语气或角色扮演作为本阶段评分标准。
+2. 允许使用新的概括措辞，但 evidence 必须能回溯到材料，推测必须保留不确定性。
+3. 只输出 JSON，不输出分析过程。
+
+评测表面：{surface}；任务：{task}
+目标对象：{case.get('user_message', '')}
+原作场景提示：{scene}
+原作证据发言者：{speaker}
+原作证据（仅用于核对材料边界）：{evidence}
+期望信号：{expected}
+禁止漂移：{forbidden}
+待评分析：{response}
+
+请按 0～2 分评分：0=不符合，1=部分符合，2=符合。
+字段含义：
+- evidence_grounding：证据是否来自目标材料
+- observation_quality：观察是否具体且可复核
+- uncertainty_control：是否区分事实与推测
+- attribution_accuracy：是否正确归因于目标本人或其他人物
+
+输出格式：
+{{
+  "evidence_grounding": 0,
+  "observation_quality": 0,
+  "uncertainty_control": 0,
+  "attribution_accuracy": 0,
+  "verdict": "pass|borderline|fail",
+  "short_reason": "不超过40字"
+}}"""
+    surface_guidance = {
+        "auto_chat": (
+            "自动回复还要判断是否应该插嘴：当前消息无自然回应时，空回复/静默可以是正确结果；"
+            "如果回复，则只能锚定当前消息，不能借群聊旧背景强行接话。"
+        ),
+        "impression_reply": (
+            "这里只评估群印象最终的彰人表达；材料事实边界已在 impression_analysis 阶段单独评估，"
+            "不要要求复述分析 JSON。"
+        ),
+    }.get(surface, "")
     return f"""你是独立的角色一致性评测员。请评估一条模拟游戏角色“东云彰人”的回复。
 
 评测原则：
@@ -126,6 +202,8 @@ def build_judge_prompt(case: dict[str, Any], response: str) -> str:
 5. 只输出 JSON，不输出分析过程。
 
 用户消息：{case.get('user_message', '')}
+评测表面：{surface}；任务：{task}
+{surface_guidance}
 原作场景提示：{scene}
 原作证据发言者：{speaker}
 原作证据（仅用于核对事实和态度）：{evidence}
@@ -155,7 +233,10 @@ def build_judge_prompt(case: dict[str, Any], response: str) -> str:
 }}"""
 
 
-def parse_judge_result(raw: str) -> dict[str, Any] | None:
+def parse_judge_result(
+    raw: str,
+    dimensions: tuple[str, ...] = JUDGE_DIMENSIONS,
+) -> dict[str, Any] | None:
     """Parse and validate a judge JSON object; invalid output is a failed judge run."""
     try:
         start = raw.index("{")
@@ -165,7 +246,7 @@ def parse_judge_result(raw: str) -> dict[str, Any] | None:
         return None
     if not isinstance(result, dict):
         return None
-    for dimension in JUDGE_DIMENSIONS:
+    for dimension in dimensions:
         value = result.get(dimension)
         if not isinstance(value, int) or value not in (0, 1, 2):
             return None
@@ -187,7 +268,15 @@ def summarize_responses(data: dict[str, Any], responses: list[dict[str, Any]]) -
         seen.add(case_id)
         response = str(item.get("response") or "")
         result = score_signal_diagnostics(cases[case_id], response)
-        result.update({"id": case_id, "category": cases[case_id]["category"]})
+        case = cases[case_id]
+        result.update(
+            {
+                "id": case_id,
+                "category": case["category"],
+                "surface": case.get("surface", "main_chat"),
+                "task": case.get("task", case["category"]),
+            }
+        )
         result["exact_duplicate"] = bool(response.strip() and response.strip() == previous_response.strip())
         previous_response = response
         judge = item.get("judge")
@@ -196,6 +285,7 @@ def summarize_responses(data: dict[str, Any], responses: list[dict[str, Any]]) -
         diagnostics.append(result)
 
     category_counts = Counter(case["category"] for case in data["cases"])
+    surface_counts = Counter(case.get("surface", "main_chat") for case in data["cases"])
     expected_coverage = [item["expected_signal_coverage"] for item in diagnostics]
     forbidden_count = sum(item["forbidden_signal_triggered"] for item in diagnostics)
     duplicate_count = sum(item["exact_duplicate"] for item in diagnostics)
@@ -205,10 +295,25 @@ def summarize_responses(data: dict[str, Any], responses: list[dict[str, Any]]) -
         for dimension in JUDGE_DIMENSIONS
         if judge_scores and all(dimension in score for score in judge_scores)
     }
+    surface_judge_average: dict[str, dict[str, float]] = {}
+    for surface in sorted(surface_counts):
+        surface_scores = [
+            item["judge"]
+            for item in diagnostics
+            if item.get("surface") == surface and isinstance(item.get("judge"), dict)
+        ]
+        if surface_scores:
+            surface_judge_average[surface] = {
+                dimension: round(sum(int(score[dimension]) for score in surface_scores) / len(surface_scores), 3)
+                for dimension in set().union(*(score.keys() for score in surface_scores))
+                if all(dimension in score for score in surface_scores)
+                and all(isinstance(score.get(dimension), int) for score in surface_scores)
+            }
     return {
         "dataset_cases": len(data["cases"]),
         "response_cases": len(diagnostics),
         "category_counts": dict(sorted(category_counts.items())),
+        "surface_counts": dict(sorted(surface_counts.items())),
         "expected_signal_coverage": round(sum(expected_coverage) / len(expected_coverage), 4)
         if expected_coverage
         else None,
@@ -216,12 +321,13 @@ def summarize_responses(data: dict[str, Any], responses: list[dict[str, Any]]) -
         "exact_duplicate_rate": round(duplicate_count / len(diagnostics), 4) if diagnostics else None,
         "judge_cases": len(judge_scores),
         "judge_average": judge_average,
+        "surface_judge_average": surface_judge_average,
         "diagnostics": diagnostics,
     }
 
 
-def summarize_traces(traces: list[dict[str, Any]]) -> dict[str, Any]:
-    """Aggregate JSONL turn traces emitted by the optional runtime sink."""
+def _summarize_trace_group(traces: list[dict[str, Any]]) -> dict[str, Any]:
+    """Aggregate one group of traces; callers add surface/stage breakdowns."""
     if not traces:
         return {"total_turns": 0}
     latencies = sorted(float(item.get("elapsed_ms", 0.0)) for item in traces)
@@ -231,6 +337,17 @@ def summarize_traces(traces: list[dict[str, Any]]) -> dict[str, Any]:
     parse_successes = sum(item.get("parse_success") is True for item in parse_observed)
     memory_observed = [item for item in traces if item.get("memory_hit") is not None]
     memory_hits = sum(item.get("memory_hit") is True for item in memory_observed)
+    shadow_reports = [
+        report
+        for item in traces
+        for report in item.get("context_shadow", [])
+        if isinstance(report, dict)
+    ]
+    shadow_omitted_sources = Counter(
+        str(source)
+        for report in shadow_reports
+        for source in report.get("omitted_sources", [])
+    )
 
     def percentile(percentile_value: float) -> float:
         index = (len(latencies) - 1) * percentile_value / 100
@@ -258,9 +375,33 @@ def summarize_traces(traces: list[dict[str, Any]]) -> dict[str, Any]:
         if search_calls
         else None,
         "retries": sum(int(item.get("retries", 0) or 0) for item in traces),
+        "context_shadow_reports": len(shadow_reports),
+        "context_shadow_total_blocks": sum(int(report.get("total_blocks", 0) or 0) for report in shadow_reports),
+        "context_shadow_estimated_tokens": sum(
+            int(report.get("estimated_tokens", 0) or 0) for report in shadow_reports
+        ),
+        "context_shadow_omitted_sources": dict(sorted(shadow_omitted_sources.items())),
         "p50_latency_ms": percentile(50),
         "p95_latency_ms": percentile(95),
     }
+
+
+def summarize_traces(traces: list[dict[str, Any]]) -> dict[str, Any]:
+    """Aggregate traces and expose comparable metrics for each conversation surface."""
+    if not traces:
+        return {"total_turns": 0}
+    summary = _summarize_trace_group(traces)
+    surfaces = Counter(str(item.get("surface") or "main_chat") for item in traces)
+    stages = Counter(str(item.get("stage") or "response") for item in traces)
+    summary["surface_counts"] = dict(sorted(surfaces.items()))
+    summary["stage_counts"] = dict(sorted(stages.items()))
+    summary["surface_metrics"] = {
+        surface: _summarize_trace_group(
+            [item for item in traces if str(item.get("surface") or "main_chat") == surface]
+        )
+        for surface in sorted(surfaces)
+    }
+    return summary
 
 
 def render_baseline_report(
@@ -280,6 +421,7 @@ def render_baseline_report(
         "",
         f"- 样例总数：{summary['dataset_cases']}",
         f"- 类别分布：{json.dumps(summary['category_counts'], ensure_ascii=False)}",
+        f"- 表面分布：{json.dumps(summary['surface_counts'], ensure_ascii=False)}",
         f"- 已提供回复：{summary['response_cases']}",
         "- 剧情回忆样例：12 条，均绑定原作场景证据",
         "",

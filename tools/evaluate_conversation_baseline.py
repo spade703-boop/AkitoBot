@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 try:
     from .conversation_eval import (
         build_judge_prompt,
+        judge_dimensions_for_surface,
         load_eval_set,
         parse_judge_result,
         render_baseline_report,
@@ -26,6 +27,7 @@ except ImportError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from tools.conversation_eval import (
         build_judge_prompt,
+        judge_dimensions_for_surface,
         load_eval_set,
         parse_judge_result,
         render_baseline_report,
@@ -114,7 +116,10 @@ async def judge_responses(
                 response_format={"type": "json_object"},
             )
             raw = response.choices[0].message.content or ""
-            parsed = parse_judge_result(raw)
+            parsed = parse_judge_result(
+                raw,
+                judge_dimensions_for_surface(str(case.get("surface", "main_chat"))),
+            )
             enriched = dict(item)
             enriched["judge"] = parsed or {"verdict": "fail", "short_reason": "裁判输出无法解析"}
             return enriched

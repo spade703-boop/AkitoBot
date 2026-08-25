@@ -47,6 +47,7 @@ from ..core import (
     new_request_id,
     record_bot_message,
     record_bot_response,
+    record_context_shadow,
     record_context_sources,
     record_intent,
     record_memory_hit,
@@ -54,6 +55,7 @@ from ..core import (
     record_retry,
     record_tool_call,
     save_memory,
+    shadow_context,
     smart_search,
     start_turn_trace,
     to_image_data,
@@ -439,6 +441,24 @@ async def prepare_turn(turn: IncomingTurn, sleep_instruction: str) -> PreparedTu
         context_sources.append("vision")
     if time_gap_awareness:
         context_sources.append("time_gap")
+    context_shadow = shadow_context(
+        [
+            {"kind": "system_rules", "source": "system_rules", "content": PROMPTS_DB.get("system_header", ""), "priority": 1000},
+            {"kind": "persona", "source": "persona", "content": shared_prompt_context.persona, "priority": 950},
+            {"kind": "current_turn", "source": "current_turn", "content": turn.plain_text_content, "priority": 1000},
+            {"kind": "relationship", "source": "relationship", "content": relationship_context, "priority": 900},
+            {"kind": "script_retrieval", "source": "script_retrieval", "content": shared_prompt_context.script_examples, "priority": 700},
+            {"kind": "pjsk_retrieval", "source": "pjsk_retrieval", "content": shared_prompt_context.pjsk_block, "priority": 600},
+            {"kind": "recent_history", "source": "recent_history", "content": "\n".join(str(item) for item in user_mem.get("history", [])), "priority": 800},
+            {"kind": "long_term_memory", "source": "long_term_memory", "content": long_term_memory_text, "priority": 750},
+            {"kind": "group_context", "source": "group_context", "content": group_context, "priority": 650},
+            {"kind": "temporary_state", "source": "temporary_state", "content": implant_context, "priority": 980},
+            {"kind": "vision", "source": "vision", "content": turn.current_image_identity, "priority": 850},
+            {"kind": "time_gap", "source": "time_gap", "content": time_gap_awareness, "priority": 700},
+        ],
+        stage="main_chat",
+    )
+    record_context_shadow(turn.request_id, context_shadow.as_dict())
     record_context_sources(turn.request_id, context_sources)
     return PreparedTurn(
         turn=turn,
@@ -597,7 +617,7 @@ async def commit_turn(prepared: PreparedTurn, reply: ChatReply, bot_self_id: str
 
 async def run_chat_turn(event: Event, bot: Bot, message: Message) -> PipelineResult:
     request_id = new_request_id()
-    start_turn_trace(request_id)
+    start_turn_trace(request_id, surface="main_chat", stage="response")
     try:
         turn = await collect_turn_input(event, bot, message, request_id=request_id)
         gate = decide_gate(turn)

@@ -137,6 +137,7 @@ from .observability import (
     get_turn_trace,
     new_request_id,
     record_context_sources,
+    record_context_shadow,
     record_intent,
     record_memory_hit,
     record_model_call,
@@ -145,8 +146,16 @@ from .observability import (
     record_retry,
     record_tool_call,
     reset_metrics,
+    set_trace_stage,
     snapshot_metrics,
     start_turn_trace,
+)
+from .context_orchestrator import (
+    ContextOrchestrator,
+    ContextShadowReport,
+    build_context_blocks,
+    estimate_token_count,
+    shadow_context,
 )
 
 # ── 统一公共导出面（显式声明，避免 import * 时泄漏内部名） ────────────────
@@ -190,13 +199,15 @@ __all__ = [
     "build_shared_prompt_context", "render_json_schema", "render_prompt_frame",
     "render_main_chat_prompt", "render_impression_analysis_prompt", "render_impression_reply_prompt",
     "render_impression_prompt", "render_auto_chat_prompt",
+    # context orchestration
+    "ContextOrchestrator", "ContextShadowReport", "build_context_blocks", "estimate_token_count", "shadow_context",
     # time_awareness
     "record_bot_response", "build_time_gap_prompt",
     # retrieval
     "RetrievalContext", "RetrievalResult", "build_retrieval_context", "retrieve", "retrieve_result", "reload_indices",
     # observability
     "TurnTrace", "new_request_id", "start_turn_trace", "get_turn_trace", "finish_turn_trace", "current_request_id",
-    "record_intent", "record_context_sources", "record_model_call", "record_parse_result",
+    "record_intent", "record_context_sources", "record_context_shadow", "record_model_call", "record_parse_result",
     "record_repeat_detection", "record_memory_hit", "record_retry", "record_tool_call",
-    "snapshot_metrics", "reset_metrics",
+    "set_trace_stage", "snapshot_metrics", "reset_metrics",
 ]
