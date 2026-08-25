@@ -14,10 +14,20 @@ from nonebot.exception import FinishedException
 import pytest
 
 import nonebot_plugin_akito.features.gallery as gallery
+from nonebot_plugin_akito.features.gallery.hash_index import GalleryIndexSyncResult
 
 
 def _pick_first(options: list[str]) -> str:
     return options[0]
+
+
+def _make_gallery_hash_index(tmp_path):
+    return gallery.GalleryHashIndex(
+        image_root=tmp_path,
+        database_path=tmp_path / "gallery_hash_index.sqlite3",
+        fixed_storage_keys=tuple(item.storage_key for item in gallery.FIXED_GALLERIES),
+        image_suffixes=gallery.GALLERY_IMAGE_SUFFIXES,
+    )
 
 
 def test_resolve_save_category_and_reply_uses_matching_bucket():
@@ -634,6 +644,7 @@ async def test_save_custom_gallery_accepts_image_in_same_message(
     monkeypatch.setattr(gallery, "CUSTOM_GALLERIES", [custom])
     monkeypatch.setattr(gallery, "GROUP_IMAGE_PERMISSIONS", {1001: ["all"]})
     monkeypatch.setattr(gallery, "IMAGE_BASE_PATH", tmp_path)
+    monkeypatch.setattr(gallery, "GALLERY_HASH_INDEX", _make_gallery_hash_index(tmp_path))
     monkeypatch.setattr(gallery, "_gallery_sleep_block", lambda *args, **kwargs: "")
     monkeypatch.setattr(gallery, "_grant_gallery_safety_pass", lambda seconds: None)
     monkeypatch.setattr(gallery.aiohttp, "ClientSession", lambda: session)
@@ -667,6 +678,166 @@ async def test_unknown_gallery_with_image_is_silent_before_sleep_gate(monkeypatc
 
     assert result is None
     bot.send.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_global_duplicate_index_covers_fixed_and_custom_galleries_only(tmp_path):
+    fixed_dir = tmp_path / "toya"
+    custom_dir = tmp_path / "custom" / "旧图库"
+    avatar_dir = tmp_path / "paro_avatars" / "彰人"
+    fixed_dir.mkdir(parents=True)
+    custom_dir.mkdir(parents=True)
+    avatar_dir.mkdir(parents=True)
+    (fixed_dir / "fixed.jpg").write_bytes(b"fixed-image")
+    (custom_dir / "custom.png").write_bytes(b"custom-image")
+    (avatar_dir / "avatar.jpg").write_bytes(b"avatar-image")
+    hash_index = _make_gallery_hash_index(tmp_path)
+    await hash_index.sync_incremental()
+
+    assert await hash_index.is_duplicate(b"fixed-image") is True
+    assert await hash_index.is_duplicate(b"custom-image") is True
+    assert await hash_index.is_duplicate(b"avatar-image") is False
+    assert await hash_index.is_duplicate(b"other-image") is False
+
+
+@pytest.mark.asyncio
+async def test_duplicate_index_skips_unreadable_existing_file(monkeypatch, tmp_path):
+    unreadable = tmp_path / "toya" / "broken.jpg"
+    unreadable.parent.mkdir(parents=True)
+    unreadable.write_bytes(b"same")
+    hash_index = _make_gallery_hash_index(tmp_path)
+
+    def fail_hash(relative_path, path):
+        raise OSError("unreadable")
+
+    monkeypatch.setattr(hash_index, "_hash_file_record", fail_hash)
+    result = await hash_index.sync_incremental()
+
+    assert result.failed_count == 1
+    assert await hash_index.is_duplicate(b"same") is False
+
+
+@pytest.mark.asyncio
+async def test_unique_save_does_not_overwrite_filename_collision(tmp_path):
+    save_dir = tmp_path / "custom" / "月城"
+    save_dir.mkdir(parents=True)
+    hash_index = _make_gallery_hash_index(tmp_path)
+
+    assert await hash_index.save_unique(save_dir, "same.jpg", b"first") is True
+    assert await hash_index.save_unique(save_dir, "same.jpg", b"second") is True
+
+    assert {path.read_bytes() for path in save_dir.glob("*.jpg")} == {b"first", b"second"}
+
+
+@pytest.mark.asyncio
+async def test_manual_save_rejects_duplicate_from_another_gallery(monkeypatch, tmp_path):
+    custom = gallery.GalleryDefinition(
+        storage_key="custom/月城",
+        name="月城",
+        caption_enabled=False,
+        permission_tokens=("月城",),
+        custom=True,
+    )
+    existing_dir = tmp_path / "toya"
+    existing_dir.mkdir()
+    (existing_dir / "existing.jpg").write_bytes(b"duplicate-image")
+    response = MagicMock(status=200)
+    response.read = AsyncMock(return_value=b"duplicate-image")
+    response.__aenter__.return_value = response
+    session = MagicMock()
+    session.get.return_value = response
+    session.__aenter__.return_value = session
+    image = SimpleNamespace(type="image", data={"url": "https://example.com/duplicate.jpg"})
+    monkeypatch.setattr(gallery, "CUSTOM_GALLERIES", [custom])
+    monkeypatch.setattr(gallery, "GROUP_IMAGE_PERMISSIONS", {1001: ["all"]})
+    monkeypatch.setattr(gallery, "IMAGE_BASE_PATH", tmp_path)
+    monkeypatch.setattr(gallery, "GALLERY_HASH_INDEX", _make_gallery_hash_index(tmp_path))
+    monkeypatch.setattr(gallery, "_gallery_sleep_block", lambda *args, **kwargs: "")
+    monkeypatch.setattr(gallery, "_grant_gallery_safety_pass", lambda seconds: None)
+    monkeypatch.setattr(gallery.aiohttp, "ClientSession", lambda: session)
+    bot = Bot()
+
+    await gallery.save_img_cmd.handlers[0](
+        bot,
+        Event(plain_text="存月城", group_id=1001, message=[image]),
+    )
+
+    assert list((tmp_path / custom.storage_key).glob("*.jpg")) == []
+    assert bot.send.await_args.kwargs["message"] == gallery.DUPLICATE_IMAGE_REPLY
+
+
+@pytest.mark.asyncio
+async def test_collect_mode_saves_new_images_and_reports_duplicates(monkeypatch, tmp_path):
+    custom = gallery.GalleryDefinition(
+        storage_key="custom/月城",
+        name="月城",
+        caption_enabled=False,
+        permission_tokens=("月城",),
+        custom=True,
+    )
+    existing_dir = tmp_path / "groupmate"
+    existing_dir.mkdir()
+    (existing_dir / "existing.jpg").write_bytes(b"old-image")
+    image_payloads = {
+        "https://example.com/old.jpg": b"old-image",
+        "https://example.com/new-a.jpg": b"new-image",
+        "https://example.com/new-b.jpg": b"new-image",
+    }
+    responses = {}
+    for url, image_data in image_payloads.items():
+        response = MagicMock(status=200)
+        response.read = AsyncMock(return_value=image_data)
+        response.__aenter__.return_value = response
+        responses[url] = response
+    session = MagicMock()
+    session.get.side_effect = responses.__getitem__
+    session.__aenter__.return_value = session
+    images = [SimpleNamespace(type="image", data={"url": url}) for url in image_payloads]
+    monkeypatch.setattr(gallery, "CUSTOM_GALLERIES", [custom])
+    monkeypatch.setattr(gallery, "COLLECTING_MODE", {"group_1001": custom.storage_key})
+    monkeypatch.setattr(gallery, "IMAGE_BASE_PATH", tmp_path)
+    monkeypatch.setattr(gallery, "GALLERY_HASH_INDEX", _make_gallery_hash_index(tmp_path))
+    monkeypatch.setattr(gallery, "_grant_gallery_safety_pass", lambda seconds: None)
+    monkeypatch.setattr(gallery.aiohttp, "ClientSession", lambda: session)
+    bot = Bot()
+
+    await gallery.auto_save_monitor.handlers[0](
+        bot,
+        Event(plain_text="", group_id=1001, message=images),
+    )
+
+    saved_files = list((tmp_path / custom.storage_key).glob("*.jpg"))
+    assert len(saved_files) == 1
+    assert saved_files[0].read_bytes() == b"new-image"
+    assert bot.send.await_args.kwargs["message"] == "存了 1 张，另外 2 张之前就有了。"
+
+    bot.send.reset_mock()
+    duplicate_images = [
+        SimpleNamespace(type="image", data={"url": "https://example.com/old.jpg"}),
+        SimpleNamespace(type="image", data={"url": "https://example.com/new-a.jpg"}),
+    ]
+    await gallery.auto_save_monitor.handlers[0](
+        bot,
+        Event(plain_text="", group_id=1001, message=duplicate_images),
+    )
+
+    assert len(list((tmp_path / custom.storage_key).glob("*.jpg"))) == 1
+    assert bot.send.await_args.kwargs["message"] == gallery.DUPLICATE_IMAGES_REPLY
+
+
+@pytest.mark.asyncio
+async def test_save_lock_prevents_concurrent_duplicate_writes(tmp_path):
+    save_dir = tmp_path / "custom" / "月城"
+    save_dir.mkdir(parents=True)
+    hash_index = _make_gallery_hash_index(tmp_path)
+
+    async def save_image(file_name):
+        return await hash_index.save_unique(save_dir, file_name, b"same-image")
+
+    results = await asyncio.gather(save_image("first.jpg"), save_image("second.jpg"))
+
+    assert sorted(results) == [False, True]
+    assert len(list(save_dir.glob("*.jpg"))) == 1
 
 
 @pytest.mark.asyncio
@@ -717,6 +888,30 @@ async def test_gallery_command_help_images_and_superuser_access(monkeypatch):
     superuser_html = render.await_args.args[0]
     assert "新建图库[名称]" in superuser_html
     assert "关闭图库休眠" in superuser_html
+    assert "重建图库索引" in superuser_html
+
+
+@pytest.mark.asyncio
+async def test_rebuild_gallery_index_command_is_superuser_only(monkeypatch):
+    hash_index = SimpleNamespace(
+        rebuild=AsyncMock(return_value=GalleryIndexSyncResult(indexed_count=1126, rebuilt=True))
+    )
+    monkeypatch.setattr(gallery, "GALLERY_HASH_INDEX", hash_index)
+
+    result = await gallery.rebuild_gallery_index_cmd.handlers[0](
+        Event(plain_text="重建图库索引", user_id="10001")
+    )
+
+    assert result is None
+    hash_index.rebuild.assert_not_awaited()
+
+    with pytest.raises(FinishedException) as exc:
+        await gallery.rebuild_gallery_index_cmd.handlers[0](
+            Event(plain_text="重建图库索引", user_id=gallery.SUPERUSER_QQ)
+        )
+
+    assert str(exc.value.result) == "图库索引重建完成，共登记 1126 张图片。"
+    hash_index.rebuild.assert_awaited_once()
 
 
 @pytest.mark.asyncio

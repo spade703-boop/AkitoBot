@@ -253,6 +253,8 @@ alconna_mod.UniMessage = FakeUniMessage
 class _FakeScheduler:
     def scheduled_job(self, *args, **kwargs):
         def decorator(func):
+            func.__scheduled_job_args__ = args
+            func.__scheduled_job_kwargs__ = kwargs
             return func
 
         return decorator

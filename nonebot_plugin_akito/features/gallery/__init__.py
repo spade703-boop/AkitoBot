@@ -17,12 +17,13 @@ import time
 import uuid
 
 import aiohttp
-from nonebot import on_command, on_message, on_regex
+from nonebot import get_driver, on_command, on_message, on_regex
 from nonebot.adapters import Event, Message
 from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, MessageSegment
 from nonebot.adapters.onebot.v11 import Message as OB11Message
 from nonebot.log import logger
 from nonebot.params import CommandArg
+from nonebot_plugin_apscheduler import scheduler
 from nonebot_plugin_htmlrender import html_to_pic
 from PIL import Image as PILImage
 
@@ -41,6 +42,7 @@ from ...core import (
     is_sleeping,
     sleep_block,
 )
+from .hash_index import GalleryHashIndex
 
 # ==============================================================================
 # 模块 8：相册图库引擎 (IMAGE & GALLERY SYSTEM)
@@ -51,6 +53,8 @@ GALLERY_REGISTRY_FILE = "gallery_registry.json"
 GALLERY_REGISTRY_VERSION = 2
 SUPPORTED_GALLERY_REGISTRY_VERSIONS = {1, GALLERY_REGISTRY_VERSION}
 CUSTOM_GALLERY_NAME_RE = re.compile(r"^[A-Za-z0-9_\-\u3400-\u4dbf\u4e00-\u9fff]{1,20}$")
+GALLERY_IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".gif"}
+GALLERY_HASH_INDEX_FILE = "gallery_hash_index.sqlite3"
 
 
 @dataclass(frozen=True)
@@ -166,10 +170,12 @@ DEFAULT_UNKNOWN_GALLERY_REPLIES = [
     "这种图库不存在。看清楚再发指令啊。",
     "都说了没有。换一个。",
 ]
+DUPLICATE_IMAGE_REPLY = "……这张已经存过了。别重复塞给我。"
+DUPLICATE_IMAGES_REPLY = "……这些图已经存过了。别重复塞给我。"
 GALLERY_USER_HELP_ROWS = (
     ("发张[图库名]", "严格匹配后随机发图；未知图库会拒绝，附加文字或空参数静默。"),
-    ("存[图库名]", "保存本条消息或引用消息中的图片；没有图片时静默。"),
-    ("开始收图 [图库名]", "进入连续收图模式，之后发送的图片会自动存入该图库。"),
+    ("存[图库名]", "保存本条或引用消息中的图片；全图库已存在时拒绝重复写入。"),
+    ("开始收图 [图库名]", "连续保存图片，自动跳过所有图库中已经存在的图片。"),
     ("停止收图", "结束当前会话的连续收图模式。"),
     ("图库清单 [图库名] [页码]", "生成指定图库的缩略图清单；页码可省略。"),
     ("查看图库指令", "查看这张普通图库指令说明图。"),
@@ -182,6 +188,7 @@ GALLERY_SUPERUSER_HELP_ROWS = (
     ("删除图库[名称]", "删除自定义图库、目录和图片，并解除相关子图库关联。"),
     ("关闭图库休眠", "临时绕过凌晨 0–6 点的图库睡眠拦截。"),
     ("开启图库休眠", "恢复凌晨 0–6 点的图库睡眠拦截。"),
+    ("重建图库索引", "立即按原图片全量重建图库去重索引。"),
     ("查看超管图库指令", "查看这张超管图库指令说明图。"),
 )
 GALLERY_SLEEP_ENABLED = True
@@ -431,6 +438,45 @@ CUSTOM_GALLERIES, GALLERY_ALIASES, GALLERY_PARENTS, GALLERY_REGISTRY_LOAD_ERROR 
     _load_custom_gallery_registry(_get_gallery_registry_path())
 )
 GALLERY_CREATE_LOCK = asyncio.Lock()
+GALLERY_HASH_INDEX = GalleryHashIndex(
+    image_root=IMAGE_BASE_PATH,
+    database_path=get_data_dir() / GALLERY_HASH_INDEX_FILE,
+    fixed_storage_keys=tuple(gallery.storage_key for gallery in FIXED_GALLERIES),
+    image_suffixes=GALLERY_IMAGE_SUFFIXES,
+)
+
+
+async def initialize_gallery_hash_index() -> None:
+    try:
+        result = await GALLERY_HASH_INDEX.sync_incremental()
+        logger.info(f"图库哈希索引已校准，共登记 {result.indexed_count} 张图片")
+    except Exception as exc:
+        logger.error(f"图库哈希索引启动校准失败，将在存图或定时任务时重试: {exc}")
+
+
+_driver = get_driver()
+if hasattr(_driver, "on_startup"):
+    _driver.on_startup(initialize_gallery_hash_index)
+
+
+@scheduler.scheduled_job(
+    "interval",
+    minutes=10,
+    id="sync_gallery_hash_index",
+    max_instances=1,
+    coalesce=True,
+)
+async def sync_gallery_hash_index() -> None:
+    try:
+        result = await GALLERY_HASH_INDEX.sync_incremental()
+        if result.updated_count or result.deleted_count or result.failed_count or result.rebuilt:
+            logger.info(
+                "图库哈希索引后台同步完成: "
+                f"登记 {result.indexed_count}，更新 {result.updated_count}，"
+                f"删除 {result.deleted_count}，失败 {result.failed_count}"
+            )
+    except Exception as exc:
+        logger.error(f"图库哈希索引后台同步失败，将在下次任务时重试: {exc}")
 
 
 def _all_galleries() -> tuple[GalleryDefinition, ...]:
@@ -522,12 +568,13 @@ def _resolve_save_category_and_reply(
     return gallery.storage_key, chooser(replies)
 
 
-def _extract_image_url(message: object) -> str:
-    """Extract a usable image URL/file value from an OneBot message."""
+def _extract_image_urls(message: object) -> list[str]:
+    """Extract usable image URL/file values from an OneBot message."""
     try:
         segments = iter(message)  # type: ignore[arg-type]
     except TypeError:
-        return ""
+        return []
+    image_urls: list[str] = []
     for segment in segments:
         if getattr(segment, "type", "") != "image":
             continue
@@ -535,8 +582,13 @@ def _extract_image_url(message: object) -> str:
         if isinstance(data, dict):
             image_value = data.get("url") or data.get("file")
             if image_value:
-                return str(image_value)
-    return ""
+                image_urls.append(str(image_value))
+    return image_urls
+
+
+def _extract_image_url(message: object) -> str:
+    image_urls = _extract_image_urls(message)
+    return image_urls[0] if image_urls else ""
 
 
 def _build_collect_session_key(group_id: int | None, user_id: str) -> str:
@@ -696,6 +748,7 @@ unlink_child_gallery_cmd = on_regex(r"^取消子图库关联\s*.*$", priority=5,
 delete_gallery_cmd = on_regex(r"^删除图库\s*.*$", priority=5, block=True)
 disable_gallery_sleep_cmd = on_regex(r"^关闭图库休眠\s*$", priority=5, block=True)
 enable_gallery_sleep_cmd = on_regex(r"^开启图库休眠\s*$", priority=5, block=True)
+rebuild_gallery_index_cmd = on_regex(r"^重建图库索引\s*$", priority=5, block=True)
 gallery_help_cmd = on_regex(r"^查看图库指令\s*$", priority=5, block=True)
 superuser_gallery_help_cmd = on_regex(r"^查看超管图库指令\s*$", priority=5, block=True)
 
@@ -740,6 +793,22 @@ async def _(event: Event):
     global GALLERY_SLEEP_ENABLED
     GALLERY_SLEEP_ENABLED = True
     await enable_gallery_sleep_cmd.finish("图库休眠恢复。凌晨六点前别想让我发图。")
+
+
+@rebuild_gallery_index_cmd.handle()
+async def _(event: Event):
+    if str(event.get_user_id()) != SUPERUSER_QQ:
+        return
+    try:
+        result = await GALLERY_HASH_INDEX.rebuild()
+    except Exception as exc:
+        logger.error(f"超管重建图库哈希索引失败: {exc}")
+        await rebuild_gallery_index_cmd.finish("……索引没重建成功。原图片没动，稍后再试。")
+        return
+    reply = f"图库索引重建完成，共登记 {result.indexed_count} 张图片。"
+    if result.failed_count:
+        reply += f"另有 {result.failed_count} 个文件读取失败。"
+    await rebuild_gallery_index_cmd.finish(reply)
 
 
 @create_gallery_cmd.handle()
@@ -1006,10 +1075,14 @@ async def _(bot: Bot, event: GroupMessageEvent):
         save_dir.mkdir(parents=True, exist_ok=True)
         file_name = f"{int(time.time())}_{random.randint(100, 999)}.jpg"
         async with aiohttp.ClientSession() as session, session.get(img_url) as resp:
-            if resp.status == 200:
-                with open(save_dir / file_name, "wb") as f: f.write(await resp.read())
-                _grant_gallery_safety_pass(5)
-                await bot.send(event=event, message=save_msg)
+            if resp.status != 200:
+                return
+            image_data = await resp.read()
+        if not image_data:
+            return
+        saved = await GALLERY_HASH_INDEX.save_unique(save_dir, file_name, image_data)
+        _grant_gallery_safety_pass(5)
+        await bot.send(event=event, message=save_msg if saved else DUPLICATE_IMAGE_REPLY)
     except Exception as e:
         logger.debug(f"💾 手动存图失败: {e}")
 
@@ -1054,33 +1127,54 @@ async def _(bot: Bot, event: Event):
     if session_key not in COLLECTING_MODE: return
     if re.fullmatch(r"存\s*\S+\s*", event.get_plaintext().strip()): return
 
-    img_urls = []
+    img_urls: list[str] = []
     try:
-        for seg in event.get_message():
-            if seg.type == "image": img_urls.append(seg.data.get("url"))
+        img_urls = _extract_image_urls(event.get_message())
     except Exception as e:
         logger.debug(f"📥 提取图片 URL 失败: {e}")
     if not img_urls: return
 
     category = COLLECTING_MODE[session_key]
-    count = 0
+    downloaded_images: list[bytes] = []
     try:
-        save_dir = IMAGE_BASE_PATH / category
-        save_dir.mkdir(parents=True, exist_ok=True)
         async with aiohttp.ClientSession() as session:
             for url in img_urls:
                 try:
                     async with session.get(url) as resp:
                         if resp.status == 200:
-                            with open(save_dir / f"{int(time.time())}_{random.randint(1000, 9999)}.jpg", "wb") as f:
-                                f.write(await resp.read())
-                            count += 1
+                            image_data = await resp.read()
+                            if image_data:
+                                downloaded_images.append(image_data)
                 except Exception as e:
                     logger.debug(f"📥 自动存图下载失败: {e}")
     except Exception as e:
         logger.debug(f"📥 自动进货批次失败: {e}")
+        return
+    if not downloaded_images:
+        return
 
-    if count > 0 and random.random() < 0.3:
+    save_dir = IMAGE_BASE_PATH / category
+    save_dir.mkdir(parents=True, exist_ok=True)
+    saved_count = 0
+    duplicate_count = 0
+    try:
+        for image_data in downloaded_images:
+            file_name = f"{int(time.time())}_{random.randint(1000, 9999)}.jpg"
+            if await GALLERY_HASH_INDEX.save_unique(save_dir, file_name, image_data):
+                saved_count += 1
+            else:
+                duplicate_count += 1
+    except Exception as e:
+        logger.debug(f"📥 自动进货写入失败: {e}")
+        return
+
+    if duplicate_count and not saved_count:
+        _grant_gallery_safety_pass(5)
+        await bot.send(event=event, message=DUPLICATE_IMAGES_REPLY)
+    elif duplicate_count:
+        _grant_gallery_safety_pass(5)
+        await bot.send(event=event, message=f"存了 {saved_count} 张，另外 {duplicate_count} 张之前就有了。")
+    elif saved_count > 0 and random.random() < 0.3:
         _grant_gallery_safety_pass(5)
         await bot.send(event=event, message="👌")
 
