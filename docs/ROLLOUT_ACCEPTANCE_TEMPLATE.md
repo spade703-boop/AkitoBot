@@ -3,7 +3,7 @@
 ## 1. 采集前确认
 
 - 测试群的 `AKITO_EXPERIMENT_GROUPS` 已映射到 `combined`。
-- 至少保留一个未映射群作为 `control`；不要把所有群同时切到实验臂。
+- 至少保留一个未映射群作为 `default` 对照；不要把所有群同时切到实验臂。`default` 默认是 M1 shadow、M2 off，不改变回复行为。
 - `AKITO_CONVERSATION_TRACE_PATH` 已配置，且运行用户对目标目录有写权限。
 - trace 只包含 schema 版本、UTC 记录时间、群组标识、request id、实验臂、表面、状态、耗时、Token 和事件元数据，不应包含用户原文。
 
@@ -15,12 +15,27 @@
 docker exec mybot python tools/evaluate_rollout.py \
   --traces data/conversation_traces.jsonl \
   --output docs/ROLLOUT_ACCEPTANCE.md \
-  --control-arm control \
+  --control-arm default \
   --treatment-arm combined \
   --min-turns 30
 ```
 
 如果要把未通过自动门槛视为命令失败，追加 `--strict`。样本不足时不要据此扩大或回滚。
+
+当前生产灰度群使用 `combined` 时，未映射群会自动作为 `default` 对照；因此默认命令不需要额外改 `--control-arm`。如果 trace 全部来自单个灰度群，报告会显示 `insufficient_data`，这是预期的安全结果。
+
+如果当前只有一个高频群，直接使用单臂观察模式：
+
+```bash
+docker exec mybot python tools/evaluate_rollout.py \
+  --traces data/conversation_traces.jsonl \
+  --output docs/ROLLOUT_ACCEPTANCE.md \
+  --treatment-arm combined \
+  --single-arm \
+  --min-turns 30
+```
+
+该模式会输出实验臂的绝对稳定性指标，但明确标注“不提供因果比较”；不能据此宣称新版一定优于旧版。
 
 ## 3. 建议探针
 
@@ -32,4 +47,4 @@ docker exec mybot python tools/evaluate_rollout.py \
 
 ## 4. 放量决策
 
-先看报告自动结论，再完成报告中的人工复核清单。发现错误认领、细节幻觉、答非所问或自动回复越界时，优先把测试群切回 `control`，保留 trace 和 request id 供复盘。
+先看报告自动结论，再完成报告中的人工复核清单。发现错误认领、细节幻觉、答非所问或自动回复越界时，优先把测试群显式切回 `control`，保留 trace 和 request id 供复盘。

@@ -25,12 +25,12 @@ def _trace(arm: str, *, failed: bool = False, elapsed_ms: float = 100, tokens: i
 
 
 def test_rollout_report_passes_with_enough_comparable_samples():
-    traces = [_trace("control") for _ in range(30)] + [_trace("combined", tokens=22) for _ in range(30)]
+    traces = [_trace("default") for _ in range(30)] + [_trace("combined", tokens=22) for _ in range(30)]
 
     report = build_rollout_report(traces, min_turns=30)
 
     assert report["verdict"] == "pass"
-    assert report["arm_counts"] == {"combined": 30, "control": 30}
+    assert report["arm_counts"] == {"combined": 30, "default": 30}
     assert report["observations"]["treatment"]["avg_tokens"] == 22.0
     assert report["checks"][0]["status"] == "pass"
 
@@ -39,11 +39,28 @@ def test_rollout_report_waits_for_both_arms():
     report = build_rollout_report([_trace("combined")], min_turns=2)
 
     assert report["verdict"] == "insufficient_data"
-    assert report["insufficient_arms"] == ["control", "combined"]
+    assert report["insufficient_arms"] == ["default", "combined"]
+
+
+def test_rollout_report_supports_single_active_group():
+    report = build_rollout_report(
+        [_trace("combined") for _ in range(30)],
+        treatment_arm="combined",
+        min_turns=30,
+        single_arm=True,
+    )
+
+    assert report["verdict"] == "single_arm_observation"
+    assert report["mode"] == "single_arm"
+    assert report["missing_arms"] == []
+    assert report["insufficient_arms"] == []
+    markdown = render_rollout_report(report)
+    assert "不提供因果比较" in markdown
+    assert "单臂绝对指标" in markdown
 
 
 def test_rollout_report_flags_regression_and_renders_review_boundary():
-    traces = [_trace("control") for _ in range(30)] + [_trace("combined", failed=True) for _ in range(30)]
+    traces = [_trace("default") for _ in range(30)] + [_trace("combined", failed=True) for _ in range(30)]
     report = build_rollout_report(traces, min_turns=30)
 
     assert report["verdict"] == "review"

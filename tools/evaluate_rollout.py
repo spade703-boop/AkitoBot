@@ -87,18 +87,21 @@ def _comparison_check(
 def build_rollout_report(
     traces: list[dict[str, Any]],
     *,
-    control_arm: str = "control",
+    control_arm: str = "default",
     treatment_arm: str = "combined",
     min_turns: int = 30,
+    single_arm: bool = False,
 ) -> dict[str, Any]:
-    """Compare one treatment arm with a control arm without judging message content."""
+    """Compare arms, or observe one treatment arm when no control is available."""
     summary = summarize_traces(traces)
     arm_metrics = summary.get("experiment_arm_metrics", {})
-    control_group = arm_metrics.get(control_arm)
+    control_group = None if single_arm else arm_metrics.get(control_arm)
     treatment_group = arm_metrics.get(treatment_arm)
     missing_arms = [
         arm for arm, group in ((control_arm, control_group), (treatment_arm, treatment_group)) if group is None
     ]
+    if single_arm:
+        missing_arms = []
     observations = {
         "control": _arm_observation(control_group or {}),
         "treatment": _arm_observation(treatment_group or {}),
@@ -139,19 +142,26 @@ def build_rollout_report(
                 ),
             ]
         )
+    arms_to_check = ((treatment_arm, treatment_group),) if single_arm else (
+        (control_arm, control_group),
+        (treatment_arm, treatment_group),
+    )
     insufficient_arms = [
         arm
-        for arm, group in ((control_arm, control_group), (treatment_arm, treatment_group))
+        for arm, group in arms_to_check
         if group is None or int(group.get("total_turns", 0) or 0) < max(1, min_turns)
     ]
     if missing_arms or insufficient_arms:
         verdict = "insufficient_data"
+    elif single_arm:
+        verdict = "single_arm_observation"
     elif any(check["status"] == "review" for check in checks):
         verdict = "review"
     else:
         verdict = "pass"
     return {
         "verdict": verdict,
+        "mode": "single_arm" if single_arm else "comparison",
         "control_arm": control_arm,
         "treatment_arm": treatment_arm,
         "min_turns": max(1, min_turns),
@@ -178,9 +188,11 @@ def render_rollout_report(report: dict[str, Any], *, trace_path: str = "") -> st
         f"- 结论：**{report['verdict']}**",
         f"- Trace 文件：`{trace_path or '未注明'}`",
         f"- 总回合：{report['total_turns']}",
-        f"- 对照臂：`{report['control_arm']}`（{observations['control']['turns']} 回合）",
+        f"- 对照臂：`{report['control_arm']}`（{observations['control']['turns']} 回合）"
+        if report["mode"] == "comparison"
+        else "- 对照臂：未启用（单臂观察，不提供因果比较）",
         f"- 实验臂：`{report['treatment_arm']}`（{observations['treatment']['turns']} 回合）",
-        f"- 最低样本要求：每臂 {report['min_turns']} 回合",
+        f"- 最低样本要求：{'每臂' if report['mode'] == 'comparison' else '实验臂'} {report['min_turns']} 回合",
         "",
         "## 指标对比",
         "",
@@ -192,6 +204,19 @@ def render_rollout_report(report: dict[str, Any], *, trace_path: str = "") -> st
         lines.append(
             f"| {check['metric']} | {check['control'] if check['control'] is not None else '-'} | "
             f"{check['treatment'] if check['treatment'] is not None else '-'} | {comparison} | {check['status']} |"
+        )
+    if report["mode"] == "single_arm":
+        lines.extend(
+            [
+                "| 单臂绝对指标 | - | - | - | 仅供观察 |",
+                f"| completed_rate | - | {observations['treatment']['completed_rate']} | - | 观察 |",
+                f"| failed_rate | - | {observations['treatment']['failed_rate']} | - | 观察 |",
+                f"| parse_success_rate | - | {observations['treatment']['parse_success_rate']} | - | 观察 |",
+                f"| p95_latency_ms | - | {observations['treatment']['p95_latency_ms']} | - | 观察 |",
+                f"| avg_tokens | - | {observations['treatment']['avg_tokens']} | - | 观察 |",
+                f"| event_hit_rate | - | {observations['treatment']['event_hit_rate']} | - | 观察 |",
+                f"| fallback_rate | - | {observations['treatment']['fallback_rate']} | - | 观察 |",
+            ]
         )
     lines.extend(
         [
@@ -215,6 +240,7 @@ def render_rollout_report(report: dict[str, Any], *, trace_path: str = "") -> st
             "## 放量建议",
             "",
             "- `insufficient_data`：继续收集，不据此扩大或回滚。",
+            "- `single_arm_observation`：单群阶段的稳定性观察，不等价于 A/B 通过。",
             "- `review`：先人工复核回退项和失败样例，必要时切回 `control`。",
             "- `pass`：仍需完成上面的人工清单后，才考虑扩大到更多群。",
         ]
@@ -226,9 +252,18 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="生成 M1/M2 灰度验收报告")
     parser.add_argument("--traces", required=True, help="bot 写出的匿名化 JSONL trace")
     parser.add_argument("--output", default="docs/ROLLOUT_ACCEPTANCE.md")
-    parser.add_argument("--control-arm", default="control")
+    parser.add_argument(
+        "--control-arm",
+        default="default",
+        help="对照实验臂；未映射群在 trace 中记作 default",
+    )
     parser.add_argument("--treatment-arm", default="combined")
     parser.add_argument("--min-turns", type=int, default=30)
+    parser.add_argument(
+        "--single-arm",
+        action="store_true",
+        help="只有一个活跃实验群时，只报告实验臂绝对指标，不要求 control/default",
+    )
     parser.add_argument("--strict", action="store_true", help="insufficient_data/review 时返回非零退出码")
     args = parser.parse_args()
     trace_path = Path(args.traces)
@@ -238,6 +273,7 @@ def main() -> int:
         control_arm=args.control_arm,
         treatment_arm=args.treatment_arm,
         min_turns=args.min_turns,
+        single_arm=args.single_arm,
     )
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -248,12 +284,13 @@ def main() -> int:
                 "verdict": report["verdict"],
                 "total_turns": report["total_turns"],
                 "arm_counts": report["arm_counts"],
+                "mode": report["mode"],
                 "output": str(output),
             },
             ensure_ascii=False,
         )
     )
-    return 2 if args.strict and report["verdict"] != "pass" else 0
+    return 2 if args.strict and report["verdict"] in {"insufficient_data", "review"} else 0
 
 
 if __name__ == "__main__":
