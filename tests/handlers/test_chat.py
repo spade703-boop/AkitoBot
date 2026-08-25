@@ -420,6 +420,7 @@ async def test_pipeline_collect_turn_strips_trigger_and_keeps_event_identity():
     assert result.sender_nickname == "群名片"
     assert result.plain_text_content == "你好"
     assert result.has_image is False
+    assert len(result.request_id) == 12
 
 
 @pytest.mark.asyncio

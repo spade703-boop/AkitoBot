@@ -18,9 +18,11 @@ from nonebot_plugin_htmlrender import md_to_pic
 from ..core import (
     ALLOWED_CHAT_GROUPS,
     TRIGGER_NAMES,
+    current_request_id,
     get_memory_key,
     grant_safety_pass,
     parse_json_object,
+    record_parse_result,
     render_main_chat_prompt,
     rescue_field,
     rescue_tail_after_field,
@@ -342,7 +344,9 @@ def _parse_model_reply(raw_result: str, is_toya_context: bool) -> tuple[str, str
     try:
         response_data = parse_json_object(raw_result)
         if response_data is None:
+            record_parse_result(current_request_id(), success=False)
             raise json.JSONDecodeError("invalid json object", raw_result, 0)
+        record_parse_result(current_request_id(), success=True)
         inner_os = response_data.get("inner_os", "") or response_data.get("Inner_os", "") or response_data.get("内心OS", "")
         if inner_os:
             logger.info(f"🎭【小彰内心OS】: {inner_os}")

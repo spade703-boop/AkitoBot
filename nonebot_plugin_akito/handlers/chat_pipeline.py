@@ -33,6 +33,7 @@ from ..core import (
     check_sleep_status,
     classify_query_intent,
     describe_image,
+    finish_turn_trace,
     format_image_analysis_for_chat,
     format_relationship_context,
     get_daily_activity,
@@ -43,10 +44,18 @@ from ..core import (
     get_sleep_buffer_buff,
     get_toya_anchor,
     get_user_memory,
+    new_request_id,
     record_bot_message,
     record_bot_response,
+    record_context_sources,
+    record_intent,
+    record_memory_hit,
+    record_repeat_detection,
+    record_retry,
+    record_tool_call,
     save_memory,
     smart_search,
+    start_turn_trace,
     to_image_data,
 )
 
@@ -65,6 +74,7 @@ class IncomingTurn:
     has_reply: bool
     reply_target_is_toya: bool
     origin_sender: str
+    request_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -106,7 +116,13 @@ def _chat_module():
     return chat
 
 
-async def collect_turn_input(event: Event, bot: Bot, message: Message) -> IncomingTurn:
+async def collect_turn_input(
+    event: Event,
+    bot: Bot,
+    message: Message,
+    request_id: str | None = None,
+) -> IncomingTurn:
+    request_id = request_id or new_request_id()
     session_key = get_memory_key(event)
     uni_message = await UniMessage.generate(message=message, event=event, bot=bot)
 
@@ -194,6 +210,7 @@ async def collect_turn_input(event: Event, bot: Bot, message: Message) -> Incomi
         has_reply=has_reply,
         reply_target_is_toya=reply_target_is_toya,
         origin_sender=origin_sender,
+        request_id=request_id,
     )
 
 
@@ -327,9 +344,11 @@ async def prepare_turn(turn: IncomingTurn, sleep_instruction: str) -> PreparedTu
 
     toya_anchor = get_toya_anchor(is_wl2=is_wl2) if is_toya_context else ""
     query_intent = classify_query_intent(turn.plain_text_content)
+    record_intent(turn.request_id, query_intent.intent)
     is_info_request = query_intent.intent == "web_search"
     search_mode = chat._select_search_mode(query_intent, has_image=turn.has_image)
     long_term_facts = user_mem.get("long_term_facts", [])
+    record_memory_hit(turn.request_id, hit=bool(long_term_facts or user_mem.get("history")))
     long_term_memory_text = "\n".join(long_term_facts) if long_term_facts else "（暂无特殊记忆）"
     director_note = chat.build_director_note(
         turn.plain_text_content,
@@ -401,6 +420,26 @@ async def prepare_turn(turn: IncomingTurn, sleep_instruction: str) -> PreparedTu
     if format_breaker:
         tagged_user_msg_for_llm += format_breaker
     messages_list.append({"role": "user", "content": tagged_user_msg_for_llm})
+    context_sources = ["current_turn", "persona", "time_state", "interaction_rules"]
+    if user_mem.get("history"):
+        context_sources.append("recent_history")
+    if relationship_context:
+        context_sources.append("relationship")
+    if group_context:
+        context_sources.append("group_context")
+    if shared_prompt_context.script_examples:
+        context_sources.append("script_retrieval")
+    if shared_prompt_context.pjsk_block:
+        context_sources.append("pjsk_retrieval")
+    if long_term_facts:
+        context_sources.append("long_term_memory")
+    if valid_implants:
+        context_sources.append("temporary_state")
+    if turn.current_image_identity:
+        context_sources.append("vision")
+    if time_gap_awareness:
+        context_sources.append("time_gap")
+    record_context_sources(turn.request_id, context_sources)
     return PreparedTurn(
         turn=turn,
         user_mem=user_mem,
@@ -420,7 +459,14 @@ async def _dispatch_model(prepared: PreparedTurn) -> str:
     if prepared.search_mode == "forced":
         forced_query = prepared.query_intent.query or prepared.turn.plain_text_content.strip()
         chat.logger.info(f"🔑 明确搜索请求，强制触发联网搜索: [{forced_query}]")
+        search_started = time.perf_counter()
         search_result = await smart_search(forced_query)
+        record_tool_call(
+            prepared.turn.request_id,
+            name="search",
+            status="success" if search_result else "empty",
+            latency_ms=(time.perf_counter() - search_started) * 1000,
+        )
         messages_list[-1]["content"] += chat._build_search_aside(forced_query, search_result)
         return await call_deepseek_api(messages_list, force_json=True)
 
@@ -434,7 +480,14 @@ async def _dispatch_model(prepared: PreparedTurn) -> str:
                 query = ""
             chat.logger.info(f"🤖 Agent 主动触发搜索: [{query}]")
             if query:
+                search_started = time.perf_counter()
                 search_result = await smart_search(query)
+                record_tool_call(
+                    prepared.turn.request_id,
+                    name="search",
+                    status="success" if search_result else "empty",
+                    latency_ms=(time.perf_counter() - search_started) * 1000,
+                )
                 if not search_result:
                     search_result = chat._search_miss_note(query)
             messages_list.append(
@@ -512,6 +565,8 @@ async def post_process_reply(prepared: PreparedTurn, reply: ChatReply) -> ChatRe
     ]
     if result.strip() in [reply.strip() for reply in recent_bot_replies]:
         logger.warning("⚠️ 检测到复读！强制注入去重指令重新生成...")
+        record_repeat_detection(prepared.turn.request_id)
+        record_retry(prepared.turn.request_id)
         prepared.messages_list[-1]["content"] += (
             "\n🚫【紧急系统警告】：你刚才说过完全一样的话！"
             "这次必须从完全不同的角度切入，换一种表达方式，绝对不能重复！"
@@ -541,17 +596,26 @@ async def commit_turn(prepared: PreparedTurn, reply: ChatReply, bot_self_id: str
 
 
 async def run_chat_turn(event: Event, bot: Bot, message: Message) -> PipelineResult:
-    turn = await collect_turn_input(event, bot, message)
-    gate = decide_gate(turn)
-    if gate.skip_send:
-        return PipelineResult(text=None, delay_seconds=0, finish_silently=True)
-    if gate.text is not None:
-        return PipelineResult(text=gate.text, delay_seconds=gate.delay_seconds)
+    request_id = new_request_id()
+    start_turn_trace(request_id)
+    try:
+        turn = await collect_turn_input(event, bot, message, request_id=request_id)
+        gate = decide_gate(turn)
+        if gate.skip_send:
+            finish_turn_trace(request_id, outcome="silent")
+            return PipelineResult(text=None, delay_seconds=0, finish_silently=True)
+        if gate.text is not None:
+            finish_turn_trace(request_id, outcome="completed")
+            return PipelineResult(text=gate.text, delay_seconds=gate.delay_seconds)
 
-    prepared = await prepare_turn(turn, gate.sleep_instruction)
-    reply = await generate_reply(prepared)
-    reply = await post_process_reply(prepared, reply)
-    await commit_turn(prepared, reply, str(bot.self_id))
-    base_delay = _chat_module().random.uniform(0.8, 2.5)
-    typing_delay = min(len(reply.text) * 0.12, 5.0)
-    return PipelineResult(text=reply.text, delay_seconds=base_delay + typing_delay)
+        prepared = await prepare_turn(turn, gate.sleep_instruction)
+        reply = await generate_reply(prepared)
+        reply = await post_process_reply(prepared, reply)
+        await commit_turn(prepared, reply, str(bot.self_id))
+        base_delay = _chat_module().random.uniform(0.8, 2.5)
+        typing_delay = min(len(reply.text) * 0.12, 5.0)
+        finish_turn_trace(request_id, outcome="completed")
+        return PipelineResult(text=reply.text, delay_seconds=base_delay + typing_delay)
+    except Exception:
+        finish_turn_trace(request_id, outcome="failed")
+        raise

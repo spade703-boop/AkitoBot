@@ -17,7 +17,17 @@ from nonebot.log import logger
 from openai import AsyncOpenAI
 
 from .paths import get_data_dir
-from .types import BaseUserRecord, GameData, GroupRecord, MemorySession
+from .types import (
+    BaseUserRecord,
+    ContextBlock,
+    ConversationState,
+    GameData,
+    GroupRecord,
+    MemorySession,
+    ResponseEnvelope,
+    ToolResult,
+    Turn,
+)
 
 load_dotenv()  # 显式将 .env 写入 os.environ（NoneBot2 自身不做这一步）
 
@@ -120,6 +130,24 @@ from .time_awareness import (
 from .retrieval import (
     RetrievalContext, RetrievalResult, build_retrieval_context, retrieve, retrieve_result, reload_indices,
 )
+from .observability import (
+    TurnTrace,
+    current_request_id,
+    finish_turn_trace,
+    get_turn_trace,
+    new_request_id,
+    record_context_sources,
+    record_intent,
+    record_memory_hit,
+    record_model_call,
+    record_parse_result,
+    record_repeat_detection,
+    record_retry,
+    record_tool_call,
+    reset_metrics,
+    snapshot_metrics,
+    start_turn_trace,
+)
 
 # ── 统一公共导出面（显式声明，避免 import * 时泄漏内部名） ────────────────
 __all__ = [
@@ -132,6 +160,7 @@ __all__ = [
     "GROUP_IMAGE_PERMISSIONS",
     # memory
     "BaseUserRecord", "GameData", "GroupRecord", "MemorySession",
+    "Turn", "ConversationState", "ContextBlock", "ToolResult", "ResponseEnvelope",
     "MEMORY_DB", "MessageRow", "load_memory", "save_memory", "get_memory_key", "get_user_memory",
     "MessageReader", "delete_group_messages", "get_group_context", "open_message_reader",
     "parse_sqlite_timestamp", "record_bot_message", "record_message",
@@ -165,4 +194,9 @@ __all__ = [
     "record_bot_response", "build_time_gap_prompt",
     # retrieval
     "RetrievalContext", "RetrievalResult", "build_retrieval_context", "retrieve", "retrieve_result", "reload_indices",
+    # observability
+    "TurnTrace", "new_request_id", "start_turn_trace", "get_turn_trace", "finish_turn_trace", "current_request_id",
+    "record_intent", "record_context_sources", "record_model_call", "record_parse_result",
+    "record_repeat_detection", "record_memory_hit", "record_retry", "record_tool_call",
+    "snapshot_metrics", "reset_metrics",
 ]

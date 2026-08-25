@@ -17,6 +17,7 @@ from nonebot.log import logger
 from PIL import Image as PILImage
 
 from . import SILICONFLOW_API_KEY, TAVILY_API_KEY, ZHIPU_API_KEY, client, embedding_client, vision_client
+from .observability import current_request_id, record_model_call
 
 # ── LLM JSON 输出的提取与救援（chat.py / impression.py 共用） ──────────────────
 
@@ -100,6 +101,7 @@ async def expand_query_for_retrieval(message: str) -> str | None:
             ),
             timeout=6.0,
         )
+        record_model_call(current_request_id(), usage=getattr(resp, "usage", None))
         text = (resp.choices[0].message.content or "").strip()
         return text or None
     except Exception as e:
@@ -136,6 +138,7 @@ async def call_deepseek_api(
             client.chat.completions.create(**kwargs),
             timeout=timeout,
         )
+        record_model_call(current_request_id(), usage=getattr(response, "usage", None))
         return response.choices[0].message.content
     except asyncio.TimeoutError:
         logger.error("API 请求超时熔断！")
@@ -164,6 +167,7 @@ async def call_deepseek_api_agent(messages, tools: list, model_name="deepseek-v4
             ),
             timeout=15.0,
         )
+        record_model_call(current_request_id(), usage=getattr(response, "usage", None))
         return response.choices[0].message
     except asyncio.TimeoutError:
         logger.error("Agent API 请求超时熔断")
@@ -483,6 +487,7 @@ async def _run_ocr_pass(images: list[bytes]) -> str:
             ),
             timeout=_OCR_TIMEOUT,
         )
+        record_model_call(current_request_id(), usage=getattr(response, "usage", None))
         text = (response.choices[0].message.content or "").strip()
         if not text or text == "无":
             return ""
@@ -517,6 +522,7 @@ async def describe_image(images: list[bytes]) -> ImageAnalysis | None:
                 ),
                 timeout=_VISION_TIMEOUT,
             )
+            record_model_call(current_request_id(), usage=getattr(response, "usage", None))
         except asyncio.TimeoutError:
             logger.error(f"❌ 智谱视觉调用超时（{_VISION_TIMEOUT:.0f}s）")
             return None
