@@ -867,7 +867,7 @@ um_cmd = on_command(
 @um_cmd.handle()
 async def _(bot: Bot, event: GroupMessageEvent):
     trace_request_id = new_request_id()
-    start_turn_trace(trace_request_id, surface="impression", stage="analysis")
+    start_turn_trace(trace_request_id, group_id=event.group_id, surface="impression", stage="analysis")
     record_intent(trace_request_id, "impression")
     group_id = str(event.group_id)
     rollout = resolve_rollout(group_id)
@@ -1334,7 +1334,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
     )
 
     trace_request_id = new_request_id()
-    start_turn_trace(trace_request_id, surface="auto_chat", stage="response")
+    start_turn_trace(trace_request_id, group_id=event.group_id, surface="auto_chat", stage="response")
     record_intent(trace_request_id, "auto_chat")
     record_rollout(
         trace_request_id,

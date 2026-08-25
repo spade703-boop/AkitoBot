@@ -409,9 +409,11 @@ def summarize_traces(traces: list[dict[str, Any]]) -> dict[str, Any]:
     surfaces = Counter(str(item.get("surface") or "main_chat") for item in traces)
     stages = Counter(str(item.get("stage") or "response") for item in traces)
     experiment_arms = Counter(str(item.get("experiment_arm") or "default") for item in traces)
+    groups = Counter(str(item.get("group_id") or "unknown") for item in traces)
     summary["surface_counts"] = dict(sorted(surfaces.items()))
     summary["stage_counts"] = dict(sorted(stages.items()))
     summary["experiment_arm_counts"] = dict(sorted(experiment_arms.items()))
+    summary["group_counts"] = dict(sorted(groups.items()))
     summary["surface_metrics"] = {
         surface: _summarize_trace_group(
             [item for item in traces if str(item.get("surface") or "main_chat") == surface]

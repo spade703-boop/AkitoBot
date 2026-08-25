@@ -22,7 +22,7 @@ from nonebot_plugin_akito.core.observability import (
 
 def test_turn_trace_collects_structured_fields_and_metrics():
     reset_metrics()
-    trace = start_turn_trace("m0-test-001", surface="auto_chat", stage="response")
+    trace = start_turn_trace("m0-test-001", group_id="1041487251", surface="auto_chat", stage="response")
     set_trace_stage(trace.request_id, "reply")
     record_context_shadow(
         trace.request_id,
@@ -65,6 +65,9 @@ def test_turn_trace_collects_structured_fields_and_metrics():
 
     assert payload is not None
     assert payload["surface"] == "auto_chat"
+    assert payload["trace_schema_version"] == 1
+    assert payload["recorded_at"].endswith("+00:00")
+    assert payload["group_id"] == "1041487251"
     assert payload["stage"] == "reply"
     assert payload["context_shadow"][0]["selected_sources"] == ["current_turn"]
     assert payload["intent"] == "web_search"

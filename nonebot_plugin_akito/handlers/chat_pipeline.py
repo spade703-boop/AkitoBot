@@ -721,7 +721,7 @@ async def commit_turn(prepared: PreparedTurn, reply: ChatReply, bot_self_id: str
 
 async def run_chat_turn(event: Event, bot: Bot, message: Message) -> PipelineResult:
     request_id = new_request_id()
-    start_turn_trace(request_id, surface="main_chat", stage="response")
+    start_turn_trace(request_id, group_id=getattr(event, "group_id", None), surface="main_chat", stage="response")
     try:
         turn = await collect_turn_input(event, bot, message, request_id=request_id)
         gate = decide_gate(turn)

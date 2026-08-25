@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from contextvars import ContextVar
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
@@ -21,6 +22,11 @@ class TurnTrace:
     """In-memory trace for one turn; user text is intentionally not retained."""
 
     request_id: str
+    trace_schema_version: int = 1
+    recorded_at: str = field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+    )
+    group_id: str = ""
     surface: str = "main_chat"
     stage: str = "response"
     started_at: float = field(default_factory=time.perf_counter)
@@ -92,12 +98,14 @@ def new_request_id() -> str:
 def start_turn_trace(
     request_id: str | None = None,
     *,
+    group_id: str | int | None = None,
     surface: str = "main_chat",
     stage: str = "response",
 ) -> TurnTrace:
     """Start and register a turn trace."""
     trace = TurnTrace(
         request_id=request_id or new_request_id(),
+        group_id=str(group_id) if group_id is not None else "",
         surface=surface or "main_chat",
         stage=stage or "response",
     )
@@ -274,7 +282,7 @@ def finish_turn_trace(request_id: str, *, outcome: str) -> dict[str, Any] | None
         arm = trace.experiment_arm or "default"
         _accumulate_metrics(_ARM_METRICS.setdefault(arm, _new_metric_bucket()), trace)
         _persist_trace(payload)
-    logger.info("conversation_trace=%s", json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
+    logger.info("conversation_trace={}", json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
     if _CURRENT_REQUEST_ID.get() == request_id:
         _CURRENT_REQUEST_ID.set(None)
     return payload

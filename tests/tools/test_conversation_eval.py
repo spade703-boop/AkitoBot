@@ -135,6 +135,7 @@ def test_trace_summary_calculates_runtime_rates_and_percentiles():
                 "parse_success": True,
                 "memory_hit": True,
                 "experiment_arm": "combined",
+                "group_id": "1041487251",
                 "event_retrieval_status": "hit",
                 "fallback_reason": [],
                 "repeat_detected": False,
@@ -153,6 +154,7 @@ def test_trace_summary_calculates_runtime_rates_and_percentiles():
                 "parse_success": False,
                 "memory_hit": False,
                 "experiment_arm": "control",
+                "group_id": "691188576",
                 "event_retrieval_status": "disabled",
                 "fallback_reason": ["legacy_prompt_fallback"],
                 "repeat_detected": True,
@@ -175,5 +177,6 @@ def test_trace_summary_calculates_runtime_rates_and_percentiles():
     assert summary["context_shadow_reports"] == 1
     assert summary["context_shadow_omitted_sources"] == {"old_history": 1}
     assert summary["experiment_arm_counts"] == {"combined": 1, "control": 1}
+    assert summary["group_counts"] == {"1041487251": 1, "691188576": 1}
     assert summary["experiment_arm_metrics"]["combined"]["avg_tokens"] == 15.0
     assert summary["experiment_arm_surface_metrics"]["control"]["auto_chat"]["failed_turns"] == 1
