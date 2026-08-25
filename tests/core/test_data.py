@@ -117,6 +117,7 @@ def test_reload_assets_updates_existing_containers_and_counts_hooks():
         "SCRIPT_DB": list(data.SCRIPT_DB),
         "RELATIONSHIP_DATA": list(data.RELATIONSHIP_DATA),
         "SLEEP_DB": copy.deepcopy(data.SLEEP_DB),
+        "EVENT_MEMORY_DB": copy.deepcopy(data.EVENT_MEMORY_DB),
     }
     hook_calls: list[str] = []
 
@@ -162,7 +163,7 @@ def test_reload_assets_updates_existing_containers_and_counts_hooks():
         ):
             count = data.reload_assets()
 
-        assert count == 15
+        assert count == 16
         assert data.DIRECTOR_DB == {"director": "new"}
         assert data.DAILY_ROUTINE == {"morning": [{"status": "练习中"}]}
         assert data.WL2_ROUTINE == {"night": ["沉默"]}
@@ -192,3 +193,5 @@ def test_reload_assets_updates_existing_containers_and_counts_hooks():
         data.RELATIONSHIP_DATA.extend(snapshot["RELATIONSHIP_DATA"])
         data.SLEEP_DB.clear()
         data.SLEEP_DB.update(snapshot["SLEEP_DB"])
+        data.EVENT_MEMORY_DB.clear()
+        data.EVENT_MEMORY_DB.update(snapshot["EVENT_MEMORY_DB"])

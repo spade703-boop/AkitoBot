@@ -22,6 +22,7 @@ from ...core import (
     PROMPTS_DB,
     RELATIONSHIP_DATA,
     TZ_CN,
+    build_event_memory_context,
     build_shared_prompt_context,
     call_deepseek_api,
     get_base_persona,
@@ -37,6 +38,7 @@ from ...core import (
     parse_sqlite_timestamp,
     record_bot_message,
     record_context_shadow,
+    record_event_memory,
     record_message,
     render_auto_chat_prompt,
     render_impression_analysis_prompt,
@@ -48,8 +50,11 @@ from ...core import (
     record_context_sources,
     record_intent,
     record_parse_result,
+    record_rollout,
+    mode_is_active,
+    resolve_rollout,
+    select_context_for_mode,
     set_trace_stage,
-    shadow_context,
     start_turn_trace,
 )
 
@@ -474,6 +479,7 @@ def _build_impression_reply_system_prompt(
     target_name: str,
     is_querying_other: bool,
     relationship_context: str = "",
+    event_memory: str = "",
 ) -> str:
     return render_impression_reply_prompt(
         persona=persona,
@@ -484,6 +490,7 @@ def _build_impression_reply_system_prompt(
         limited_max_length=IMPRESSION_LIMITED_MAX_LENGTH,
         candidate_count=IMPRESSION_CANDIDATE_COUNT,
         relationship_context=relationship_context,
+        event_memory=event_memory,
     )
 
 
@@ -501,6 +508,7 @@ def _build_auto_chat_system_prompt(
     cool_guy_filter: str,
     task_logic: str,
     inner_os_guide: str,
+    event_memory: str = "",
 ) -> str:
     """Compatibility wrapper for the core auto-chat renderer."""
     return render_auto_chat_prompt(
@@ -516,6 +524,7 @@ def _build_auto_chat_system_prompt(
         cool_guy_filter=cool_guy_filter,
         task_logic=task_logic,
         inner_os_guide=inner_os_guide,
+        event_memory=event_memory,
     )
 
 
@@ -861,6 +870,13 @@ async def _(bot: Bot, event: GroupMessageEvent):
     start_turn_trace(trace_request_id, surface="impression", stage="analysis")
     record_intent(trace_request_id, "impression")
     group_id = str(event.group_id)
+    rollout = resolve_rollout(group_id)
+    record_rollout(
+        trace_request_id,
+        experiment_arm=rollout.arm,
+        m1_context_mode=rollout.m1_context_mode,
+        m2_memory_mode=rollout.m2_memory_mode,
+    )
 
     target_id, target_name, is_querying_other, is_querying_bot = _resolve_impression_target(event, str(bot.self_id))
 
@@ -917,10 +933,27 @@ async def _(bot: Bot, event: GroupMessageEvent):
         context_blocks,
         target_id=target_id,
     )
+    event_memory, event_memory_result = build_event_memory_context(
+        f"{event.get_plaintext()}\n{target_evidence_source}",
+        mode=rollout.m2_memory_mode,
+    )
+    record_event_memory(
+        trace_request_id,
+        candidates=event_memory_result.candidates,
+        confidences=event_memory_result.confidences,
+        status=event_memory_result.status,
+        reason=event_memory_result.reason,
+        top_score=event_memory_result.top_score,
+        score_margin=event_memory_result.score_margin,
+        candidate_count=event_memory_result.candidate_count,
+        fallback_reason=event_memory_result.reason if event_memory_result.status == "unavailable" else "",
+    )
     relationship_context = _build_impression_relationship_context(target_evidence_source)
     context_sources = ["impression_history", "impression_context", "group_context"]
     if relationship_context:
         context_sources.append("relationship")
+    if event_memory:
+        context_sources.append("event_memory")
     if recent_impression_replies:
         context_sources.append("recent_impression_replies")
 
@@ -949,17 +982,28 @@ async def _(bot: Bot, event: GroupMessageEvent):
     if wl2_overlay:
         context_sources.append("temporary_state")
     record_context_sources(trace_request_id, context_sources)
-    analysis_shadow = shadow_context(
-        [
-            {"kind": "impression_history", "source": "impression_history", "content": history_text, "priority": 850},
-            {"kind": "impression_context", "source": "impression_context", "content": context_text, "priority": 800},
-            {"kind": "relationship", "source": "relationship", "content": relationship_context, "priority": 900},
-            {"kind": "recent_impression_replies", "source": "recent_impression_replies", "content": "\n".join(recent_impression_replies), "priority": 500},
-            {"kind": "persona", "source": "persona", "content": persona, "priority": 950},
-            {"kind": "temporary_state", "source": "temporary_state", "content": state_overlay_prompt, "priority": 980},
-        ],
+    analysis_blocks = [
+        {"kind": "impression_history", "source": "impression_history", "content": history_text, "priority": 850},
+        {"kind": "impression_context", "source": "impression_context", "content": context_text, "priority": 800},
+        {"kind": "relationship", "source": "relationship", "content": relationship_context, "priority": 900},
+        {"kind": "recent_impression_replies", "source": "recent_impression_replies", "content": "\n".join(recent_impression_replies), "priority": 500},
+        {"kind": "persona", "source": "persona", "content": persona, "priority": 950},
+        {"kind": "temporary_state", "source": "temporary_state", "content": state_overlay_prompt, "priority": 980},
+    ]
+    analysis_selected, analysis_shadow = select_context_for_mode(
+        analysis_blocks,
         stage="impression_analysis",
+        active=mode_is_active(rollout.m1_context_mode),
     )
+    analysis_sources = {str(block["source"]) for block in analysis_selected}
+    if "impression_history" not in analysis_sources:
+        history_text = ""
+    if "impression_context" not in analysis_sources:
+        context_text = ""
+    if "relationship" not in analysis_sources:
+        relationship_context = ""
+    if "recent_impression_replies" not in analysis_sources:
+        recent_impression_replies = []
     record_context_shadow(trace_request_id, analysis_shadow.as_dict())
 
     try:
@@ -1032,25 +1076,34 @@ async def _(bot: Bot, event: GroupMessageEvent):
 
         if analysis is not None:
             set_trace_stage(trace_request_id, "reply")
-            reply_shadow = shadow_context(
-                [
-                    {"kind": "persona", "source": "persona", "content": persona, "priority": 950},
-                    {"kind": "relationship", "source": "relationship", "content": relationship_context, "priority": 900},
-                    {"kind": "analysis_result", "source": "analysis_result", "content": json.dumps(asdict(analysis), ensure_ascii=False), "priority": 850},
-                    {"kind": "temporary_state", "source": "temporary_state", "content": state_overlay_prompt, "priority": 980},
-                ],
+            reply_blocks = [
+                {"kind": "persona", "source": "persona", "content": persona, "priority": 950},
+                {"kind": "relationship", "source": "relationship", "content": relationship_context, "priority": 900},
+                {"kind": "analysis_result", "source": "analysis_result", "content": json.dumps(asdict(analysis), ensure_ascii=False), "priority": 850},
+                {"kind": "event_memory", "source": "event_memory", "content": event_memory, "priority": 760},
+                {"kind": "temporary_state", "source": "temporary_state", "content": state_overlay_prompt, "priority": 980},
+            ]
+            reply_selected, reply_shadow = select_context_for_mode(
+                reply_blocks,
                 stage="impression_reply",
+                active=mode_is_active(rollout.m1_context_mode),
             )
+            reply_sources = {str(block["source"]) for block in reply_selected}
+            persona_for_reply = persona if "persona" in reply_sources else ""
+            relationship_for_reply = relationship_context if "relationship" in reply_sources else ""
+            event_for_reply = event_memory if "event_memory" in reply_sources else ""
+            state_for_reply = state_overlay_prompt if "temporary_state" in reply_sources else ""
             record_context_shadow(trace_request_id, reply_shadow.as_dict())
             expression_messages = [
                 {
                     "role": "system",
                     "content": _build_impression_reply_system_prompt(
-                        persona=persona,
-                        state_overlay_prompt=state_overlay_prompt,
+                        persona=persona_for_reply,
+                        state_overlay_prompt=state_for_reply,
                         target_name=target_name,
                         is_querying_other=is_querying_other,
-                        relationship_context=relationship_context,
+                        relationship_context=relationship_for_reply,
+                        event_memory=event_for_reply,
                     ),
                 },
                 {
@@ -1163,6 +1216,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
     if random.random() > CHAT_PROBABILITY: return
 
     AUTO_CHAT_COOLDOWN[group_id] = now_ts
+    rollout = resolve_rollout(group_id)
 
     reply_segment = MessageSegment.reply(event.message_id)
     group_context = await get_group_context(
@@ -1184,6 +1238,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
         else ""
     )
     song_info = shared_prompt_context.song_mention
+    event_memory, event_memory_result = build_event_memory_context(msg, mode=rollout.m2_memory_mode)
 
     cool_guy_filter = PROMPTS_DB.get("cool_guy_filter", "")
 
@@ -1240,47 +1295,77 @@ async def _(bot: Bot, event: GroupMessageEvent):
         inner_os_guide = f'分析过程：1.这句话是对我说的吗？2.当前消息"{msg}"本身有槽点吗？3.决定回应当前消息或继续潜水。'
         user_content = f'你在群里潜水，看到【{current_user_name}】说了："{msg}"。这句话不是对你说的。决定是否插嘴点评，严格按JSON格式输出。'
 
+    auto_context_blocks = [
+        {"kind": "current_message", "source": "current_message", "content": msg, "priority": 1000},
+        {"kind": "persona", "source": "persona", "content": persona, "priority": 950},
+        {"kind": "group_context", "source": "group_context", "content": group_context, "priority": 700},
+        {"kind": "relationship", "source": "relationship", "content": relation_info, "priority": 850},
+        {"kind": "script_retrieval", "source": "script_retrieval", "content": script_examples, "priority": 650},
+        {"kind": "event_memory", "source": "event_memory", "content": event_memory, "priority": 760},
+        {"kind": "pjsk_retrieval", "source": "pjsk_retrieval", "content": pjsk_block, "priority": 550},
+        {"kind": "song_info", "source": "song_info", "content": song_info, "priority": 600},
+        {"kind": "cool_guy_filter", "source": "cool_guy_filter", "content": cool_guy_filter, "priority": 700},
+        {"kind": "toya_anchor", "source": "toya_anchor", "content": toya_anchor, "priority": 800},
+    ]
+    auto_selected, auto_shadow = select_context_for_mode(
+        auto_context_blocks,
+        stage="auto_chat",
+        active=mode_is_active(rollout.m1_context_mode),
+    )
+    auto_sources = {str(block["source"]) for block in auto_selected}
+
+    def auto_selected_text(source: str, value: str) -> str:
+        return value if source in auto_sources else ""
+
     system_prompt = _build_auto_chat_system_prompt(
-        persona=persona,
+        persona=auto_selected_text("persona", persona),
         time_str=time_str,
-        toya_anchor=toya_anchor,
+        toya_anchor=auto_selected_text("toya_anchor", toya_anchor),
         scene_desc=scene_desc,
-        group_context=group_context,
-        relation_info=relation_info,
-        song_info=song_info,
-        script_examples=script_examples,
-        pjsk_block=pjsk_block,
-        cool_guy_filter=cool_guy_filter,
+        group_context=auto_selected_text("group_context", group_context),
+        relation_info=auto_selected_text("relationship", relation_info),
+        song_info=auto_selected_text("song_info", song_info),
+        script_examples=auto_selected_text("script_retrieval", script_examples),
+        pjsk_block=auto_selected_text("pjsk_retrieval", pjsk_block),
+        cool_guy_filter=auto_selected_text("cool_guy_filter", cool_guy_filter),
         task_logic=task_logic,
         inner_os_guide=inner_os_guide,
+        event_memory=auto_selected_text("event_memory", event_memory),
     )
 
     trace_request_id = new_request_id()
     start_turn_trace(trace_request_id, surface="auto_chat", stage="response")
     record_intent(trace_request_id, "auto_chat")
+    record_rollout(
+        trace_request_id,
+        experiment_arm=rollout.arm,
+        m1_context_mode=rollout.m1_context_mode,
+        m2_memory_mode=rollout.m2_memory_mode,
+    )
+    record_event_memory(
+        trace_request_id,
+        candidates=event_memory_result.candidates,
+        confidences=event_memory_result.confidences,
+        status=event_memory_result.status,
+        reason=event_memory_result.reason,
+        top_score=event_memory_result.top_score,
+        score_margin=event_memory_result.score_margin,
+        candidate_count=event_memory_result.candidate_count,
+        fallback_reason=event_memory_result.reason if event_memory_result.status == "unavailable" else "",
+    )
     context_sources = ["current_message", "group_context", "persona"]
     if relation_info:
         context_sources.append("relationship")
     if script_examples:
         context_sources.append("script_retrieval")
+    if event_memory:
+        context_sources.append("event_memory")
     if pjsk_block:
         context_sources.append("pjsk_retrieval")
     if toya_anchor:
         context_sources.append("toya_anchor")
     record_context_sources(trace_request_id, context_sources)
-    context_shadow = shadow_context(
-        [
-            {"kind": "current_message", "source": "current_message", "content": msg, "priority": 1000},
-            {"kind": "persona", "source": "persona", "content": persona, "priority": 950},
-            {"kind": "group_context", "source": "group_context", "content": group_context, "priority": 700},
-            {"kind": "relationship", "source": "relationship", "content": relation_info, "priority": 850},
-            {"kind": "script_retrieval", "source": "script_retrieval", "content": script_examples, "priority": 650},
-            {"kind": "pjsk_retrieval", "source": "pjsk_retrieval", "content": pjsk_block, "priority": 550},
-            {"kind": "toya_anchor", "source": "toya_anchor", "content": toya_anchor, "priority": 800},
-        ],
-        stage="auto_chat",
-    )
-    record_context_shadow(trace_request_id, context_shadow.as_dict())
+    record_context_shadow(trace_request_id, auto_shadow.as_dict())
 
     try:
         raw_result = await call_deepseek_api(

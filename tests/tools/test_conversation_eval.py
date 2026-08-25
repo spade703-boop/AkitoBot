@@ -134,6 +134,9 @@ def test_trace_summary_calculates_runtime_rates_and_percentiles():
                 "total_tokens": 15,
                 "parse_success": True,
                 "memory_hit": True,
+                "experiment_arm": "combined",
+                "event_retrieval_status": "hit",
+                "fallback_reason": [],
                 "repeat_detected": False,
                 "retries": 0,
                 "context_shadow": [
@@ -149,6 +152,9 @@ def test_trace_summary_calculates_runtime_rates_and_percentiles():
                 "model_calls": 1,
                 "parse_success": False,
                 "memory_hit": False,
+                "experiment_arm": "control",
+                "event_retrieval_status": "disabled",
+                "fallback_reason": ["legacy_prompt_fallback"],
                 "repeat_detected": True,
                 "retries": 1,
                 "tool_calls": [{"name": "search", "status": "empty"}],
@@ -159,6 +165,8 @@ def test_trace_summary_calculates_runtime_rates_and_percentiles():
     assert summary["total_turns"] == 2
     assert summary["parse_success_rate"] == 0.5
     assert summary["memory_hit_rate"] == 0.5
+    assert summary["event_hit_rate"] == 1.0
+    assert summary["fallback_rate"] == 0.5
     assert summary["search_success_rate"] == 0.5
     assert summary["p50_latency_ms"] == 150.0
     assert summary["p95_latency_ms"] == 195.0
@@ -166,3 +174,6 @@ def test_trace_summary_calculates_runtime_rates_and_percentiles():
     assert summary["surface_metrics"]["auto_chat"]["silent_turns"] == 0
     assert summary["context_shadow_reports"] == 1
     assert summary["context_shadow_omitted_sources"] == {"old_history": 1}
+    assert summary["experiment_arm_counts"] == {"combined": 1, "control": 1}
+    assert summary["experiment_arm_metrics"]["combined"]["avg_tokens"] == 15.0
+    assert summary["experiment_arm_surface_metrics"]["control"]["auto_chat"]["failed_turns"] == 1

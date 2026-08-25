@@ -304,6 +304,7 @@ def _build_final_system_prompt(
     schema_inner_os: str,
     schema_action: str,
     schema_dialogue: str,
+    event_memory: str = "",
 ) -> str:
     """Compatibility wrapper for the core main-chat renderer."""
     return render_main_chat_prompt(
@@ -334,6 +335,7 @@ def _build_final_system_prompt(
         schema_inner_os=schema_inner_os,
         schema_action=schema_action,
         schema_dialogue=schema_dialogue,
+        event_memory=event_memory,
     )
 
 

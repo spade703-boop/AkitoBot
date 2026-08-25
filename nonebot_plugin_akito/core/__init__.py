@@ -95,6 +95,7 @@ from .data import (
     SCRIPT_DB, REACTIONS_DB, PROMPTS_DB, DIRECTOR_DB,
     DAILY_ROUTINE, WL2_ROUTINE,
     SONG_DATA, RELATIONSHIP_DATA, SLEEP_DB,
+    EVENT_MEMORY_DB,
 )
 # 注：PJSK_KNOWLEDGE_BASE / PJSK_INTRO 是会被热重载重新赋值的 str，
 # 不做模块级再导出（避免旧引用失效）；需要时经 data.get_pjsk_knowledge_base() 等 getter 取。
@@ -138,6 +139,8 @@ from .observability import (
     new_request_id,
     record_context_sources,
     record_context_shadow,
+    record_event_memory,
+    record_fallback_reason,
     record_intent,
     record_memory_hit,
     record_model_call,
@@ -145,6 +148,7 @@ from .observability import (
     record_repeat_detection,
     record_retry,
     record_tool_call,
+    record_rollout,
     reset_metrics,
     set_trace_stage,
     snapshot_metrics,
@@ -155,8 +159,17 @@ from .context_orchestrator import (
     ContextShadowReport,
     build_context_blocks,
     estimate_token_count,
+    select_context_for_mode,
     shadow_context,
 )
+from .event_memory import (
+    EventMemoryHit,
+    EventMemoryResult,
+    build_event_memory_context,
+    format_event_memory_context,
+    retrieve_event_memories,
+)
+from .rollout import RolloutConfig, mode_is_active, mode_is_shadowing, resolve_rollout, rollout_as_dict
 
 # ── 统一公共导出面（显式声明，避免 import * 时泄漏内部名） ────────────────
 __all__ = [
@@ -177,7 +190,7 @@ __all__ = [
     "load_json_file", "load_prompt_template", "reload_assets", "find_data_path", "get_data_dir",
     "SCRIPT_DB", "REACTIONS_DB", "PROMPTS_DB", "DIRECTOR_DB",
     "DAILY_ROUTINE", "WL2_ROUTINE", "SONG_DATA", "RELATIONSHIP_DATA",
-    "SLEEP_DB",
+    "SLEEP_DB", "EVENT_MEMORY_DB",
     # life_state
     "AKITO_STATUS", "STATE_DURATION",
     "grant_safety_pass", "get_safe_until", "get_last_complaint", "set_last_complaint",
@@ -200,14 +213,16 @@ __all__ = [
     "render_main_chat_prompt", "render_impression_analysis_prompt", "render_impression_reply_prompt",
     "render_impression_prompt", "render_auto_chat_prompt",
     # context orchestration
-    "ContextOrchestrator", "ContextShadowReport", "build_context_blocks", "estimate_token_count", "shadow_context",
+    "ContextOrchestrator", "ContextShadowReport", "build_context_blocks", "estimate_token_count", "select_context_for_mode", "shadow_context",
+    "EventMemoryHit", "EventMemoryResult", "build_event_memory_context", "format_event_memory_context", "retrieve_event_memories",
+    "RolloutConfig", "mode_is_active", "mode_is_shadowing", "resolve_rollout", "rollout_as_dict",
     # time_awareness
     "record_bot_response", "build_time_gap_prompt",
     # retrieval
     "RetrievalContext", "RetrievalResult", "build_retrieval_context", "retrieve", "retrieve_result", "reload_indices",
     # observability
     "TurnTrace", "new_request_id", "start_turn_trace", "get_turn_trace", "finish_turn_trace", "current_request_id",
-    "record_intent", "record_context_sources", "record_context_shadow", "record_model_call", "record_parse_result",
+    "record_intent", "record_context_sources", "record_context_shadow", "record_event_memory", "record_fallback_reason", "record_rollout", "record_model_call", "record_parse_result",
     "record_repeat_detection", "record_memory_hit", "record_retry", "record_tool_call",
     "set_trace_stage", "snapshot_metrics", "reset_metrics",
 ]

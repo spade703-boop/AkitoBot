@@ -152,6 +152,7 @@ def render_main_chat_prompt(
     schema_inner_os: str,
     schema_action: str,
     schema_dialogue: str,
+    event_memory: str = "",
 ) -> str:
     """Render the main chat system prompt using the shared five-section frame."""
     frame = PromptFrame(
@@ -169,6 +170,7 @@ def render_main_chat_prompt(
             base_persona,
             relationship_context,
             script_examples,
+            event_memory,
             f"🎮【PJSK 世界观/黑话库】：\n{pjsk_block}",
             song_memories,
             f"🧠【你的长期记忆】：\n{long_term_memory_text}",
@@ -254,6 +256,7 @@ def render_impression_reply_prompt(
     limited_max_length: int,
     candidate_count: int = 3,
     relationship_context: str = "",
+    event_memory: str = "",
 ) -> str:
     """Render the persona-aware expression stage for group impressions."""
     if is_querying_other:
@@ -290,7 +293,11 @@ def render_impression_reply_prompt(
     frame = PromptFrame(
         system_header="【系统级绝对指令：群印象任务】",
         environment_blocks=(state_overlay_prompt,),
-        role_knowledge_blocks=(persona, relationship_context or "本次没有可用的人物关系资料；不要凭空补充角色关系。"),
+        role_knowledge_blocks=(
+            persona,
+            relationship_context or "本次没有可用的人物关系资料；不要凭空补充角色关系。",
+            event_memory,
+        ),
         task_context_blocks=(task_context,),
         task_rule_blocks=(task_rules,),
     )
@@ -316,6 +323,7 @@ def render_impression_prompt(
     specific_max_length: int,
     limited_max_length: int,
     relationship_context: str = "",
+    event_memory: str = "",
 ) -> str:
     """Compatibility wrapper for the persona-aware impression renderer."""
     return render_impression_reply_prompt(
@@ -326,6 +334,7 @@ def render_impression_prompt(
         specific_max_length=specific_max_length,
         limited_max_length=limited_max_length,
         relationship_context=relationship_context,
+        event_memory=event_memory,
     )
 
 
@@ -343,6 +352,7 @@ def render_auto_chat_prompt(
     cool_guy_filter: str,
     task_logic: str,
     inner_os_guide: str,
+    event_memory: str = "",
 ) -> str:
     """Render the random interjection system prompt using the shared frame."""
     frame = PromptFrame(
@@ -352,6 +362,7 @@ def render_auto_chat_prompt(
             persona,
             f"【人际资料】{relation_info}",
             script_examples,
+            event_memory,
             f"🎮【PJSK 世界观/黑话库】：\n{pjsk_block}",
             song_info,
             cool_guy_filter,

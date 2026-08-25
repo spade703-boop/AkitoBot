@@ -131,6 +131,7 @@ DAILY_ROUTINE   = load_json_file("akito_routine.json", {
 WL2_ROUTINE     = load_json_file("wl2_routine.json", {"late_night": ["独自一人，在沉默中发呆。"]})
 SONG_DATA         = load_json_file("akito_songs.json", {})
 RELATIONSHIP_DATA = load_json_file("akito_relationships.json", [])
+EVENT_MEMORY_DB = _load_optional_json("akito_event_memories.json") or {}
 
 
 def get_pjsk_knowledge_base() -> str:
@@ -211,6 +212,11 @@ def reload_assets() -> int:
     new_rels = load_json_file("akito_relationships.json", [])
     RELATIONSHIP_DATA.clear()
     RELATIONSHIP_DATA.extend(new_rels)
+    count += 1
+
+    new_event_memories = _load_optional_json("akito_event_memories.json") or {}
+    EVENT_MEMORY_DB.clear()
+    EVENT_MEMORY_DB.update(new_event_memories)
     count += 1
 
     new_sleep = load_json_file("akito_sleep.json", {})

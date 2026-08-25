@@ -26,6 +26,8 @@ from ..core import (
     ImageAnalysis,
     MemorySession,
     QueryIntent,
+    RolloutConfig,
+    build_event_memory_context,
     build_shared_prompt_context,
     build_time_gap_prompt,
     call_deepseek_api,
@@ -44,18 +46,23 @@ from ..core import (
     get_sleep_buffer_buff,
     get_toya_anchor,
     get_user_memory,
+    mode_is_active,
     new_request_id,
     record_bot_message,
     record_bot_response,
     record_context_shadow,
     record_context_sources,
+    record_event_memory,
+    record_fallback_reason,
     record_intent,
     record_memory_hit,
     record_repeat_detection,
     record_retry,
+    record_rollout,
     record_tool_call,
+    resolve_rollout,
     save_memory,
-    shadow_context,
+    select_context_for_mode,
     smart_search,
     start_turn_trace,
     to_image_data,
@@ -97,6 +104,9 @@ class PreparedTurn:
     is_toya_context: bool
     search_mode: str
     query_intent: QueryIntent
+    event_memory: str = ""
+    rollout: RolloutConfig | None = None
+    legacy_messages_list: list[dict[str, Any]] | None = None
 
 
 @dataclass(frozen=True)
@@ -238,6 +248,13 @@ def decide_gate(turn: IncomingTurn) -> GateDecision:
 
 async def prepare_turn(turn: IncomingTurn, sleep_instruction: str) -> PreparedTurn:
     chat = _chat_module()
+    rollout = resolve_rollout(turn.group_id)
+    record_rollout(
+        turn.request_id,
+        experiment_arm=rollout.arm,
+        m1_context_mode=rollout.m1_context_mode,
+        m2_memory_mode=rollout.m2_memory_mode,
+    )
     now_time = datetime.datetime.now(TZ_CN)
     now_jst = datetime.datetime.now(TZ_JST)
     hour_24 = now_time.hour
@@ -352,6 +369,21 @@ async def prepare_turn(turn: IncomingTurn, sleep_instruction: str) -> PreparedTu
     long_term_facts = user_mem.get("long_term_facts", [])
     record_memory_hit(turn.request_id, hit=bool(long_term_facts or user_mem.get("history")))
     long_term_memory_text = "\n".join(long_term_facts) if long_term_facts else "（暂无特殊记忆）"
+    event_memory, event_memory_result = build_event_memory_context(
+        turn.plain_text_content,
+        mode=rollout.m2_memory_mode,
+    )
+    record_event_memory(
+        turn.request_id,
+        candidates=event_memory_result.candidates,
+        confidences=event_memory_result.confidences,
+        status=event_memory_result.status,
+        reason=event_memory_result.reason,
+        top_score=event_memory_result.top_score,
+        score_margin=event_memory_result.score_margin,
+        candidate_count=event_memory_result.candidate_count,
+        fallback_reason=event_memory_result.reason if event_memory_result.status == "unavailable" else "",
+    )
     director_note = chat.build_director_note(
         turn.plain_text_content,
         is_toya_context,
@@ -373,25 +405,63 @@ async def prepare_turn(turn: IncomingTurn, sleep_instruction: str) -> PreparedTu
     else:
         acting_guide = director_note.get("acting_guide", "")
 
+    context_blocks = [
+        {"kind": "system_rules", "source": "system_rules", "content": PROMPTS_DB.get("system_header", ""), "priority": 1000},
+        {"kind": "persona", "source": "persona", "content": shared_prompt_context.persona, "priority": 950},
+        {"kind": "current_turn", "source": "current_turn", "content": turn.plain_text_content, "priority": 1000},
+        {"kind": "relationship", "source": "relationship", "content": relationship_context, "priority": 900},
+        {"kind": "toya_anchor", "source": "toya_anchor", "content": toya_anchor, "priority": 800},
+        {"kind": "script_retrieval", "source": "script_retrieval", "content": shared_prompt_context.script_examples, "priority": 700},
+        {"kind": "event_memory", "source": "event_memory", "content": event_memory, "priority": 760},
+        {"kind": "pjsk_retrieval", "source": "pjsk_retrieval", "content": shared_prompt_context.pjsk_block, "priority": 600},
+        {"kind": "recent_history", "source": "recent_history", "content": "\n".join(str(item) for item in user_mem.get("history", [])), "priority": 800},
+        {"kind": "long_term_memory", "source": "long_term_memory", "content": long_term_memory_text, "priority": 750},
+        {"kind": "group_context", "source": "group_context", "content": group_context, "priority": 650},
+        {"kind": "temporary_state", "source": "temporary_state", "content": implant_context, "priority": 980},
+        {"kind": "vision", "source": "vision", "content": turn.current_image_identity, "priority": 850},
+        {"kind": "time_gap", "source": "time_gap", "content": time_gap_awareness, "priority": 700},
+    ]
+    selected_blocks, context_shadow = select_context_for_mode(
+        context_blocks,
+        stage="main_chat",
+        active=mode_is_active(rollout.m1_context_mode),
+    )
+    selected_sources = {str(block["source"]) for block in selected_blocks}
+
+    def selected(source: str, value: str) -> str:
+        return value if source in selected_sources else ""
+
+    relationship_for_prompt = selected("relationship", relationship_context)
+    toya_anchor_for_prompt = selected("toya_anchor", toya_anchor)
+    script_for_prompt = selected("script_retrieval", shared_prompt_context.script_examples)
+    event_for_prompt = selected("event_memory", event_memory)
+    pjsk_for_prompt = selected("pjsk_retrieval", shared_prompt_context.pjsk_block)
+    long_term_for_prompt = selected("long_term_memory", long_term_memory_text)
+    group_for_prompt = selected("group_context", group_context)
+    implant_for_prompt = selected("temporary_state", reality_overwrite_instruction)
+    vision_for_prompt = selected("vision", turn.current_image_identity)
+    time_gap_for_prompt = selected("time_gap", time_gap_awareness)
+    history_for_prompt = user_mem["history"] if "recent_history" in selected_sources else []
+
     final_system_prompt = chat._build_final_system_prompt(
         system_header=PROMPTS_DB.get("system_header", "【系统级绝对指令】你是东云彰人，只输出合法JSON。"),
         current_time=current_time,
         daily_status=daily_status,
-        toya_anchor=toya_anchor,
-        time_gap_awareness=time_gap_awareness,
+        toya_anchor=toya_anchor_for_prompt,
+        time_gap_awareness=time_gap_for_prompt,
         festival_buff=festival_buff,
         morning_run_buff=morning_run_buff,
         sleep_buffer_buff=sleep_buffer_buff,
-        relationship_context=relationship_context,
-        group_context=group_context,
+        relationship_context=relationship_for_prompt,
+        group_context=group_for_prompt,
         interact_instruction=interact_instruction,
         referenced_relationship_instruction=referenced_relationship_instruction,
-        base_persona=shared_prompt_context.persona,
-        script_examples=shared_prompt_context.script_examples,
-        pjsk_block=shared_prompt_context.pjsk_block,
+        base_persona=selected("persona", shared_prompt_context.persona),
+        script_examples=script_for_prompt,
+        pjsk_block=pjsk_for_prompt,
         song_memories=shared_prompt_context.song_memories + shared_prompt_context.song_mention,
-        long_term_memory_text=long_term_memory_text,
-        reality_overwrite_instruction=reality_overwrite_instruction,
+        long_term_memory_text=long_term_for_prompt,
+        reality_overwrite_instruction=implant_for_prompt,
         acting_guide=acting_guide,
         sleep_instruction=sleep_instruction,
         fact_grounding_instruction=chat._build_fact_grounding_instruction(
@@ -404,24 +474,62 @@ async def prepare_turn(turn: IncomingTurn, sleep_instruction: str) -> PreparedTu
         schema_inner_os=PROMPTS_DB.get("schema_inner_os", "你的真实心理活动。"),
         schema_action=PROMPTS_DB.get("schema_action", "角色的肢体动作或微表情。没有时留空。"),
         schema_dialogue=PROMPTS_DB.get("schema_dialogue", "角色实际说出的话，纯对话文本。"),
+        event_memory=event_for_prompt,
     )
 
     tagged_user_msg_for_llm = f"[{turn.sender_nickname}({user_id})]: {turn.plain_text_content}"
     tagged_user_msg_for_history = tagged_user_msg_for_llm
     messages_list = [{"role": "system", "content": final_system_prompt}]
-    messages_list.extend(user_mem["history"])
-    if turn.current_image_identity:
+    messages_list.extend(history_for_prompt)
+    if vision_for_prompt:
         role_force = chat._build_image_director_instruction(
             turn.image_analysis.character_label if turn.image_analysis else "none"
         )
         tagged_user_msg_for_llm += (
-            f"\n\n📱 [系统旁白：你瞥了一眼对方发来的图片，画面内容是：{turn.current_image_identity}]\n{role_force}"
+            f"\n\n📱 [系统旁白：你瞥了一眼对方发来的图片，画面内容是：{vision_for_prompt}]\n{role_force}"
         )
         tagged_user_msg_for_history += f"\n[看了一眼图片: {turn.current_image_identity}]"
     format_breaker = director_note.get("format_breaker", "")
     if format_breaker:
         tagged_user_msg_for_llm += format_breaker
     messages_list.append({"role": "user", "content": tagged_user_msg_for_llm})
+    legacy_messages_list: list[dict[str, Any]] | None = None
+    if mode_is_active(rollout.m1_context_mode):
+        legacy_system_prompt = chat._build_final_system_prompt(
+            system_header=PROMPTS_DB.get("system_header", "【系统级绝对指令】你是东云彰人，只输出合法JSON。"),
+            current_time=current_time,
+            daily_status=daily_status,
+            toya_anchor=toya_anchor,
+            time_gap_awareness=time_gap_awareness,
+            festival_buff=festival_buff,
+            morning_run_buff=morning_run_buff,
+            sleep_buffer_buff=sleep_buffer_buff,
+            relationship_context=relationship_context,
+            group_context=group_context,
+            interact_instruction=interact_instruction,
+            referenced_relationship_instruction=referenced_relationship_instruction,
+            base_persona=shared_prompt_context.persona,
+            script_examples=shared_prompt_context.script_examples,
+            pjsk_block=shared_prompt_context.pjsk_block,
+            song_memories=shared_prompt_context.song_memories + shared_prompt_context.song_mention,
+            long_term_memory_text=long_term_memory_text,
+            reality_overwrite_instruction=reality_overwrite_instruction,
+            acting_guide=acting_guide,
+            sleep_instruction=sleep_instruction,
+            fact_grounding_instruction=chat._build_fact_grounding_instruction(
+                is_toya_context=is_toya_context,
+                is_wl2=is_wl2,
+            ),
+            vitality_guide=PROMPTS_DB.get("vitality_guide", ""),
+            memory_capture_rule=PROMPTS_DB.get("memory_capture_rule", ""),
+            tone_limiter=PROMPTS_DB.get("tone_limiter", ""),
+            schema_inner_os=PROMPTS_DB.get("schema_inner_os", "你的真实心理活动。"),
+            schema_action=PROMPTS_DB.get("schema_action", "角色的肢体动作或微表情。没有时留空。"),
+            schema_dialogue=PROMPTS_DB.get("schema_dialogue", "角色实际说出的话，纯对话文本。"),
+        )
+        legacy_messages_list = [{"role": "system", "content": legacy_system_prompt}]
+        legacy_messages_list.extend(user_mem["history"])
+        legacy_messages_list.append({"role": "user", "content": tagged_user_msg_for_llm})
     context_sources = ["current_turn", "persona", "time_state", "interaction_rules"]
     if user_mem.get("history"):
         context_sources.append("recent_history")
@@ -431,6 +539,8 @@ async def prepare_turn(turn: IncomingTurn, sleep_instruction: str) -> PreparedTu
         context_sources.append("group_context")
     if shared_prompt_context.script_examples:
         context_sources.append("script_retrieval")
+    if event_memory:
+        context_sources.append("event_memory")
     if shared_prompt_context.pjsk_block:
         context_sources.append("pjsk_retrieval")
     if long_term_facts:
@@ -441,23 +551,6 @@ async def prepare_turn(turn: IncomingTurn, sleep_instruction: str) -> PreparedTu
         context_sources.append("vision")
     if time_gap_awareness:
         context_sources.append("time_gap")
-    context_shadow = shadow_context(
-        [
-            {"kind": "system_rules", "source": "system_rules", "content": PROMPTS_DB.get("system_header", ""), "priority": 1000},
-            {"kind": "persona", "source": "persona", "content": shared_prompt_context.persona, "priority": 950},
-            {"kind": "current_turn", "source": "current_turn", "content": turn.plain_text_content, "priority": 1000},
-            {"kind": "relationship", "source": "relationship", "content": relationship_context, "priority": 900},
-            {"kind": "script_retrieval", "source": "script_retrieval", "content": shared_prompt_context.script_examples, "priority": 700},
-            {"kind": "pjsk_retrieval", "source": "pjsk_retrieval", "content": shared_prompt_context.pjsk_block, "priority": 600},
-            {"kind": "recent_history", "source": "recent_history", "content": "\n".join(str(item) for item in user_mem.get("history", [])), "priority": 800},
-            {"kind": "long_term_memory", "source": "long_term_memory", "content": long_term_memory_text, "priority": 750},
-            {"kind": "group_context", "source": "group_context", "content": group_context, "priority": 650},
-            {"kind": "temporary_state", "source": "temporary_state", "content": implant_context, "priority": 980},
-            {"kind": "vision", "source": "vision", "content": turn.current_image_identity, "priority": 850},
-            {"kind": "time_gap", "source": "time_gap", "content": time_gap_awareness, "priority": 700},
-        ],
-        stage="main_chat",
-    )
     record_context_shadow(turn.request_id, context_shadow.as_dict())
     record_context_sources(turn.request_id, context_sources)
     return PreparedTurn(
@@ -469,6 +562,9 @@ async def prepare_turn(turn: IncomingTurn, sleep_instruction: str) -> PreparedTu
         is_toya_context=is_toya_context,
         search_mode=search_mode,
         query_intent=query_intent,
+        event_memory=event_memory,
+        rollout=rollout,
+        legacy_messages_list=legacy_messages_list,
     )
 
 
@@ -541,7 +637,15 @@ async def _dispatch_model(prepared: PreparedTurn) -> str:
 
 async def generate_reply(prepared: PreparedTurn) -> ChatReply:
     chat = _chat_module()
-    raw_result = await _dispatch_model(prepared)
+    try:
+        raw_result = await _dispatch_model(prepared)
+    except Exception:
+        if not prepared.legacy_messages_list or not prepared.rollout or not mode_is_active(prepared.rollout.m1_context_mode):
+            raise
+        record_fallback_reason(prepared.turn.request_id, "m1_request_fallback")
+        record_retry(prepared.turn.request_id)
+        prepared.messages_list = prepared.legacy_messages_list
+        raw_result = await _dispatch_model(prepared)
     result, inner_os = chat._parse_model_reply(raw_result, prepared.is_toya_context)
     return ChatReply(text=result, inner_os=inner_os)
 

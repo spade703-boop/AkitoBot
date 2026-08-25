@@ -4,12 +4,14 @@ from nonebot_plugin_akito.core.observability import (
     finish_turn_trace,
     record_context_shadow,
     record_context_sources,
+    record_event_memory,
     record_intent,
     record_memory_hit,
     record_model_call,
     record_parse_result,
     record_repeat_detection,
     record_retry,
+    record_rollout,
     record_tool_call,
     reset_metrics,
     set_trace_stage,
@@ -35,6 +37,22 @@ def test_turn_trace_collects_structured_fields_and_metrics():
     )
     record_intent(trace.request_id, "web_search")
     record_context_sources(trace.request_id, ["persona", "persona", "group_context"])
+    record_rollout(
+        trace.request_id,
+        experiment_arm="combined",
+        m1_context_mode="canary",
+        m2_memory_mode="shadow",
+    )
+    record_event_memory(
+        trace.request_id,
+        candidates=["event-1", "event-1"],
+        confidences=["high"],
+        status="hit",
+        reason="",
+        top_score=8.5,
+        score_margin=2.0,
+        candidate_count=3,
+    )
     record_model_call(trace.request_id, usage={"prompt_tokens": 10, "completion_tokens": 4, "total_tokens": 14})
     record_parse_result(trace.request_id, success=True)
     record_memory_hit(trace.request_id, hit=True)
@@ -51,6 +69,13 @@ def test_turn_trace_collects_structured_fields_and_metrics():
     assert payload["context_shadow"][0]["selected_sources"] == ["current_turn"]
     assert payload["intent"] == "web_search"
     assert payload["context_sources"] == ["persona", "group_context"]
+    assert payload["experiment_arm"] == "combined"
+    assert payload["m1_context_mode"] == "canary"
+    assert payload["event_candidates"] == ["event-1"]
+    assert payload["event_retrieval_status"] == "hit"
+    assert payload["event_retrieval_reason"] == ""
+    assert payload["event_top_score"] == 8.5
+    assert payload["event_candidate_count"] == 3
     assert payload["total_tokens"] == 14
     assert payload["tool_calls"][0]["name"] == "search"
     assert metrics["total_turns"] == 1
@@ -60,6 +85,9 @@ def test_turn_trace_collects_structured_fields_and_metrics():
     assert metrics["repeat_detections"] == 1
     assert metrics["retries"] == 1
     assert metrics["p50_latency_ms"] is not None
+    assert metrics["by_experiment_arm"]["combined"]["turns"] == 1
+    assert metrics["by_experiment_arm"]["combined"]["event_hit_rate"] == 1.0
+    assert metrics["by_experiment_arm"]["combined"]["avg_tokens"] == 14.0
 
 
 def test_trace_can_persist_sanitized_jsonl(monkeypatch, tmp_path):

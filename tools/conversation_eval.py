@@ -337,6 +337,12 @@ def _summarize_trace_group(traces: list[dict[str, Any]]) -> dict[str, Any]:
     parse_successes = sum(item.get("parse_success") is True for item in parse_observed)
     memory_observed = [item for item in traces if item.get("memory_hit") is not None]
     memory_hits = sum(item.get("memory_hit") is True for item in memory_observed)
+    event_observed = [
+        item
+        for item in traces
+        if item.get("event_retrieval_status") not in {None, "", "disabled"}
+    ]
+    event_hits = sum(item.get("event_retrieval_status") == "hit" for item in event_observed)
     shadow_reports = [
         report
         for item in traces
@@ -365,9 +371,18 @@ def _summarize_trace_group(traces: list[dict[str, Any]]) -> dict[str, Any]:
         "prompt_tokens": sum(int(item.get("prompt_tokens", 0) or 0) for item in traces),
         "completion_tokens": sum(int(item.get("completion_tokens", 0) or 0) for item in traces),
         "total_tokens": sum(int(item.get("total_tokens", 0) or 0) for item in traces),
+        "avg_tokens": round(
+            sum(int(item.get("total_tokens", 0) or 0) for item in traces) / len(traces),
+            2,
+        ),
         "parse_success_rate": round(parse_successes / len(parse_observed), 4) if parse_observed else None,
         "repeat_rate": round(sum(item.get("repeat_detected") is True for item in traces) / len(traces), 4),
         "memory_hit_rate": round(memory_hits / len(memory_observed), 4) if memory_observed else None,
+        "event_hit_rate": round(event_hits / len(event_observed), 4) if event_observed else None,
+        "fallback_rate": round(
+            sum(bool(item.get("fallback_reason")) for item in traces) / len(traces),
+            4,
+        ),
         "search_requests": len(search_calls),
         "search_success_rate": round(
             sum(tool.get("status") == "success" for tool in search_calls) / len(search_calls), 4
@@ -393,13 +408,41 @@ def summarize_traces(traces: list[dict[str, Any]]) -> dict[str, Any]:
     summary = _summarize_trace_group(traces)
     surfaces = Counter(str(item.get("surface") or "main_chat") for item in traces)
     stages = Counter(str(item.get("stage") or "response") for item in traces)
+    experiment_arms = Counter(str(item.get("experiment_arm") or "default") for item in traces)
     summary["surface_counts"] = dict(sorted(surfaces.items()))
     summary["stage_counts"] = dict(sorted(stages.items()))
+    summary["experiment_arm_counts"] = dict(sorted(experiment_arms.items()))
     summary["surface_metrics"] = {
         surface: _summarize_trace_group(
             [item for item in traces if str(item.get("surface") or "main_chat") == surface]
         )
         for surface in sorted(surfaces)
+    }
+    summary["experiment_arm_metrics"] = {
+        arm: _summarize_trace_group(
+            [item for item in traces if str(item.get("experiment_arm") or "default") == arm]
+        )
+        for arm in sorted(experiment_arms)
+    }
+    summary["experiment_arm_surface_metrics"] = {
+        arm: {
+            surface: _summarize_trace_group(
+                [
+                    item
+                    for item in traces
+                    if str(item.get("experiment_arm") or "default") == arm
+                    and str(item.get("surface") or "main_chat") == surface
+                ]
+            )
+            for surface in sorted(
+                {
+                    str(item.get("surface") or "main_chat")
+                    for item in traces
+                    if str(item.get("experiment_arm") or "default") == arm
+                }
+            )
+        }
+        for arm in sorted(experiment_arms)
     }
     return summary
 

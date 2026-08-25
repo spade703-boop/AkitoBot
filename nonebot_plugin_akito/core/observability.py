@@ -27,6 +27,17 @@ class TurnTrace:
     intent: str = ""
     context_sources: list[str] = field(default_factory=list)
     context_shadow: list[dict[str, Any]] = field(default_factory=list)
+    experiment_arm: str = "default"
+    m1_context_mode: str = ""
+    m2_memory_mode: str = ""
+    event_candidates: list[str] = field(default_factory=list)
+    event_confidence: list[str] = field(default_factory=list)
+    event_retrieval_status: str = ""
+    event_retrieval_reason: str = ""
+    event_top_score: float = 0.0
+    event_score_margin: float = 0.0
+    event_candidate_count: int = 0
+    fallback_reason: list[str] = field(default_factory=list)
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     model_calls: int = 0
     prompt_tokens: int = 0
@@ -43,26 +54,34 @@ class TurnTrace:
 _LOCK = threading.Lock()
 _CURRENT_REQUEST_ID: ContextVar[str | None] = ContextVar("conversation_request_id", default=None)
 _ACTIVE: dict[str, TurnTrace] = {}
-_METRICS: dict[str, Any] = {
-    "total_turns": 0,
-    "completed_turns": 0,
-    "failed_turns": 0,
-    "silent_turns": 0,
-    "model_calls": 0,
-    "prompt_tokens": 0,
-    "completion_tokens": 0,
-    "total_tokens": 0,
-    "parse_successes": 0,
-    "parse_failures": 0,
-    "repeat_detections": 0,
-    "search_requests": 0,
-    "search_successes": 0,
-    "memory_hits": 0,
-    "tool_calls": 0,
-    "tool_successes": 0,
-    "retries": 0,
-    "latencies_ms": [],
-}
+def _new_metric_bucket() -> dict[str, Any]:
+    return {
+        "total_turns": 0,
+        "completed_turns": 0,
+        "failed_turns": 0,
+        "silent_turns": 0,
+        "model_calls": 0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "parse_successes": 0,
+        "parse_failures": 0,
+        "repeat_detections": 0,
+        "search_requests": 0,
+        "search_successes": 0,
+        "memory_hits": 0,
+        "event_retrieval_observed": 0,
+        "event_hits": 0,
+        "fallbacks": 0,
+        "tool_calls": 0,
+        "tool_successes": 0,
+        "retries": 0,
+        "latencies_ms": [],
+    }
+
+
+_METRICS: dict[str, Any] = _new_metric_bucket()
+_ARM_METRICS: dict[str, dict[str, Any]] = {}
 
 
 def new_request_id() -> str:
@@ -128,6 +147,53 @@ def record_context_shadow(request_id: str | None, report: dict[str, Any]) -> Non
     trace = _get_trace(request_id)
     if trace is not None and report:
         trace.context_shadow.append(dict(report))
+
+
+def record_rollout(
+    request_id: str | None,
+    *,
+    experiment_arm: str,
+    m1_context_mode: str,
+    m2_memory_mode: str,
+) -> None:
+    trace = _get_trace(request_id)
+    if trace is None:
+        return
+    trace.experiment_arm = str(experiment_arm or "default")
+    trace.m1_context_mode = str(m1_context_mode or "")
+    trace.m2_memory_mode = str(m2_memory_mode or "")
+
+
+def record_event_memory(
+    request_id: str | None,
+    *,
+    candidates: list[str] | tuple[str, ...] = (),
+    confidences: list[str] | tuple[str, ...] = (),
+    status: str = "",
+    reason: str = "",
+    top_score: float = 0.0,
+    score_margin: float = 0.0,
+    candidate_count: int = 0,
+    fallback_reason: str = "",
+) -> None:
+    trace = _get_trace(request_id)
+    if trace is None:
+        return
+    trace.event_candidates = list(dict.fromkeys(str(item) for item in candidates if str(item)))
+    trace.event_confidence = list(dict.fromkeys(str(item) for item in confidences if str(item)))
+    trace.event_retrieval_status = str(status or "")
+    trace.event_retrieval_reason = str(reason or "")
+    trace.event_top_score = round(float(top_score or 0.0), 3)
+    trace.event_score_margin = round(float(score_margin or 0.0), 3)
+    trace.event_candidate_count = max(0, int(candidate_count or 0))
+    if fallback_reason:
+        trace.fallback_reason.append(str(fallback_reason))
+
+
+def record_fallback_reason(request_id: str | None, reason: str) -> None:
+    trace = _get_trace(request_id)
+    if trace is not None and reason:
+        trace.fallback_reason.append(str(reason))
 
 
 def record_model_call(request_id: str | None, *, usage: Any = None) -> None:
@@ -203,26 +269,10 @@ def finish_turn_trace(request_id: str, *, outcome: str) -> dict[str, Any] | None
             return None
         trace.outcome = outcome
         trace.elapsed_ms = round((time.perf_counter() - trace.started_at) * 1000, 2)
-        _METRICS["completed_turns"] += outcome == "completed"
-        _METRICS["failed_turns"] += outcome == "failed"
-        _METRICS["silent_turns"] += outcome == "silent"
-        _METRICS["model_calls"] += trace.model_calls
-        _METRICS["prompt_tokens"] += trace.prompt_tokens
-        _METRICS["completion_tokens"] += trace.completion_tokens
-        _METRICS["total_tokens"] += trace.total_tokens
-        _METRICS["parse_successes"] += trace.parse_success is True
-        _METRICS["parse_failures"] += trace.parse_success is False
-        _METRICS["repeat_detections"] += trace.repeat_detected
-        _METRICS["memory_hits"] += trace.memory_hit
-        _METRICS["tool_calls"] += len(trace.tool_calls)
-        _METRICS["tool_successes"] += sum(item["status"] == "success" for item in trace.tool_calls)
-        _METRICS["search_requests"] += sum(item["name"] == "search" for item in trace.tool_calls)
-        _METRICS["search_successes"] += sum(
-            item["name"] == "search" and item["status"] == "success" for item in trace.tool_calls
-        )
-        _METRICS["retries"] += trace.retries
-        _METRICS["latencies_ms"].append(trace.elapsed_ms)
         payload = asdict(trace)
+        _accumulate_metrics(_METRICS, trace, count_turn=False)
+        arm = trace.experiment_arm or "default"
+        _accumulate_metrics(_ARM_METRICS.setdefault(arm, _new_metric_bucket()), trace)
         _persist_trace(payload)
     logger.info("conversation_trace=%s", json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
     if _CURRENT_REQUEST_ID.get() == request_id:
@@ -243,6 +293,38 @@ def _persist_trace(payload: dict[str, Any]) -> None:
         logger.warning("conversation trace 写入失败: %s", exc)
 
 
+def _accumulate_metrics(
+    metrics: dict[str, Any],
+    trace: TurnTrace,
+    *,
+    count_turn: bool = True,
+) -> None:
+    metrics["total_turns"] += count_turn
+    metrics["completed_turns"] += trace.outcome == "completed"
+    metrics["failed_turns"] += trace.outcome == "failed"
+    metrics["silent_turns"] += trace.outcome == "silent"
+    metrics["model_calls"] += trace.model_calls
+    metrics["prompt_tokens"] += trace.prompt_tokens
+    metrics["completion_tokens"] += trace.completion_tokens
+    metrics["total_tokens"] += trace.total_tokens
+    metrics["parse_successes"] += trace.parse_success is True
+    metrics["parse_failures"] += trace.parse_success is False
+    metrics["repeat_detections"] += trace.repeat_detected
+    metrics["memory_hits"] += trace.memory_hit
+    event_observed = trace.event_retrieval_status not in {"", "disabled"}
+    metrics["event_retrieval_observed"] += event_observed
+    metrics["event_hits"] += event_observed and trace.event_retrieval_status == "hit"
+    metrics["fallbacks"] += bool(trace.fallback_reason)
+    metrics["tool_calls"] += len(trace.tool_calls)
+    metrics["tool_successes"] += sum(item["status"] == "success" for item in trace.tool_calls)
+    metrics["search_requests"] += sum(item["name"] == "search" for item in trace.tool_calls)
+    metrics["search_successes"] += sum(
+        item["name"] == "search" and item["status"] == "success" for item in trace.tool_calls
+    )
+    metrics["retries"] += trace.retries
+    metrics["latencies_ms"].append(trace.elapsed_ms)
+
+
 def _percentile(values: list[float], percentile: float) -> float | None:
     if not values:
         return None
@@ -256,6 +338,10 @@ def snapshot_metrics() -> dict[str, Any]:
     with _LOCK:
         snapshot = {key: value for key, value in _METRICS.items() if key != "latencies_ms"}
         latencies = list(_METRICS["latencies_ms"])
+        arm_metrics = {
+            arm: {key: list(value) if key == "latencies_ms" else value for key, value in metrics.items()}
+            for arm, metrics in _ARM_METRICS.items()
+        }
     total = snapshot["total_turns"] or 1
     snapshot.update(
         {
@@ -269,6 +355,10 @@ def snapshot_metrics() -> dict[str, Any]:
             else None,
             "p50_latency_ms": _percentile(latencies, 50),
             "p95_latency_ms": _percentile(latencies, 95),
+            "by_experiment_arm": {
+                arm: _summarize_metric_bucket(metrics)
+                for arm, metrics in sorted(arm_metrics.items())
+            },
         }
     )
     return snapshot
@@ -278,5 +368,30 @@ def reset_metrics() -> None:
     """Reset in-memory counters; intended for tests and local baseline runs."""
     with _LOCK:
         _ACTIVE.clear()
-        for key in list(_METRICS):
-            _METRICS[key] = [] if key == "latencies_ms" else 0
+        _ARM_METRICS.clear()
+        _METRICS.clear()
+        _METRICS.update(_new_metric_bucket())
+
+
+def _summarize_metric_bucket(metrics: dict[str, Any]) -> dict[str, Any]:
+    total_turns = int(metrics["total_turns"])
+    parse_observed = int(metrics["parse_successes"]) + int(metrics["parse_failures"])
+    event_observed = int(metrics["event_retrieval_observed"])
+    return {
+        "turns": total_turns,
+        "completed": metrics["completed_turns"],
+        "failed": metrics["failed_turns"],
+        "silent": metrics["silent_turns"],
+        "parse_success_rate": round(
+            int(metrics["parse_successes"]) / parse_observed, 4
+        ) if parse_observed else None,
+        "avg_tokens": round(int(metrics["total_tokens"]) / total_turns, 2) if total_turns else 0.0,
+        "p50_latency_ms": _percentile(metrics["latencies_ms"], 50),
+        "p95_latency_ms": _percentile(metrics["latencies_ms"], 95),
+        "event_hit_rate": round(
+            int(metrics["event_hits"]) / event_observed, 4
+        ) if event_observed else None,
+        "fallback_rate": round(
+            int(metrics["fallbacks"]) / total_turns, 4
+        ) if total_turns else None,
+    }

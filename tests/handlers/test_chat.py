@@ -540,6 +540,22 @@ async def test_pipeline_dispatch_agent_preserves_tool_call_round_trip():
 
 
 @pytest.mark.asyncio
+async def test_generate_reply_falls_back_to_legacy_prompt_on_m1_failure():
+    rollout = SimpleNamespace(m1_context_mode="canary")
+    prepared = _prepared_turn(
+        rollout=rollout,
+        legacy_messages_list=[{"role": "system", "content": "LEGACY"}],
+    )
+    dispatch_mock = mock.AsyncMock(side_effect=[RuntimeError("new path failed"), '{"dialogue":"旧路径"}'])
+    with mock.patch.object(chat_pipeline, "_dispatch_model", dispatch_mock):
+        reply = await chat_pipeline.generate_reply(prepared)
+
+    assert reply.text == "旧路径"
+    assert prepared.messages_list == prepared.legacy_messages_list
+    assert dispatch_mock.await_count == 2
+
+
+@pytest.mark.asyncio
 async def test_pipeline_post_process_keeps_memory_and_ooc_behavior():
     prepared = _prepared_turn()
     with mock.patch.object(chat_pipeline, "save_memory") as save_mock:

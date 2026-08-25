@@ -127,6 +127,28 @@ class ContextOrchestrator:
             omitted_sources=omitted_sources,
         )
 
+    def select_with_report(
+        self,
+        blocks: Iterable[Mapping[str, object] | ContextBlock],
+        *,
+        stage: str,
+    ) -> tuple[tuple[ContextBlock, ...], ContextShadowReport]:
+        """Select blocks and return the same privacy-safe report used by shadow mode."""
+        normalized = self.normalize(blocks)
+        selected = self._select_normalized(normalized)
+        selected_ids = {id(block) for block in selected}
+        report = ContextShadowReport(
+            stage=stage,
+            budget_tokens=self.budget_tokens,
+            total_blocks=len(normalized),
+            estimated_tokens=sum(int(block["token_estimate"] or 0) for block in normalized),
+            selected_sources=tuple(str(block["source"]) for block in selected),
+            omitted_sources=tuple(
+                str(block["source"]) for block in normalized if id(block) not in selected_ids
+            ),
+        )
+        return selected, report
+
 
 def build_context_blocks(
     blocks: Iterable[Mapping[str, object] | ContextBlock],
@@ -145,3 +167,18 @@ def shadow_context(
 ) -> ContextShadowReport:
     """Convenience wrapper for a non-invasive shadow selection report."""
     return ContextOrchestrator(budget_tokens=budget_tokens).shadow(blocks, stage=stage)
+
+
+def select_context_for_mode(
+    blocks: Iterable[Mapping[str, object] | ContextBlock],
+    *,
+    stage: str,
+    active: bool,
+    budget_tokens: int = DEFAULT_CONTEXT_BUDGET_TOKENS,
+) -> tuple[tuple[ContextBlock, ...], ContextShadowReport]:
+    """Return selected blocks when active, while always producing a shadow report."""
+    orchestrator = ContextOrchestrator(budget_tokens=budget_tokens)
+    if active:
+        return orchestrator.select_with_report(blocks, stage=stage)
+    normalized = orchestrator.normalize(blocks)
+    return normalized, orchestrator.shadow(normalized, stage=stage)

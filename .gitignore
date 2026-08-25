@@ -11,6 +11,7 @@
 /data/content/*
 !/data/content/gift_config.json
 !/data/content/rpg_config.json
+!/data/content/akito_event_memories.json
 
 # Python
 __pycache__/
