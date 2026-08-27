@@ -37,6 +37,7 @@ class TurnTrace:
     m1_context_mode: str = ""
     m2_memory_mode: str = ""
     event_candidates: list[str] = field(default_factory=list)
+    event_evidence_units: list[str] = field(default_factory=list)
     event_confidence: list[str] = field(default_factory=list)
     event_retrieval_status: str = ""
     event_retrieval_reason: str = ""
@@ -176,6 +177,7 @@ def record_event_memory(
     request_id: str | None,
     *,
     candidates: list[str] | tuple[str, ...] = (),
+    evidence_units: list[str] | tuple[str, ...] = (),
     confidences: list[str] | tuple[str, ...] = (),
     status: str = "",
     reason: str = "",
@@ -188,6 +190,7 @@ def record_event_memory(
     if trace is None:
         return
     trace.event_candidates = list(dict.fromkeys(str(item) for item in candidates if str(item)))
+    trace.event_evidence_units = list(dict.fromkeys(str(item) for item in evidence_units if str(item)))
     trace.event_confidence = list(dict.fromkeys(str(item) for item in confidences if str(item)))
     trace.event_retrieval_status = str(status or "")
     trace.event_retrieval_reason = str(reason or "")

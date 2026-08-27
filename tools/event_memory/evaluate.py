@@ -181,12 +181,12 @@ def render_report(report: dict[str, Any]) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="评估 M2 事件记忆召回与安全拒绝")
-    parser.add_argument("--eval-set", default="tools/event_memory_eval_set.json")
+    parser.add_argument("--eval-set", default="tools/event_memory/eval_set.json")
     parser.add_argument("--asset", default="data/content/akito_event_memories.json")
     parser.add_argument("--top-k", type=int, default=3)
-    parser.add_argument("--output", default="docs/M2_EVENT_RECALL.md")
+    parser.add_argument("--output", default="docs/conversation_ai/event_memory/M2_EVENT_RECALL.md")
     args = parser.parse_args()
-    root = Path(__file__).resolve().parents[1]
+    root = Path(__file__).resolve().parents[2]
     eval_set = json.loads((root / args.eval_set).read_text(encoding="utf-8"))
     asset = json.loads((root / args.asset).read_text(encoding="utf-8"))
     report = evaluate(eval_set, asset, top_k=max(1, args.top_k))

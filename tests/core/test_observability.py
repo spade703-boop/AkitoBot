@@ -46,6 +46,7 @@ def test_turn_trace_collects_structured_fields_and_metrics():
     record_event_memory(
         trace.request_id,
         candidates=["event-1", "event-1"],
+        evidence_units=["event-1:31", "event-1:31", "event-1:83"],
         confidences=["high"],
         status="hit",
         reason="",
@@ -75,6 +76,7 @@ def test_turn_trace_collects_structured_fields_and_metrics():
     assert payload["experiment_arm"] == "combined"
     assert payload["m1_context_mode"] == "canary"
     assert payload["event_candidates"] == ["event-1"]
+    assert payload["event_evidence_units"] == ["event-1:31", "event-1:83"]
     assert payload["event_retrieval_status"] == "hit"
     assert payload["event_retrieval_reason"] == ""
     assert payload["event_top_score"] == 8.5

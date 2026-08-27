@@ -12,9 +12,9 @@
 在生产容器中运行：
 
 ```bash
-docker exec mybot python tools/evaluate_rollout.py \
-  --traces data/conversation_traces.jsonl \
-  --output docs/ROLLOUT_ACCEPTANCE.md \
+docker exec mybot python tools/conversation_ai/rollout/evaluate.py \
+  --traces data/conversation_ai/traces/conversation_traces.jsonl \
+  --output docs/conversation_ai/rollout/ACCEPTANCE.md \
   --control-arm default \
   --treatment-arm combined \
   --min-turns 30
@@ -27,9 +27,9 @@ docker exec mybot python tools/evaluate_rollout.py \
 如果当前只有一个高频群，直接使用单臂观察模式：
 
 ```bash
-docker exec mybot python tools/evaluate_rollout.py \
-  --traces data/conversation_traces.jsonl \
-  --output docs/ROLLOUT_ACCEPTANCE.md \
+docker exec mybot python tools/conversation_ai/rollout/evaluate.py \
+  --traces data/conversation_ai/traces/conversation_traces.jsonl \
+  --output docs/conversation_ai/rollout/ACCEPTANCE.md \
   --treatment-arm combined \
   --single-arm \
   --min-turns 30

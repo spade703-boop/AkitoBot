@@ -169,7 +169,7 @@ def main() -> int:
     parser.add_argument("--source", default="data/content/akito_scripts.json")
     parser.add_argument("--output", default="data/content/akito_event_memories.json")
     args = parser.parse_args()
-    root = Path(__file__).resolve().parents[1]
+    root = Path(__file__).resolve().parents[2]
     source_path = root / args.source
     output_path = root / args.output
     records = json.loads(source_path.read_text(encoding="utf-8"))

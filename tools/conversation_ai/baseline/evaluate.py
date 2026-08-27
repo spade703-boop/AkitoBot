@@ -13,7 +13,7 @@ from typing import Any
 from dotenv import load_dotenv
 
 try:
-    from .conversation_eval import (
+    from .core import (
         build_judge_prompt,
         judge_dimensions_for_surface,
         load_eval_set,
@@ -24,8 +24,8 @@ try:
         validate_eval_set,
     )
 except ImportError:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from tools.conversation_eval import (
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+    from tools.conversation_ai.baseline.core import (
         build_judge_prompt,
         judge_dimensions_for_surface,
         load_eval_set,
@@ -130,17 +130,17 @@ async def judge_responses(
 def main() -> int:
     load_dotenv()
     parser = argparse.ArgumentParser(description="生成 M0 对话评测基线报告")
-    parser.add_argument("--eval-set", default="tools/conversation_eval_set.json")
+    parser.add_argument("--eval-set", default="tools/conversation_ai/baseline/eval_set.json")
     parser.add_argument("--responses", help="JSONL 回放结果，每行至少包含 id 和 response")
     parser.add_argument("--traces", help="bot 运行时写出的 JSONL trace 文件")
-    parser.add_argument("--output", default="docs/M0_BASELINE.md")
+    parser.add_argument("--output", default="docs/conversation_ai/baseline/M0_BASELINE.md")
     parser.add_argument("--judge", action="store_true", help="调用独立模型对已有 responses 做结构化裁判")
     parser.add_argument("--judge-model", default="deepseek-v4-flash")
     parser.add_argument("--concurrency", type=int, default=3)
     parser.add_argument("--validate-only", action="store_true", help="只校验评测集和原作证据引用")
     args = parser.parse_args()
 
-    root = Path(__file__).resolve().parents[1]
+    root = Path(__file__).resolve().parents[3]
     data = load_eval_set(root / args.eval_set)
     errors = validate_eval_set(data) + validate_reference_files(data, root)
     if errors:

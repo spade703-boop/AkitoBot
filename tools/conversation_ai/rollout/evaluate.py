@@ -5,12 +5,14 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import sys
 from typing import Any
 
 try:
-    from .conversation_eval import summarize_traces
+    from ..baseline.core import summarize_traces
 except ImportError:
-    from conversation_eval import summarize_traces
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+    from tools.conversation_ai.baseline.core import summarize_traces
 
 
 def load_traces(path: Path) -> list[dict[str, Any]]:
@@ -251,7 +253,7 @@ def render_rollout_report(report: dict[str, Any], *, trace_path: str = "") -> st
 def main() -> int:
     parser = argparse.ArgumentParser(description="生成 M1/M2 灰度验收报告")
     parser.add_argument("--traces", required=True, help="bot 写出的匿名化 JSONL trace")
-    parser.add_argument("--output", default="docs/ROLLOUT_ACCEPTANCE.md")
+    parser.add_argument("--output", default="docs/conversation_ai/rollout/ACCEPTANCE.md")
     parser.add_argument(
         "--control-arm",
         default="default",

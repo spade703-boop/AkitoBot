@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from tools.conversation_eval import (
+from tools.conversation_ai.baseline.core import (
     ANALYSIS_JUDGE_DIMENSIONS,
     build_judge_prompt,
     load_eval_set,
@@ -13,11 +13,11 @@ from tools.conversation_eval import (
     validate_eval_set,
 )
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 
 
 def test_m0_eval_set_has_required_coverage_and_valid_references():
-    data = load_eval_set(ROOT / "tools/conversation_eval_set.json")
+    data = load_eval_set(ROOT / "tools/conversation_ai/baseline/eval_set.json")
 
     assert validate_eval_set(data) == []
     assert len(data["cases"]) == 68
@@ -32,7 +32,11 @@ def test_m0_eval_set_has_required_coverage_and_valid_references():
 
 
 def test_judge_prompt_treats_original_line_as_evidence_not_exact_answer():
-    case = next(case for case in load_eval_set(ROOT / "tools/conversation_eval_set.json")["cases"] if case["id"] == "plot-001")
+    case = next(
+        case
+        for case in load_eval_set(ROOT / "tools/conversation_ai/baseline/eval_set.json")["cases"]
+        if case["id"] == "plot-001"
+    )
 
     prompt = build_judge_prompt(case, "记得，那次大家安排得太夸张了，不过冬弥也确实出了力。")
 

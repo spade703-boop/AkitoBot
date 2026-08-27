@@ -169,6 +169,22 @@ from .event_memory import (
     format_event_memory_context,
     retrieve_event_memories,
 )
+from .story_import import (
+    FetchedAsset,
+    StoryAssetError,
+    StoryImportError,
+    StoryRoute,
+    capture_story,
+    event_memory_from_draft,
+    merge_event_memory,
+    parse_story_url,
+    preview_event_memory,
+    save_draft,
+    story_content_digest,
+    story_evidence_digest,
+    update_review,
+    validate_story_draft,
+)
 from .rollout import RolloutConfig, mode_is_active, mode_is_shadowing, resolve_rollout, rollout_as_dict
 
 # ── 统一公共导出面（显式声明，避免 import * 时泄漏内部名） ────────────────
@@ -215,6 +231,9 @@ __all__ = [
     # context orchestration
     "ContextOrchestrator", "ContextShadowReport", "build_context_blocks", "estimate_token_count", "select_context_for_mode", "shadow_context",
     "EventMemoryHit", "EventMemoryResult", "build_event_memory_context", "format_event_memory_context", "retrieve_event_memories",
+    "FetchedAsset", "StoryRoute", "StoryImportError", "StoryAssetError", "parse_story_url", "capture_story",
+    "validate_story_draft", "save_draft", "update_review", "event_memory_from_draft", "merge_event_memory",
+    "preview_event_memory", "story_content_digest", "story_evidence_digest",
     "RolloutConfig", "mode_is_active", "mode_is_shadowing", "resolve_rollout", "rollout_as_dict",
     # time_awareness
     "record_bot_response", "build_time_gap_prompt",

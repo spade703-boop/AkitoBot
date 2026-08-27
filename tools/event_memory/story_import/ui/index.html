@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>彰人 / 冬弥剧情采集</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+    body { margin: 0; background: #f4f5f7; color: #20242a; }
+    header { padding: 20px 28px; background: #273248; color: #fff; }
+    header h1 { margin: 0 0 6px; font-size: 22px; }
+    header p { margin: 0; color: #cbd3e3; font-size: 13px; }
+    main { display: grid; grid-template-columns: minmax(230px, 300px) minmax(0, 1fr); gap: 16px; max-width: 1500px; margin: 16px auto; padding: 0 16px; }
+    section, aside { background: #fff; border: 1px solid #dfe3ea; border-radius: 10px; box-shadow: 0 2px 8px #1b263815; }
+    .capture { grid-column: 1 / -1; padding: 16px; }
+    .capture form { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+    input[type="url"], textarea { width: 100%; box-sizing: border-box; border: 1px solid #cbd2de; border-radius: 6px; padding: 9px; font: inherit; }
+    input[type="url"] { flex: 1 1 560px; }
+    textarea { min-height: 92px; resize: vertical; }
+    button { border: 0; border-radius: 6px; background: #405da5; color: white; padding: 9px 13px; cursor: pointer; font: inherit; }
+    button.secondary { background: #667085; }
+    button.warning { background: #b66b1e; }
+    button.danger { background: #a6374c; }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    label { font-size: 13px; color: #525b6b; }
+    .hint { flex-basis: 100%; margin: 0; color: #667085; font-size: 12px; }
+    #notice { margin-top: 10px; min-height: 20px; color: #40516f; font-size: 13px; white-space: pre-wrap; }
+    aside { padding: 12px; }
+    aside h2, .detail h2 { margin: 3px 0 12px; font-size: 17px; }
+    #draft-list { display: grid; gap: 8px; }
+    .draft-item { padding: 10px; border: 1px solid #e1e5eb; border-radius: 7px; cursor: pointer; background: #fbfcfe; }
+    .draft-item.active { border-color: #405da5; background: #eef2ff; }
+    .draft-item strong { display: block; font-size: 13px; margin-bottom: 5px; }
+    .draft-item small { color: #667085; display: block; line-height: 1.5; }
+    .detail { padding: 16px; min-width: 0; }
+    .empty { color: #7a8494; font-size: 14px; }
+    .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; margin-bottom: 14px; }
+    .meta div { padding: 8px; background: #f6f7fa; border-radius: 6px; font-size: 12px; overflow-wrap: anywhere; }
+    .meta b { display: block; color: #687387; margin-bottom: 3px; }
+    .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0; }
+    details { border: 1px solid #e1e5eb; border-radius: 7px; margin: 10px 0; }
+    summary { padding: 10px; cursor: pointer; font-weight: 600; }
+    .content { padding: 0 10px 10px; }
+    .action { display: grid; grid-template-columns: 42px minmax(90px, 150px) minmax(0, 1fr); gap: 8px; padding: 7px 0; border-bottom: 1px solid #f0f1f4; font-size: 13px; }
+    .action:last-child { border-bottom: 0; }
+    .idx { color: #8b95a5; }
+    .speaker { color: #40516f; font-weight: 600; }
+    .line { min-width: 0; overflow-wrap: anywhere; }
+    .line em { display: block; margin-top: 4px; color: #7a8494; font-style: normal; font-size: 12px; }
+    .segment { background: #f8f9fc; border-radius: 6px; padding: 10px; margin-top: 8px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; }
+    .segment b { display: block; color: #40516f; margin-bottom: 5px; }
+    .analysis-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+    .analysis-grid label { display: block; margin-bottom: 5px; color: #3f4858; font-weight: 600; }
+    .analysis-grid textarea { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; min-height: 135px; }
+    .analysis-grid .summary textarea { font-family: inherit; }
+    .analysis-status { margin: 0 0 10px; padding: 8px 10px; border-radius: 6px; background: #fff4df; color: #855b1a; font-size: 13px; }
+    .badge { display: inline-block; border-radius: 999px; padding: 2px 8px; background: #e7ebf2; color: #505c70; font-size: 11px; }
+    .badge.approved { background: #d8f2df; color: #246a39; }
+    .badge.rejected { background: #f8dce1; color: #8f2c42; }
+    .preview { padding: 10px; border-radius: 7px; background: #fff7e8; border: 1px solid #f0d3a0; white-space: pre-wrap; font-size: 13px; }
+    @media (max-width: 800px) { main { display: block; } aside, .detail { margin-bottom: 16px; } .action { grid-template-columns: 34px 90px minmax(0, 1fr); } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>彰人 / 冬弥剧情采集</h1>
+    <p>抓取 → 查看双语证据 → 修订派生分析 → 审核 → 去重预览 → 发布事件记忆</p>
+  </header>
+  <main>
+    <section class="capture">
+      <form id="capture-form">
+        <input id="story-url" type="url" required placeholder="粘贴 pjsk.moe 剧情页面 URL，例如 https://pjsk.moe/zh-cn/story/event/140/8/">
+        <label><input id="enrich-llm" type="checkbox"> 抓取后请求 LLM 分析</label>
+        <button id="capture-button" type="submit">开始抓取</button>
+        <p class="hint">卡面剧情支持单段编号，例如 <code>https://pjsk.moe/zh-cn/story/card/1388/</code>；省略分段编号会收集该卡全部分段。卡面始终按日服卡 ID 定位，再用同一资源包分别读取日文原文和国服中文翻译；<code>zh-cn</code> 只表示页面界面语言。整话动作会保留供复核，但下方目标片段和 LLM 分析只包含彰人/冬弥台词，不会混入其他角色原文。</p>
+        <p class="hint">LLM 分析使用 DeepSeek 兼容接口，需要安装 <code>openai</code> 并配置 <code>DEEPSEEK_API_KEY</code>；未勾选时不会请求模型。</p>
+      </form>
+      <div id="notice" role="status"></div>
+    </section>
+    <aside>
+      <h2>本地草稿</h2>
+      <div class="toolbar">
+        <select id="status-filter">
+          <option value="">全部状态</option><option value="draft">draft</option><option value="approved">approved</option><option value="rejected">rejected</option>
+        </select>
+        <button id="refresh-button" class="secondary" type="button">刷新</button>
+      </div>
+      <div id="draft-list" class="empty">正在读取……</div>
+    </aside>
+    <section class="detail" id="detail">
+      <div class="empty">从左侧选择草稿，或先抓取一个剧情页面。</div>
+    </section>
+  </main>
+  <script>
+    const state = { drafts: [], current: null, preview: null };
+    const analysisFields = [
+      ["timeline", "时间线"], ["relationship_facts", "关系事实"], ["akito_attitude", "彰人态度"],
+      ["toya_traits", "冬弥特征"], ["uncertain_or_missing", "不确定/缺失"], ["style_examples", "口吻示例"], ["topics", "主题"]
+    ];
+    const $ = (selector) => document.querySelector(selector);
+    const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({"&":"&amp;", "<":"&lt;", ">":"&gt;", "\"":"&quot;", "'":"&#39;"}[char]));
+    const setNotice = (message, error = false) => { const node = $("#notice"); node.textContent = message; node.style.color = error ? "#a6374c" : "#40516f"; };
+
+    async function api(path, options = {}) {
+      const response = await fetch(path, { headers: { "Content-Type": "application/json" }, ...options });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const error = new Error(body.error || `请求失败 (${response.status})`);
+        error.body = body;
+        throw error;
+      }
+      return body;
+    }
+
+    function statusBadge(status) {
+      return `<span class="badge ${escapeHtml(status)}">${escapeHtml(status)}</span>`;
+    }
+
+    async function refreshDrafts() {
+      const status = $("#status-filter").value;
+      const query = status ? `?status=${encodeURIComponent(status)}` : "";
+      const body = await api(`/api/drafts${query}`);
+      state.drafts = body.drafts || [];
+      const list = $("#draft-list");
+      if (!state.drafts.length) { list.className = "empty"; list.textContent = "暂无符合条件的草稿"; return; }
+      list.className = "";
+      list.innerHTML = state.drafts.map((draft) => `
+        <div class="draft-item ${state.current?.draft_id === draft.draft_id ? "active" : ""}" data-draft-id="${escapeHtml(draft.draft_id)}">
+          <strong>${escapeHtml(draft.title || "未命名剧情")}</strong>
+          <small>${statusBadge(draft.status)}　${escapeHtml(draft.route_type)} / ${escapeHtml(draft.locale)}</small>
+          <small>${escapeHtml(draft.draft_id)} · ${draft.actions} 条动作 · ${draft.target_segments} 个目标片段</small>
+        </div>`).join("");
+      list.querySelectorAll("[data-draft-id]").forEach((node) => node.addEventListener("click", () => loadDraft(node.dataset.draftId)));
+    }
+
+    function renderActions(actions) {
+      if (!Array.isArray(actions) || !actions.length) return "<p class='empty'>没有动作记录</p>";
+      return actions.map((action) => `<div class="action">
+        <span class="idx">#${escapeHtml(action.index)}</span><span class="speaker">${escapeHtml(action.speaker_zh || action.speaker_ja || "旁白")}</span>
+        <span class="line">${escapeHtml(action.text_zh || "（暂无中文译文）")}<em>${escapeHtml(action.text_ja || "")}</em></span>
+      </div>`).join("");
+    }
+
+    function renderAnalysis(analysis = {}) {
+      const status = String(analysis.status || "not_requested");
+      const statusHint = status === "llm_invalid_json"
+        ? "模型返回内容不是严格 JSON，可重试分析或手动编辑。"
+        : "请检查依赖、API Key 和接口配置。";
+      const statusNotice = status !== "ready" && status !== "not_requested"
+        ? `<p class="analysis-status">LLM 分析状态：${escapeHtml(status)}${analysis.error ? `（${escapeHtml(analysis.error)}）` : ""}。${statusHint}</p>`
+        : "";
+      const fields = analysisFields.map(([field, label]) => {
+        const value = Array.isArray(analysis[field]) ? JSON.stringify(analysis[field], null, 2) : "[]";
+        return `<div><label for="analysis-${field}">${label}（JSON 数组，条目需带 evidence_refs）</label><textarea id="analysis-${field}" data-analysis-field="${field}">${escapeHtml(value)}</textarea></div>`;
+      }).join("");
+      return `${statusNotice}<div class="analysis-grid"><div class="summary"><label for="analysis-summary_zh">摘要</label><textarea id="analysis-summary_zh" data-analysis-field="summary_zh">${escapeHtml(analysis.summary_zh || "")}</textarea></div>${fields}</div>`;
+    }
+
+    function renderDetail(payload) {
+      const source = payload.source || {}, story = payload.story || {}, analysis = payload.draft_analysis || {};
+      const segments = (payload.target_segments || []).map((segment) => `<div class="segment"><b>${escapeHtml(segment.segment_id)} · evidence_refs=${escapeHtml(JSON.stringify(segment.evidence_refs || []))}</b>中文：${escapeHtml(segment.text_zh || "（暂无中文）")}\n\n日文：${escapeHtml(segment.text_ja || "（暂无日文）")}</div>`).join("") || "<p class='empty'>没有识别到彰人/冬弥目标片段</p>";
+      $("#detail").innerHTML = `
+        <h2>${escapeHtml(story.episode_title || story.title || payload.page?.title || "未命名剧情")}　${statusBadge(payload.review?.status || payload.status || "unknown")}</h2>
+        <div class="meta"><div><b>草稿 ID</b>${escapeHtml(payload.draft_id)}</div><div><b>路由</b>${escapeHtml(source.route_type)} / ${escapeHtml(source.locale)}</div><div><b>场景 ID</b>${escapeHtml(story.scenario_id)}</div><div><b>来源</b><a href="${escapeHtml(source.canonical_url)}" target="_blank" rel="noreferrer">打开资讯站页面</a></div></div>
+        <details><summary>彰人 / 冬弥目标片段（只读）</summary><div class="content">${segments}</div></details>
+        <details><summary>整话双语动作（只读，${Array.isArray(payload.actions) ? payload.actions.length : 0} 条）</summary><div class="content">${renderActions(payload.actions)}</div></details>
+        <details open><summary>派生分析（可编辑，原文和证据索引不可编辑）</summary><div class="content">${renderAnalysis(analysis)}<div class="toolbar"><button id="save-analysis" type="button">保存分析并退回待审核</button></div></div></details>
+        <div class="toolbar"><button id="review-approve" type="button">审核通过</button><button id="review-reject" class="danger" type="button">标记驳回</button><button id="dedupe-preview" class="secondary" type="button">预览去重</button><button id="publish" class="warning" type="button">发布</button></div>
+        <div id="preview-box"></div>`;
+      $("#save-analysis").addEventListener("click", saveAnalysis);
+      $("#review-approve").addEventListener("click", () => reviewDraft("approved"));
+      $("#review-reject").addEventListener("click", () => reviewDraft("rejected"));
+      $("#dedupe-preview").addEventListener("click", previewDedupe);
+      $("#publish").addEventListener("click", publishDraft);
+    }
+
+    async function loadDraft(draftId) {
+      try { state.current = (await api(`/api/drafts/${encodeURIComponent(draftId)}`)).draft; state.preview = null; renderDetail(state.current); await refreshDrafts(); setNotice(`已加载 ${draftId}`); }
+      catch (error) { setNotice(error.message, true); }
+    }
+
+    async function saveAnalysis() {
+      if (!state.current) return;
+      try {
+        const analysis = {};
+        $("#detail").querySelectorAll("[data-analysis-field]").forEach((node) => {
+          if (node.dataset.analysisField === "summary_zh") analysis.summary_zh = node.value;
+          else analysis[node.dataset.analysisField] = JSON.parse(node.value || "[]");
+        });
+        state.current = (await api(`/api/drafts/${state.current.draft_id}/analysis`, { method: "PATCH", body: JSON.stringify({ analysis }) })).draft;
+        state.preview = null; renderDetail(state.current); await refreshDrafts(); setNotice("分析已保存，草稿已退回待审核状态");
+      } catch (error) { setNotice(error.message, true); }
+    }
+
+    async function reviewDraft(status) {
+      if (!state.current) return;
+      const note = window.prompt(status === "approved" ? "审核备注（可留空）" : "驳回原因（可留空）", "") ?? "";
+      try { state.current = (await api(`/api/drafts/${state.current.draft_id}/review`, { method: "POST", body: JSON.stringify({ status, reviewer: "web", note }) })).draft; renderDetail(state.current); await refreshDrafts(); setNotice(`已标记为 ${status}`); }
+      catch (error) { setNotice(error.message, true); }
+    }
+
+    async function previewDedupe() {
+      if (!state.current) return;
+      try { state.preview = (await api(`/api/drafts/${state.current.draft_id}/dedupe-preview`, { method: "POST", body: "{}" })).preview; renderPreview(); setNotice(`去重结果：${state.preview.status}`); }
+      catch (error) { setNotice(error.message, true); }
+    }
+
+    function renderPreview() {
+      const box = $("#preview-box");
+      if (!box || !state.preview) return;
+      const existing = state.preview.existing_event;
+      box.innerHTML = `<div class="preview"><b>去重状态：${escapeHtml(state.preview.status)}</b>\n${escapeHtml(state.preview.reason || "")}\n事件 ID：${escapeHtml(state.preview.event_id)}${existing ? `\n现有标题：${escapeHtml(existing.title || "")}\n现有事件 ID：${escapeHtml(existing.event_id || "")}` : ""}</div>`;
+    }
+
+    async function publishDraft() {
+      if (!state.current) return;
+      if (state.current.review?.status !== "approved") { setNotice("请先审核通过，再发布", true); return; }
+      let confirmRevision = false;
+      try {
+        if (!state.preview) await previewDedupe();
+        if (state.preview?.status === "duplicate_content") { setNotice("内容与已有事件重复，未发布；请查看去重预览", true); return; }
+        if (state.preview?.status === "revision") confirmRevision = window.confirm("检测到同一剧情的新版本。确认保存旧版快照并更新当前事件吗？");
+        if (state.preview?.status === "revision" && !confirmRevision) return;
+        const result = await api(`/api/drafts/${state.current.draft_id}/publish`, { method: "POST", body: JSON.stringify({ confirm_revision: confirmRevision }) });
+        state.current = result.draft; state.preview = result.dedupe; renderDetail(state.current); renderPreview(); await refreshDrafts(); setNotice(`发布成功：${result.event_id}`);
+      } catch (error) { if (error.body?.preview) { state.preview = error.body.preview; renderPreview(); } setNotice(error.message, true); }
+    }
+
+    $("#capture-form").addEventListener("submit", async (event) => {
+      event.preventDefault(); const button = $("#capture-button"); button.disabled = true; setNotice("正在抓取公开页面和剧情资产……");
+      try { const body = await api("/api/capture", { method: "POST", body: JSON.stringify({ url: $("#story-url").value.trim(), enrich: $("#enrich-llm").checked ? "llm" : "none" }) }); state.current = body.draft; state.preview = null; renderDetail(state.current); await refreshDrafts(); setNotice(`抓取成功：${state.current.draft_id}`); }
+      catch (error) { setNotice(error.message, true); } finally { button.disabled = false; }
+    });
+    $("#refresh-button").addEventListener("click", () => refreshDrafts().catch((error) => setNotice(error.message, true)));
+    $("#status-filter").addEventListener("change", () => refreshDrafts().catch((error) => setNotice(error.message, true)));
+    refreshDrafts().catch((error) => setNotice(error.message, true));
+  </script>
+</body>
+</html>

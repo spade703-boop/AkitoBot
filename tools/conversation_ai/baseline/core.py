@@ -496,9 +496,9 @@ def render_baseline_report(
             "",
             "## 复现方式",
             "",
-            "- 校验评测集：`python tools/evaluate_conversation_baseline.py --validate-only`",
-            "- 读取回放结果：`python tools/evaluate_conversation_baseline.py --responses path/to/responses.jsonl`",
-            "- 汇总在线 trace：设置 `AKITO_CONVERSATION_TRACE_PATH` 后运行 `python tools/evaluate_conversation_baseline.py --traces path/to/traces.jsonl`",
+            "- 校验评测集：`python tools/conversation_ai/baseline/evaluate.py --validate-only`",
+            "- 读取回放结果：`python tools/conversation_ai/baseline/evaluate.py --responses path/to/responses.jsonl`",
+            "- 汇总在线 trace：设置 `AKITO_CONVERSATION_TRACE_PATH` 后运行 `python tools/conversation_ai/baseline/evaluate.py --traces path/to/traces.jsonl`",
             "- 启用结构化 AI 裁判：追加 `--judge --judge-model <model>`，并配置 `DEEPSEEK_API_KEY`",
             '- 回放结果每行至少包含 `{"id":"casual-001","response":"..."}`；可选附带 `judge` 字段',
         ]

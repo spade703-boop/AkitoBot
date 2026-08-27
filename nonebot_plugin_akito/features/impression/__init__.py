@@ -940,6 +940,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
     record_event_memory(
         trace_request_id,
         candidates=event_memory_result.candidates,
+        evidence_units=event_memory_result.evidence_units,
         confidences=event_memory_result.confidences,
         status=event_memory_result.status,
         reason=event_memory_result.reason,
@@ -1345,6 +1346,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
     record_event_memory(
         trace_request_id,
         candidates=event_memory_result.candidates,
+        evidence_units=event_memory_result.evidence_units,
         confidences=event_memory_result.confidences,
         status=event_memory_result.status,
         reason=event_memory_result.reason,

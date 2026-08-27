@@ -16,11 +16,49 @@ _MIN_ISOLATED_SCORE = 3.0
 _MIN_SCORE_MARGIN = 1.0
 _GENERIC_TERMS = {"彰人", "冬弥", "青柳", "东云", "東雲", "toya", "akito"}
 _QUERY_STOP_PHRASES = (
-    "你还记得", "还记得", "你们以前", "以前", "那一次", "那次", "那天", "上次",
-    "那个事情", "那个事", "后来", "当时", "发生过什么", "发生了什么", "发生过",
-    "怎么样了", "怎么样", "怎么说的", "怎么说", "说说", "是不是", "有没有", "什么",
-    "青柳冬弥", "东云彰人", "東雲彰人", "冬弥", "彰人", "青柳", "东云", "東雲",
-    "你们", "你自己", "自己", "你", "他", "的", "了", "吗", "吧", "呢", "挺", "有点",
+    "你还记得",
+    "还记得",
+    "你们以前",
+    "以前",
+    "那一次",
+    "那次",
+    "那天",
+    "上次",
+    "那个事情",
+    "那个事",
+    "后来",
+    "当时",
+    "发生过什么",
+    "发生了什么",
+    "发生过",
+    "怎么样了",
+    "怎么样",
+    "怎么说的",
+    "怎么说",
+    "说说",
+    "是不是",
+    "有没有",
+    "什么",
+    "青柳冬弥",
+    "东云彰人",
+    "東雲彰人",
+    "冬弥",
+    "彰人",
+    "青柳",
+    "东云",
+    "東雲",
+    "你们",
+    "你自己",
+    "自己",
+    "你",
+    "他",
+    "的",
+    "了",
+    "吗",
+    "吧",
+    "呢",
+    "挺",
+    "有点",
 )
 _QUERY_ALIASES = (
     ("庆生", "生日"),
@@ -33,9 +71,31 @@ _QUERY_ALIASES = (
     ("努力学习", "学习"),
 )
 _SIGNAL_TERMS = (
-    "生日", "惊喜", "甜食", "唱歌", "胜负", "切蛋糕", "聚餐", "学校", "热闹", "规则",
-    "雪仗", "提醒", "学习", "感谢", "配合", "开心", "祝福", "讨论", "努力", "聚会",
-    "清晨", "很早", "早上", "sekai", "rad blast",
+    "生日",
+    "惊喜",
+    "甜食",
+    "唱歌",
+    "胜负",
+    "切蛋糕",
+    "聚餐",
+    "学校",
+    "热闹",
+    "规则",
+    "雪仗",
+    "提醒",
+    "学习",
+    "感谢",
+    "配合",
+    "开心",
+    "祝福",
+    "讨论",
+    "努力",
+    "聚会",
+    "清晨",
+    "很早",
+    "早上",
+    "sekai",
+    "rad blast",
 )
 
 
@@ -49,6 +109,7 @@ class EventMemoryHit:
     score: float
     evidence: tuple[dict[str, Any], ...]
     topics: tuple[str, ...] = ()
+    style_examples: tuple[dict[str, Any], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -67,6 +128,17 @@ class EventMemoryResult:
     @property
     def confidences(self) -> list[str]:
         return [hit.confidence for hit in self.hits]
+
+    @property
+    def evidence_units(self) -> list[str]:
+        units: list[str] = []
+        for hit in self.hits:
+            for evidence in hit.evidence[:3]:
+                record_index = evidence.get("record_index")
+                if record_index is None:
+                    continue
+                units.append(f"{hit.event_id}:{record_index}")
+        return units
 
 
 def validate_event_inventory(payload: object) -> list[str]:
@@ -91,9 +163,7 @@ def validate_event_inventory(payload: object) -> list[str]:
             errors.append(f"events[{index}] evidence missing")
             continue
         if event.get("confidence") == "high" and not any(
-            isinstance(row, dict)
-            and str(row.get("context") or "").strip()
-            and str(row.get("dialogue") or "").strip()
+            isinstance(row, dict) and str(row.get("context") or "").strip() and str(row.get("dialogue") or "").strip()
             for row in evidence
         ):
             errors.append(f"events[{index}] high-confidence evidence incomplete")
@@ -152,6 +222,16 @@ def _score_event(query: str, event: dict[str, Any]) -> float:
         values.extend(_normalize(item) for item in topic_values)
     if isinstance(keywords, list):
         values.extend(_normalize(item) for item in keywords)
+    evidence = event.get("evidence", [])
+    if isinstance(evidence, list):
+        for item in evidence:
+            if not isinstance(item, dict):
+                continue
+            values.extend(
+                _normalize(item.get(field))
+                for field in ("context", "context_zh", "dialogue", "dialogue_zh")
+                if item.get(field)
+            )
     for value in dict.fromkeys(item for item in values if item):
         if len(value) >= 2 and value in query_text:
             score += 3.0 if value == title else 1.5
@@ -159,6 +239,30 @@ def _score_event(query: str, event: dict[str, Any]) -> float:
         score += min(3.0, 0.5 * len(overlap))
         score += 2.0 * sum(term in query_text and term in value for term in _SIGNAL_TERMS)
     return score
+
+
+def _score_evidence(query: str, evidence: dict[str, Any]) -> float:
+    query_text = _normalize(query)
+    query_terms = _ngrams(query)
+    values = [
+        _normalize(evidence.get(field))
+        for field in ("context", "context_zh", "dialogue", "dialogue_zh")
+        if evidence.get(field)
+    ]
+    score = 0.0
+    for value in dict.fromkeys(item for item in values if item):
+        overlap = _ngrams(value) & query_terms
+        score += min(5.0, 0.5 * len(overlap))
+        score += 2.0 * sum(term in query_text and term in value for term in _SIGNAL_TERMS)
+    return score
+
+
+def _rank_evidence(query: str, evidence: tuple[dict[str, Any], ...]) -> tuple[dict[str, Any], ...]:
+    ranked = sorted(
+        enumerate(evidence),
+        key=lambda item: (-_score_evidence(query, item[1]), item[0]),
+    )
+    return tuple(item[1] for item in ranked)
 
 
 def retrieve_event_memories(
@@ -186,7 +290,12 @@ def retrieve_event_memories(
             continue
         evidence = event.get("evidence", [])
         evidence_rows = tuple(item for item in evidence if isinstance(item, dict)) if isinstance(evidence, list) else ()
+        evidence_rows = _rank_evidence(query_text, evidence_rows)
         topics = event.get("topics", [])
+        style_examples = event.get("style_examples", [])
+        style_rows = (
+            tuple(item for item in style_examples if isinstance(item, dict)) if isinstance(style_examples, list) else ()
+        )
         scored.append(
             EventMemoryHit(
                 event_id=str(event.get("event_id")),
@@ -197,6 +306,7 @@ def retrieve_event_memories(
                 score=round(score, 3),
                 evidence=evidence_rows,
                 topics=tuple(str(item) for item in topics if str(item).strip()) if isinstance(topics, list) else (),
+                style_examples=style_rows,
             )
         )
     scored.sort(key=lambda hit: (-hit.score, -_CONFIDENCE_ORDER.get(hit.confidence, 0), hit.event_id))
@@ -213,11 +323,7 @@ def retrieve_event_memories(
             score_margin=score_margin,
             candidate_count=candidate_count,
         )
-    if (
-        top_score < _MIN_STRONG_SCORE
-        and score_margin < _MIN_SCORE_MARGIN
-        and _signal_cue_count(query_text) < 2
-    ):
+    if top_score < _MIN_STRONG_SCORE and score_margin < _MIN_SCORE_MARGIN and _signal_cue_count(query_text) < 2:
         return EventMemoryResult(
             status="no_hit",
             reason="ambiguous_candidates",
@@ -246,19 +352,37 @@ def format_event_memory_context(result: EventMemoryResult, *, max_evidence_chars
         "群友明确提到已证实经历时，可以用彰人的第一人称自然认领；不要提及检索、资料库或 event_id，也不要逐字复述原台词。",
     ]
     for hit in result.hits:
-        lines.append(f"- [{hit.event_id}][{hit.confidence}] {hit.title}")
+        lines.append(f"- 已确认共同经历（置信度：{hit.confidence}）")
         if hit.summary:
             lines.append(f"  已确认概括：{hit.summary}")
         if hit.category or hit.topics:
             labels = " / ".join(item for item in (hit.category, *hit.topics) if item)
             lines.append(f"  分类主题：{labels}")
-        for evidence in hit.evidence[:1]:
-            context = str(evidence.get("context") or "").strip()
-            dialogue = str(evidence.get("dialogue") or "").strip()
+        for unit_index, evidence in enumerate(hit.evidence[:3], 1):
+            lines.append(f"  共同经历单元 {unit_index}：")
+            context = str(evidence.get("context_zh") or evidence.get("context") or "").strip()
+            dialogue = str(evidence.get("dialogue_zh") or evidence.get("dialogue") or "").strip()
+            original = str(
+                evidence.get("original_ja") or evidence.get("text_ja") or evidence.get("dialogue_ja") or ""
+            ).strip()
             if context:
                 lines.append(f"  原始情境：{context[:max_evidence_chars]}")
             if dialogue:
                 lines.append(f"  原始台词证据：{dialogue[:max_evidence_chars]}")
+            if original and original not in {context, dialogue}:
+                lines.append(f"  日文原文对照：{original[:max_evidence_chars]}")
+        style_lines = []
+        for style in hit.style_examples[:2]:
+            refs = style.get("evidence_refs")
+            if not isinstance(refs, list) or not refs:
+                continue
+            example = str(
+                style.get("text_zh") or style.get("example_zh") or style.get("dialogue") or style.get("text") or ""
+            ).strip()
+            if example:
+                style_lines.append(example[:max_evidence_chars])
+        if style_lines:
+            lines.append("  彰人口吻参考（只借鉴表达方式，不新增事实）：" + " / ".join(style_lines))
     return "\n".join(lines)
 
 

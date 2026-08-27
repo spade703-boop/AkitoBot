@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from tools.evaluate_rollout import build_rollout_report, load_traces, render_rollout_report
+from tools.conversation_ai.rollout.evaluate import build_rollout_report, load_traces, render_rollout_report
 
 
 def _trace(arm: str, *, failed: bool = False, elapsed_ms: float = 100, tokens: int = 20) -> dict:
