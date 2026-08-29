@@ -331,6 +331,8 @@ class CoverageStore:
             entry["priority"] = priority
         if notes is not None:
             entry["notes"] = str(notes).strip()
+        if (classification is not None or confirm_classification) and entry.get("workflow_status") != "published":
+            raise CoverageError("只有已发布剧情需要确认覆盖分类")
         if classification is not None:
             entry["classification"] = _normalize_classification(classification, allow_empty=not confirm_classification)
             entry["classification_status"] = "confirmed" if confirm_classification else "unclassified"
@@ -346,6 +348,8 @@ class CoverageStore:
         entry = next((item for item in catalog["sources"] if item.get("source_id") == source_id), None)
         if entry is None:
             raise CoverageError("找不到覆盖来源")
+        if entry.get("workflow_status") != "published":
+            raise CoverageError("只有已发布剧情需要生成分类建议")
         entry["suggested_classification"] = _normalize_classification(suggestion)
         entry["classification_status"] = "suggested"
         self._save_catalog(catalog)
@@ -354,6 +358,8 @@ class CoverageStore:
     def list_sources(self, filters: dict[str, str] | None = None) -> list[dict[str, Any]]:
         rows = self.load_catalog()["sources"]
         filters = filters or {}
+        if not filters.get("workflow_status") and str(filters.get("include_rejected") or "").lower() not in {"1", "true"}:
+            rows = [item for item in rows if item.get("workflow_status") != "rejected"]
         for field in ("workflow_status", "priority", "classification_status", "eval_status"):
             value = str(filters.get(field) or "")
             if value:
@@ -365,39 +371,53 @@ class CoverageStore:
 
     def summary(self) -> dict[str, Any]:
         rows = self.load_catalog()["sources"]
+        maintenance_rows = [item for item in rows if item.get("workflow_status") != "rejected"]
+        published_rows = [item for item in rows if item.get("workflow_status") == "published"]
         return {
             "scope": "known_sources_only",
-            "known_sources": len(rows),
+            "processed_sources": len(rows),
+            "maintenance_sources": len(maintenance_rows),
+            "published_sources": len(published_rows),
+            "rejected_records": len(rows) - len(maintenance_rows),
             "workflow": dict(Counter(str(item.get("workflow_status") or "unknown") for item in rows)),
-            "priority": dict(Counter(str(item.get("priority") or "unknown") for item in rows)),
-            "classification": dict(Counter(str(item.get("classification_status") or "unknown") for item in rows)),
-            "evaluation": dict(Counter(str(item.get("eval_status") or "unknown") for item in rows)),
+            "priority": dict(Counter(str(item.get("priority") or "unknown") for item in maintenance_rows)),
+            "classification": dict(Counter(str(item.get("classification_status") or "unknown") for item in published_rows)),
+            "evaluation": dict(Counter(str(item.get("eval_status") or "unknown") for item in published_rows)),
         }
 
     def render_report(self, catalog: dict[str, Any] | None = None) -> str:
         provided_catalog = catalog is not None
         catalog = catalog or self.load_catalog()
         rows = catalog["sources"]
+        maintenance_rows = [item for item in rows if item.get("workflow_status") != "rejected"]
+        published_rows = [item for item in rows if item.get("workflow_status") == "published"]
         summary = self.summary() if not provided_catalog else {
-            "known_sources": len(rows),
+            "processed_sources": len(rows),
+            "maintenance_sources": len(maintenance_rows),
+            "published_sources": len(published_rows),
+            "rejected_records": len(rows) - len(maintenance_rows),
             "workflow": dict(Counter(str(item.get("workflow_status") or "unknown") for item in rows)),
-            "classification": dict(Counter(str(item.get("classification_status") or "unknown") for item in rows)),
-            "evaluation": dict(Counter(str(item.get("eval_status") or "unknown") for item in rows)),
+            "classification": dict(Counter(str(item.get("classification_status") or "unknown") for item in published_rows)),
+            "evaluation": dict(Counter(str(item.get("eval_status") or "unknown") for item in published_rows)),
         }
         lines = [
             "# 彰冬剧情已知来源覆盖报告",
             "",
             "> 该报告只统计已抓取、已发布和人工加入待办的已知来源，不代表全游戏剧情覆盖率。",
             "",
-            f"- 已知来源：{summary['known_sources']}",
-            f"- 工作流状态：`{json.dumps(summary['workflow'], ensure_ascii=False)}`",
-            f"- 分类状态：`{json.dumps(summary['classification'], ensure_ascii=False)}`",
-            f"- 评测状态：`{json.dumps(summary['evaluation'], ensure_ascii=False)}`",
+            f"- 已处理来源记录：{summary['processed_sources']}",
+            f"- 已驳回归档：{summary['rejected_records']}（仅用于避免重复处理，不纳入覆盖进度）",
+            f"- 当前维护队列：{summary['maintenance_sources']}",
+            f"- 有效覆盖来源：{summary['published_sources']}（仅统计已发布剧情）",
+            f"- 有效来源分类状态：`{json.dumps(summary['classification'], ensure_ascii=False)}`",
+            f"- 有效来源评测状态：`{json.dumps(summary['evaluation'], ensure_ascii=False)}`",
+            "",
+            "## 有效覆盖来源",
             "",
             "| 来源 | 优先级 | 工作流 | 分类 | 评测 |",
             "| --- | --- | --- | --- | --- |",
         ]
-        for item in sorted(rows, key=lambda row: (PRIORITIES.index(row.get("priority", "low")), row["source_id"])):
+        for item in sorted(published_rows, key=lambda row: (PRIORITIES.index(row.get("priority", "low")), row["source_id"])):
             classification = item.get("classification", {})
             labels = "/".join(
                 [classification.get("timeline_stage", ""), *classification.get("event_types", [])]
@@ -406,6 +426,14 @@ class CoverageStore:
                 f"| [{item.get('display_label') or item['source_id']}]({item['canonical_url']}) | "
                 f"{item['priority']} | {item['workflow_status']} | {labels} | {item['eval_status']} |"
             )
+        pending_rows = [item for item in maintenance_rows if item.get("workflow_status") != "published"]
+        if pending_rows:
+            lines.extend(["", "## 待处理来源", "", "| 来源 | 优先级 | 工作流 |", "| --- | --- | --- |"])
+            for item in sorted(pending_rows, key=lambda row: (PRIORITIES.index(row.get("priority", "low")), row["source_id"])):
+                lines.append(
+                    f"| [{item.get('display_label') or item['source_id']}]({item['canonical_url']}) | "
+                    f"{item['priority']} | {item['workflow_status']} |"
+                )
         return "\n".join(lines) + "\n"
 
     def source_material(self, source_id: str) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, Any] | None]:

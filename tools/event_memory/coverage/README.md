@@ -15,4 +15,4 @@ python tools/event_memory/coverage/cli.py summary
 python tools/event_memory/coverage/cli.py add https://pjsk.moe/zh-cn/story/event/140/8/ --priority high
 ```
 
-覆盖率分母仅为已知来源，不能用于宣称全游戏剧情覆盖率。AI 分类只写入 `suggested_classification`；评测生成只写入 `eval_drafts.json`。分类和评测问题都必须人工确认，评测批准后才会写入 `retrieval/eval_set.json`。
+覆盖率分母仅为已发布的已知来源，不能用于宣称全游戏剧情覆盖率。`rejected` 只作历史归档，默认隐藏且不参与分类、评测或进度统计。AI 分类只写入 `suggested_classification`；评测生成只写入 `eval_drafts.json`。分类和评测问题都必须人工确认，评测批准后才会写入 `retrieval/eval_set.json`。

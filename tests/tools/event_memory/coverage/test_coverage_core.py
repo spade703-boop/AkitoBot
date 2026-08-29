@@ -91,14 +91,15 @@ def test_sync_tracks_known_sources_without_copying_dialogue(tmp_path: Path) -> N
     assert entry["workflow_status"] == "published"
     assert entry["event_ids"] == ["event-target"]
     assert entry["origins"] == ["published"]
-    assert store.summary()["known_sources"] == 1
+    assert store.summary()["processed_sources"] == 1
+    assert store.summary()["published_sources"] == 1
     assert "冬弥发烧时仍想参加" not in store.catalog_path.read_text(encoding="utf-8")
     assert "不代表全游戏剧情覆盖率" in store.report_path.read_text(encoding="utf-8")
 
 
 def test_classification_suggestion_requires_manual_confirmation(tmp_path: Path) -> None:
     store = _store(tmp_path)
-    entry = store.add_source("https://pjsk.moe/zh-cn/story/event/71/8/")
+    entry = _published_source(store)
     suggestion = {"timeline_stage": "早期搭档", "event_types": ["创作练习"], "participant_scope": "VBS集体"}
 
     suggested = store.save_suggestion(entry["source_id"], suggestion)
@@ -108,6 +109,42 @@ def test_classification_suggestion_requires_manual_confirmation(tmp_path: Path) 
     confirmed = store.update_source(entry["source_id"], confirm_classification=True)
     assert confirmed["classification_status"] == "confirmed"
     assert confirmed["classification"] == suggestion
+
+
+def test_rejected_sources_are_archived_and_not_maintained(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    url = "https://pjsk.moe/zh-cn/story/card/1388/"
+    _write(
+        store.data_dir / "event_memory" / "story_import" / "drafts" / "story-0123456789abcdef.json",
+        {
+            "draft_id": "story-0123456789abcdef",
+            "source": {"canonical_url": url},
+            "story": {"episode_title": "卡牌剧情"},
+            "review": {"status": "rejected"},
+        },
+    )
+    store.sync()
+    rejected = store.load_catalog()["sources"][0]
+
+    assert store.list_sources() == []
+    assert store.list_sources({"workflow_status": "rejected"}) == [rejected]
+    assert store.summary()["processed_sources"] == 1
+    assert store.summary()["maintenance_sources"] == 0
+    assert store.summary()["published_sources"] == 0
+    assert store.summary()["rejected_records"] == 1
+    assert store.summary()["classification"] == {}
+    assert store.summary()["evaluation"] == {}
+    with pytest.raises(CoverageError, match="已发布"):
+        store.save_suggestion(
+            rejected["source_id"],
+            {"timeline_stage": "日常/未定位", "event_types": ["日常互动"], "participant_scope": "仅彰冬"},
+        )
+    with pytest.raises(CoverageError, match="已发布"):
+        store.update_source(
+            rejected["source_id"],
+            classification={"timeline_stage": "日常/未定位", "event_types": ["日常互动"], "participant_scope": "仅彰冬"},
+            confirm_classification=True,
+        )
 
 
 def test_eval_draft_does_not_change_formal_set_until_approved(tmp_path: Path) -> None:

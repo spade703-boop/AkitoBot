@@ -123,9 +123,9 @@ def test_web_ui_is_local_and_api_runs_complete_flow(tmp_path: Path, monkeypatch)
         assert status == 200 and published["event_id"].startswith("akito-toya-web-")
 
         status, coverage = _request(port, "GET", "/api/coverage")
-        assert status == 200 and coverage["summary"]["known_sources"] == 1
+        assert status == 200 and coverage["summary"]["published_sources"] == 1
         status, synced = _request(port, "POST", "/api/coverage/sync", {})
-        assert status == 200 and synced["summary"]["known_sources"] == 1
+        assert status == 200 and synced["summary"]["published_sources"] == 1
         source = coverage["sources"][0]
         assert source["workflow_status"] == "published"
         source_id = source["source_id"]

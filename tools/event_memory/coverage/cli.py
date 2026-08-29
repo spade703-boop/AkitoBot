@@ -26,8 +26,9 @@ def main() -> int:
     args = parser.parse_args()
     store = default_store(ROOT)
     if args.command == "sync":
-        payload = store.sync()
-        print(json.dumps({"sources": len(payload["sources"]), "report": str(store.report_path)}, ensure_ascii=False))
+        store.sync()
+        summary = store.summary()
+        print(json.dumps({**summary, "report": str(store.report_path)}, ensure_ascii=False))
     elif args.command == "summary":
         print(json.dumps(store.summary(), ensure_ascii=False, indent=2))
     else:

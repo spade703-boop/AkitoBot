@@ -14,7 +14,7 @@ python tools/event_memory/story_import/web.py --data-dir data --port 8765
 
 然后打开 `http://127.0.0.1:8765/`。服务只监听本机，关闭窗口或按 `Ctrl+C` 即可停止；它不会启动 NoneBot，也不会自动打开浏览器。网页可以完成抓取、查看、分析编辑、审核、去重预览和发布，也可以维护页面下方的“已知来源覆盖台账”。
 
-覆盖台账把已抓取草稿、已发布人工事件和手动加入的待办 URL 合并到同一个列表，并显示 `todo`、`draft`、`approved`、`published`、`rejected`、`revision_pending` 状态。AI 可以建议时间阶段、事件类型、参与范围和召回评测问题，但不会自动确认分类，也不会直接修改正式评测集；必须在网页中人工核对并批准。
+覆盖台账把已抓取草稿、已发布人工事件和手动加入的待办 URL 合并到同一个列表，并显示 `todo`、`draft`、`approved`、`published`、`rejected`、`revision_pending` 状态。默认维护视图隐藏 `rejected`；它们只是避免重复处理的历史归档，不参与覆盖分类、评测和进度统计。AI 只为 `published` 剧情建议时间阶段、事件类型、参与范围和召回评测问题，不会自动确认分类，也不会直接修改正式评测集；必须在网页中人工核对并批准。
 
 ## 快速流程
 
