@@ -124,6 +124,9 @@ def test_web_ui_is_local_and_api_runs_complete_flow(tmp_path: Path, monkeypatch)
 
         status, coverage = _request(port, "GET", "/api/coverage")
         assert status == 200 and coverage["summary"]["published_sources"] == 1
+        assert "赴美/美国筹备（RUSH BEATS）" in coverage["options"]["timeline_stages"]
+        assert coverage["options"]["participant_scope_label"].startswith("参与范围")
+        assert "目标片段" in coverage["options"]["participant_scope_descriptions"]["彰冬+多方角色"]
         status, synced = _request(port, "POST", "/api/coverage/sync", {})
         assert status == 200 and synced["summary"]["published_sources"] == 1
         source = coverage["sources"][0]

@@ -1,4 +1,53 @@
 {
   "schema_version": 1,
-  "drafts": []
+  "drafts": [
+    {
+      "draft_id": "eval-ea53697ea7bc0151",
+      "source_id": "source-ea53697ea7bc0151",
+      "event_ids": [
+        "akito-toya-web-b08adb36a69c"
+      ],
+      "status": "draft",
+      "cases": [
+        {
+          "case_type": "positive",
+          "query": "冬弥回顾与彰人相遇和组队的经历，表达了对彰人的感激与信任，并创作了一首音轨向彰人传达心意，彰人听后大加赞赏，决定在演出中加入这首曲子。",
+          "expected_event_ids": [
+            "akito-toya-web-b08adb36a69c"
+          ],
+          "forbidden_event_ids": []
+        },
+        {
+          "case_type": "positive",
+          "query": "彰人听了冬弥创作的音轨后非常赞赏，并决定在演出中加入这首曲子，这是冬弥为了向彰人表达感激和信任而创作的。",
+          "expected_event_ids": [
+            "akito-toya-web-b08adb36a69c"
+          ],
+          "forbidden_event_ids": []
+        },
+        {
+          "case_type": "adjacent",
+          "query": "冬弥回顾与彰人的相遇和组队经历，表达感激和信任，并创作音轨传达心意，彰人听后大加赞赏，决定在演出中加入这首曲子。",
+          "expected_event_ids": [
+            "akito-toya-web-b08adb36a69c"
+          ],
+          "forbidden_event_ids": [
+            "akito-toya-06ed04c2c5a6"
+          ]
+        },
+        {
+          "case_type": "negative",
+          "query": "冬弥回顾与彰人的相遇和组队经历，表达感激和信任，并创作了一首音轨向彰人传达心意，但彰人听后并不满意，拒绝在演出中加入这首曲子。",
+          "expected_event_ids": [],
+          "forbidden_event_ids": []
+        },
+        {
+          "case_type": "negative",
+          "query": "冬弥回顾与彰人的相遇和组队经历，表达感激和信任，并创作了一首音轨向彰人传达心意，彰人听后大加赞赏，但决定不在演出中加入这首曲子。",
+          "expected_event_ids": [],
+          "forbidden_event_ids": []
+        }
+      ]
+    }
+  ]
 }

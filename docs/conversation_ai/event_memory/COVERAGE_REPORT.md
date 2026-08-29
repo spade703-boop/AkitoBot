@@ -6,12 +6,12 @@
 - 已驳回归档：5（仅用于避免重复处理，不纳入覆盖进度）
 - 当前维护队列：2
 - 有效覆盖来源：2（仅统计已发布剧情）
-- 有效来源分类状态：`{"unclassified": 2}`
-- 有效来源评测状态：`{"approved": 1, "missing": 1}`
+- 有效来源分类状态：`{"confirmed": 2}`
+- 有效来源评测状态：`{"approved": 1, "draft": 1}`
 
 ## 有效覆盖来源
 
 | 来源 | 优先级 | 工作流 | 分类 | 评测 |
 | --- | --- | --- | --- | --- |
-| [理屈ではなく](https://pjsk.moe/zh-cn/story/event/193/6/) | medium | published | 未确认 | approved |
-| [接下来就该轮到我了](https://pjsk.moe/zh-cn/story/event/71/8/) | medium | published | 未确认 | missing |
+| [理屈ではなく](https://pjsk.moe/zh-cn/story/event/193/6/) | high | published | 赴美/美国筹备（RUSH BEATS）/演出对决 | approved |
+| [接下来就该轮到我了](https://pjsk.moe/zh-cn/story/event/71/8/) | high | published | 早期搭档/创作练习/支持照顾 | draft |

@@ -109,6 +109,8 @@ def test_suggest_coverage_classification_uses_compact_material(monkeypatch):
     assert result["timeline_stage"] == "早期搭档"
     assert "不应发送" not in str(captured["prompt"])
     assert "不应发送完整台词" not in str(captured["prompt"])
+    assert "赴美/美国筹备（RUSH BEATS）" in str(captured["prompt"])
+    assert "原剧情场景中出现的角色范围" in str(captured["prompt"])
 
 
 def test_generate_coverage_eval_cases_rejects_missing_cases(monkeypatch):

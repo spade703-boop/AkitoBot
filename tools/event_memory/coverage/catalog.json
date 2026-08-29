@@ -23,7 +23,22 @@
         "draft"
       ],
       "notes": "",
-      "eval_draft_id": ""
+      "eval_draft_id": "",
+      "source_speakers": [
+        "MEIKO",
+        "こはね",
+        "こはね・杏",
+        "リン",
+        "レン",
+        "冬弥",
+        "冬弥・こはね・杏",
+        "彰人",
+        "杏"
+      ],
+      "target_speakers": [
+        "akito",
+        "toya"
+      ]
     },
     {
       "source_id": "source-397e45ce759eede3",
@@ -46,7 +61,17 @@
         "draft"
       ],
       "notes": "",
-      "eval_draft_id": ""
+      "eval_draft_id": "",
+      "source_speakers": [
+        "冬弥",
+        "彰人",
+        "心羽的消息",
+        "杏的消息"
+      ],
+      "target_speakers": [
+        "akito",
+        "toya"
+      ]
     },
     {
       "source_id": "source-58fe41e2913cf67e",
@@ -69,21 +94,37 @@
         "draft"
       ],
       "notes": "",
-      "eval_draft_id": ""
+      "eval_draft_id": "",
+      "source_speakers": [
+        "Vivid Street上的年轻人们",
+        "冬弥",
+        "彰人",
+        "心羽",
+        "杏",
+        "杏&心羽&冬弥",
+        "洸太郎",
+        "？？？"
+      ],
+      "target_speakers": [
+        "akito",
+        "toya"
+      ]
     },
     {
       "source_id": "source-85e3ee7dcb7008ce",
       "canonical_url": "https://pjsk.moe/zh-cn/story/event/193/6/",
       "route_type": "event",
       "display_label": "理屈ではなく",
-      "priority": "medium",
+      "priority": "high",
       "classification": {
-        "timeline_stage": "",
-        "event_types": [],
-        "participant_scope": "未知"
+        "timeline_stage": "赴美/美国筹备（RUSH BEATS）",
+        "event_types": [
+          "演出对决"
+        ],
+        "participant_scope": "彰冬+VBS外角色"
       },
       "suggested_classification": null,
-      "classification_status": "unclassified",
+      "classification_status": "confirmed",
       "draft_id": "story-30b154922d2f28ab",
       "event_ids": [
         "akito-toya-web-30b154922d2f"
@@ -95,7 +136,16 @@
         "published"
       ],
       "notes": "",
-      "eval_draft_id": ""
+      "eval_draft_id": "",
+      "source_speakers": [
+        "KAITO",
+        "冬弥",
+        "彰人"
+      ],
+      "target_speakers": [
+        "akito",
+        "toya"
+      ]
     },
     {
       "source_id": "source-93c47b159a83a002",
@@ -118,7 +168,18 @@
         "draft"
       ],
       "notes": "",
-      "eval_draft_id": ""
+      "eval_draft_id": "",
+      "source_speakers": [
+        "MEIKO",
+        "冬弥",
+        "初音未来",
+        "彰人",
+        "洸太郎"
+      ],
+      "target_speakers": [
+        "akito",
+        "toya"
+      ]
     },
     {
       "source_id": "source-d1c6e51fd1483069",
@@ -141,33 +202,59 @@
         "draft"
       ],
       "notes": "",
-      "eval_draft_id": ""
+      "eval_draft_id": "",
+      "source_speakers": [
+        "冬弥",
+        "店长",
+        "彰人",
+        "彰人&心羽&冬弥",
+        "杏",
+        "男性顾客"
+      ],
+      "target_speakers": [
+        "akito",
+        "toya"
+      ]
     },
     {
       "source_id": "source-ea53697ea7bc0151",
       "canonical_url": "https://pjsk.moe/zh-cn/story/event/71/8/",
       "route_type": "event",
       "display_label": "接下来就该轮到我了",
-      "priority": "medium",
+      "priority": "high",
       "classification": {
-        "timeline_stage": "",
-        "event_types": [],
-        "participant_scope": "未知"
+        "timeline_stage": "早期搭档",
+        "event_types": [
+          "创作练习",
+          "支持照顾"
+        ],
+        "participant_scope": "彰冬+多方角色"
       },
       "suggested_classification": null,
-      "classification_status": "unclassified",
+      "classification_status": "confirmed",
       "draft_id": "story-b08adb36a69ce8a8",
       "event_ids": [
         "akito-toya-web-b08adb36a69c"
       ],
       "workflow_status": "published",
-      "eval_status": "missing",
+      "eval_status": "draft",
       "origins": [
         "draft",
         "published"
       ],
       "notes": "",
-      "eval_draft_id": ""
+      "eval_draft_id": "eval-ea53697ea7bc0151",
+      "source_speakers": [
+        "こはね",
+        "冬弥",
+        "彰人",
+        "杏",
+        "颯真"
+      ],
+      "target_speakers": [
+        "akito",
+        "toya"
+      ]
     }
   ]
 }

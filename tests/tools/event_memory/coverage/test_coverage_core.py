@@ -6,6 +6,8 @@ from pathlib import Path
 import pytest
 
 from tools.event_memory.coverage.core import (
+    PARTICIPANT_SCOPE_DESCRIPTIONS,
+    TIMELINE_STAGE_DESCRIPTIONS,
     CoverageError,
     CoverageStore,
     canonicalize_story_url,
@@ -97,10 +99,36 @@ def test_sync_tracks_known_sources_without_copying_dialogue(tmp_path: Path) -> N
     assert "不代表全游戏剧情覆盖率" in store.report_path.read_text(encoding="utf-8")
 
 
+def test_sync_distinguishes_full_scene_and_target_segment_speakers(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    url = "https://pjsk.moe/zh-cn/story/event/71/8/"
+    _write(
+        store.data_dir / "event_memory" / "story_import" / "drafts" / "story-0123456789abcdef.json",
+        {
+            "draft_id": "story-0123456789abcdef",
+            "source": {"canonical_url": url},
+            "story": {"episode_title": "场景"},
+            "actions": [
+                {"index": 0, "speaker_zh": "杏"},
+                {"index": 1, "speaker_zh": "彰人"},
+                {"index": 2, "speaker_zh": "冬弥"},
+            ],
+            "target_segments": [{"target_speakers": ["akito", "toya"]}],
+            "review": {"status": "draft"},
+        },
+    )
+
+    store.sync()
+    entry = store.load_catalog()["sources"][0]
+
+    assert entry["source_speakers"] == ["冬弥", "彰人", "杏"]
+    assert entry["target_speakers"] == ["akito", "toya"]
+
+
 def test_classification_suggestion_requires_manual_confirmation(tmp_path: Path) -> None:
     store = _store(tmp_path)
     entry = _published_source(store)
-    suggestion = {"timeline_stage": "早期搭档", "event_types": ["创作练习"], "participant_scope": "VBS集体"}
+    suggestion = {"timeline_stage": "早期搭档", "event_types": ["创作练习"], "participant_scope": "彰冬+VBS成员"}
 
     suggested = store.save_suggestion(entry["source_id"], suggestion)
     assert suggested["classification_status"] == "suggested"
@@ -109,6 +137,28 @@ def test_classification_suggestion_requires_manual_confirmation(tmp_path: Path) 
     confirmed = store.update_source(entry["source_id"], confirm_classification=True)
     assert confirmed["classification_status"] == "confirmed"
     assert confirmed["classification"] == suggestion
+
+
+def test_classification_accepts_legacy_participant_scope_alias(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    entry = _published_source(store)
+
+    confirmed = store.update_source(
+        entry["source_id"],
+        classification={"timeline_stage": "RUSH BEATS目标确立", "event_types": ["关系回顾"], "participant_scope": "有其他角色"},
+        confirm_classification=True,
+    )
+
+    assert confirmed["classification"]["participant_scope"] == "彰冬+多方角色"
+
+
+def test_stage_and_scope_descriptions_cover_every_selectable_value() -> None:
+    from tools.event_memory.coverage.core import PARTICIPANT_SCOPES, TIMELINE_STAGES
+
+    assert set(TIMELINE_STAGES) == set(TIMELINE_STAGE_DESCRIPTIONS)
+    assert set(PARTICIPANT_SCOPES) == set(PARTICIPANT_SCOPE_DESCRIPTIONS)
+    assert "美国" in TIMELINE_STAGE_DESCRIPTIONS["赴美/美国筹备（RUSH BEATS）"]
+    assert "目标片段" in PARTICIPANT_SCOPE_DESCRIPTIONS["彰冬+多方角色"]
 
 
 def test_rejected_sources_are_archived_and_not_maintained(tmp_path: Path) -> None:

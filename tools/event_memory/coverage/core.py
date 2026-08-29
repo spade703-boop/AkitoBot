@@ -18,8 +18,27 @@ TIMELINE_STAGES = (
     "追逐RAD WEEKEND",
     "超越阶段",
     "超越后成长",
+    "RUSH BEATS目标确立",
+    "RUSH BEATS筹备（日本）",
+    "赴美/美国筹备（RUSH BEATS）",
+    "RUSH BEATS比赛进行中",
+    "RUSH BEATS赛后",
     "日常/未定位",
 )
+TIMELINE_STAGE_DESCRIPTIONS = {
+    "相遇前": "彰人与冬弥正式相遇、组队之前，各自的经历或彼此尚未建立共同目标的时期。",
+    "初遇组队": "两人初次相遇、试唱并决定组队，或刚开始把对方视为搭档的场景。",
+    "早期搭档": "组队后的早期磨合、练习、创作和互相支持；尚未进入超越 RAD WEEKEND 的后续阶段。",
+    "追逐RAD WEEKEND": "以超越 RAD WEEKEND 为共同目标，持续进行街头演出、练习和挑战的时期。",
+    "超越阶段": "围绕正式挑战、达到或确认超越 RAD WEEKEND 展开的关键演出与转折。",
+    "超越后成长": "确认超越 RAD WEEKEND 后，重新审视实力、关系和下一阶段方向的时期。",
+    "RUSH BEATS目标确立": "明确把 RUSH BEATS 作为通往世界舞台的下一目标，但尚未进入具体参赛准备。",
+    "RUSH BEATS筹备（日本）": "仍在日本时，为 RUSH BEATS 准备资金、资格、英语、训练、报名或海外合作。",
+    "赴美/美国筹备（RUSH BEATS）": "已经前往美国，但对应的 RUSH BEATS 正式比赛尚未开始；包括适应环境、海外活动、训练和赛前对手交流。",
+    "RUSH BEATS比赛进行中": "RUSH BEATS 的预选、正式赛程或比赛现场正在进行。",
+    "RUSH BEATS赛后": "RUSH BEATS 比赛结束后的结果、复盘、关系变化或新的目标。",
+    "日常/未定位": "确属共同经历但无法可靠定位到上述阶段，或只是与主线时间无关的日常场景。",
+}
 EVENT_TYPES = (
     "相遇组队",
     "演出对决",
@@ -32,7 +51,16 @@ EVENT_TYPES = (
     "庆祝纪念",
     "关系回顾",
 )
-PARTICIPANT_SCOPES = ("仅彰冬", "VBS集体", "有其他角色", "未知")
+PARTICIPANT_SCOPES = ("仅彰冬", "彰冬+VBS成员", "彰冬+VBS外角色", "彰冬+多方角色", "未知")
+PARTICIPANT_SCOPE_DESCRIPTIONS = {
+    "仅彰冬": "整页原剧情场景只出现彰人和冬弥；目标片段也应只保留两人。",
+    "彰冬+VBS成员": "整页原剧情还出现心羽、杏等 VBS 成员，但目标片段仍只提取彰人和冬弥。",
+    "彰冬+VBS外角色": "整页原剧情还出现虚拟歌手、家人、对手或其他 VBS 外角色，但没有可归入 VBS 成员的额外角色。",
+    "彰冬+多方角色": "整页原剧情同时出现 VBS 成员和 VBS 外角色；这不表示这些角色会被写入彰冬目标片段或事件记忆。",
+    "未知": "尚未核对整页原剧情的角色范围；不能据此推断目标片段包含其他角色。",
+}
+PARTICIPANT_SCOPE_LABEL = "参与范围（原剧情整页角色，不是目标片段）"
+PARTICIPANT_SCOPE_ALIASES = {"VBS集体": "彰冬+VBS成员", "有其他角色": "彰冬+多方角色"}
 PRIORITIES = ("high", "medium", "low")
 WORKFLOW_STATUSES = ("todo", "draft", "approved", "published", "rejected", "revision_pending")
 CLASSIFICATION_STATUSES = ("unclassified", "suggested", "confirmed")
@@ -93,6 +121,7 @@ def _normalize_classification(value: object, *, allow_empty: bool = False) -> di
     timeline_stage = str(value.get("timeline_stage") or "").strip()
     event_types = list(dict.fromkeys(str(item).strip() for item in value.get("event_types", []) if str(item).strip()))
     participant_scope = str(value.get("participant_scope") or "未知").strip()
+    participant_scope = PARTICIPANT_SCOPE_ALIASES.get(participant_scope, participant_scope)
     if timeline_stage not in TIMELINE_STAGES and not (allow_empty and not timeline_stage):
         raise CoverageError("timeline_stage 不在允许范围内")
     if not event_types and not allow_empty:
@@ -118,6 +147,8 @@ def _new_entry(canonical_url: str, route_type: str) -> dict[str, Any]:
         "classification": _empty_classification(),
         "suggested_classification": None,
         "classification_status": "unclassified",
+        "source_speakers": [],
+        "target_speakers": ["akito", "toya"],
         "draft_id": "",
         "event_ids": [],
         "workflow_status": "todo",
@@ -193,6 +224,17 @@ def _eval_draft_id(source_id: str, eval_drafts: dict[str, Any]) -> str:
     return str(draft.get("draft_id") or "") if draft else ""
 
 
+def _speaker_label(action: dict[str, Any]) -> str:
+    for field in ("speaker_zh", "speaker_ja", "speaker_id"):
+        value = str(action.get(field) or "").strip()
+        if value:
+            return value
+    speaker_ids = action.get("speaker_ids")
+    if isinstance(speaker_ids, list):
+        return "/".join(str(value).strip() for value in speaker_ids if str(value).strip())
+    return ""
+
+
 class CoverageStore:
     """Persist known-source metadata without copying story dialogue."""
 
@@ -242,6 +284,15 @@ class CoverageStore:
     def sync(self) -> dict[str, Any]:
         catalog = self.load_catalog()
         by_url = {str(item.get("canonical_url")): deepcopy(item) for item in catalog["sources"] if isinstance(item, dict)}
+        for entry in by_url.values():
+            entry.setdefault("source_speakers", [])
+            entry.setdefault("target_speakers", ["akito", "toya"])
+            for field in ("classification", "suggested_classification"):
+                classification = entry.get(field)
+                if isinstance(classification, dict):
+                    scope = str(classification.get("participant_scope") or "").strip()
+                    if scope in PARTICIPANT_SCOPE_ALIASES:
+                        classification["participant_scope"] = PARTICIPANT_SCOPE_ALIASES[scope]
         drafts = _load_drafts(self.data_dir)
         events = _published_events(self.data_dir)
         events_by_url: dict[str, list[dict[str, Any]]] = {}
@@ -264,6 +315,26 @@ class CoverageStore:
                 or canonical_url
             )
             entry["draft_id"] = str(draft.get("draft_id") or "")
+            actions = draft.get("actions", [])
+            entry["source_speakers"] = sorted(
+                {
+                    _speaker_label(action)
+                    for action in actions
+                    if isinstance(action, dict)
+                    and _speaker_label(action)
+                }
+            )
+            target_speakers: set[str] = set()
+            for segment in draft.get("target_segments", []):
+                if not isinstance(segment, dict) or not isinstance(segment.get("target_speakers"), list):
+                    continue
+                target_speakers.update(
+                    str(speaker).strip()
+                    for speaker in segment["target_speakers"]
+                    if str(speaker).strip()
+                )
+            if target_speakers:
+                entry["target_speakers"] = sorted(target_speakers)
             entry["event_ids"] = sorted({str(event.get("event_id")) for event in linked_events if event.get("event_id")})
             entry["workflow_status"] = _draft_workflow(draft, entry["event_ids"])
             entry["origins"] = sorted(set(entry.get("origins", [])) | {"draft"} | ({"published"} if linked_events else set()))

@@ -231,11 +231,17 @@ def suggest_coverage_classification(
     draft: dict[str, Any] | None,
 ) -> dict[str, Any]:
     """Suggest coverage labels from compact reviewed metadata."""
-    from tools.event_memory.coverage.core import EVENT_TYPES, PARTICIPANT_SCOPES, TIMELINE_STAGES
+    from tools.event_memory.coverage.core import (
+        EVENT_TYPES,
+        PARTICIPANT_SCOPE_DESCRIPTIONS,
+        TIMELINE_STAGE_DESCRIPTIONS,
+    )
 
     material = {
         "url": entry.get("canonical_url"),
         "route_type": entry.get("route_type"),
+        "source_speakers": entry.get("source_speakers", []),
+        "target_speakers": entry.get("target_speakers", ["akito", "toya"]),
         "published_events": [
             {
                 "summary": event.get("summary", ""),
@@ -248,9 +254,11 @@ def suggest_coverage_classification(
     }
     prompt = (
         "根据给定的已审核摘要或分析建议剧情覆盖分类。页面标题不是事件事实。"
+        "participant_scope 只描述原剧情场景中出现的角色范围；target_speakers 才是实际写入彰冬目标片段的说话人，二者不要混淆。"
         "timeline_stage 必须恰好选一个；event_types 选 1-3 个；participant_scope 恰好选一个。"
-        f"timeline_stage 可选：{list(TIMELINE_STAGES)}；event_types 可选：{list(EVENT_TYPES)}；"
-        f"participant_scope 可选：{list(PARTICIPANT_SCOPES)}。"
+        f"timeline_stage 可选及定义：{json.dumps(TIMELINE_STAGE_DESCRIPTIONS, ensure_ascii=False)}；"
+        f"event_types 可选：{list(EVENT_TYPES)}；"
+        f"participant_scope 可选及定义：{json.dumps(PARTICIPANT_SCOPE_DESCRIPTIONS, ensure_ascii=False)}。"
         "输出 JSON：{\"timeline_stage\":\"\",\"event_types\":[],\"participant_scope\":\"\"}。\n"
         + json.dumps(material, ensure_ascii=False)
     )
