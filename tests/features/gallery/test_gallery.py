@@ -564,9 +564,11 @@ async def test_pet_send_outputs_only_image_and_skips_caption_api(monkeypatch, tm
     monkeypatch.setattr(gallery, "get_random_local_image", lambda category: image_path)
     monkeypatch.setattr(gallery, "call_deepseek_api", caption_api)
     monkeypatch.setattr(gallery, "grant_safety_pass", lambda seconds: None)
+    bot = Bot()
 
     with pytest.raises(FinishedException) as exc:
         await gallery.send_img_cmd.handlers[0](
+            bot,
             Event(plain_text="发张宠物", group_id=1001),
         )
 
@@ -575,7 +577,7 @@ async def test_pet_send_outputs_only_image_and_skips_caption_api(monkeypatch, tm
 
 
 @pytest.mark.asyncio
-async def test_send_multiple_pet_images_in_one_message(monkeypatch, tmp_path):
+async def test_send_multiple_pet_images_as_forward_message(monkeypatch, tmp_path):
     image_paths = []
     for index in range(5):
         image_path = tmp_path / f"pet-{index}.jpg"
@@ -587,24 +589,63 @@ async def test_send_multiple_pet_images_in_one_message(monkeypatch, tmp_path):
     monkeypatch.setattr(gallery, "get_user_memory", lambda key: {"temp_implants": []})
     monkeypatch.setattr(gallery, "get_random_local_images", lambda category, count: image_paths[:count])
     monkeypatch.setattr(gallery, "grant_safety_pass", lambda seconds: None)
+    bot = Bot()
 
-    with pytest.raises(FinishedException) as exc:
-        await gallery.send_img_cmd.handlers[0](
-            Event(plain_text="发张宠物 5", group_id=1001),
-        )
+    result = await gallery.send_img_cmd.handlers[0](
+        bot,
+        Event(plain_text="发张宠物 5", group_id=1001),
+    )
 
-    assert str(exc.value.result) == "[image]" * 5
+    assert result is None
+    bot.call_api.assert_awaited_once()
+    api_name = bot.call_api.await_args.args[0]
+    payload = bot.call_api.await_args.kwargs
+    assert api_name == "send_group_forward_msg"
+    assert payload["group_id"] == 1001
+    assert len(payload["messages"]) == 1
+    node = payload["messages"][0]
+    assert node["type"] == "node"
+    assert node["data"]["name"] == "东云彰人"
+    assert str(node["data"]["content"]) == "[image]" * 5
 
 
 @pytest.mark.asyncio
-async def test_send_image_count_must_be_between_one_and_nine(monkeypatch, tmp_path):
+async def test_multi_image_forward_failure_falls_back_to_normal_message(monkeypatch, tmp_path):
+    image_paths = []
+    for index in range(2):
+        image_path = tmp_path / f"pet-{index}.jpg"
+        image_path.write_bytes(f"pet-image-{index}".encode())
+        image_paths.append(image_path)
+    monkeypatch.setattr(gallery, "GROUP_IMAGE_PERMISSIONS", {1001: ["all"]})
+    monkeypatch.setattr(gallery, "sleep_block", lambda *args, **kwargs: "")
+    monkeypatch.setattr(gallery, "get_memory_key", lambda event: "group_1001")
+    monkeypatch.setattr(gallery, "get_user_memory", lambda key: {"temp_implants": []})
+    monkeypatch.setattr(gallery, "get_random_local_images", lambda category, count: image_paths[:count])
+    monkeypatch.setattr(gallery, "grant_safety_pass", lambda seconds: None)
+    bot = Bot()
+    bot.call_api.side_effect = RuntimeError("forward unsupported")
+
+    with pytest.raises(FinishedException) as exc:
+        await gallery.send_img_cmd.handlers[0](
+            bot,
+            Event(plain_text="发张宠物 2", group_id=1001),
+        )
+
+    assert str(exc.value.result) == "[image]" * 2
+    bot.call_api.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_send_image_count_must_be_between_one_and_five(monkeypatch, tmp_path):
     image_path = tmp_path / "pet.jpg"
     image_path.write_bytes(b"pet-image")
     monkeypatch.setattr(gallery, "GROUP_IMAGE_PERMISSIONS", {1001: ["all"]})
     monkeypatch.setattr(gallery, "get_random_local_image", lambda category: image_path)
+    bot = Bot()
 
     for request in ("发张宠物 0", "发张宠物 6", "发张宠物 10", "发张宠物 五", "发张宠物 2 额外"):
         result = await gallery.send_img_cmd.handlers[0](
+            bot,
             Event(plain_text=request, group_id=1001),
         )
         assert result is None
@@ -630,16 +671,20 @@ async def test_unknown_send_request_is_rejected_but_extra_text_and_empty_are_sil
         pytest.fail("invalid send requests must be discarded before the sleep gate")
 
     monkeypatch.setattr(gallery, "_gallery_sleep_block", fail_sleep_block)
+    bot = Bot()
 
     extra_text_result = await gallery.send_img_cmd.handlers[0](
+        bot,
         Event(plain_text="发张宠物照片", group_id=1001)
     )
     empty_result = await gallery.send_img_cmd.handlers[0](
+        bot,
         Event(plain_text="发张", group_id=1001)
     )
 
     with pytest.raises(FinishedException) as unknown_exc:
         await gallery.send_img_cmd.handlers[0](
+            bot,
             Event(plain_text="发张不存在图库", group_id=1001)
         )
 

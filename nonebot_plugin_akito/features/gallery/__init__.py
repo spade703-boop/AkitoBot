@@ -175,7 +175,7 @@ DEFAULT_UNKNOWN_GALLERY_REPLIES = [
 DUPLICATE_IMAGE_REPLY = "……这张已经存过了。别重复塞给我。"
 DUPLICATE_IMAGES_REPLY = "……这些图已经存过了。别重复塞给我。"
 GALLERY_USER_HELP_ROWS = (
-    ("发张[图库名] [数量]", "严格匹配后在一条消息中随机发图，数量限 1–5；未知图库会拒绝。"),
+    ("发张[图库名] [数量]", "严格匹配后随机发图，多图使用折叠消息，数量限 1–5；未知图库会拒绝。"),
     ("存[图库名]", "保存本条或引用消息中的图片；全图库已存在时拒绝重复写入。"),
     ("开始收图 [图库名]", "连续保存图片，自动跳过所有图库中已经存在的图片。"),
     ("停止收图", "结束当前会话的连续收图模式。"),
@@ -1362,8 +1362,41 @@ async def _(bot: Bot, event: Event):
 
 # --- 3. 主动发图 ---
 send_img_cmd = on_regex(r"^发张\s*\S+(?:\s+\S+)?\s*$", priority=5, block=True)
+async def _send_gallery_forward_message(
+    bot: Bot,
+    event: GroupMessageEvent,
+    image_segments: list[MessageSegment],
+    caption: str,
+) -> bool:
+    call_api = getattr(bot, "call_api", None)
+    if not callable(call_api):
+        return False
+    content = OB11Message(caption.strip() + "\n") if caption else OB11Message()
+    for image_segment in image_segments:
+        content += image_segment
+    bot_uin = str(getattr(bot, "self_id", ""))
+    node = {
+        "type": "node",
+        "data": {
+            "name": "东云彰人",
+            "uin": int(bot_uin) if bot_uin.isdigit() else bot_uin,
+            "content": content,
+        },
+    }
+    try:
+        await call_api(
+            "send_group_forward_msg",
+            group_id=event.group_id,
+            messages=[node],
+        )
+    except Exception as exc:
+        logger.warning(f"图库多图合并转发失败，将回退为普通多图消息: {exc}")
+        return False
+    return True
+
+
 @send_img_cmd.handle()
-async def _(event: Event):
+async def _(bot: Bot, event: Event):
     if not isinstance(event, GroupMessageEvent):
         return
     group_id = event.group_id
@@ -1457,6 +1490,14 @@ async def _(event: Event):
             with open(image_path, "rb") as image_file:
                 base64_url = f"base64://{base64.b64encode(image_file.read()).decode()}"
             image_segments.append(MessageSegment.image(base64_url))
+        if len(image_segments) > 1 and await _send_gallery_forward_message(
+            bot,
+            event,
+            image_segments,
+            caption,
+        ):
+            _grant_gallery_safety_pass(5)
+            return
         if caption:
             final_msg = OB11Message(caption.strip() + "\n")
             for image_segment in image_segments:

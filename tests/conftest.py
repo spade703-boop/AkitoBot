@@ -127,6 +127,7 @@ class FakeEvent:
 class FakeBot:
     def __init__(self, self_id: str = "114514"):
         self.self_id = self_id
+        self.call_api = mock.AsyncMock()
         self.send_group_msg = mock.AsyncMock()
         self.send = mock.AsyncMock()
         self.get_msg = mock.AsyncMock(
