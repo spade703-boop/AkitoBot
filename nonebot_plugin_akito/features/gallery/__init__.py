@@ -6,6 +6,7 @@ import asyncio
 import base64
 from collections.abc import Callable
 from dataclasses import dataclass, replace
+from html import escape as html_escape
 from io import BytesIO
 import json
 import os
@@ -178,11 +179,13 @@ GALLERY_USER_HELP_ROWS = (
     ("开始收图 [图库名]", "连续保存图片，自动跳过所有图库中已经存在的图片。"),
     ("停止收图", "结束当前会话的连续收图模式。"),
     ("图库清单 [图库名] [页码]", "生成指定图库的缩略图清单；页码可省略。"),
+    ("查看图库别名 [图库名]", "查看全部图库或指定图库的内置与手动别名。"),
     ("查看图库指令", "查看这张普通图库指令说明图。"),
 )
 GALLERY_SUPERUSER_HELP_ROWS = (
     ("新建图库[名称]", "创建一个不附带发图配文的自定义图库。"),
     ("添加图库别名 [图库] [别名]", "给固定或自定义图库添加一个全局唯一别名。"),
+    ("删除图库别名 [图库] [别名]", "删除指定图库的手动别名；固定别名不可删除。"),
     ("关联子图库 [子图库] [父图库]", "让父图库抽图和清单递归包含指定自定义子图库。"),
     ("取消子图库关联 [子图库]", "解除指定自定义图库与父图库的关系。"),
     ("删除图库[名称]", "删除自定义图库、目录和图片，并解除相关子图库关联。"),
@@ -710,6 +713,107 @@ def _build_gallery_command_help_html(
     """
 
 
+def _unique_gallery_aliases(values: tuple[str, ...]) -> list[str]:
+    seen: set[str] = set()
+    aliases: list[str] = []
+    for value in values:
+        normalized = _normalize_gallery_name(value)
+        if normalized and normalized not in seen:
+            seen.add(normalized)
+            aliases.append(value)
+    return aliases
+
+
+def _build_gallery_alias_html(target: GalleryDefinition | None = None) -> str:
+    if target is None:
+        galleries = [*FIXED_GALLERIES, *sorted(CUSTOM_GALLERIES, key=lambda item: item.name.casefold())]
+    else:
+        galleries = [target]
+
+    cards: list[str] = []
+    for gallery in galleries:
+        builtin_aliases = _unique_gallery_aliases(
+            (
+                *gallery.save_aliases,
+                *gallery.send_aliases,
+                *gallery.collect_aliases,
+                *gallery.list_aliases,
+            )
+        )
+        manual_aliases = GALLERY_ALIASES.get(gallery.storage_key, [])
+        builtin_text = "、".join(html_escape(alias) for alias in builtin_aliases) or "无"
+        manual_text = "、".join(html_escape(alias) for alias in manual_aliases) or "无"
+        cards.append(
+            f"""
+            <div class="alias-card">
+                <div class="gallery-name">{html_escape(gallery.name)}</div>
+                <div class="alias-line"><span class="alias-label builtin">内置</span>{builtin_text}</div>
+                <div class="alias-line"><span class="alias-label manual">手动</span>{manual_text}</div>
+            </div>
+            """
+        )
+
+    if not cards:
+        cards.append('<div class="empty">当前没有可展示的图库。</div>')
+    title = "图库别名" if target is None else f"{html_escape(target.name)} · 图库别名"
+    note = "内置别名由程序固定提供；手动别名可用“添加图库别名”与“删除图库别名”管理。"
+    return f"""
+    <!doctype html>
+    <html lang="zh-CN">
+    <head>
+        <meta charset="utf-8">
+        <style>
+            * {{ box-sizing: border-box; }}
+            body {{
+                width: 700px;
+                margin: 0;
+                padding: 20px;
+                color: #352f33;
+                background: linear-gradient(145deg, #fff7ef 0%, #f5e8e4 100%);
+                font-family: "Microsoft YaHei", "Noto Sans SC", sans-serif;
+            }}
+            .sheet {{
+                padding: 20px;
+                border: 2px solid #e7a26f;
+                border-radius: 18px;
+                background: rgba(255, 255, 255, 0.92);
+                box-shadow: 0 10px 26px rgba(111, 65, 50, 0.12);
+            }}
+            h1 {{ margin: 0 0 4px; color: #b45d38; font-size: 27px; }}
+            .subtitle {{ margin-bottom: 14px; color: #7c6c68; font-size: 12px; }}
+            .aliases {{ display: grid; gap: 8px; }}
+            .alias-card {{
+                display: grid;
+                grid-template-columns: 100px 1fr;
+                gap: 3px 12px;
+                padding: 10px 12px;
+                border-left: 4px solid #e88a52;
+                border-radius: 9px;
+                background: #fffaf6;
+                font-size: 13px;
+                line-height: 1.5;
+            }}
+            .gallery-name {{ grid-row: span 2; align-self: center; color: #9f4726; font-size: 16px; font-weight: 700; }}
+            .alias-line {{ color: #51474a; overflow-wrap: anywhere; }}
+            .alias-label {{ display: inline-block; min-width: 34px; margin-right: 6px; font-size: 11px; font-weight: 700; }}
+            .builtin {{ color: #a06b4c; }}
+            .manual {{ color: #4d7d70; }}
+            .empty {{ padding: 16px; color: #7c6c68; text-align: center; }}
+            .note {{ margin-top: 14px; color: #89736b; font-size: 11px; line-height: 1.5; }}
+        </style>
+    </head>
+    <body>
+        <main class="sheet">
+            <h1>{title}</h1>
+            <div class="subtitle">AkitoBot Gallery Aliases</div>
+            <div class="aliases">{"".join(cards)}</div>
+            <div class="note">{note}</div>
+        </main>
+    </body>
+    </html>
+    """
+
+
 def _build_gallery_inventory_note() -> str:
     fixed_names = "、".join(gallery.name for gallery in FIXED_GALLERIES)
     custom_names = "、".join(
@@ -743,6 +847,7 @@ async def _finish_gallery_command_help(
 
 create_gallery_cmd = on_regex(r"^新建图库\s*.*$", priority=5, block=True)
 add_gallery_alias_cmd = on_regex(r"^添加图库别名\s*.*$", priority=5, block=True)
+delete_gallery_alias_cmd = on_regex(r"^删除图库别名\s*.*$", priority=5, block=True)
 link_child_gallery_cmd = on_regex(r"^关联子图库\s*.*$", priority=5, block=True)
 unlink_child_gallery_cmd = on_regex(r"^取消子图库关联\s*.*$", priority=5, block=True)
 delete_gallery_cmd = on_regex(r"^删除图库\s*.*$", priority=5, block=True)
@@ -751,6 +856,7 @@ enable_gallery_sleep_cmd = on_regex(r"^开启图库休眠\s*$", priority=5, bloc
 rebuild_gallery_index_cmd = on_regex(r"^重建图库索引\s*$", priority=5, block=True)
 gallery_help_cmd = on_regex(r"^查看图库指令\s*$", priority=5, block=True)
 superuser_gallery_help_cmd = on_regex(r"^查看超管图库指令\s*$", priority=5, block=True)
+view_gallery_alias_cmd = on_regex(r"^查看图库别名(?:\s+.*)?$", priority=5, block=True)
 
 
 @gallery_help_cmd.handle()
@@ -775,6 +881,29 @@ async def _(event: Event):
         GALLERY_SUPERUSER_HELP_ROWS,
         "仅超管可用；其他用户发送这些指令时会静默处理。",
     )
+
+
+@view_gallery_alias_cmd.handle()
+async def _(event: Event):
+    if not isinstance(event, GroupMessageEvent) or event.group_id not in GROUP_IMAGE_PERMISSIONS:
+        return
+    target_text = re.sub(r"^查看图库别名\s*", "", event.get_plaintext().strip(), count=1).strip()
+    target = None
+    if target_text:
+        if len(target_text.split()) != 1:
+            await view_gallery_alias_cmd.finish("格式是“查看图库别名 [图库名]”。")
+        target = _find_gallery_exact(target_text)
+        if target is None:
+            await view_gallery_alias_cmd.finish(f"没有【{target_text}】这个图库。")
+    try:
+        html = _build_gallery_alias_html(target)
+        pic = await html_to_pic(html, viewport={"width": 740, "height": 100})
+    except Exception as exc:
+        logger.error(f"图库别名图渲染失败: {exc}")
+        await view_gallery_alias_cmd.finish("……别名图没生成出来。稍后再试。")
+        return
+    _grant_gallery_safety_pass(5)
+    await view_gallery_alias_cmd.finish(MessageSegment.image(pic))
 
 
 @disable_gallery_sleep_cmd.handle()
@@ -889,6 +1018,50 @@ async def _(event: Event):
             await add_gallery_alias_cmd.finish("……别名没存上。稍后再试。")
 
     await add_gallery_alias_cmd.finish(f"行。【{gallery.name}】以后也可以叫【{alias}】。")
+
+
+@delete_gallery_alias_cmd.handle()
+async def _(event: Event):
+    if str(event.get_user_id()) != SUPERUSER_QQ:
+        return
+    params = re.sub(r"^删除图库别名\s*", "", event.get_plaintext().strip(), count=1).split()
+    if len(params) != 2:
+        await delete_gallery_alias_cmd.finish("格式是“删除图库别名 图库名 别名”。")
+    gallery_name, alias = params
+
+    async with GALLERY_CREATE_LOCK:
+        if GALLERY_REGISTRY_LOAD_ERROR:
+            await delete_gallery_alias_cmd.finish("……注册表读坏了，先检查 gallery_registry.json。")
+        gallery = _find_gallery_exact(gallery_name)
+        if gallery is None:
+            await delete_gallery_alias_cmd.finish(f"没有【{gallery_name}】这个图库。")
+
+        aliases = GALLERY_ALIASES.get(gallery.storage_key)
+        if not aliases:
+            await delete_gallery_alias_cmd.finish(f"【{gallery.name}】没有登记这个自定义别名。")
+        alias_index = next(
+            (
+                index
+                for index, registered_alias in enumerate(aliases)
+                if _normalize_gallery_name(registered_alias) == _normalize_gallery_name(alias)
+            ),
+            None,
+        )
+        if alias_index is None:
+            await delete_gallery_alias_cmd.finish(f"【{alias}】不是【{gallery.name}】的自定义别名。")
+
+        removed_alias = aliases.pop(alias_index)
+        if not aliases:
+            GALLERY_ALIASES.pop(gallery.storage_key, None)
+        try:
+            _save_custom_gallery_registry(_get_gallery_registry_path(), CUSTOM_GALLERIES)
+        except Exception as exc:
+            aliases.insert(alias_index, removed_alias)
+            GALLERY_ALIASES[gallery.storage_key] = aliases
+            logger.error(f"删除图库别名失败: {exc}")
+            await delete_gallery_alias_cmd.finish("……别名没删掉。稍后再试。")
+
+    await delete_gallery_alias_cmd.finish(f"行。【{gallery.name}】不再叫【{removed_alias}】了。")
 
 
 @link_child_gallery_cmd.handle()

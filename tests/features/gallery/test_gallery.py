@@ -386,6 +386,49 @@ async def test_add_gallery_alias_command_persists_alias(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_delete_gallery_alias_command_persists_removal(monkeypatch, tmp_path):
+    registry_path = tmp_path / "gallery_registry.json"
+    monkeypatch.setattr(gallery, "CUSTOM_GALLERIES", [])
+    monkeypatch.setattr(gallery, "GALLERY_ALIASES", {"pet": ["毛孩子", "小动物"]})
+    monkeypatch.setattr(gallery, "GALLERY_PARENTS", {})
+    monkeypatch.setattr(gallery, "GALLERY_REGISTRY_LOAD_ERROR", False)
+    monkeypatch.setattr(gallery, "GALLERY_CREATE_LOCK", asyncio.Lock())
+    monkeypatch.setattr(gallery, "_get_gallery_registry_path", lambda: registry_path)
+
+    with pytest.raises(FinishedException) as exc:
+        await gallery.delete_gallery_alias_cmd.handlers[0](
+            Event(plain_text="删除图库别名 宠物 毛孩子", user_id=gallery.SUPERUSER_QQ)
+        )
+
+    assert str(exc.value.result) == "行。【宠物】不再叫【毛孩子】了。"
+    assert gallery.GALLERY_ALIASES == {"pet": ["小动物"]}
+    assert json.loads(registry_path.read_text(encoding="utf-8"))["aliases"] == {
+        "pet": ["小动物"]
+    }
+    assert gallery._resolve_send_image_request("毛孩子")[0] == ""
+    assert gallery._resolve_send_image_request("小动物")[0] == "pet"
+
+
+@pytest.mark.asyncio
+async def test_delete_gallery_alias_command_cannot_remove_builtin_alias(monkeypatch, tmp_path):
+    registry_path = tmp_path / "gallery_registry.json"
+    monkeypatch.setattr(gallery, "CUSTOM_GALLERIES", [])
+    monkeypatch.setattr(gallery, "GALLERY_ALIASES", {})
+    monkeypatch.setattr(gallery, "GALLERY_REGISTRY_LOAD_ERROR", False)
+    monkeypatch.setattr(gallery, "GALLERY_CREATE_LOCK", asyncio.Lock())
+    monkeypatch.setattr(gallery, "_get_gallery_registry_path", lambda: registry_path)
+
+    with pytest.raises(FinishedException) as exc:
+        await gallery.delete_gallery_alias_cmd.handlers[0](
+            Event(plain_text="删除图库别名 宠物 卡车", user_id=gallery.SUPERUSER_QQ)
+        )
+
+    assert str(exc.value.result) == "【宠物】没有登记这个自定义别名。"
+    assert gallery._resolve_send_image_request("卡车")[0] == "pet"
+    assert not registry_path.exists()
+
+
+@pytest.mark.asyncio
 async def test_link_and_unlink_child_gallery_commands(monkeypatch, tmp_path):
     registry_path = tmp_path / "gallery_registry.json"
     child = gallery.GalleryDefinition(
@@ -431,6 +474,9 @@ async def test_gallery_management_commands_are_silent_for_non_superuser(monkeypa
     alias_result = await gallery.add_gallery_alias_cmd.handlers[0](
         Event(plain_text="添加图库别名 宠物 毛孩子", user_id="10001")
     )
+    delete_alias_result = await gallery.delete_gallery_alias_cmd.handlers[0](
+        Event(plain_text="删除图库别名 宠物 毛孩子", user_id="10001")
+    )
     link_result = await gallery.link_child_gallery_cmd.handlers[0](
         Event(plain_text="关联子图库 33 群友", user_id="10001")
     )
@@ -439,6 +485,7 @@ async def test_gallery_management_commands_are_silent_for_non_superuser(monkeypa
     )
 
     assert alias_result is None
+    assert delete_alias_result is None
     assert link_result is None
     assert unlink_result is None
     assert gallery.GALLERY_ALIASES == {}
@@ -535,6 +582,7 @@ def test_gallery_command_registrations_only_keep_supported_entrypoints():
     assert gallery.collect_cmd.kwargs["aliases"] == {"停止收图"}
     assert gallery.gallery_cmd.args == ("图库清单",)
     assert "aliases" not in gallery.gallery_cmd.kwargs
+    assert gallery.view_gallery_alias_cmd.args == (r"^查看图库别名(?:\s+.*)?$",)
 
 
 @pytest.mark.asyncio
@@ -864,6 +912,7 @@ async def test_gallery_command_help_images_and_superuser_access(monkeypatch):
     user_html = render.await_args.args[0]
     assert "发张[图库名]" in user_html
     assert "开始收图 [图库名]" in user_html
+    assert "查看图库别名 [图库名]" in user_html
     assert "固定图库：</span>冬弥、彰人、美食、群友、合照、表情、宠物" in user_html
     assert "自定义图库：</span>33" in user_html
     assert "新建图库[名称]" not in user_html
@@ -887,8 +936,73 @@ async def test_gallery_command_help_images_and_superuser_access(monkeypatch):
     assert str(superuser_exc.value.result) == "[image]"
     superuser_html = render.await_args.args[0]
     assert "新建图库[名称]" in superuser_html
+    assert "删除图库别名 [图库] [别名]" in superuser_html
     assert "关闭图库休眠" in superuser_html
     assert "重建图库索引" in superuser_html
+
+
+@pytest.mark.asyncio
+async def test_view_gallery_alias_command_renders_all_and_targeted_aliases(monkeypatch):
+    render = AsyncMock(return_value=b"alias-help")
+    custom = gallery.GalleryDefinition(
+        storage_key="custom/33",
+        name="33",
+        caption_enabled=False,
+        permission_tokens=("33",),
+        custom=True,
+    )
+    monkeypatch.setattr(gallery, "html_to_pic", render)
+    monkeypatch.setattr(gallery, "GROUP_IMAGE_PERMISSIONS", {1001: ["all"]})
+    monkeypatch.setattr(gallery, "CUSTOM_GALLERIES", [custom])
+    monkeypatch.setattr(gallery, "GALLERY_ALIASES", {"pet": ["毛孩子"], custom.storage_key: ["精选"]})
+    monkeypatch.setattr(gallery, "_grant_gallery_safety_pass", lambda seconds: None)
+
+    with pytest.raises(FinishedException) as all_exc:
+        await gallery.view_gallery_alias_cmd.handlers[0](
+            Event(plain_text="查看图库别名", group_id=1001)
+        )
+
+    assert str(all_exc.value.result) == "[image]"
+    all_html = render.await_args.args[0]
+    assert "宠物" in all_html
+    assert "毛孩子" in all_html
+    assert "33" in all_html
+    assert "精选" in all_html
+    assert "内置" in all_html
+    assert "手动" in all_html
+
+    render.reset_mock()
+    with pytest.raises(FinishedException) as target_exc:
+        await gallery.view_gallery_alias_cmd.handlers[0](
+            Event(plain_text="查看图库别名 33", group_id=1001)
+        )
+
+    assert str(target_exc.value.result) == "[image]"
+    target_html = render.await_args.args[0]
+    assert "33 · 图库别名" in target_html
+    assert "精选" in target_html
+    assert "毛孩子" not in target_html
+
+
+@pytest.mark.asyncio
+async def test_view_gallery_alias_command_rejects_unknown_target_and_private_messages(monkeypatch):
+    render = AsyncMock(return_value=b"alias-help")
+    monkeypatch.setattr(gallery, "html_to_pic", render)
+    monkeypatch.setattr(gallery, "GROUP_IMAGE_PERMISSIONS", {1001: ["all"]})
+
+    private_result = await gallery.view_gallery_alias_cmd.handlers[0](
+        Event(plain_text="查看图库别名", group_id=None)
+    )
+    assert private_result is None
+    render.assert_not_awaited()
+
+    with pytest.raises(FinishedException) as exc:
+        await gallery.view_gallery_alias_cmd.handlers[0](
+            Event(plain_text="查看图库别名 不存在", group_id=1001)
+        )
+
+    assert str(exc.value.result) == "没有【不存在】这个图库。"
+    render.assert_not_awaited()
 
 
 @pytest.mark.asyncio
