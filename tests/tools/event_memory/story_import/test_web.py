@@ -8,6 +8,7 @@ from pathlib import Path
 from threading import Thread
 
 from nonebot_plugin_akito.core import story_import
+from tools.event_memory.story_import import web as story_import_web
 from tools.event_memory.story_import.web import UI_PATH, StoryImportService, make_handler
 
 
@@ -74,7 +75,23 @@ def _request(port: int, method: str, path: str, body: dict | None = None):
     return response.status, data
 
 
-def test_web_ui_is_local_and_api_runs_complete_flow(tmp_path: Path):
+def test_web_ui_is_local_and_api_runs_complete_flow(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(
+        story_import_web,
+        "suggest_coverage_classification",
+        lambda *_args: {"timeline_stage": "初遇组队", "event_types": ["相遇组队"], "participant_scope": "仅彰冬"},
+    )
+    monkeypatch.setattr(
+        story_import_web,
+        "generate_coverage_eval_cases",
+        lambda *_args: [
+            {"case_type": "positive", "query": "你和冬弥初遇那次？"},
+            {"case_type": "positive", "query": "你为什么会选冬弥当搭档？"},
+            {"case_type": "adjacent", "query": "你们刚组队时发生了什么？", "forbidden_event_ids": ["event-other"]},
+            {"case_type": "negative", "query": "你们是在纽约初遇的？"},
+            {"case_type": "negative", "query": "冬弥一开始拒绝和你唱歌？"},
+        ],
+    )
     assert UI_PATH.exists()
     fake_core = _FakeCore()
     service = StoryImportService(tmp_path, core=fake_core)
@@ -104,6 +121,32 @@ def test_web_ui_is_local_and_api_runs_complete_flow(tmp_path: Path):
         assert status == 200 and preview["preview"]["status"] == "new"
         status, published = _request(port, "POST", f"/api/drafts/{draft_id}/publish", {"confirm_revision": False})
         assert status == 200 and published["event_id"].startswith("akito-toya-web-")
+
+        status, coverage = _request(port, "GET", "/api/coverage")
+        assert status == 200 and coverage["summary"]["known_sources"] == 1
+        status, synced = _request(port, "POST", "/api/coverage/sync", {})
+        assert status == 200 and synced["summary"]["known_sources"] == 1
+        source = coverage["sources"][0]
+        assert source["workflow_status"] == "published"
+        source_id = source["source_id"]
+        status, suggested = _request(port, "POST", f"/api/coverage/sources/{source_id}/suggest-classification", {})
+        assert status == 200 and suggested["source"]["classification_status"] == "suggested"
+        status, confirmed = _request(
+            port,
+            "PATCH",
+            f"/api/coverage/sources/{source_id}",
+            {"confirm_classification": True},
+        )
+        assert status == 200 and confirmed["source"]["classification_status"] == "confirmed"
+        inventory_path = tmp_path / "content" / "akito_event_memories.json"
+        inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
+        inventory["events"].append({"event_id": "event-other", "source_kind": "legacy_script"})
+        inventory_path.write_text(json.dumps(inventory, ensure_ascii=False), encoding="utf-8")
+        status, generated = _request(port, "POST", f"/api/coverage/sources/{source_id}/generate-eval", {})
+        assert status == 201 and generated["draft"]["status"] == "draft"
+        eval_id = generated["draft"]["draft_id"]
+        status, approved = _request(port, "POST", f"/api/coverage/evals/{eval_id}/approve", {})
+        assert status == 200 and approved["draft"]["status"] == "approved"
     finally:
         server.shutdown()
         server.server_close()

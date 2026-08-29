@@ -189,3 +189,108 @@ def enrich_with_llm(payload: dict[str, Any]) -> dict[str, Any]:
     analysis.clear()
     analysis.update(cleaned)
     return payload
+
+
+def _deepseek_json(prompt: str, *, max_tokens: int = 1800) -> dict[str, Any]:
+    """Call the configured DeepSeek endpoint for review-gated metadata drafts."""
+    try:
+        from openai import OpenAI
+    except ImportError as error:
+        raise RuntimeError("openai package is not installed") from error
+    _load_project_env()
+    load_dotenv()
+    api_key = os.environ.get("DEEPSEEK_API_KEY", "").strip()
+    if not api_key:
+        raise RuntimeError("DEEPSEEK_API_KEY is not configured")
+    try:
+        client = OpenAI(
+            api_key=api_key,
+            base_url=os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
+        )
+        response = client.chat.completions.create(
+            model=os.environ.get("DEEPSEEK_MODEL", "deepseek-chat"),
+            messages=[
+                {"role": "system", "content": "你是严格的剧情资料维护助手，只输出 JSON。"},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.1,
+            max_tokens=max(256, min(max_tokens, _llm_max_tokens())),
+            response_format={"type": "json_object"},
+        )
+        parsed = _parse_llm_json(response.choices[0].message.content or "")
+    except Exception as error:
+        raise RuntimeError(_format_llm_error(error, api_key)) from error
+    if not isinstance(parsed, dict):
+        raise RuntimeError("LLM response JSON root is not an object")
+    return parsed
+
+
+def suggest_coverage_classification(
+    entry: dict[str, Any],
+    events: list[dict[str, Any]],
+    draft: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Suggest coverage labels from compact reviewed metadata."""
+    from tools.event_memory.coverage.core import EVENT_TYPES, PARTICIPANT_SCOPES, TIMELINE_STAGES
+
+    material = {
+        "url": entry.get("canonical_url"),
+        "route_type": entry.get("route_type"),
+        "published_events": [
+            {
+                "summary": event.get("summary", ""),
+                "topics": event.get("topics", []),
+                "relationship_tags": event.get("relationship_tags", []),
+            }
+            for event in events
+        ],
+        "draft_analysis": (draft or {}).get("draft_analysis", {}),
+    }
+    prompt = (
+        "根据给定的已审核摘要或分析建议剧情覆盖分类。页面标题不是事件事实。"
+        "timeline_stage 必须恰好选一个；event_types 选 1-3 个；participant_scope 恰好选一个。"
+        f"timeline_stage 可选：{list(TIMELINE_STAGES)}；event_types 可选：{list(EVENT_TYPES)}；"
+        f"participant_scope 可选：{list(PARTICIPANT_SCOPES)}。"
+        "输出 JSON：{\"timeline_stage\":\"\",\"event_types\":[],\"participant_scope\":\"\"}。\n"
+        + json.dumps(material, ensure_ascii=False)
+    )
+    return _deepseek_json(prompt, max_tokens=800)
+
+
+def generate_coverage_eval_cases(
+    entry: dict[str, Any],
+    events: list[dict[str, Any]],
+    adjacent_events: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Generate review-only query drafts without mutating the formal eval set."""
+    material = {
+        "target": [
+            {
+                "event_id": event.get("event_id"),
+                "summary": event.get("summary", ""),
+                "topics": event.get("topics", []),
+            }
+            for event in events
+        ],
+        "adjacent_candidates": [
+            {
+                "event_id": event.get("event_id"),
+                "summary": event.get("summary", ""),
+                "topics": event.get("topics", []),
+            }
+            for event in adjacent_events
+        ],
+    }
+    prompt = (
+        "为目标剧情生成待人工审核的检索问题，不做逐字匹配。严格生成 5 条：2 条 positive（不同自然问法）、"
+        "1 条 adjacent（仍询问目标剧情，但容易误召回某个相邻候选，必须填写该候选 event_id 到 forbidden_event_ids）、"
+        "2 条 negative（与目标剧情相近但事实不成立）。不得把 negative 写成真实事实。"
+        "forbidden_event_ids 只能从 adjacent_candidates 中选择；没有候选时留空等待人工补充，禁止编造 ID。"
+        "输出 JSON：{\"cases\":[{\"case_type\":\"positive|adjacent|negative\",\"query\":\"\","
+        "\"forbidden_event_ids\":[]}]}。\n" + json.dumps(material, ensure_ascii=False)
+    )
+    parsed = _deepseek_json(prompt, max_tokens=1400)
+    cases = parsed.get("cases")
+    if not isinstance(cases, list):
+        raise RuntimeError("LLM response is missing cases")
+    return [item for item in cases if isinstance(item, dict)]

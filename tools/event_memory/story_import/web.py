@@ -15,9 +15,33 @@ from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
 try:
-    from .runtime import enrich_with_llm, load_story_import_module
+    from .runtime import (
+        enrich_with_llm,
+        generate_coverage_eval_cases,
+        load_story_import_module,
+        suggest_coverage_classification,
+    )
 except ImportError:  # pragma: no cover - direct ``python tools/...`` execution
-    from runtime import enrich_with_llm, load_story_import_module
+    from runtime import (
+        enrich_with_llm,
+        generate_coverage_eval_cases,
+        load_story_import_module,
+        suggest_coverage_classification,
+    )
+
+from tools.event_memory.coverage.core import (
+    CLASSIFICATION_STATUSES,
+    EVAL_STATUSES,
+    EVENT_TYPES,
+    PARTICIPANT_SCOPES,
+    PRIORITIES,
+    TIMELINE_STAGES,
+    WORKFLOW_STATUSES,
+    CoverageError,
+    CoverageStore,
+    default_store,
+    find_adjacent_events,
+)
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -52,9 +76,22 @@ class WebRequestError(ValueError):
 class StoryImportService:
     """State-free request operations with a process-local write lock."""
 
-    def __init__(self, data_dir: Path, *, core: Any | None = None):
+    def __init__(self, data_dir: Path, *, core: Any | None = None, coverage: CoverageStore | None = None):
         self.data_dir = Path(data_dir).resolve()
         self.core = core or load_story_import_module()
+        if coverage is not None:
+            self.coverage = coverage
+        elif self.data_dir == (PROJECT_ROOT / "data").resolve():
+            self.coverage = default_store(PROJECT_ROOT, self.data_dir)
+        else:
+            coverage_dir = self.data_dir / "event_memory" / "coverage"
+            self.coverage = CoverageStore(
+                data_dir=self.data_dir,
+                catalog_path=coverage_dir / "catalog.json",
+                eval_drafts_path=coverage_dir / "eval_drafts.json",
+                eval_set_path=coverage_dir / "eval_set.json",
+                report_path=coverage_dir / "COVERAGE_REPORT.md",
+            )
         self._write_lock = RLock()
 
     def health(self) -> dict[str, Any]:
@@ -101,7 +138,9 @@ class StoryImportService:
             payload = self.core.capture_story(url, data_dir=self.data_dir, enrich=enrich)
             if enrich:
                 payload = enrich_with_llm(payload)
-            self.core.save_draft(payload, data_dir=self.data_dir)
+            with self._write_lock:
+                self.core.save_draft(payload, data_dir=self.data_dir)
+                self.coverage.sync()
         except self.core.StoryImportError as error:
             raise WebRequestError(str(error)) from error
         return payload
@@ -142,7 +181,9 @@ class StoryImportService:
         payload["status"] = "draft"
         payload["publish"] = {"event_memory_id": "", "published_at": ""}
         try:
-            self.core.save_draft(payload, data_dir=self.data_dir)
+            with self._write_lock:
+                self.core.save_draft(payload, data_dir=self.data_dir)
+                self.coverage.sync()
         except self.core.StoryImportError as error:
             raise WebRequestError(str(error)) from error
         return payload
@@ -151,7 +192,9 @@ class StoryImportService:
         payload = self.get_draft(draft_id)
         try:
             payload = self.core.update_review(payload, status, reviewer=reviewer or "web", note=note)
-            self.core.save_draft(payload, data_dir=self.data_dir)
+            with self._write_lock:
+                self.core.save_draft(payload, data_dir=self.data_dir)
+                self.coverage.sync()
         except self.core.StoryImportError as error:
             raise WebRequestError(str(error)) from error
         return payload
@@ -187,9 +230,82 @@ class StoryImportService:
                 )
                 payload["publish"] = {"event_memory_id": event_id, "published_at": self.core._now_iso()}
                 self.core.save_draft(payload, data_dir=self.data_dir)
+                self.coverage.sync()
             except self.core.StoryImportError as error:
                 raise WebRequestError(str(error)) from error
         return {"event_id": event_id, "path": str(path), "dedupe": preview, "draft": payload}
+
+    def coverage_payload(self, filters: dict[str, str] | None = None) -> dict[str, Any]:
+        return {
+            "sources": self.coverage.list_sources(filters),
+            "summary": self.coverage.summary(),
+            "options": {
+                "timeline_stages": TIMELINE_STAGES,
+                "event_types": EVENT_TYPES,
+                "participant_scopes": PARTICIPANT_SCOPES,
+                "priorities": PRIORITIES,
+                "workflow_statuses": WORKFLOW_STATUSES,
+                "classification_statuses": CLASSIFICATION_STATUSES,
+                "eval_statuses": EVAL_STATUSES,
+            },
+        }
+
+    def sync_coverage(self) -> dict[str, Any]:
+        with self._write_lock:
+            self.coverage.sync()
+        return self.coverage_payload()
+
+    def add_coverage_source(self, *, url: str, priority: str, notes: str) -> dict[str, Any]:
+        with self._write_lock:
+            return self.coverage.add_source(url, priority=priority, notes=notes)
+
+    def update_coverage_source(self, source_id: str, patch: dict[str, Any]) -> dict[str, Any]:
+        classification = patch.get("classification")
+        if classification is not None and not isinstance(classification, dict):
+            raise WebRequestError("classification 必须是对象")
+        with self._write_lock:
+            return self.coverage.update_source(
+                source_id,
+                priority=str(patch["priority"]) if "priority" in patch else None,
+                notes=str(patch["notes"]) if "notes" in patch else None,
+                classification=classification,
+                confirm_classification=bool(patch.get("confirm_classification")),
+            )
+
+    def suggest_classification(self, source_id: str) -> dict[str, Any]:
+        entry, events, draft = self.coverage.source_material(source_id)
+        try:
+            suggestion = suggest_coverage_classification(entry, events, draft)
+            with self._write_lock:
+                return self.coverage.save_suggestion(source_id, suggestion)
+        except (RuntimeError, CoverageError) as error:
+            raise WebRequestError(f"分类建议失败：{error}") from error
+
+    def generate_eval_draft(self, source_id: str) -> dict[str, Any]:
+        entry, events, _draft = self.coverage.source_material(source_id)
+        inventory_path = self.data_dir / "content" / "akito_event_memories.json"
+        inventory = json.loads(inventory_path.read_text(encoding="utf-8-sig")) if inventory_path.exists() else {"events": []}
+        adjacent = find_adjacent_events(
+            [item for item in inventory.get("events", []) if isinstance(item, dict)],
+            entry.get("event_ids", []),
+        )
+        try:
+            cases = generate_coverage_eval_cases(entry, events, adjacent)
+            with self._write_lock:
+                return self.coverage.save_eval_draft(source_id, cases)
+        except (RuntimeError, CoverageError) as error:
+            raise WebRequestError(f"评测草稿生成失败：{error}") from error
+
+    def get_eval_draft(self, draft_id: str) -> dict[str, Any]:
+        return self.coverage.get_eval_draft(draft_id)
+
+    def update_eval_draft(self, draft_id: str, cases: list[dict[str, Any]]) -> dict[str, Any]:
+        with self._write_lock:
+            return self.coverage.update_eval_draft(draft_id, cases)
+
+    def approve_eval_draft(self, draft_id: str) -> dict[str, Any]:
+        with self._write_lock:
+            return self.coverage.approve_eval_draft(draft_id)
 
 
 def _json_body(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
@@ -215,6 +331,13 @@ def _draft_id_from_path(path: str) -> str:
     return draft_id
 
 
+def _coverage_id_from_path(path: str) -> str:
+    value = unquote(path.rstrip("/").rsplit("/", 1)[-1])
+    if not re.fullmatch(r"(?:source|eval)-[a-f0-9]{16}", value):
+        raise WebRequestError("覆盖来源或评测草稿 ID 格式无效")
+    return value
+
+
 def make_handler(service: StoryImportService) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
         server_version = "AkitoStoryImport/1.0"
@@ -231,6 +354,8 @@ def make_handler(service: StoryImportService) -> type[BaseHTTPRequestHandler]:
         def _send_error(self, error: Exception) -> None:
             if isinstance(error, WebRequestError):
                 self._send_json({"error": str(error), **error.details}, status=error.status)
+            elif isinstance(error, CoverageError):
+                self._send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
             else:
                 self._send_json({"error": f"{type(error).__name__}: {error}"}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
 
@@ -263,6 +388,13 @@ def make_handler(service: StoryImportService) -> type[BaseHTTPRequestHandler]:
                 if parsed.path.startswith("/api/drafts/"):
                     self._send_json({"draft": service.get_draft(_draft_id_from_path(parsed.path))})
                     return
+                if parsed.path == "/api/coverage":
+                    query = {key: values[0] for key, values in parse_qs(parsed.query).items() if values}
+                    self._send_json(service.coverage_payload(query))
+                    return
+                if parsed.path.startswith("/api/coverage/evals/"):
+                    self._send_json({"draft": service.get_eval_draft(_coverage_id_from_path(parsed.path))})
+                    return
                 self._send_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
             except Exception as error:
                 self._send_error(error)
@@ -275,6 +407,29 @@ def make_handler(service: StoryImportService) -> type[BaseHTTPRequestHandler]:
                     url = body.get("url")
                     enrich = body.get("enrich", "none") == "llm"
                     self._send_json({"draft": service.capture(str(url or ""), enrich=enrich)}, status=HTTPStatus.CREATED)
+                    return
+                if parsed.path == "/api/coverage/sync":
+                    self._send_json(service.sync_coverage())
+                    return
+                if parsed.path == "/api/coverage/sources":
+                    source = service.add_coverage_source(
+                        url=str(body.get("url") or ""),
+                        priority=str(body.get("priority") or "medium"),
+                        notes=str(body.get("notes") or ""),
+                    )
+                    self._send_json({"source": source}, status=HTTPStatus.CREATED)
+                    return
+                if parsed.path.endswith("/suggest-classification"):
+                    source_id = _coverage_id_from_path(parsed.path[: -len("/suggest-classification")])
+                    self._send_json({"source": service.suggest_classification(source_id)})
+                    return
+                if parsed.path.endswith("/generate-eval"):
+                    source_id = _coverage_id_from_path(parsed.path[: -len("/generate-eval")])
+                    self._send_json({"draft": service.generate_eval_draft(source_id)}, status=HTTPStatus.CREATED)
+                    return
+                if parsed.path.endswith("/approve") and parsed.path.startswith("/api/coverage/evals/"):
+                    draft_id = _coverage_id_from_path(parsed.path[: -len("/approve")])
+                    self._send_json({"draft": service.approve_eval_draft(draft_id)})
                     return
                 if parsed.path.endswith("/review"):
                     draft_id = _draft_id_from_path(parsed.path[: -len("/review")])
@@ -302,13 +457,24 @@ def make_handler(service: StoryImportService) -> type[BaseHTTPRequestHandler]:
         def do_PATCH(self) -> None:  # noqa: N802
             parsed = urlsplit(self.path)
             try:
-                if not parsed.path.endswith("/analysis"):
-                    self._send_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
-                    return
                 body = _json_body(self)
-                draft_id = _draft_id_from_path(parsed.path[: -len("/analysis")])
-                analysis = body.get("analysis", body)
-                self._send_json({"draft": service.update_analysis(draft_id, analysis)})
+                if parsed.path.startswith("/api/coverage/sources/"):
+                    source_id = _coverage_id_from_path(parsed.path)
+                    self._send_json({"source": service.update_coverage_source(source_id, body)})
+                    return
+                if parsed.path.startswith("/api/coverage/evals/"):
+                    draft_id = _coverage_id_from_path(parsed.path)
+                    cases = body.get("cases")
+                    if not isinstance(cases, list):
+                        raise WebRequestError("cases 必须是数组")
+                    self._send_json({"draft": service.update_eval_draft(draft_id, cases)})
+                    return
+                if parsed.path.endswith("/analysis"):
+                    draft_id = _draft_id_from_path(parsed.path[: -len("/analysis")])
+                    analysis = body.get("analysis", body)
+                    self._send_json({"draft": service.update_analysis(draft_id, analysis)})
+                    return
+                self._send_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
             except Exception as error:
                 self._send_error(error)
 

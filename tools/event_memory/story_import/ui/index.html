@@ -14,7 +14,8 @@
     section, aside { background: #fff; border: 1px solid #dfe3ea; border-radius: 10px; box-shadow: 0 2px 8px #1b263815; }
     .capture { grid-column: 1 / -1; padding: 16px; }
     .capture form { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
-    input[type="url"], textarea { width: 100%; box-sizing: border-box; border: 1px solid #cbd2de; border-radius: 6px; padding: 9px; font: inherit; }
+    input[type="url"], input[type="text"], select, textarea { box-sizing: border-box; border: 1px solid #cbd2de; border-radius: 6px; padding: 9px; font: inherit; background: #fff; }
+    input[type="url"], input[type="text"], textarea { width: 100%; }
     input[type="url"] { flex: 1 1 560px; }
     textarea { min-height: 92px; resize: vertical; }
     button { border: 0; border-radius: 6px; background: #405da5; color: white; padding: 9px 13px; cursor: pointer; font: inherit; }
@@ -58,7 +59,25 @@
     .badge.approved { background: #d8f2df; color: #246a39; }
     .badge.rejected { background: #f8dce1; color: #8f2c42; }
     .preview { padding: 10px; border-radius: 7px; background: #fff7e8; border: 1px solid #f0d3a0; white-space: pre-wrap; font-size: 13px; }
-    @media (max-width: 800px) { main { display: block; } aside, .detail { margin-bottom: 16px; } .action { grid-template-columns: 34px 90px minmax(0, 1fr); } }
+    .coverage { grid-column: 1 / -1; padding: 16px; }
+    .coverage-layout { display: grid; grid-template-columns: minmax(260px, 360px) minmax(0, 1fr); gap: 14px; }
+    .coverage-summary { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 12px; }
+    .summary-card { padding: 8px 10px; border-radius: 7px; background: #f6f7fa; font-size: 12px; }
+    .coverage-add { display: grid; grid-template-columns: minmax(0, 1fr) 110px auto; gap: 8px; margin-bottom: 10px; }
+    .coverage-filters { display: grid; grid-template-columns: repeat(4, minmax(110px, 1fr)); gap: 8px; margin-bottom: 12px; }
+    #coverage-list { display: grid; gap: 7px; max-height: 620px; overflow: auto; }
+    .source-item { padding: 9px; border: 1px solid #e1e5eb; border-radius: 7px; cursor: pointer; background: #fbfcfe; overflow-wrap: anywhere; }
+    .source-item.active { border-color: #405da5; background: #eef2ff; }
+    .source-item strong, .source-item small { display: block; }
+    .source-item small { margin-top: 4px; color: #667085; line-height: 1.45; }
+    .coverage-detail { min-width: 0; padding: 12px; border: 1px solid #e1e5eb; border-radius: 8px; }
+    .field-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+    .field-grid label { display: grid; gap: 5px; }
+    .checkboxes { display: flex; flex-wrap: wrap; gap: 8px; padding: 7px 0; }
+    .checkboxes label { display: inline-flex; align-items: center; gap: 4px; }
+    .eval-case { display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: 8px; padding: 9px 0; border-bottom: 1px solid #edf0f4; }
+    .eval-case input { grid-column: 2; }
+    @media (max-width: 800px) { main { display: block; } aside, .detail, .coverage { margin-bottom: 16px; } .action { grid-template-columns: 34px 90px minmax(0, 1fr); } .coverage-layout { display: block; } .coverage-detail { margin-top: 12px; } .coverage-add, .coverage-filters { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
@@ -90,9 +109,30 @@
     <section class="detail" id="detail">
       <div class="empty">从左侧选择草稿，或先抓取一个剧情页面。</div>
     </section>
+    <section class="coverage">
+      <h2>已知来源覆盖台账</h2>
+      <p class="hint">这里只统计已抓取、已发布或人工加入的已知来源，不代表全游戏覆盖率。AI 分类和评测问题都只是草稿，必须人工确认。</p>
+      <div class="toolbar"><button id="coverage-sync" class="secondary" type="button">从本地草稿和事件库同步</button></div>
+      <div id="coverage-summary" class="coverage-summary"></div>
+      <form id="coverage-add-form" class="coverage-add">
+        <input id="coverage-url" type="url" required placeholder="加入待整理的 pjsk.moe 剧情 URL">
+        <select id="coverage-priority"><option value="high">high</option><option value="medium" selected>medium</option><option value="low">low</option></select>
+        <button type="submit">加入待办</button>
+      </form>
+      <div class="coverage-filters">
+        <select id="coverage-workflow-filter"><option value="">全部工作流</option></select>
+        <select id="coverage-priority-filter"><option value="">全部优先级</option></select>
+        <select id="coverage-classification-filter"><option value="">全部分类状态</option></select>
+        <select id="coverage-eval-filter"><option value="">全部评测状态</option></select>
+      </div>
+      <div class="coverage-layout">
+        <div id="coverage-list" class="empty">正在读取覆盖台账……</div>
+        <div id="coverage-detail" class="coverage-detail"><div class="empty">从左侧选择一个来源。</div></div>
+      </div>
+    </section>
   </main>
   <script>
-    const state = { drafts: [], current: null, preview: null };
+    const state = { drafts: [], current: null, preview: null, coverage: [], coverageOptions: {}, coverageCurrent: null, evalDraft: null };
     const analysisFields = [
       ["timeline", "时间线"], ["relationship_facts", "关系事实"], ["akito_attitude", "彰人态度"],
       ["toya_traits", "冬弥特征"], ["uncertain_or_missing", "不确定/缺失"], ["style_examples", "口吻示例"], ["topics", "主题"]
@@ -114,6 +154,111 @@
 
     function statusBadge(status) {
       return `<span class="badge ${escapeHtml(status)}">${escapeHtml(status)}</span>`;
+    }
+
+    function setOptions(node, values) {
+      const first = node.options[0]?.outerHTML || "";
+      node.innerHTML = first + (values || []).map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join("");
+    }
+
+    async function refreshCoverage(keepSelection = true) {
+      const params = new URLSearchParams();
+      [["workflow_status", "#coverage-workflow-filter"], ["priority", "#coverage-priority-filter"], ["classification_status", "#coverage-classification-filter"], ["eval_status", "#coverage-eval-filter"]].forEach(([key, selector]) => {
+        if ($(selector).value) params.set(key, $(selector).value);
+      });
+      const body = await api(`/api/coverage${params.toString() ? `?${params}` : ""}`);
+      state.coverage = body.sources || []; state.coverageOptions = body.options || {};
+      if (!$("#coverage-workflow-filter").dataset.ready) {
+        setOptions($("#coverage-workflow-filter"), state.coverageOptions.workflow_statuses);
+        setOptions($("#coverage-priority-filter"), state.coverageOptions.priorities);
+        setOptions($("#coverage-classification-filter"), state.coverageOptions.classification_statuses);
+        setOptions($("#coverage-eval-filter"), state.coverageOptions.eval_statuses);
+        $("#coverage-workflow-filter").dataset.ready = "1";
+      }
+      const summary = body.summary || {};
+      $("#coverage-summary").innerHTML = `<span class="summary-card"><b>${escapeHtml(summary.known_sources || 0)}</b> 个已知来源</span><span class="summary-card">工作流 ${escapeHtml(JSON.stringify(summary.workflow || {}))}</span><span class="summary-card">分类 ${escapeHtml(JSON.stringify(summary.classification || {}))}</span><span class="summary-card">评测 ${escapeHtml(JSON.stringify(summary.evaluation || {}))}</span>`;
+      const list = $("#coverage-list");
+      if (!state.coverage.length) { list.className = "empty"; list.textContent = "暂无符合条件的来源"; return; }
+      list.className = "";
+      list.innerHTML = state.coverage.map((source) => `<div class="source-item ${state.coverageCurrent?.source_id === source.source_id ? "active" : ""}" data-source-id="${escapeHtml(source.source_id)}"><strong>${escapeHtml(source.display_label || source.canonical_url)}</strong><small>${statusBadge(source.workflow_status)} ${escapeHtml(source.priority)} · 分类 ${escapeHtml(source.classification_status)} · 评测 ${escapeHtml(source.eval_status)}</small><small>${escapeHtml(source.canonical_url)}</small></div>`).join("");
+      list.querySelectorAll("[data-source-id]").forEach((node) => node.addEventListener("click", () => selectCoverage(node.dataset.sourceId)));
+      if (keepSelection && state.coverageCurrent) {
+        const updated = state.coverage.find((item) => item.source_id === state.coverageCurrent.source_id);
+        if (updated) { state.coverageCurrent = updated; renderCoverageDetail(); }
+      }
+    }
+
+    function classificationForm(source) {
+      const classification = source.classification_status === "suggested" ? source.suggested_classification : source.classification;
+      const selected = classification || {};
+      return `<div class="field-grid"><label>时间阶段<select id="classification-timeline">${(state.coverageOptions.timeline_stages || []).map((value) => `<option value="${escapeHtml(value)}" ${selected.timeline_stage === value ? "selected" : ""}>${escapeHtml(value)}</option>`).join("")}</select></label><label>参与范围<select id="classification-scope">${(state.coverageOptions.participant_scopes || []).map((value) => `<option value="${escapeHtml(value)}" ${selected.participant_scope === value ? "selected" : ""}>${escapeHtml(value)}</option>`).join("")}</select></label></div><div class="checkboxes">${(state.coverageOptions.event_types || []).map((value) => `<label><input type="checkbox" data-event-type value="${escapeHtml(value)}" ${(selected.event_types || []).includes(value) ? "checked" : ""}>${escapeHtml(value)}</label>`).join("")}</div>`;
+    }
+
+    function renderCoverageDetail() {
+      const source = state.coverageCurrent;
+      if (!source) return;
+      $("#coverage-detail").innerHTML = `<h3>${escapeHtml(source.display_label || source.source_id)}</h3><div class="meta"><div><b>来源 ID</b>${escapeHtml(source.source_id)}</div><div><b>剧情状态</b>${escapeHtml(source.workflow_status)}</div><div><b>事件 ID</b>${escapeHtml((source.event_ids || []).join(", ") || "尚未发布")}</div><div><b>来源</b><a href="${escapeHtml(source.canonical_url)}" target="_blank" rel="noreferrer">打开页面</a></div></div><div class="field-grid"><label>优先级<select id="source-priority">${(state.coverageOptions.priorities || []).map((value) => `<option value="${escapeHtml(value)}" ${source.priority === value ? "selected" : ""}>${escapeHtml(value)}</option>`).join("")}</select></label><label>备注<input id="source-notes" type="text" value="${escapeHtml(source.notes || "")}"></label></div><h4>剧情分类 ${statusBadge(source.classification_status)}</h4>${classificationForm(source)}<div class="toolbar"><button id="save-source" class="secondary" type="button">保存元数据</button><button id="suggest-classification" type="button">AI 建议分类</button><button id="confirm-classification" class="warning" type="button">人工确认分类</button></div><h4>召回评测 ${statusBadge(source.eval_status)}</h4><div class="toolbar"><button id="generate-eval" type="button" ${source.workflow_status !== "published" ? "disabled" : ""}>AI 生成评测草稿</button></div><div id="eval-editor" class="empty">${source.workflow_status === "published" ? "尚未加载评测草稿。" : "只有已发布来源可以生成评测草稿。"}</div>`;
+      $("#save-source").addEventListener("click", () => saveCoverageSource(false));
+      $("#confirm-classification").addEventListener("click", () => saveCoverageSource(true));
+      $("#suggest-classification").addEventListener("click", suggestClassification);
+      $("#generate-eval").addEventListener("click", generateEvalDraft);
+      state.evalDraft = null;
+      if (source.eval_draft_id) loadEvalDraft(source.eval_draft_id);
+      else if (source.eval_status === "approved") $("#eval-editor").textContent = "正式评测集中已有该事件用例；暂无由覆盖工具生成的可编辑草稿。";
+    }
+
+    function selectedClassification() {
+      return { timeline_stage: $("#classification-timeline").value, participant_scope: $("#classification-scope").value, event_types: [...document.querySelectorAll("[data-event-type]:checked")].map((node) => node.value) };
+    }
+
+    async function selectCoverage(sourceId) {
+      state.coverageCurrent = state.coverage.find((item) => item.source_id === sourceId); renderCoverageDetail(); await refreshCoverage();
+    }
+
+    async function saveCoverageSource(confirmClassification) {
+      if (!state.coverageCurrent) return;
+      const patch = { priority: $("#source-priority").value, notes: $("#source-notes").value };
+      if (confirmClassification) { patch.classification = selectedClassification(); patch.confirm_classification = true; }
+      try { const body = await api(`/api/coverage/sources/${state.coverageCurrent.source_id}`, { method: "PATCH", body: JSON.stringify(patch) }); state.coverageCurrent = body.source; await refreshCoverage(); setNotice(confirmClassification ? "分类已人工确认" : "来源元数据已保存"); }
+      catch (error) { setNotice(error.message, true); }
+    }
+
+    async function suggestClassification() {
+      try { setNotice("正在生成分类建议……"); const body = await api(`/api/coverage/sources/${state.coverageCurrent.source_id}/suggest-classification`, { method: "POST", body: "{}" }); state.coverageCurrent = body.source; renderCoverageDetail(); await refreshCoverage(); setNotice("AI 建议已生成，请人工核对后确认"); }
+      catch (error) { setNotice(error.message, true); }
+    }
+
+    async function generateEvalDraft() {
+      try { setNotice("正在生成评测草稿……"); state.evalDraft = (await api(`/api/coverage/sources/${state.coverageCurrent.source_id}/generate-eval`, { method: "POST", body: "{}" })).draft; renderEvalDraft(); await refreshCoverage(); setNotice("评测草稿已生成，尚未进入正式评测集"); }
+      catch (error) { setNotice(error.message, true); }
+    }
+
+    async function loadEvalDraft(draftId) {
+      try { state.evalDraft = (await api(`/api/coverage/evals/${draftId}`)).draft; renderEvalDraft(); }
+      catch (error) { $("#eval-editor").textContent = error.message; }
+    }
+
+    function renderEvalDraft() {
+      if (!state.evalDraft || !$("#eval-editor")) return;
+      const editable = state.evalDraft.status !== "approved";
+      $("#eval-editor").className = "";
+      $("#eval-editor").innerHTML = `<p>${statusBadge(state.evalDraft.status)} · 批准门槛：2 个正例、1 个带禁召事件的相邻例、2 个事实错误负例。</p>${(state.evalDraft.cases || []).map((item, index) => `<div class="eval-case" data-case-index="${index}"><select data-case-type ${editable ? "" : "disabled"}><option value="positive" ${item.case_type === "positive" ? "selected" : ""}>positive</option><option value="adjacent" ${item.case_type === "adjacent" ? "selected" : ""}>adjacent</option><option value="negative" ${item.case_type === "negative" ? "selected" : ""}>negative</option></select><textarea data-case-query ${editable ? "" : "disabled"}>${escapeHtml(item.query || "")}</textarea><input data-case-forbidden type="text" ${editable ? "" : "disabled"} value="${escapeHtml((item.forbidden_event_ids || []).join(","))}" placeholder="adjacent 的 forbidden_event_ids，逗号分隔"></div>`).join("")}<div class="toolbar">${editable ? '<button id="save-eval" class="secondary" type="button">保存评测草稿</button><button id="approve-eval" class="warning" type="button">人工批准并写入正式评测集</button>' : ""}</div>`;
+      if (editable) { $("#save-eval").addEventListener("click", saveEvalDraft); $("#approve-eval").addEventListener("click", approveEvalDraft); }
+    }
+
+    function collectEvalCases() {
+      return [...document.querySelectorAll("[data-case-index]")].map((node) => ({ case_type: node.querySelector("[data-case-type]").value, query: node.querySelector("[data-case-query]").value, forbidden_event_ids: node.querySelector("[data-case-forbidden]").value.split(",").map((value) => value.trim()).filter(Boolean) }));
+    }
+
+    async function saveEvalDraft() {
+      try { state.evalDraft = (await api(`/api/coverage/evals/${state.evalDraft.draft_id}`, { method: "PATCH", body: JSON.stringify({ cases: collectEvalCases() }) })).draft; renderEvalDraft(); setNotice("评测草稿已保存，尚未进入正式评测集"); return true; }
+      catch (error) { setNotice(error.message, true); return false; }
+    }
+
+    async function approveEvalDraft() {
+      if (!window.confirm("确认这些问题和事实边界正确，并写入正式评测集吗？")) return;
+      try { if (!await saveEvalDraft()) return; state.evalDraft = (await api(`/api/coverage/evals/${state.evalDraft.draft_id}/approve`, { method: "POST", body: "{}" })).draft; renderEvalDraft(); await refreshCoverage(); setNotice("评测草稿已人工批准并写入正式评测集"); }
+      catch (error) { setNotice(error.message, true); }
     }
 
     async function refreshDrafts() {
@@ -233,7 +378,18 @@
     });
     $("#refresh-button").addEventListener("click", () => refreshDrafts().catch((error) => setNotice(error.message, true)));
     $("#status-filter").addEventListener("change", () => refreshDrafts().catch((error) => setNotice(error.message, true)));
+    $("#coverage-add-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      try { const body = await api("/api/coverage/sources", { method: "POST", body: JSON.stringify({ url: $("#coverage-url").value.trim(), priority: $("#coverage-priority").value }) }); $("#coverage-url").value = ""; state.coverageCurrent = body.source; await refreshCoverage(); renderCoverageDetail(); setNotice("已加入剧情来源待办"); }
+      catch (error) { setNotice(error.message, true); }
+    });
+    $("#coverage-sync").addEventListener("click", async () => {
+      try { await api("/api/coverage/sync", { method: "POST", body: "{}" }); await refreshCoverage(); setNotice("覆盖台账已从本地草稿和事件库同步"); }
+      catch (error) { setNotice(error.message, true); }
+    });
+    ["#coverage-workflow-filter", "#coverage-priority-filter", "#coverage-classification-filter", "#coverage-eval-filter"].forEach((selector) => $(selector).addEventListener("change", () => refreshCoverage(false).catch((error) => setNotice(error.message, true))));
     refreshDrafts().catch((error) => setNotice(error.message, true));
+    refreshCoverage().catch((error) => setNotice(error.message, true));
   </script>
 </body>
 </html>

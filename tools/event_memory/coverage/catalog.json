@@ -1,0 +1,173 @@
+{
+  "schema_version": 1,
+  "scope": "known_sources_only",
+  "sources": [
+    {
+      "source_id": "source-245549945a1b1bac",
+      "canonical_url": "https://pjsk.moe/zh-cn/story/card/1284/",
+      "route_type": "card",
+      "display_label": "サイドストーリー（前編）",
+      "priority": "medium",
+      "classification": {
+        "timeline_stage": "",
+        "event_types": [],
+        "participant_scope": "未知"
+      },
+      "suggested_classification": null,
+      "classification_status": "unclassified",
+      "draft_id": "story-4f5c9401d29d0d4e",
+      "event_ids": [],
+      "workflow_status": "rejected",
+      "eval_status": "missing",
+      "origins": [
+        "draft"
+      ],
+      "notes": "",
+      "eval_draft_id": ""
+    },
+    {
+      "source_id": "source-397e45ce759eede3",
+      "canonical_url": "https://pjsk.moe/zh-cn/story/card/1059/",
+      "route_type": "card",
+      "display_label": "卡牌剧情（上篇）",
+      "priority": "medium",
+      "classification": {
+        "timeline_stage": "",
+        "event_types": [],
+        "participant_scope": "未知"
+      },
+      "suggested_classification": null,
+      "classification_status": "unclassified",
+      "draft_id": "story-a2e8349b5d06ca08",
+      "event_ids": [],
+      "workflow_status": "rejected",
+      "eval_status": "missing",
+      "origins": [
+        "draft"
+      ],
+      "notes": "",
+      "eval_draft_id": ""
+    },
+    {
+      "source_id": "source-58fe41e2913cf67e",
+      "canonical_url": "https://pjsk.moe/zh-cn/story/card/1016/",
+      "route_type": "card",
+      "display_label": "サイドストーリー（前編）",
+      "priority": "medium",
+      "classification": {
+        "timeline_stage": "",
+        "event_types": [],
+        "participant_scope": "未知"
+      },
+      "suggested_classification": null,
+      "classification_status": "unclassified",
+      "draft_id": "story-e811d0ad7a5ea3be",
+      "event_ids": [],
+      "workflow_status": "rejected",
+      "eval_status": "missing",
+      "origins": [
+        "draft"
+      ],
+      "notes": "",
+      "eval_draft_id": ""
+    },
+    {
+      "source_id": "source-85e3ee7dcb7008ce",
+      "canonical_url": "https://pjsk.moe/zh-cn/story/event/193/6/",
+      "route_type": "event",
+      "display_label": "理屈ではなく",
+      "priority": "medium",
+      "classification": {
+        "timeline_stage": "",
+        "event_types": [],
+        "participant_scope": "未知"
+      },
+      "suggested_classification": null,
+      "classification_status": "unclassified",
+      "draft_id": "story-30b154922d2f28ab",
+      "event_ids": [
+        "akito-toya-web-30b154922d2f"
+      ],
+      "workflow_status": "published",
+      "eval_status": "approved",
+      "origins": [
+        "draft",
+        "published"
+      ],
+      "notes": "",
+      "eval_draft_id": ""
+    },
+    {
+      "source_id": "source-93c47b159a83a002",
+      "canonical_url": "https://pjsk.moe/zh-cn/story/card/1020/",
+      "route_type": "card",
+      "display_label": "サイドストーリー（前編）",
+      "priority": "medium",
+      "classification": {
+        "timeline_stage": "",
+        "event_types": [],
+        "participant_scope": "未知"
+      },
+      "suggested_classification": null,
+      "classification_status": "unclassified",
+      "draft_id": "story-bb21e5864c41c5bd",
+      "event_ids": [],
+      "workflow_status": "rejected",
+      "eval_status": "missing",
+      "origins": [
+        "draft"
+      ],
+      "notes": "",
+      "eval_draft_id": ""
+    },
+    {
+      "source_id": "source-d1c6e51fd1483069",
+      "canonical_url": "https://pjsk.moe/zh-cn/story/card/1388/",
+      "route_type": "card",
+      "display_label": "卡牌剧情（下篇）",
+      "priority": "medium",
+      "classification": {
+        "timeline_stage": "",
+        "event_types": [],
+        "participant_scope": "未知"
+      },
+      "suggested_classification": null,
+      "classification_status": "unclassified",
+      "draft_id": "story-3d2110231bfa8b96",
+      "event_ids": [],
+      "workflow_status": "rejected",
+      "eval_status": "missing",
+      "origins": [
+        "draft"
+      ],
+      "notes": "",
+      "eval_draft_id": ""
+    },
+    {
+      "source_id": "source-ea53697ea7bc0151",
+      "canonical_url": "https://pjsk.moe/zh-cn/story/event/71/8/",
+      "route_type": "event",
+      "display_label": "接下来就该轮到我了",
+      "priority": "medium",
+      "classification": {
+        "timeline_stage": "",
+        "event_types": [],
+        "participant_scope": "未知"
+      },
+      "suggested_classification": null,
+      "classification_status": "unclassified",
+      "draft_id": "story-b08adb36a69ce8a8",
+      "event_ids": [
+        "akito-toya-web-b08adb36a69c"
+      ],
+      "workflow_status": "published",
+      "eval_status": "missing",
+      "origins": [
+        "draft",
+        "published"
+      ],
+      "notes": "",
+      "eval_draft_id": ""
+    }
+  ]
+}

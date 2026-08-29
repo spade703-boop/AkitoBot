@@ -90,3 +90,29 @@ def test_enrich_with_llm_marks_request_failure_and_redacts_secret(monkeypatch):
 
     assert result["draft_analysis"]["status"] == "llm_request_failed"
     assert "test-secret" not in result["draft_analysis"]["error"]
+
+
+def test_suggest_coverage_classification_uses_compact_material(monkeypatch):
+    captured: dict[str, object] = {}
+
+    def fake_deepseek(prompt: str, *, max_tokens: int):
+        captured.update(prompt=prompt, max_tokens=max_tokens)
+        return {"timeline_stage": "早期搭档", "event_types": ["支持照顾"], "participant_scope": "仅彰冬"}
+
+    monkeypatch.setattr(story_import_runtime, "_deepseek_json", fake_deepseek)
+    result = story_import_runtime.suggest_coverage_classification(
+        {"canonical_url": "https://pjsk.moe/zh-cn/story/event/193/6/", "route_type": "event"},
+        [{"summary": "彰人担心发烧的冬弥。", "topics": ["发烧"], "relationship_tags": ["关心"], "evidence": "不应发送"}],
+        {"draft_analysis": {"summary_zh": "两人讨论是否继续对决。"}, "actions": ["不应发送完整台词"]},
+    )
+
+    assert result["timeline_stage"] == "早期搭档"
+    assert "不应发送" not in str(captured["prompt"])
+    assert "不应发送完整台词" not in str(captured["prompt"])
+
+
+def test_generate_coverage_eval_cases_rejects_missing_cases(monkeypatch):
+    monkeypatch.setattr(story_import_runtime, "_deepseek_json", lambda *_args, **_kwargs: {"wrong": []})
+
+    with pytest.raises(RuntimeError, match="missing cases"):
+        story_import_runtime.generate_coverage_eval_cases({}, [], [])

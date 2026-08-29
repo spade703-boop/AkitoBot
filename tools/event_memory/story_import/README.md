@@ -2,13 +2,14 @@
 
 本目录集中放置剧情导入功能的所有部件：
 
-- `web.py`：本地网页服务和 JSON API。
-- `ui/index.html`：网页审核界面。
+- `web.py`：本地网页服务和 JSON API，同时连接已知来源覆盖台账。
+- `ui/index.html`：剧情审核与覆盖维护界面。
 - `cli.py`：抓取、查看、审核、去重和发布的命令行入口。
 - `runtime.py`：加载仓库核心以及可选 LLM 分析。
 - `start_story_import.bat`：双击启动入口。
 
 抓取、草稿与修订工作区位于 `data/event_memory/story_import/`，发布后的紧凑事件记忆仍写入 `data/content/akito_event_memories.json`。
+可提交的覆盖元数据位于相邻的 `coverage/` 目录；剧情原文、完整草稿和缓存不会复制进去。
 
 在仓库根目录可直接双击 `start_story_import.bat`，或运行：
 

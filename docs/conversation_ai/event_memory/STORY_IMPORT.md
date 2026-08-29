@@ -12,7 +12,9 @@ Windows 用户也可以直接双击仓库根目录的 `start_story_import.bat`�
 python tools/event_memory/story_import/web.py --data-dir data --port 8765
 ```
 
-然后打开 `http://127.0.0.1:8765/`。服务只监听本机，关闭窗口或按 `Ctrl+C` 即可停止；它不会启动 NoneBot，也不会自动打开浏览器。网页可以完成抓取、查看、分析编辑、审核、去重预览和发布。
+然后打开 `http://127.0.0.1:8765/`。服务只监听本机，关闭窗口或按 `Ctrl+C` 即可停止；它不会启动 NoneBot，也不会自动打开浏览器。网页可以完成抓取、查看、分析编辑、审核、去重预览和发布，也可以维护页面下方的“已知来源覆盖台账”。
+
+覆盖台账把已抓取草稿、已发布人工事件和手动加入的待办 URL 合并到同一个列表，并显示 `todo`、`draft`、`approved`、`published`、`rejected`、`revision_pending` 状态。AI 可以建议时间阶段、事件类型、参与范围和召回评测问题，但不会自动确认分类，也不会直接修改正式评测集；必须在网页中人工核对并批准。
 
 ## 快速流程
 
@@ -39,6 +41,8 @@ python tools/event_memory/story_import/cli.py publish story-<draft-id> --confirm
 - `data/content/akito_event_memories.json`：`publish` 的最终事件记忆目标；该文件只写入与现有事件库一致的紧凑事件卡，完整双语原文和证据索引继续保留在草稿中。
 
 部署时只需要把审核后的 `data/content/akito_event_memories.json` 同步到运行环境，并通过 `重载配置` 或重启使其生效。缓存和草稿是本地工作资料，不由 bot 运行时联网读取。
+
+覆盖维护元数据位于 `tools/event_memory/coverage/`，覆盖报告生成到 `docs/conversation_ai/event_memory/COVERAGE_REPORT.md`。无网页环境可用单行命令 `python tools/event_memory/coverage/cli.py sync` 同步状态。该台账的分母只是“已经知道的来源”，不能解释成全游戏剧情覆盖率。
 
 ## 支持的路由
 
