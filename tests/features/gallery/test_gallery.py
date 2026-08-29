@@ -574,8 +574,44 @@ async def test_pet_send_outputs_only_image_and_skips_caption_api(monkeypatch, tm
     caption_api.assert_not_awaited()
 
 
+@pytest.mark.asyncio
+async def test_send_multiple_pet_images_in_one_message(monkeypatch, tmp_path):
+    image_paths = []
+    for index in range(5):
+        image_path = tmp_path / f"pet-{index}.jpg"
+        image_path.write_bytes(f"pet-image-{index}".encode())
+        image_paths.append(image_path)
+    monkeypatch.setattr(gallery, "GROUP_IMAGE_PERMISSIONS", {1001: ["all"]})
+    monkeypatch.setattr(gallery, "sleep_block", lambda *args, **kwargs: "")
+    monkeypatch.setattr(gallery, "get_memory_key", lambda event: "group_1001")
+    monkeypatch.setattr(gallery, "get_user_memory", lambda key: {"temp_implants": []})
+    monkeypatch.setattr(gallery, "get_random_local_images", lambda category, count: image_paths[:count])
+    monkeypatch.setattr(gallery, "grant_safety_pass", lambda seconds: None)
+
+    with pytest.raises(FinishedException) as exc:
+        await gallery.send_img_cmd.handlers[0](
+            Event(plain_text="发张宠物 5", group_id=1001),
+        )
+
+    assert str(exc.value.result) == "[image]" * 5
+
+
+@pytest.mark.asyncio
+async def test_send_image_count_must_be_between_one_and_nine(monkeypatch, tmp_path):
+    image_path = tmp_path / "pet.jpg"
+    image_path.write_bytes(b"pet-image")
+    monkeypatch.setattr(gallery, "GROUP_IMAGE_PERMISSIONS", {1001: ["all"]})
+    monkeypatch.setattr(gallery, "get_random_local_image", lambda category: image_path)
+
+    for request in ("发张宠物 0", "发张宠物 6", "发张宠物 10", "发张宠物 五", "发张宠物 2 额外"):
+        result = await gallery.send_img_cmd.handlers[0](
+            Event(plain_text=request, group_id=1001),
+        )
+        assert result is None
+
+
 def test_gallery_command_registrations_only_keep_supported_entrypoints():
-    assert gallery.send_img_cmd.args == (r"^发张\s*\S+\s*$",)
+    assert gallery.send_img_cmd.args == (r"^发张\s*\S+(?:\s+\S+)?\s*$",)
     assert gallery.save_img_cmd.args == ()
     assert gallery.save_img_cmd.kwargs == {"priority": 6, "block": False}
     assert gallery.collect_cmd.args == ("开始收图",)

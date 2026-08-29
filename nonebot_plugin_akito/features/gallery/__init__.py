@@ -50,6 +50,7 @@ from .hash_index import GalleryHashIndex
 # ==============================================================================
 
 ITEMS_PER_PAGE = 30
+MAX_SEND_IMAGE_COUNT = 5
 GALLERY_REGISTRY_FILE = "gallery_registry.json"
 GALLERY_REGISTRY_VERSION = 2
 SUPPORTED_GALLERY_REGISTRY_VERSIONS = {1, GALLERY_REGISTRY_VERSION}
@@ -174,7 +175,7 @@ DEFAULT_UNKNOWN_GALLERY_REPLIES = [
 DUPLICATE_IMAGE_REPLY = "……这张已经存过了。别重复塞给我。"
 DUPLICATE_IMAGES_REPLY = "……这些图已经存过了。别重复塞给我。"
 GALLERY_USER_HELP_ROWS = (
-    ("发张[图库名]", "严格匹配后随机发图；未知图库会拒绝，附加文字或空参数静默。"),
+    ("发张[图库名] [数量]", "严格匹配后在一条消息中随机发图，数量限 1–5；未知图库会拒绝。"),
     ("存[图库名]", "保存本条或引用消息中的图片；全图库已存在时拒绝重复写入。"),
     ("开始收图 [图库名]", "连续保存图片，自动跳过所有图库中已经存在的图片。"),
     ("停止收图", "结束当前会话的连续收图模式。"),
@@ -1190,6 +1191,12 @@ async def _(event: Event):
 
 def get_random_local_image(category: str) -> Path | None:
     """从图库及其全部子图库中随机返回一张有效图片。"""
+    images = get_random_local_images(category, 1)
+    return images[0] if images else None
+
+
+def get_random_local_images(category: str, count: int) -> list[Path]:
+    """从图库及其全部子图库中随机返回指定数量的有效图片。"""
     folders = [IMAGE_BASE_PATH / storage_key for storage_key in _gallery_storage_keys_for_read(category)]
     if not folders[0].exists():
         try:
@@ -1204,7 +1211,9 @@ def get_random_local_image(category: str) -> Path | None:
         for image in folder.glob(pattern)
     ]
     valid_images = [img for img in images if img.stat().st_size > 0]
-    return random.choice(valid_images) if valid_images else None
+    if not valid_images or count <= 0:
+        return []
+    return random.sample(valid_images, k=min(count, len(valid_images)))
 
 # --- 1. 手动存图 ---
 save_img_cmd = on_message(priority=6, block=False)
@@ -1352,7 +1361,7 @@ async def _(bot: Bot, event: Event):
         await bot.send(event=event, message="👌")
 
 # --- 3. 主动发图 ---
-send_img_cmd = on_regex(r"^发张\s*\S+\s*$", priority=5, block=True)
+send_img_cmd = on_regex(r"^发张\s*\S+(?:\s+\S+)?\s*$", priority=5, block=True)
 @send_img_cmd.handle()
 async def _(event: Event):
     if not isinstance(event, GroupMessageEvent):
@@ -1361,7 +1370,21 @@ async def _(event: Event):
     if group_id not in GROUP_IMAGE_PERMISSIONS:
         return
 
-    target = re.sub(r"^发张\s*", "", event.get_plaintext().strip(), count=1).strip()
+    request_text = re.sub(r"^发张\s*", "", event.get_plaintext().strip(), count=1).strip()
+    request_parts = request_text.split()
+    target = request_parts[0] if request_parts else ""
+    requested_count = 1
+    count_valid = len(request_parts) <= 1
+    if len(request_parts) == 2:
+        if request_parts[1].isdigit():
+            try:
+                requested_count = int(request_parts[1])
+            except ValueError:
+                count_valid = False
+            else:
+                count_valid = 1 <= requested_count <= MAX_SEND_IMAGE_COUNT
+        else:
+            count_valid = False
     category, prompt_hint = _resolve_send_image_request(target)
     if not category:
         if not target or _has_gallery_name_prefix(target):
@@ -1371,6 +1394,8 @@ async def _(event: Event):
         await send_img_cmd.finish(random.choice(replies))
     gallery = _get_gallery(category)
     if gallery is None:
+        return
+    if not count_valid:
         return
 
     result = _gallery_sleep_block("sleep_replies_img", silent_chance=0.0, fallback="……zzZ")
@@ -1392,8 +1417,13 @@ async def _(event: Event):
     if not _gallery_allowed(group_id, gallery):
         await send_img_cmd.finish("（瞥了一眼）……没有这种图可以发。" if category in ["toya", "self"] else "（摆手）……不想发这个。")
 
-    img_path = get_random_local_image(category)
-    if not img_path: await send_img_cmd.finish(f"（翻了翻相册）……啧，相册里还没存【{gallery.name}】的照片。你先发给我几张？")
+    if requested_count == 1:
+        image_paths = [get_random_local_image(category)]
+        image_paths = [path for path in image_paths if path is not None]
+    else:
+        image_paths = get_random_local_images(category, requested_count)
+    if not image_paths:
+        await send_img_cmd.finish(f"（翻了翻相册）……啧，相册里还没存【{gallery.name}】的照片。你先发给我几张？")
 
     try:
         if not gallery.caption_enabled:
@@ -1404,7 +1434,7 @@ async def _(event: Event):
 
             img_prompt = f"""
             {get_base_persona()}
-            【当前动作】：你从手机相册里翻出了一张【{gallery.caption_subject}】发送给对方。
+            【当前动作】：你从手机相册里翻出{requested_count}张【{gallery.caption_subject}】发送给对方。
             【导演要求】：{prompt_hint}
             【随机微表情】：{current_angle}
 
@@ -1422,12 +1452,21 @@ async def _(event: Event):
 
     final_msg = None
     try:
-        with open(img_path, "rb") as f:
-            base64_url = f"base64://{base64.b64encode(f.read()).decode()}"
+        image_segments = []
+        for image_path in image_paths:
+            with open(image_path, "rb") as image_file:
+                base64_url = f"base64://{base64.b64encode(image_file.read()).decode()}"
+            image_segments.append(MessageSegment.image(base64_url))
         if caption:
-            final_msg = OB11Message(caption.strip() + "\n") + MessageSegment.image(base64_url)
+            final_msg = OB11Message(caption.strip() + "\n")
+            for image_segment in image_segments:
+                final_msg += image_segment
+        elif len(image_segments) == 1:
+            final_msg = image_segments[0]
         else:
-            final_msg = MessageSegment.image(base64_url)
+            final_msg = OB11Message()
+            for image_segment in image_segments:
+                final_msg += image_segment
     except Exception: await send_img_cmd.finish("（划手机）……啧，图片加载失败了。")
 
     if final_msg:
