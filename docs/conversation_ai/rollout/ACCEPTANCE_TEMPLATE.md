@@ -12,12 +12,7 @@
 在生产容器中运行：
 
 ```bash
-docker exec mybot python tools/conversation_ai/rollout/evaluate.py \
-  --traces data/conversation_ai/traces/conversation_traces.jsonl \
-  --output docs/conversation_ai/rollout/ACCEPTANCE.md \
-  --control-arm default \
-  --treatment-arm combined \
-  --min-turns 30
+docker exec -w /app mybot python tools/conversation_ai/rollout/evaluate.py --traces data/conversation_ai/traces/conversation_traces.jsonl --output docs/conversation_ai/rollout/ACCEPTANCE.md --control-arm default --treatment-arm combined --min-turns 30
 ```
 
 如果要把未通过自动门槛视为命令失败，追加 `--strict`。样本不足时不要据此扩大或回滚。
@@ -27,12 +22,7 @@ docker exec mybot python tools/conversation_ai/rollout/evaluate.py \
 如果当前只有一个高频群，直接使用单臂观察模式：
 
 ```bash
-docker exec mybot python tools/conversation_ai/rollout/evaluate.py \
-  --traces data/conversation_ai/traces/conversation_traces.jsonl \
-  --output docs/conversation_ai/rollout/ACCEPTANCE.md \
-  --treatment-arm combined \
-  --single-arm \
-  --min-turns 30
+docker exec -w /app mybot python tools/conversation_ai/rollout/evaluate.py --traces data/conversation_ai/traces/conversation_traces.jsonl --output docs/conversation_ai/rollout/ACCEPTANCE.md --treatment-arm combined --single-arm --min-turns 30
 ```
 
 该模式会输出实验臂的绝对稳定性指标，但明确标注“不提供因果比较”；不能据此宣称新版一定优于旧版。

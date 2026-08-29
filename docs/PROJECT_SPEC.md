@@ -42,6 +42,48 @@ nonebot_plugin_akito/
 - `core/retrieval.py` 与 `core/data.py` 互为惰性导入（函数内 import，规避循环依赖）；core 子模块之间允许直接引用兄弟模块的内部工具（如 `_DATA_SEARCH_DIRS`），不必经过包入口。
   （历史例外已收敛：features 层现统一走公共 `find_data_path` / `get_data_dir`，不再直引 core 内部工具。）
 
+### 1.4 生产环境基线
+
+- 云平台：阿里云 ECS。
+- 部署方式：Docker 容器部署，不直接使用宿主机 Python 运行 bot 或维护脚本。
+- bot 容器名：`mybot`。
+- bot 基础镜像：`python:3.10`。
+- 宿主机存在另一套旧版 Python；宿主机的 `python` 命令可能不支持本项目语法，不能作为生产维护解释器。
+- NapCat、Hermes Gateway 和 FRP 分别运行在独立容器中，不与 bot Python 环境混用。
+- 面向生产服务器提供操作命令时，默认必须给出可直接粘贴执行的单行命令；不得使用反斜杠续行、heredoc 或依赖多行输入的写法。如步骤较多，应拆成多条彼此独立的单行命令。
+
+生产维护应先在宿主机更新仓库，再进入 `mybot` 容器执行 Python 命令：
+
+```bash
+git status --short
+git pull --ff-only
+docker exec -it mybot bash
+python --version
+cd <容器内项目目录>
+python tools/event_memory/retrieval/build_index.py --check
+```
+
+也可以在确认容器工作目录正确后直接执行：
+
+```bash
+docker exec -it mybot python tools/event_memory/retrieval/build_index.py --check
+```
+
+检查生产 `.env` 中的对话灰度与事件检索配置：
+
+```bash
+docker exec -it -w /app mybot sh -lc 'grep -E "^(AKITO_EVENT_MEMORY_RETRIEVAL|AKITO_M2_MEMORY_MODE|AKITO_EXPERIMENT_GROUPS)=" .env'
+```
+
+重启 bot 使用：
+
+```bash
+docker restart mybot
+docker logs --tail 200 mybot
+```
+
+如宿主机 `git status --short` 显示运行时配置存在本地修改（例如 `data/content/rpg_config.json`），不得使用 `git reset --hard` 或强制覆盖；先保留并确认这些生产数据，再处理代码更新冲突。
+
 ---
 
 ## 2. 目录结构标准
