@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "source": {
     "path": "data/content/akito_scripts.json",
     "record_count": 2502
@@ -60,7 +60,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-00708226a372",
@@ -103,7 +105,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-008448ac3c6d",
@@ -144,7 +148,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-00b371d0a227",
@@ -185,7 +191,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-00e68dd8b5aa",
@@ -230,7 +238,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-00ffaac0ca8c",
@@ -273,7 +283,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-018bad8b8b69",
@@ -316,7 +328,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-0199316b03f3",
@@ -361,7 +375,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-01b3f9ec314a",
@@ -402,7 +418,9 @@
         "足球·过去",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-01c3759f5738",
@@ -448,7 +466,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-02700b74e5bb",
@@ -495,7 +515,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-02d0bd53c469",
@@ -543,7 +565,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-02e020837628",
@@ -590,7 +614,9 @@
         "街头·比赛",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-035356f07985",
@@ -633,7 +659,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-03b2b05edfb0",
@@ -674,7 +702,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-03cdc09c5577",
@@ -721,7 +751,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-041efd156a11",
@@ -768,7 +800,9 @@
         "街头·比赛",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-043d0989457d",
@@ -811,7 +845,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-0468fab5d51e",
@@ -856,7 +892,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-04a0705dceb6",
@@ -904,7 +942,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-04b38fdca96d",
@@ -947,7 +987,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-0521b9a71b63",
@@ -988,7 +1030,9 @@
         "过去·RAD WEEKEND",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-0525faeab362",
@@ -1033,7 +1077,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-0558503ae582",
@@ -1081,7 +1127,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-06265609bef9",
@@ -1128,7 +1176,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-064c80621ed1",
@@ -1173,7 +1223,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-06c018cf1ea5",
@@ -1214,7 +1266,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-06e7eb2d1a24",
@@ -1255,7 +1309,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-06ed04c2c5a6",
@@ -1301,7 +1357,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-070389348666",
@@ -1344,7 +1402,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-07e72c2d143e",
@@ -1389,7 +1449,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-085de116b15d",
@@ -1436,7 +1498,9 @@
         "过去·RAD WEEKEND",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-088adf05d44c",
@@ -1479,7 +1543,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-08e8880cfa2c",
@@ -1522,7 +1588,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-09150d8118f6",
@@ -1571,7 +1639,9 @@
         "过去·RAD WEEKEND",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-09837166ccfb",
@@ -1614,7 +1684,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-09aa1387909f",
@@ -1655,7 +1727,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-0a0d414677a4",
@@ -1698,7 +1772,9 @@
         "游戏黑话·抽卡",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-0a0ec4d1ef3f",
@@ -1745,7 +1821,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-0a38d0034c25",
@@ -1793,7 +1871,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-0a624c3decd7",
@@ -1836,7 +1916,9 @@
         "游戏黑话·抽卡",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-0b2a67d1f6eb",
@@ -1879,7 +1961,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-0c55578b1935",
@@ -1922,7 +2006,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-0c9ef753d488",
@@ -1969,7 +2055,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-0ccad2c6bdb0",
@@ -2012,7 +2100,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-0d5dd61af0e6",
@@ -2059,7 +2149,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-0e058e97a21d",
@@ -2107,7 +2199,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-0e51bd03d3e0",
@@ -2154,7 +2248,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-0e64d8d1bce2",
@@ -2196,7 +2292,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-0e8935a42820",
@@ -2241,7 +2339,9 @@
         "街头·比赛",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-0ec8a58d24cd",
@@ -2284,7 +2384,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-0f59e9923ac6",
@@ -2325,7 +2427,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-0f71356117bb",
@@ -2367,7 +2471,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-0fae8a16bbcb",
@@ -2413,7 +2519,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-0fe135819635",
@@ -2460,7 +2568,9 @@
         "街头·比赛",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-0fe1f9ae9c63",
@@ -2503,7 +2613,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-10124b89ec82",
@@ -2544,7 +2656,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-10e356e843af",
@@ -2592,7 +2706,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-1119917530cc",
@@ -2639,7 +2755,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-112b0b64d817",
@@ -2690,7 +2808,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-114080b5f003",
@@ -2733,7 +2853,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-1155b6fababd",
@@ -2780,7 +2902,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-1196f65a1c55",
@@ -2829,7 +2953,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-12145b54e074",
@@ -2872,7 +2998,9 @@
         "街头·比赛",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-12520b975887",
@@ -2917,7 +3045,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-127798201147",
@@ -2964,7 +3094,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-12e5ceca7021",
@@ -3009,7 +3141,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-13acde7b84d0",
@@ -3054,7 +3188,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-1472953d8d4f",
@@ -3097,7 +3233,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-14dcc9ac3317",
@@ -3142,7 +3280,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-14ec91057c62",
@@ -3188,7 +3328,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-1517790550ac",
@@ -3231,7 +3373,9 @@
         "游戏黑话·抽卡",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-1531bf5c38be",
@@ -3276,7 +3420,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-15f40fe4b6ed",
@@ -3321,7 +3467,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-15faff50bce0",
@@ -3362,7 +3510,9 @@
         "过去·RAD WEEKEND",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-161c6d0143e0",
@@ -3405,7 +3555,9 @@
         "游戏黑话·抽卡",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-164a6796d165",
@@ -3448,7 +3600,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-165a332f998e",
@@ -3491,7 +3645,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-171a8f6679a4",
@@ -3534,7 +3690,9 @@
         "游戏黑话·抽卡",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-1743a3bfe673",
@@ -3577,7 +3735,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-17b361b3b5cc",
@@ -3625,7 +3785,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-18655ace682a",
@@ -3668,7 +3830,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-1873adf74c56",
@@ -3711,7 +3875,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-18cbb9c8127a",
@@ -3754,7 +3920,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-1a0bea9bc6e3",
@@ -3799,7 +3967,9 @@
         "街头·比赛",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-1ab28db53411",
@@ -3847,7 +4017,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-1ac670f80cc6",
@@ -3892,7 +4064,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-1b10b6c88797",
@@ -3940,7 +4114,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-1ba09f051fa5",
@@ -3981,7 +4157,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-1bc633ab4659",
@@ -4022,7 +4200,9 @@
         "足球·过去",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-1c24471fc074",
@@ -4069,7 +4249,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-1c58bf429007",
@@ -4119,7 +4301,9 @@
         "过去·RAD WEEKEND",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-1d1f4340e265",
@@ -4165,7 +4349,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-1e6bcfdbcd58",
@@ -4208,7 +4394,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-1e9bec9f5c29",
@@ -4255,7 +4443,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-1ebf126f27df",
@@ -4298,7 +4488,9 @@
         "游戏黑话·抽卡",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-1f94a78741e0",
@@ -4347,7 +4539,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-1ff9e93231b8",
@@ -4390,7 +4584,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-201d62a5cb88",
@@ -4433,7 +4629,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-20356a673c0e",
@@ -4476,7 +4674,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-204d9db73a15",
@@ -4523,7 +4723,9 @@
         "过去·RAD WEEKEND",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-20f622e93a79",
@@ -4566,7 +4768,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-20f6ddf1b0c6",
@@ -4609,7 +4813,9 @@
         "游戏黑话·抽卡",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-211affaa2360",
@@ -4652,7 +4858,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-2237177f3129",
@@ -4699,7 +4907,9 @@
         "街头·比赛",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-22eec6644407",
@@ -4746,7 +4956,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-22f53c8c573b",
@@ -4791,7 +5003,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-232cb3e952bb",
@@ -4834,7 +5048,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-2362b01240f4",
@@ -4879,7 +5095,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-2375bdfc0512",
@@ -4922,7 +5140,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-24447171eedb",
@@ -4969,7 +5189,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-25e79ef9589d",
@@ -5012,7 +5234,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-263941d52cd4",
@@ -5057,7 +5281,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-2641644bcc5a",
@@ -5102,7 +5328,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-26583b9f6867",
@@ -5147,7 +5375,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-267a8ed14e88",
@@ -5188,7 +5418,9 @@
         "足球·过去",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-26c709682ccf",
@@ -5231,7 +5463,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-27967629fe04",
@@ -5274,7 +5508,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-28332e52a676",
@@ -5322,7 +5558,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-283fcae1ae7e",
@@ -5368,7 +5606,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-29307ae59591",
@@ -5413,7 +5653,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-295f95f1962e",
@@ -5457,7 +5699,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-29e1ad9ed00a",
@@ -5502,7 +5746,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-2a6e241962ee",
@@ -5549,7 +5795,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-2aa30c9ca36c",
@@ -5592,7 +5840,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-2b02fca7ba9c",
@@ -5635,7 +5885,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-2b4670a69f7a",
@@ -5678,7 +5930,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-2ba6f93fe10e",
@@ -5726,7 +5980,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-2be20184947c",
@@ -5773,7 +6029,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-2c2ef4a60384",
@@ -5821,7 +6079,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-2cac7f6cf0cc",
@@ -5864,7 +6124,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-2d69aac809ab",
@@ -5907,7 +6169,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-2d9676742f31",
@@ -5952,7 +6216,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-2f0daf2acc32",
@@ -5998,7 +6264,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-2fa033e37b92",
@@ -6043,7 +6311,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-2fb9695a022b",
@@ -6086,7 +6356,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-2fbc3c1b5fd5",
@@ -6133,7 +6405,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-2fe9aa9be665",
@@ -6179,7 +6453,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-30349d89dbe1",
@@ -6227,7 +6503,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-3059d71da1a9",
@@ -6272,7 +6550,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-3075654db430",
@@ -6315,7 +6595,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-307682a08e23",
@@ -6358,7 +6640,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-308b4c6a4f22",
@@ -6405,7 +6689,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-310fb75adeed",
@@ -6453,7 +6739,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-316c4dfaf5a5",
@@ -6496,7 +6784,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-317ab86115d9",
@@ -6537,7 +6827,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-3191ebb4a7be",
@@ -6586,7 +6878,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-31d6772e3d48",
@@ -6629,7 +6923,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-325869fc2fef",
@@ -6679,7 +6975,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-32cca764e333",
@@ -6722,7 +7020,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-32f12f8a3f62",
@@ -6769,7 +7069,9 @@
         "街头·比赛",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-32f6bc6d35ea",
@@ -6816,7 +7118,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-33714d38a5c1",
@@ -6863,7 +7167,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-33bea13b1f4b",
@@ -6911,7 +7217,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-340e37abac1c",
@@ -6954,7 +7262,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-3411e4a14e98",
@@ -6995,7 +7305,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-34e778c63206",
@@ -7043,7 +7355,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-35241def4045",
@@ -7091,7 +7405,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-3540d7714103",
@@ -7136,7 +7452,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-355711af606b",
@@ -7179,7 +7497,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-35c4cd7107bc",
@@ -7226,7 +7546,9 @@
         "街头·比赛",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-35d0a89dda26",
@@ -7269,7 +7591,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-363e87d3047e",
@@ -7316,7 +7640,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-36b31d912450",
@@ -7361,7 +7687,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-36be505f3324",
@@ -7410,7 +7738,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-36ebc49ae729",
@@ -7457,7 +7787,9 @@
         "街头·比赛",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-36fcd0ccd534",
@@ -7503,7 +7835,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-372215ac960c",
@@ -7546,7 +7880,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-375bc1a91e65",
@@ -7595,7 +7931,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-385eac2103f9",
@@ -7643,7 +7981,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-38644403e2db",
@@ -7688,7 +8028,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-38e2aa18d486",
@@ -7731,7 +8073,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-395bba4a63c0",
@@ -7779,7 +8123,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-39863d7fc083",
@@ -7824,7 +8170,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-398813c09d9b",
@@ -7871,7 +8219,9 @@
         "过去·RAD WEEKEND",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-399c2f5680ca",
@@ -7916,7 +8266,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-39e1901ede2b",
@@ -7964,7 +8316,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-3a6fef683fc3",
@@ -8007,7 +8361,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-3a9c7215f78e",
@@ -8050,7 +8406,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-3b3f4c6c2d22",
@@ -8098,7 +8456,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-3bbe99d30044",
@@ -8146,7 +8506,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-3bc0e18ec232",
@@ -8194,7 +8556,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-3bf862348631",
@@ -8239,7 +8603,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-3e40f4b240ba",
@@ -8282,7 +8648,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-3e55a6817b8c",
@@ -8329,7 +8697,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-3e750eec9b85",
@@ -8374,7 +8744,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-3eeb123976c5",
@@ -8422,7 +8794,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-3eebfd5ab8c6",
@@ -8465,7 +8839,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-3f027a27574b",
@@ -8508,7 +8884,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-4085d2ef710e",
@@ -8553,7 +8931,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-408b2deca4e2",
@@ -8596,7 +8976,9 @@
         "游戏黑话·抽卡",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-40a9bd091c6c",
@@ -8642,7 +9024,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-4186efb664b7",
@@ -8690,7 +9074,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-41d11055af47",
@@ -8733,7 +9119,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-41d945c512e4",
@@ -8776,7 +9164,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-41f26d24717c",
@@ -8817,7 +9207,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-42119d351493",
@@ -8864,7 +9256,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-429999cef00f",
@@ -8905,7 +9299,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-4373bbb4e9ad",
@@ -8948,7 +9344,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-43abfb0e085f",
@@ -8991,7 +9389,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-43ac5babb4ad",
@@ -9039,7 +9439,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-43f5df39f1d2",
@@ -9084,7 +9486,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-440a46dea738",
@@ -9131,7 +9535,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-444ed54ce71b",
@@ -9174,7 +9580,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-4522d773436b",
@@ -9222,7 +9630,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-455ee8595c67",
@@ -9269,7 +9679,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-45ea784bcf7f",
@@ -9312,7 +9724,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-46654746c62b",
@@ -9355,7 +9769,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-46e5e13337a9",
@@ -9403,7 +9819,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-471c6a016efc",
@@ -9451,7 +9869,9 @@
         "街头·比赛",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-47332058211f",
@@ -9494,7 +9914,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-4787ded26f41",
@@ -9537,7 +9959,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-479138cba1b4",
@@ -9584,7 +10008,9 @@
         "过去·RAD WEEKEND",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-47f32b8c18ff",
@@ -9631,7 +10057,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-4891d99d77ae",
@@ -9674,7 +10102,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-48923f339811",
@@ -9717,7 +10147,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-48a41f4a89b0",
@@ -9762,7 +10194,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-48c3746099f1",
@@ -9805,7 +10239,9 @@
         "游戏黑话·抽卡",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-48f4cbe24a10",
@@ -9852,7 +10288,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-49405d4a8a81",
@@ -9895,7 +10333,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-4968611f10d0",
@@ -9938,7 +10378,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-497469846157",
@@ -9983,7 +10425,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-498fbd00e07d",
@@ -10028,7 +10472,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-499198a93d02",
@@ -10071,7 +10517,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-49c5c351c792",
@@ -10116,7 +10564,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-49dad56ef20e",
@@ -10159,7 +10609,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-4b3ac9c7de9d",
@@ -10202,7 +10654,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-4b64bf431a37",
@@ -10247,7 +10701,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-4b6c67170916",
@@ -10290,7 +10746,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-4c047c6930c9",
@@ -10338,7 +10796,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-4c634b191866",
@@ -10383,7 +10843,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-4c79bb739b1c",
@@ -10426,7 +10888,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-4c7ec772fe58",
@@ -10469,7 +10933,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-4cced0c7a811",
@@ -10512,7 +10978,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-4d029bc0f426",
@@ -10557,7 +11025,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-4d1ea625083f",
@@ -10602,7 +11072,9 @@
         "街头·比赛",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-4d54487bc193",
@@ -10647,7 +11119,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-4d5dfb7359e8",
@@ -10690,7 +11164,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-4d91f127fde3",
@@ -10733,7 +11209,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-4df6bbf4b2ef",
@@ -10776,7 +11254,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-4e391dc57d9d",
@@ -10822,7 +11302,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-4ea7b254bee1",
@@ -10865,7 +11347,9 @@
         "游戏黑话·抽卡",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-4ec35e529a17",
@@ -10908,7 +11392,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-4efb4ab4e0c1",
@@ -10955,7 +11441,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-4f3f55e86b7c",
@@ -11002,7 +11490,9 @@
         "过去·RAD WEEKEND",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-4f71c5e2f5d9",
@@ -11045,7 +11535,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-4f85fe4fe920",
@@ -11088,7 +11580,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-4ff1fd53ec9a",
@@ -11135,7 +11629,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-4ff8794c0996",
@@ -11178,7 +11674,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-4ffeea3abaa5",
@@ -11226,7 +11724,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-5035b0f74580",
@@ -11267,7 +11767,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-507ce4e88ac2",
@@ -11312,7 +11814,9 @@
         "过去·RAD WEEKEND",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-50a73adb788b",
@@ -11355,7 +11859,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-5103557dcbd3",
@@ -11403,7 +11909,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-510ae83fcaf8",
@@ -11446,7 +11954,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-510c851604f2",
@@ -11487,7 +11997,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-51b7916f57d4",
@@ -11530,7 +12042,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-51b9b9d8f97d",
@@ -11575,7 +12089,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-51c575a24946",
@@ -11618,7 +12134,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-51c58c963e3f",
@@ -11661,7 +12179,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-52b9439e6fbc",
@@ -11704,7 +12224,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-52f02caf550f",
@@ -11749,7 +12271,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-532ddc6586dd",
@@ -11796,7 +12320,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-533043cf2f5b",
@@ -11841,7 +12367,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-5364d789f9e3",
@@ -11884,7 +12412,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-54213879f837",
@@ -11927,7 +12457,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-545df89f0a99",
@@ -11970,7 +12502,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-5514dcce3654",
@@ -12013,7 +12547,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-552ecf37e914",
@@ -12056,7 +12592,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-55437e6353b5",
@@ -12103,7 +12641,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-554ec7434f0f",
@@ -12159,7 +12699,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-55866d154e4d",
@@ -12202,7 +12744,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-55a2258452a2",
@@ -12245,7 +12789,9 @@
         "过去·RAD WEEKEND",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-55e204998ee5",
@@ -12288,7 +12834,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-55e94b1a6e0e",
@@ -12331,7 +12879,9 @@
         "足球·过去",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-55f633791b38",
@@ -12374,7 +12924,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-569730a88f82",
@@ -12417,7 +12969,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-56ae255a8a0f",
@@ -12460,7 +13014,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-56bb243020df",
@@ -12503,7 +13059,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-56bd1feb8980",
@@ -12544,7 +13102,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-56f08e7c4c50",
@@ -12585,7 +13145,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-56fbe91bef6b",
@@ -12628,7 +13190,9 @@
         "游戏黑话·抽卡",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-5718f6364bf8",
@@ -12678,7 +13242,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-572f2e03d65f",
@@ -12721,7 +13287,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-576aab44c23a",
@@ -12766,7 +13334,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-576fd8b68310",
@@ -12811,7 +13381,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-57988d0799c9",
@@ -12854,7 +13426,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-57cc9b994a80",
@@ -12901,7 +13475,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-57e7e22a8888",
@@ -12948,7 +13524,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-583663e805ce",
@@ -12995,7 +13573,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-586f1fd4fbea",
@@ -13042,7 +13622,9 @@
         "街头·比赛",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-5874dbe7ad0a",
@@ -13087,7 +13669,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-590df03bb230",
@@ -13130,7 +13714,9 @@
         "街头·比赛",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-591357883f64",
@@ -13173,7 +13759,9 @@
         "游戏黑话·抽卡",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-592022a446bc",
@@ -13220,7 +13808,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-59e5903b7f4e",
@@ -13266,7 +13856,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-59ea9be2b66f",
@@ -13313,7 +13905,9 @@
         "街头·比赛",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-5a181871f5e7",
@@ -13353,7 +13947,9 @@
         "过去·RAD WEEKEND",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-5ad194ce4cfe",
@@ -13398,7 +13994,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-5b3570529fe1",
@@ -13441,7 +14039,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-5b39ae1dd7a1",
@@ -13490,7 +14090,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-5c0d42f5c3c5",
@@ -13533,7 +14135,9 @@
         "游戏黑话·抽卡",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-5c318eaa5c62",
@@ -13578,7 +14182,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-5c33cd936beb",
@@ -13627,7 +14233,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-5c5ee78cdc95",
@@ -13672,7 +14280,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-5c7b3dd4d6ea",
@@ -13717,7 +14327,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-5c7f63988c12",
@@ -13764,7 +14376,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-5cb631bc30fa",
@@ -13805,7 +14419,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-5d60fb85a128",
@@ -13848,7 +14464,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-5d7e38836987",
@@ -13893,7 +14511,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-5e094eaaf8b0",
@@ -13938,7 +14558,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-5e99a0b7eadc",
@@ -13984,7 +14606,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-5ece8a9448ab",
@@ -14046,7 +14670,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-5ee97f22b495",
@@ -14093,7 +14719,9 @@
         "街头·比赛",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-5ef706a6b2c7",
@@ -14134,7 +14762,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-5f5d55da8f27",
@@ -14177,7 +14807,9 @@
         "游戏黑话·抽卡",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-5f5f08a087ee",
@@ -14220,7 +14852,9 @@
         "游戏黑话·抽卡",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-5f82fa47c0df",
@@ -14263,7 +14897,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-5f94773ad8a6",
@@ -14304,7 +14940,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-5ff4751244d3",
@@ -14347,7 +14985,9 @@
         "游戏黑话·抽卡",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-60f14e01a535",
@@ -14390,7 +15030,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-6152b1ae2fc3",
@@ -14433,7 +15075,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-6165a757713e",
@@ -14480,7 +15124,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-6175611d620c",
@@ -14528,7 +15174,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-61a875faeaf8",
@@ -14569,7 +15217,9 @@
         "过去·RAD WEEKEND",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-61b9d46dcacb",
@@ -14612,7 +15262,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-61cf47960786",
@@ -14655,7 +15307,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-623c9c834e51",
@@ -14703,7 +15357,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-62e4e242f370",
@@ -14744,7 +15400,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-62fdadb349ed",
@@ -14791,7 +15449,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-63256a63ed1c",
@@ -14836,7 +15496,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-636b3046c327",
@@ -14883,7 +15545,9 @@
         "过去·RAD WEEKEND",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-63c04ee2257f",
@@ -14928,7 +15592,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-63e56b572447",
@@ -14976,7 +15642,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-64416ae4f255",
@@ -15019,7 +15687,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-65a32e4a8ba6",
@@ -15064,7 +15734,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-6662bdc3516e",
@@ -15107,7 +15779,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-668ced6bfd84",
@@ -15155,7 +15829,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-669277cffac4",
@@ -15196,7 +15872,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-669f6de17016",
@@ -15239,7 +15917,9 @@
         "游戏黑话·抽卡",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-67b977f2751d",
@@ -15286,7 +15966,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-67d65e3414f5",
@@ -15331,7 +16013,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-682de9d1ba26",
@@ -15374,7 +16058,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-6835ebe79ef8",
@@ -15422,7 +16108,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-690ddc8c41fd",
@@ -15463,7 +16151,9 @@
         "过去·RAD WEEKEND",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-693457238983",
@@ -15504,7 +16194,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-6a44c6569c0f",
@@ -15545,7 +16237,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-6b7e61e2c162",
@@ -15586,7 +16280,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-6ba14cd57cde",
@@ -15641,7 +16337,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-6bb4ab817017",
@@ -15684,7 +16382,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-6bc28ee91841",
@@ -15733,7 +16433,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-6bd09b53b538",
@@ -15778,7 +16480,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-6bfb00f40e40",
@@ -15823,7 +16527,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-6cacc77d786f",
@@ -15866,7 +16572,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-6cb53931d3eb",
@@ -15909,7 +16617,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-6cd1eaf16b84",
@@ -15956,7 +16666,9 @@
         "街头·比赛",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-6cfe691ca9e4",
@@ -15997,7 +16709,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-6d69e848dc26",
@@ -16038,7 +16752,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-6d813d3cb93b",
@@ -16086,7 +16802,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-6d8526fd0bb7",
@@ -16133,7 +16851,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-6d928d1f2fbf",
@@ -16178,7 +16898,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-6e1904cff899",
@@ -16229,7 +16951,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-6f30c8063b9c",
@@ -16274,7 +16998,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-6f4ad37b0e25",
@@ -16322,7 +17048,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-6f52a1cd1dfe",
@@ -16367,7 +17095,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-6fe142d04a72",
@@ -16410,7 +17140,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-701853995700",
@@ -16457,7 +17189,9 @@
         "街头·比赛",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-704b635f242e",
@@ -16506,7 +17240,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-711cbd945d84",
@@ -16549,7 +17285,9 @@
         "游戏黑话·抽卡",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-714407599bde",
@@ -16596,7 +17334,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-71851c3da7f5",
@@ -16643,7 +17383,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-71c9ec11c55c",
@@ -16688,7 +17430,9 @@
         "街头·比赛",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-71e00c32a7ba",
@@ -16731,7 +17475,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-71f9d0edfdbf",
@@ -16774,7 +17520,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-72b86208a354",
@@ -16817,7 +17565,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-72d59c9762c4",
@@ -16862,7 +17612,9 @@
         "街头·比赛",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-7322a9b00067",
@@ -16903,7 +17655,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-73f0fdf5d9ca",
@@ -16946,7 +17700,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-741cb64aeb98",
@@ -16994,7 +17750,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-743d82967cef",
@@ -17037,7 +17795,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-74961e3a586e",
@@ -17079,7 +17839,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-74ae94be301f",
@@ -17122,7 +17884,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-74aead9fd1f8",
@@ -17167,7 +17931,9 @@
         "过去·RAD WEEKEND",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-752fc8048957",
@@ -17210,7 +17976,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-757a62fb0827",
@@ -17255,7 +18023,9 @@
         "街头·比赛",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-75f8a490264b",
@@ -17298,7 +18068,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-76674af1f1af",
@@ -17341,7 +18113,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-767fe2f2f720",
@@ -17388,7 +18162,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-76a4bcf4a7a8",
@@ -17434,7 +18210,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-76a785313f9b",
@@ -17482,7 +18260,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-7701428d2cc2",
@@ -17523,7 +18303,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-77594b87f3d0",
@@ -17571,7 +18353,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-777bc3b67779",
@@ -17618,7 +18402,9 @@
         "街头·比赛",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-778e058dd390",
@@ -17661,7 +18447,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-77a795ce3810",
@@ -17708,7 +18496,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-77d015955bc2",
@@ -17751,7 +18541,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-77d3113f8be0",
@@ -17792,7 +18584,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-77f1842cb423",
@@ -17835,7 +18629,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-782089b65bfe",
@@ -17882,7 +18678,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-784d04f26a12",
@@ -17925,7 +18723,9 @@
         "游戏黑话·抽卡",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-7876334f8e9b",
@@ -17966,7 +18766,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-788b5cecc672",
@@ -18013,7 +18815,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-78afb3bd6814",
@@ -18056,7 +18860,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-78fb7d491611",
@@ -18101,7 +18907,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-7996bb111daa",
@@ -18144,7 +18952,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-79aa45b394a5",
@@ -18189,7 +18999,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-79f00c9f05bb",
@@ -18232,7 +19044,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-7a01163cd43e",
@@ -18275,7 +19089,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-7a08205bf059",
@@ -18323,7 +19139,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-7b45d88fcfd8",
@@ -18369,7 +19187,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-7b772f5e4c61",
@@ -18412,7 +19232,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-7b8062fcd391",
@@ -18459,7 +19281,9 @@
         "街头·比赛",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-7b92781c9e8b",
@@ -18500,7 +19324,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-7bab5ed2282d",
@@ -18543,7 +19369,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-7bd401a230d6",
@@ -18592,7 +19420,9 @@
         "过去·RAD WEEKEND",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-7bd7becd40bf",
@@ -18635,7 +19465,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-7c90be7c9e63",
@@ -18680,7 +19512,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-7cc7b3da5f2d",
@@ -18725,7 +19559,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-7d40c79f9531",
@@ -18768,7 +19604,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-7dc1a2d86832",
@@ -18815,7 +19653,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-7df549bc5f28",
@@ -18863,7 +19703,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-7e6c4106835d",
@@ -18908,7 +19750,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-7e784e9af20c",
@@ -18959,7 +19803,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-7ea282cef53c",
@@ -19002,7 +19848,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-7f07a997d47c",
@@ -19043,7 +19891,9 @@
         "过去·RAD WEEKEND",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-7f16309a9a7f",
@@ -19085,7 +19935,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-7f2511f43704",
@@ -19126,7 +19978,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-7f3f46b54843",
@@ -19171,7 +20025,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-80075d7e5a65",
@@ -19220,7 +20076,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-806445d9ae3a",
@@ -19268,7 +20126,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-80bac3000cf9",
@@ -19316,7 +20176,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-812d514f7f0e",
@@ -19363,7 +20225,9 @@
         "街头·比赛",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-81328ea6c5a0",
@@ -19410,7 +20274,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-817be4254f6c",
@@ -19453,7 +20319,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-825a955a5c5f",
@@ -19501,7 +20369,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-828e28dc3e0f",
@@ -19546,7 +20416,9 @@
         "过去·RAD WEEKEND",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-82f22b49aedb",
@@ -19591,7 +20463,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-8325784b4c70",
@@ -19634,7 +20508,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-833f8b6cdca5",
@@ -19679,7 +20555,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-83780e66cd1c",
@@ -19727,7 +20605,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-83cf299c4c6c",
@@ -19775,7 +20655,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-83dd8c943d22",
@@ -19820,7 +20702,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-84334b2fe07f",
@@ -19865,7 +20749,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-845e249eee95",
@@ -19908,7 +20794,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-84aac4359cba",
@@ -19954,7 +20842,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-84ba49ecc657",
@@ -20001,7 +20891,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-850282c6be63",
@@ -20042,7 +20934,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-853d14b7073a",
@@ -20089,7 +20983,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-857de88133e3",
@@ -20136,7 +21032,9 @@
         "街头·比赛",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-85958d795282",
@@ -20177,7 +21075,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-85a0a2fffd2a",
@@ -20218,7 +21118,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-85ff19ea229c",
@@ -20263,7 +21165,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-87013a204cef",
@@ -20306,7 +21210,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-8717eb6a2461",
@@ -20349,7 +21255,9 @@
         "游戏黑话·抽卡",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-871859d3f338",
@@ -20390,7 +21298,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-87cecc4c4da5",
@@ -20433,7 +21343,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-8828452cda45",
@@ -20479,7 +21391,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-8839ae9bc795",
@@ -20522,7 +21436,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-88e455cb74b8",
@@ -20567,7 +21483,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-8900cfa54882",
@@ -20610,7 +21528,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-89022fe9a822",
@@ -20653,7 +21573,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-898e7bffa397",
@@ -20694,7 +21616,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-89dd6802fb96",
@@ -20742,7 +21666,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-89f69261da22",
@@ -20787,7 +21713,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-8a40e90af908",
@@ -20832,7 +21760,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-8a488a3e77d7",
@@ -20879,7 +21809,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-8a7b6cba0874",
@@ -20924,7 +21856,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-8a823b8021ba",
@@ -20973,7 +21907,9 @@
         "过去·RAD WEEKEND",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-8ad9440dfa3b",
@@ -21019,7 +21955,9 @@
         "过去·RAD WEEKEND",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-8b185e9ba97e",
@@ -21062,7 +22000,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-8ba7bc098455",
@@ -21111,7 +22051,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-8bf05ef1b3cd",
@@ -21158,7 +22100,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-8c65450bd94b",
@@ -21203,7 +22147,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-8d17399b60d9",
@@ -21246,7 +22192,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-8da4bae99f5b",
@@ -21294,7 +22242,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-8dc71b15a6b9",
@@ -21342,7 +22292,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-8dcf9eba0483",
@@ -21390,7 +22342,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-8df80790268d",
@@ -21432,7 +22386,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-8e091142aa4f",
@@ -21474,7 +22430,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-8e50b88bf426",
@@ -21519,7 +22477,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-8e78e9b7e984",
@@ -21567,7 +22527,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-8e7e8aba2bdf",
@@ -21608,7 +22570,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-8e896b489b5a",
@@ -21651,7 +22615,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-8e89b9e87fe6",
@@ -21694,7 +22660,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-8f07caa77ac4",
@@ -21737,7 +22705,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-8f14b7eb2c37",
@@ -21780,7 +22750,9 @@
         "过去·RAD WEEKEND",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-8f383b4709eb",
@@ -21827,7 +22799,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-8fb3a70fabb8",
@@ -21874,7 +22848,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-8fc34c0da262",
@@ -21921,7 +22897,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-8fd056bb39fb",
@@ -21968,7 +22946,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-910d30ff8c87",
@@ -22011,7 +22991,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-91128dd4046d",
@@ -22053,7 +23035,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-914de1836cae",
@@ -22096,7 +23080,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-9167b8b4663b",
@@ -22141,7 +23127,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-91c59120c695",
@@ -22189,7 +23177,9 @@
         "过去·RAD WEEKEND",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-920f62f321d5",
@@ -22234,7 +23224,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-921d2e3c8f46",
@@ -22279,7 +23271,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-92b8b115bfa3",
@@ -22327,7 +23321,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-933abdfc566a",
@@ -22370,7 +23366,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-9341d025b4b6",
@@ -22417,7 +23415,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-9396b3e4f8b4",
@@ -22464,7 +23464,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-94195c15eb08",
@@ -22505,7 +23507,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-945128c1301b",
@@ -22550,7 +23554,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-9463136cc3a9",
@@ -22593,7 +23599,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-946a621e8925",
@@ -22640,7 +23648,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-949769a4f68f",
@@ -22685,7 +23695,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-94e078ea10ed",
@@ -22728,7 +23740,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-9544619d4449",
@@ -22773,7 +23787,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-956466e88966",
@@ -22818,7 +23834,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-95746912052c",
@@ -22861,7 +23879,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-959acbeb4b88",
@@ -22904,7 +23924,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-959d6677ace0",
@@ -22947,7 +23969,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-95b2b04b45b5",
@@ -22992,7 +24016,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-95fcec2ad2a8",
@@ -23037,7 +24063,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-95fe5647ca7b",
@@ -23084,7 +24112,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-9616fc5af3e8",
@@ -23127,7 +24157,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-96340ddac149",
@@ -23168,7 +24200,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-96e04e3b1688",
@@ -23216,7 +24250,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-96e15e76a303",
@@ -23257,7 +24293,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-975a5b1e7932",
@@ -23302,7 +24340,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-97772ddcac11",
@@ -23347,7 +24387,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-97a1f7cf7288",
@@ -23390,7 +24432,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-9843dc6bca27",
@@ -23435,7 +24479,9 @@
         "过去·RAD WEEKEND",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-985974362f72",
@@ -23476,7 +24522,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-98799b61aaf8",
@@ -23519,7 +24567,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-9912a9eee56f",
@@ -23562,7 +24612,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-9948cec2528f",
@@ -23609,7 +24661,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-99587acf4919",
@@ -23654,7 +24708,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-9ab2016c8ca4",
@@ -23697,7 +24753,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-9ac252d71cd2",
@@ -23740,7 +24798,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-9af633019ae5",
@@ -23783,7 +24843,9 @@
         "游戏黑话·抽卡",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-9b3744b35e01",
@@ -23826,7 +24888,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-9b3de05ed571",
@@ -23867,7 +24931,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-9b4818230f76",
@@ -23912,7 +24978,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-9b72292467c8",
@@ -23958,7 +25026,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-9bb64bbb190e",
@@ -24009,7 +25079,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-9bc964ea1161",
@@ -24056,7 +25128,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-9ca22582920a",
@@ -24099,7 +25173,9 @@
         "游戏黑话·抽卡",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-9cdd5216b88f",
@@ -24144,7 +25220,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-9d12be82ee0f",
@@ -24187,7 +25265,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-9d14e44bae76",
@@ -24232,7 +25312,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-9d9378941fb4",
@@ -24279,7 +25361,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-9dcd9948baf9",
@@ -24322,7 +25406,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-9e623885502d",
@@ -24367,7 +25453,9 @@
         "过去·RAD WEEKEND",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-9eb1b10ae8b1",
@@ -24408,7 +25496,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-9f7bedda0f02",
@@ -24456,7 +25546,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-a04b5f24c672",
@@ -24501,7 +25593,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-a1143014ba0e",
@@ -24551,7 +25645,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-a13830a3cd15",
@@ -24594,7 +25690,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-a1493cc1d567",
@@ -24641,7 +25739,9 @@
         "过去·RAD WEEKEND",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-a15719117e43",
@@ -24688,7 +25788,9 @@
         "街头·比赛",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-a15dce2a61f0",
@@ -24734,7 +25836,9 @@
         "过去·RAD WEEKEND",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-a210aefb318d",
@@ -24782,7 +25886,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-a253d2b4677f",
@@ -24825,7 +25931,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-a2c4df86366d",
@@ -24870,7 +25978,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-a3097a51c6b6",
@@ -24915,7 +26025,9 @@
         "足球·过去",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-a3235b154a1b",
@@ -24958,7 +26070,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-a328fdd8aa42",
@@ -25003,7 +26117,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-a3b1445f514d",
@@ -25048,7 +26164,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-a4a389aaa755",
@@ -25093,7 +26211,9 @@
         "街头·比赛",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-a4bc5ff150d5",
@@ -25134,7 +26254,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-a5c3bf4a7481",
@@ -25181,7 +26303,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-a723730599e9",
@@ -25226,7 +26350,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-a8209589483e",
@@ -25273,7 +26399,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-a828743b00f6",
@@ -25316,7 +26444,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-a84127a6ea38",
@@ -25361,7 +26491,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-a8510294d1ce",
@@ -25404,7 +26536,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-a857c85dc8b7",
@@ -25447,7 +26581,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-a8662fd6008d",
@@ -25490,7 +26626,9 @@
         "游戏黑话·抽卡",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-a9326a2c8b3e",
@@ -25533,7 +26671,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-a952ffbec27b",
@@ -25578,7 +26718,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-a97cbfb12484",
@@ -25625,7 +26767,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-a9e05bd67457",
@@ -25670,7 +26814,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-aa3489d388c2",
@@ -25718,7 +26864,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-aac224c20638",
@@ -25766,7 +26914,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-aac8ee636634",
@@ -25813,7 +26963,9 @@
         "街头·比赛",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-aae08e903468",
@@ -25854,7 +27006,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-ab0e455cc800",
@@ -25899,7 +27053,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-ab3639936d3b",
@@ -25947,7 +27103,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-ac55a58cb346",
@@ -25988,7 +27146,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-ac5ce3a5c8d2",
@@ -26031,7 +27191,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-ad1090206742",
@@ -26074,7 +27236,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-ad289a9f1b18",
@@ -26121,7 +27285,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-adef3e1e4b79",
@@ -26168,7 +27334,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-ae7eb1c9d0f5",
@@ -26215,7 +27383,9 @@
         "街头·比赛",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-ae862fb24cf3",
@@ -26262,7 +27432,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-aede50bd159a",
@@ -26310,7 +27482,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-af184056ed84",
@@ -26357,7 +27531,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-af709c944f47",
@@ -26405,7 +27581,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-af77fa6c0932",
@@ -26450,7 +27628,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-afd82629f8ff",
@@ -26493,7 +27673,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-b01bd9bc2cec",
@@ -26538,7 +27720,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-b07c41ec1c70",
@@ -26584,7 +27768,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-b0805692f109",
@@ -26627,7 +27813,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-b10d8a2a360b",
@@ -26670,7 +27858,9 @@
         "游戏黑话·抽卡",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-b1e5d2261f68",
@@ -26715,7 +27905,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-b1fe97d2b095",
@@ -26763,7 +27955,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-b2257edeed30",
@@ -26809,7 +28003,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-b23cc3c775c9",
@@ -26856,7 +28052,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-b308e84756bc",
@@ -26899,7 +28097,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-b30bde711073",
@@ -26942,7 +28142,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-b34657f43991",
@@ -26989,7 +28191,9 @@
         "街头·比赛",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-b35e958ff1fb",
@@ -27036,7 +28240,9 @@
         "街头·比赛",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-b3c1e67d6a39",
@@ -27082,7 +28288,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-b3e2299b1d04",
@@ -27127,7 +28335,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-b3f259fb7b75",
@@ -27170,7 +28380,9 @@
         "游戏黑话·抽卡",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-b3fb2457a175",
@@ -27217,7 +28429,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-b42dee414c9f",
@@ -27264,7 +28478,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-b4648428f851",
@@ -27311,7 +28527,9 @@
         "街头·比赛",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-b4e318bf047a",
@@ -27358,7 +28576,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-b4fe2caaad63",
@@ -27405,7 +28625,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-b535afbd2b21",
@@ -27450,7 +28672,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-b6052dbfb2f7",
@@ -27493,7 +28717,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-b67321581e34",
@@ -27540,7 +28766,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-b67a2f4749f0",
@@ -27587,7 +28815,9 @@
         "街头·比赛",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-b773b86aa308",
@@ -27630,7 +28860,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-b7cc948110cc",
@@ -27677,7 +28909,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-b8fdee22fc5f",
@@ -27725,7 +28959,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-b971145cb176",
@@ -27766,7 +29002,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-b9862bec0efb",
@@ -27807,7 +29045,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-b9bea64947f0",
@@ -27854,7 +29094,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-b9bf36c09f71",
@@ -27901,7 +29143,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-b9d8943e0fb6",
@@ -27949,7 +29193,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-ba1bfe9535d7",
@@ -27996,7 +29242,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-ba5f7f6d1e84",
@@ -28042,7 +29290,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-ba65774b1024",
@@ -28091,7 +29341,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-ba8cf2ecc15f",
@@ -28134,7 +29386,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-bb0ed1a86a33",
@@ -28175,7 +29429,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-bb7e47e53edc",
@@ -28223,7 +29479,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-bba2eab5bb36",
@@ -28270,7 +29528,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-bc1f2026ab5b",
@@ -28317,7 +29577,9 @@
         "过去·RAD WEEKEND",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-bc58a9ec2377",
@@ -28360,7 +29622,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-bc833e2e18fe",
@@ -28403,7 +29667,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-bcf31b86028b",
@@ -28446,7 +29712,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-bcf7b55ceacc",
@@ -28489,7 +29757,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-bd1ae719d7f5",
@@ -28532,7 +29802,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-bd32d73e2848",
@@ -28575,7 +29847,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-bd634df9025a",
@@ -28623,7 +29897,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-bd6396e05f19",
@@ -28668,7 +29944,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-bd9ac7025781",
@@ -28711,7 +29989,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-bdbf5f86f2ba",
@@ -28759,7 +30039,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-bdfe2f350a1d",
@@ -28802,7 +30084,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-bf01a24175d0",
@@ -28850,7 +30134,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-bf58796896f6",
@@ -28895,7 +30181,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-bf836d298bc0",
@@ -28938,7 +30226,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-bf9493751f9b",
@@ -28985,7 +30275,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-bfe80548caee",
@@ -29033,7 +30325,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-c00d5cd53194",
@@ -29076,7 +30370,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-c0112452e6b9",
@@ -29119,7 +30415,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-c022b9587504",
@@ -29162,7 +30460,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-c02ddc1e7379",
@@ -29205,7 +30505,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-c059bd5aa15d",
@@ -29246,7 +30548,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-c113e5f459ec",
@@ -29294,7 +30598,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-c125b95d23c2",
@@ -29339,7 +30645,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-c153c12dcbf1",
@@ -29384,7 +30692,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-c169965f14d7",
@@ -29431,7 +30741,9 @@
         "街头·比赛",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-c1a5a07a42b8",
@@ -29474,7 +30786,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-c281b92c21b9",
@@ -29517,7 +30831,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-c2b8518c2f70",
@@ -29562,7 +30878,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-c2bc3ed47556",
@@ -29603,7 +30921,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-c357d28bc6ba",
@@ -29650,7 +30970,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-c38dd6982898",
@@ -29697,7 +31019,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-c396976c70f3",
@@ -29738,7 +31062,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-c3988e29145e",
@@ -29781,7 +31107,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-c3bc0e08da4a",
@@ -29824,7 +31152,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-c407edf15b50",
@@ -29867,7 +31197,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-c4872a602a40",
@@ -29908,7 +31240,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-c69129ffe9de",
@@ -29956,7 +31290,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-c6a602cfd6e5",
@@ -29999,7 +31335,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-c6c1611306df",
@@ -30042,7 +31380,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-c731df023fe1",
@@ -30087,7 +31427,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-c74f9d1466ed",
@@ -30135,7 +31477,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-c77bb2b395b7",
@@ -30176,7 +31520,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-c7d6e6426a4e",
@@ -30219,7 +31565,9 @@
         "足球·过去",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-c7fada66a659",
@@ -30262,7 +31610,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-c7ffb9fee6e5",
@@ -30309,7 +31659,9 @@
         "街头·比赛",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-c804b63a50fa",
@@ -30352,7 +31704,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-c84dbaadf493",
@@ -30395,7 +31749,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-c872e9021564",
@@ -30440,7 +31796,9 @@
         "过去·RAD WEEKEND",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-c8da0fa35e12",
@@ -30482,7 +31840,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-c9706638c264",
@@ -30523,7 +31883,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-c97c70e2b620",
@@ -30570,7 +31932,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-c97d520e719e",
@@ -30613,7 +31977,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-c9c6726b1f71",
@@ -30660,7 +32026,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-ca57c767ec64",
@@ -30701,7 +32069,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-ca6d4efc89cf",
@@ -30746,7 +32116,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-cab578c8c4f6",
@@ -30794,7 +32166,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-cab904cc924e",
@@ -30839,7 +32213,9 @@
         "游戏黑话·抽卡",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-cac543c90ba9",
@@ -30880,7 +32256,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-cb00e6961e6f",
@@ -30923,7 +32301,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-cbcdc2aa74df",
@@ -30966,7 +32346,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-cc52272f7a75",
@@ -31009,7 +32391,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-cc6f7993122f",
@@ -31056,7 +32440,9 @@
         "过去·RAD WEEKEND",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-cc8abecac7c5",
@@ -31101,7 +32487,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-cc9f8d5fd7e6",
@@ -31146,7 +32534,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-cd60f7d62ccf",
@@ -31189,7 +32579,9 @@
         "过去·RAD WEEKEND",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-cddce7e7a13c",
@@ -31238,7 +32630,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-ce1c0a732a5d",
@@ -31281,7 +32675,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-ce82d6a8f5c1",
@@ -31329,7 +32725,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-ce92ec5612e1",
@@ -31372,7 +32770,9 @@
         "过去·RAD WEEKEND",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-ced509cbc57e",
@@ -31413,7 +32813,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-cf6443aa0996",
@@ -31460,7 +32862,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-cfb07a926f19",
@@ -31508,7 +32912,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-cfbbccc13184",
@@ -31551,7 +32957,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-cfda6c00b8ce",
@@ -31597,7 +33005,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-d05e713a1e81",
@@ -31642,7 +33052,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-d0933bfb530e",
@@ -31689,7 +33101,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-d12dc7017b04",
@@ -31736,7 +33150,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-d14d7cbaa792",
@@ -31779,7 +33195,9 @@
         "游戏黑话·抽卡",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-d190e9d61654",
@@ -31821,7 +33239,9 @@
         "过去·RAD WEEKEND",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-d2364f218993",
@@ -31864,7 +33284,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-d2bb3c6bfbc3",
@@ -31912,7 +33334,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-d2cc9dd35c00",
@@ -31959,7 +33383,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-d2cf9d7820ec",
@@ -32002,7 +33428,9 @@
         "街头·比赛",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-d2de7720aa5f",
@@ -32045,7 +33473,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-d3170815edef",
@@ -32088,7 +33518,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-d3d1ec7cba48",
@@ -32131,7 +33563,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-d4420fb8357e",
@@ -32172,7 +33606,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-d4c713b9788a",
@@ -32217,7 +33653,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-d4f27ebfbe78",
@@ -32262,7 +33700,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-d503b601ac5c",
@@ -32310,7 +33750,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-d53c5b594436",
@@ -32358,7 +33800,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-d5d605f797e4",
@@ -32401,7 +33845,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-d6328f6152fd",
@@ -32444,7 +33890,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-d67797515b7e",
@@ -32492,7 +33940,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-d687df5a823f",
@@ -32547,7 +33997,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-d69b3712d16c",
@@ -32588,7 +34040,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-d6c33942746f",
@@ -32635,7 +34089,9 @@
         "街头·比赛",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-d76ac524287a",
@@ -32678,7 +34134,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-d7f285370fbe",
@@ -32721,7 +34179,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-d8618bb957cd",
@@ -32762,7 +34222,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-d8adf80a0ee2",
@@ -32803,7 +34265,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-d97bab8ccafe",
@@ -32848,7 +34312,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-da0887ff3e02",
@@ -32893,7 +34359,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-da2fb6d7952f",
@@ -32940,7 +34408,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-daade0868b26",
@@ -32983,7 +34453,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-db070a3a33b0",
@@ -33030,7 +34502,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-dbe071f7ddeb",
@@ -33078,7 +34552,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-dc7339b45dd7",
@@ -33119,7 +34595,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-dd06be2c3ddb",
@@ -33167,7 +34645,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-dd44e602d06a",
@@ -33208,7 +34688,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-dd9c6f3c86f8",
@@ -33266,7 +34748,9 @@
         "街头·比赛",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-dde72dc6fb2d",
@@ -33309,7 +34793,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-de4fc8419e66",
@@ -33352,7 +34838,9 @@
         "游戏黑话·抽卡",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-de58afbf86c4",
@@ -33400,7 +34888,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-de99d48e70cc",
@@ -33443,7 +34933,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-df473115391f",
@@ -33486,7 +34978,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-dfaa01a4f943",
@@ -33529,7 +35023,9 @@
         "街头·比赛",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-dfc4285f5adc",
@@ -33572,7 +35068,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-dff53f810046",
@@ -33615,7 +35113,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-e0403691bf32",
@@ -33658,7 +35158,9 @@
         "足球·过去",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-e048e68218b1",
@@ -33699,7 +35201,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-e0c7032047d4",
@@ -33742,7 +35246,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-e172010c8eab",
@@ -33785,7 +35291,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-e1df9246df83",
@@ -33830,7 +35338,9 @@
         "街头·比赛",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-e2314c213a79",
@@ -33871,7 +35381,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-e2347dca8d00",
@@ -33919,7 +35431,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-e2b5717eaec6",
@@ -33964,7 +35478,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-e2f6e23dd283",
@@ -34012,7 +35528,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-e31e9b618fa1",
@@ -34060,7 +35578,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-e3ab0b7c6932",
@@ -34103,7 +35623,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-e4936c290b07",
@@ -34149,7 +35671,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-e49ad4bbdfa9",
@@ -34197,7 +35721,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-e5319c599afb",
@@ -34242,7 +35768,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-e6062a786eb7",
@@ -34289,7 +35817,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-e659051eda40",
@@ -34337,7 +35867,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-e6ff90f2c432",
@@ -34385,7 +35917,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-e7f929158d5a",
@@ -34426,7 +35960,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-e85be5bd1662",
@@ -34469,7 +36005,9 @@
         "游戏黑话·抽卡",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-e93ed98f1735",
@@ -34517,7 +36055,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-e9d4ca824efa",
@@ -34560,7 +36100,9 @@
         "游戏黑话·抽卡",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-eab0eebf4030",
@@ -34608,7 +36150,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-eab39f868da5",
@@ -34651,7 +36195,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-eb4492739d1b",
@@ -34698,7 +36244,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-ebcf2f87dd3d",
@@ -34745,7 +36293,9 @@
         "街头·比赛",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-ebcf4ed65052",
@@ -34786,7 +36336,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-ec229fa0dab5",
@@ -34831,7 +36383,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-ece27ef6c92e",
@@ -34876,7 +36430,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-ececedf749e8",
@@ -34923,7 +36479,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-ed0f631d3173",
@@ -34966,7 +36524,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-ed60744d8df4",
@@ -35012,7 +36572,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-ed71b0219702",
@@ -35059,7 +36621,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-eda67d1e54a4",
@@ -35104,7 +36668,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-ee35442a9890",
@@ -35149,7 +36715,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-ee59c2eeae20",
@@ -35192,7 +36760,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-ee627cfc64e6",
@@ -35235,7 +36805,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-ee9b49312d06",
@@ -35280,7 +36852,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-ef2d2bb65f50",
@@ -35327,7 +36901,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-ef3c6064896a",
@@ -35370,7 +36946,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-ef98f1a55e90",
@@ -35414,7 +36992,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-efe0bdee4bdb",
@@ -35455,7 +37035,9 @@
         "过去·RAD WEEKEND",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-f02a918cd361",
@@ -35500,7 +37082,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-f0360b85fd55",
@@ -35543,7 +37127,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-f10b851dd681",
@@ -35588,7 +37174,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-f1573327b34e",
@@ -35633,7 +37221,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-f17bc440aaa4",
@@ -35675,7 +37265,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-f245c67bda78",
@@ -35732,7 +37324,9 @@
         "过去·RAD WEEKEND",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-f284813c903a",
@@ -35775,7 +37369,9 @@
         "游戏黑话·抽卡",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-f2b83f54a705",
@@ -35823,7 +37419,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-f30a6ef4ac9e",
@@ -35870,7 +37468,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-f334b39ecb5f",
@@ -35911,7 +37511,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-f3f4e804c8f2",
@@ -35952,7 +37554,9 @@
         "过去·RAD WEEKEND",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-f4025df8a83a",
@@ -35999,7 +37603,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-f41f862d2449",
@@ -36042,7 +37648,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-f4acd0bbd637",
@@ -36089,7 +37697,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-f4b70c9a4e00",
@@ -36130,7 +37740,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-f5fd358e48ed",
@@ -36171,7 +37783,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-f623cce07eff",
@@ -36216,7 +37830,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-f63536e9690f",
@@ -36259,7 +37875,9 @@
         "过去·RAD WEEKEND",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-f6a98f30b940",
@@ -36304,7 +37922,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-f7060dbcfbfa",
@@ -36351,7 +37971,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-f754dff0af81",
@@ -36396,7 +38018,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-f8254c1a7497",
@@ -36442,7 +38066,9 @@
         "音乐·演出",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-f9043119ba4f",
@@ -36489,7 +38115,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-f9493b8e8941",
@@ -36534,7 +38162,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-fa8f8e1b9ce8",
@@ -36580,7 +38210,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-faef97e7db8e",
@@ -36625,7 +38257,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-fafce2eddce7",
@@ -36668,7 +38302,9 @@
         "其它话题",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-fbdb38e06128",
@@ -36711,7 +38347,9 @@
         "过去·RAD WEEKEND",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-fc2c50924c65",
@@ -36759,7 +38397,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-fc3b1bf2b7c1",
@@ -36806,7 +38446,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-fc48909a6b85",
@@ -36851,7 +38493,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-fcce1997df5a",
@@ -36900,7 +38544,9 @@
         "练习·努力·信念",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-fe7a422d67f5",
@@ -36951,7 +38597,9 @@
         "情绪·内心",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "legacy_script",
+      "review_status": "generated"
     },
     {
       "event_id": "akito-toya-web-b08adb36a69c",
@@ -37038,7 +38686,9 @@
         "音乐",
         "音轨",
         "古典乐"
-      ]
+      ],
+      "source_kind": "curated_story",
+      "review_status": "reviewed"
     },
     {
       "event_id": "akito-toya-web-30b154922d2f",
@@ -37091,7 +38741,9 @@
         "练习",
         "冬弥",
         "彰人"
-      ]
+      ],
+      "source_kind": "curated_story",
+      "review_status": "reviewed"
     }
   ]
 }

@@ -53,6 +53,7 @@ async def test_build_shared_prompt_context_gathers_all_fragments_once():
         pjsk_block="PJSK 片段",
         song_memories="歌曲清单",
         song_mention="歌曲命中",
+        retrieval_context=retrieval_ctx,
     )
 
 

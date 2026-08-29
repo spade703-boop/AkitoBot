@@ -53,6 +53,18 @@ def test_turn_trace_collects_structured_fields_and_metrics():
         top_score=8.5,
         score_margin=2.0,
         candidate_count=3,
+        retrieval_strategy="hybrid",
+        candidate_diagnostics=[
+            {
+                "event_id": "event-1",
+                "source_kind": "curated_story",
+                "lexical_score": 6.5,
+                "cosine_score": 0.42,
+                "rerank_score": 0.91,
+                "kept": True,
+                "drop_reason": "",
+            }
+        ],
     )
     record_model_call(trace.request_id, usage={"prompt_tokens": 10, "completion_tokens": 4, "total_tokens": 14})
     record_parse_result(trace.request_id, success=True)
@@ -81,6 +93,8 @@ def test_turn_trace_collects_structured_fields_and_metrics():
     assert payload["event_retrieval_reason"] == ""
     assert payload["event_top_score"] == 8.5
     assert payload["event_candidate_count"] == 3
+    assert payload["event_retrieval_strategy"] == "hybrid"
+    assert payload["event_candidate_diagnostics"][0]["rerank_score"] == 0.91
     assert payload["total_tokens"] == 14
     assert payload["tool_calls"][0]["name"] == "search"
     assert metrics["total_turns"] == 1

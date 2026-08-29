@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,7 @@ from . import np
 from .paths import iter_data_roots
 from .retrieval_assets import (
     build_corpus_fingerprint,
+    event_memory_retrieval_text,
     pjsk_retrieval_text,
     script_retrieval_entries,
     script_retrieval_text,
@@ -40,6 +42,11 @@ def _pjsk_doc_text(entry: dict) -> str:
     return pjsk_retrieval_text(entry)
 
 
+def _event_memory_doc_text(entry: dict) -> str:
+    """Event memory row -> shared embedding/rerank text."""
+    return event_memory_retrieval_text(entry)
+
+
 def _live_retrieval_db(corpus: str, db: list[dict]) -> list[dict]:
     """Mirror the exact row subset used during embedding build."""
     if corpus == "scripts":
@@ -54,10 +61,15 @@ def _ensure_registry() -> None:
     """惰性初始化注册表（避免 import 时循环依赖）。"""
     if _registry:
         return
-    from .data import PJSK_ENTRIES, SCRIPT_DB
+    from .data import EVENT_MEMORY_ENTRIES, PJSK_ENTRIES, SCRIPT_DB
 
     _registry["scripts"] = {"db": SCRIPT_DB, "npz": "scripts_embeddings.npz", "doc_text": _script_doc_text}
     _registry["pjsk"] = {"db": PJSK_ENTRIES, "npz": "pjsk_embeddings.npz", "doc_text": _pjsk_doc_text}
+    _registry["event_memory"] = {
+        "db": EVENT_MEMORY_ENTRIES,
+        "npz": "event_memory_embeddings.npz",
+        "doc_text": _event_memory_doc_text,
+    }
 
 
 # ── 缓存结构 ────────────────────────────────────────────────────────────────
@@ -86,6 +98,8 @@ class RetrievalContext:
     query: str
     expanded_query: str | None = None
     embedding: list[float] | None = None
+    embedding_task: Any = None
+    embedding_resolved: bool = False
 
 
 @dataclass(slots=True)
@@ -98,6 +112,7 @@ class RetrievalResult:
     used_query: str = ""
     used_rerank: bool = False
     fell_back_to_cosine: bool = False
+    cosine_scores: list[tuple[int, float]] | None = None
 
     @property
     def is_available(self) -> bool:
@@ -151,6 +166,21 @@ def _load_npz(corpus: str) -> _Index | None:
             f"🔍 语料 [{corpus}] .npz count({count}) ≠ DB长度({len(db)})，标记不可用"
         )
         return None
+    if (
+        getattr(vectors, "ndim", 0) != 2
+        or getattr(indices, "ndim", 0) != 1
+        or vectors.shape[0] != len(indices)
+        or getattr(mean, "ndim", 0) != 1
+        or mean.shape[0] != vectors.shape[1]
+    ):
+        logger.warning(f"🔍 语料 [{corpus}] .npz 向量、均值或下标形状不一致，标记不可用")
+        return None
+    if corpus == "event_memory":
+        expected_indices = np.arange(count, dtype=np.int64)
+        actual_indices = np.sort(np.asarray(indices, dtype=np.int64))
+        if len(indices) != count or not np.array_equal(actual_indices, expected_indices):
+            logger.warning(f"🔍 语料 [{corpus}] .npz 未完整覆盖全部事件，标记不可用")
+            return None
 
     doc_fn = cfg.get("doc_text")
     live_db = _live_retrieval_db(corpus, db)
@@ -235,13 +265,18 @@ async def _rerank_candidates(corpus: str, query: str, idx: _Index, rows: Any, to
 
 async def _ensure_query_embedding(ctx: RetrievalContext) -> list[float] | None:
     """Fill shared query embedding once per message."""
-    if ctx.embedding is not None:
+    if ctx.embedding_resolved:
         return ctx.embedding
     from .api import embed_text
 
-    qv = await embed_text(ctx.query)
-    ctx.embedding = qv
-    return qv
+    if ctx.embedding_task is None:
+        ctx.embedding_task = asyncio.create_task(embed_text(ctx.query))
+    try:
+        ctx.embedding = await ctx.embedding_task
+        return ctx.embedding
+    finally:
+        ctx.embedding_resolved = True
+        ctx.embedding_task = None
 
 
 async def build_retrieval_context(
@@ -282,7 +317,14 @@ async def retrieve(corpus: str, query: str, top_k: int) -> list[int] | None:
     return result.ids
 
 
-async def retrieve_result(corpus: str, query: str, top_k: int, ctx: RetrievalContext | None = None) -> RetrievalResult:
+async def retrieve_result(
+    corpus: str,
+    query: str,
+    top_k: int,
+    ctx: RetrievalContext | None = None,
+    *,
+    use_rerank: bool = True,
+) -> RetrievalResult:
     """Structured retrieval API with shared context support."""
     if np is None:
         return RetrievalResult(status="unavailable", ids=[], reason="numpy_unavailable", used_query=query)
@@ -306,13 +348,19 @@ async def retrieve_result(corpus: str, query: str, top_k: int, ctx: RetrievalCon
         sims = (idx.centered @ qc) / (idx.norms * (np.linalg.norm(qc) + 1e-8) + 1e-8)
         recall_k = max(top_k, _RERANK_RECALL_K) if _RERANK_ENABLED else top_k
         top = np.argsort(-sims)[:recall_k]
-        cosine_ids = [int(idx.indices[i]) for i in top[:top_k]]
+        cosine_scores = [(int(idx.indices[i]), round(float(sims[i]), 6)) for i in top[:top_k]]
+        cosine_ids = [item[0] for item in cosine_scores]
     except Exception as e:
         logger.warning(f"🔍 检索 [{corpus}] 失败，降级: {e}")
         return RetrievalResult(status="unavailable", ids=[], reason="cosine_failed", used_query=shared_ctx.query)
 
-    if not _RERANK_ENABLED:
-        return RetrievalResult(status="hit", ids=cosine_ids, used_query=shared_ctx.query)
+    if not _RERANK_ENABLED or not use_rerank:
+        return RetrievalResult(
+            status="hit",
+            ids=cosine_ids,
+            used_query=shared_ctx.query,
+            cosine_scores=cosine_scores,
+        )
     reranked = await _rerank_candidates(corpus, shared_ctx.query, idx, top, top_k)
     if reranked is None:
         return RetrievalResult(
@@ -322,7 +370,14 @@ async def retrieve_result(corpus: str, query: str, top_k: int, ctx: RetrievalCon
             used_query=shared_ctx.query,
             used_rerank=True,
             fell_back_to_cosine=True,
+            cosine_scores=cosine_scores,
         )
     if not reranked:
         return RetrievalResult(status="no_hit", ids=[], used_query=shared_ctx.query, used_rerank=True)
-    return RetrievalResult(status="hit", ids=reranked, used_query=shared_ctx.query, used_rerank=True)
+    return RetrievalResult(
+        status="hit",
+        ids=reranked,
+        used_query=shared_ctx.query,
+        used_rerank=True,
+        cosine_scores=cosine_scores,
+    )

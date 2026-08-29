@@ -369,9 +369,10 @@ async def prepare_turn(turn: IncomingTurn, sleep_instruction: str) -> PreparedTu
     long_term_facts = user_mem.get("long_term_facts", [])
     record_memory_hit(turn.request_id, hit=bool(long_term_facts or user_mem.get("history")))
     long_term_memory_text = "\n".join(long_term_facts) if long_term_facts else "（暂无特殊记忆）"
-    event_memory, event_memory_result = build_event_memory_context(
+    event_memory, event_memory_result = await build_event_memory_context(
         turn.plain_text_content,
         mode=rollout.m2_memory_mode,
+        retrieval_ctx=getattr(shared_prompt_context, "retrieval_context", None),
     )
     record_event_memory(
         turn.request_id,
@@ -383,7 +384,10 @@ async def prepare_turn(turn: IncomingTurn, sleep_instruction: str) -> PreparedTu
         top_score=event_memory_result.top_score,
         score_margin=event_memory_result.score_margin,
         candidate_count=event_memory_result.candidate_count,
-        fallback_reason=event_memory_result.reason if event_memory_result.status == "unavailable" else "",
+        retrieval_strategy=event_memory_result.retrieval_strategy,
+        candidate_diagnostics=event_memory_result.candidate_diagnostics,
+        fallback_reason=event_memory_result.fallback_reason
+        or (event_memory_result.reason if event_memory_result.status == "unavailable" else ""),
     )
     director_note = chat.build_director_note(
         turn.plain_text_content,

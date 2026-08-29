@@ -1,5 +1,6 @@
 """retrieval.py 纯逻辑测试：mock embed_text + 小向量 + 假 mean，断言中心化 top-k 排序与降级回退。"""
 
+import asyncio
 from unittest import mock
 
 import numpy as np
@@ -95,6 +96,39 @@ def test_load_npz_success(dummy_vectors):
                 result = retrieval._load_npz("scripts")
     assert result is not None
     assert result.count == 4
+
+
+def test_load_npz_rejects_vector_index_length_mismatch(dummy_vectors):
+    with mock.patch.object(retrieval, "_find_npz_path", return_value="fake.npz"):
+        with mock.patch.object(retrieval, "_ensure_registry"):
+            retrieval._registry["scripts"] = {"db": [1, 2, 3, 4], "npz": "fake.npz"}
+            with mock.patch.object(np, "load") as mock_load:
+                mock_load.return_value = {
+                    "vectors": dummy_vectors,
+                    "mean": dummy_vectors.mean(axis=0),
+                    "indices": np.arange(3, dtype="int32"),
+                    "count": np.int32(4),
+                }
+                result = retrieval._load_npz("scripts")
+
+    assert result is None
+
+
+def test_load_npz_rejects_partial_event_memory_index(dummy_vectors):
+    db = [{"event_id": str(index)} for index in range(4)]
+    with mock.patch.object(retrieval, "_find_npz_path", return_value="fake.npz"):
+        with mock.patch.object(retrieval, "_ensure_registry"):
+            retrieval._registry["event_memory"] = {"db": db, "npz": "fake.npz"}
+            with mock.patch.object(np, "load") as mock_load:
+                mock_load.return_value = {
+                    "vectors": dummy_vectors[:3],
+                    "mean": dummy_vectors[:3].mean(axis=0),
+                    "indices": np.asarray([0, 1, 3], dtype="int32"),
+                    "count": np.int32(4),
+                }
+                result = retrieval._load_npz("event_memory")
+
+    assert result is None
 
 
 def test_load_npz_scripts_fingerprint_ignores_noise_rows(dummy_vectors):
@@ -217,6 +251,30 @@ async def test_retrieve_embed_none_returns_none(dummy_index):
         retrieval._INDICES["scripts"] = dummy_index
         ids = await retrieval.retrieve("scripts", "error", 5)
     assert ids is None
+
+
+@pytest.mark.asyncio
+async def test_shared_retrieval_context_embeds_concurrent_corpora_once(dummy_index):
+    calls = 0
+
+    async def _embed(_text):
+        nonlocal calls
+        calls += 1
+        await asyncio.sleep(0)
+        return [1.0, 0.0, 0.0, 0.0]
+
+    ctx = retrieval.RetrievalContext(original_query="共同问题", query="共同问题")
+    with mock.patch("nonebot_plugin_akito.core.api.embed_text", _embed):
+        retrieval._INDICES["scripts"] = dummy_index
+        retrieval._INDICES["pjsk"] = dummy_index
+        first, second = await asyncio.gather(
+            retrieval.retrieve_result("scripts", ctx.query, 2, ctx=ctx, use_rerank=False),
+            retrieval.retrieve_result("pjsk", ctx.query, 2, ctx=ctx, use_rerank=False),
+        )
+
+    assert first.status == "hit"
+    assert second.status == "hit"
+    assert calls == 1
 
 
 # ── get_relevant_* 降级 ──────────────────────────────────────────────────────────
@@ -378,9 +436,10 @@ def test_reload_indices_clears_stale_registry():
     retrieval._registry["test_corp"] = {"db": [1, 2], "npz": "test.npz"}
     with mock.patch.object(retrieval, "_load_npz", return_value=None):
         cnt = retrieval.reload_indices()
-    # 重建后只有 scripts + pjsk 两个（来自 _ensure_registry），旧的 test_corp 被清掉
+    # 重建后只有正式注册的语料，旧的 test_corp 被清掉
     assert cnt == 0  # _load_npz 全 mock 成 None → 无可用语料
     assert "test_corp" not in retrieval._registry
+    assert set(retrieval._registry) == {"scripts", "pjsk", "event_memory"}
 
 
 # ── type-aware 注入 ───────────────────────────────────────────────────────────────

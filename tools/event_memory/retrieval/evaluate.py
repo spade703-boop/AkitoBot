@@ -3,79 +3,33 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 from pathlib import Path
-import re
 from typing import Any
-import unicodedata
+
+ROOT = Path(__file__).resolve().parents[3]
+_SCORING_PATH = ROOT / "nonebot_plugin_akito" / "core" / "event_memory_scoring.py"
+_SCORING_SPEC = importlib.util.spec_from_file_location("akito_event_memory_scoring", _SCORING_PATH)
+if _SCORING_SPEC is None or _SCORING_SPEC.loader is None:
+    raise RuntimeError(f"无法加载共享事件记忆评分模块: {_SCORING_PATH}")
+_SCORING = importlib.util.module_from_spec(_SCORING_SPEC)
+_SCORING_SPEC.loader.exec_module(_SCORING)
+has_specific_event_cue = _SCORING.has_specific_event_cue
+event_signal_cue_count = _SCORING.event_signal_cue_count
+normalize = _SCORING.normalize
+qualified_events = _SCORING.qualified_events
+rank_events = _SCORING.rank_events
+score_event = _SCORING.score_event
+signal_cue_count = _SCORING.signal_cue_count
+source_kind = _SCORING.source_kind
 
 CONFIDENCE_ORDER = {"low": 0, "medium": 1, "high": 2}
 MIN_STRONG_SCORE = 4.5
 MIN_ISOLATED_SCORE = 3.0
 MIN_SCORE_MARGIN = 1.0
-GENERIC_TERMS = {"彰人", "冬弥", "青柳", "东云", "東雲", "toya", "akito"}
-QUERY_STOP_PHRASES = (
-    "你还记得", "还记得", "你们以前", "以前", "那一次", "那次", "那天", "上次",
-    "那个事情", "那个事", "后来", "当时", "发生过什么", "发生了什么", "发生过",
-    "怎么样了", "怎么样", "怎么说的", "怎么说", "说说", "是不是", "有没有", "什么",
-    "青柳冬弥", "东云彰人", "東雲彰人", "冬弥", "彰人", "青柳", "东云", "東雲",
-    "你们", "你自己", "自己", "你", "他", "的", "了", "吗", "吧", "呢", "挺", "有点",
-)
-QUERY_ALIASES = (
-    ("庆生", "生日"), ("庆祝", "生日"), ("生日歌", "生日唱歌"), ("吃饭", "聚餐"),
-    ("一起吃饭", "聚餐"), ("闹过头", "张扬"), ("别闹", "张扬"), ("努力学习", "学习"),
-)
-SIGNAL_TERMS = (
-    "生日", "惊喜", "甜食", "唱歌", "胜负", "切蛋糕", "聚餐", "学校", "热闹", "规则",
-    "雪仗", "提醒", "学习", "感谢", "配合", "开心", "祝福", "讨论", "努力", "聚会",
-    "清晨", "很早", "早上", "sekai", "rad blast",
-)
-
-
-def normalize(value: object) -> str:
-    text = re.sub(r"\s+", "", unicodedata.normalize("NFKC", str(value or "")).lower())
-    for source, target in QUERY_ALIASES:
-        text = text.replace(source, target)
-    return text
-
-
-def ngrams(value: object) -> set[str]:
-    text = normalize(value)
-    terms = set(re.findall(r"[a-z0-9]{2,}|[\u4e00-\u9fff]{2,}", text))
-    for match in re.findall(r"[\u4e00-\u9fff]+", text):
-        for size in (2, 3, 4):
-            terms.update(match[index : index + size] for index in range(max(0, len(match) - size + 1)))
-    return {term for term in terms if term and term not in GENERIC_TERMS}
-
-
-def has_specific_event_cue(query: str) -> bool:
-    cue_text = normalize(query)
-    for phrase in QUERY_STOP_PHRASES:
-        cue_text = cue_text.replace(phrase, "")
-    latin_terms = re.findall(r"[a-z0-9]{2,}", cue_text)
-    chinese_text = "".join(re.findall(r"[\u4e00-\u9fff]+", cue_text))
-    return bool(latin_terms or len(chinese_text) >= 2)
-
-
-def signal_cue_count(query: str) -> int:
-    query_text = normalize(query)
-    return sum(term in query_text for term in SIGNAL_TERMS)
-
-
-def score(query: str, event: dict[str, Any]) -> float:
-    query_text = normalize(query)
-    query_terms = ngrams(query)
-    title = normalize(event.get("title"))
-    values = [title, normalize(event.get("summary")), normalize(event.get("category"))]
-    values.extend(normalize(item) for item in event.get("topics", []) if str(item).strip())
-    values.extend(normalize(item) for item in event.get("keywords", []) if str(item).strip())
-    result = 0.0
-    for value in dict.fromkeys(item for item in values if item):
-        if len(value) >= 2 and value in query_text:
-            result += 3.0 if value == title else 1.5
-        result += min(3.0, len(ngrams(value) & query_terms) * 0.5)
-        result += 2.0 * sum(term in query_text and term in value for term in SIGNAL_TERMS)
-    return round(result, 3)
+LEXICAL_MAX_SCORE_GAP = 2.0
+score = score_event
 
 
 def retrieve(
@@ -90,25 +44,25 @@ def retrieve(
     if not has_specific_event_cue(query):
         return {"status": "no_hit", "reason": "insufficient_event_cues", "hits": [], "scored": []}
     minimum = CONFIDENCE_ORDER.get(min_confidence, CONFIDENCE_ORDER["high"])
-    scored = [
-        (score(query, event), event)
-        for event in events
-        if CONFIDENCE_ORDER.get(str(event.get("confidence") or "low"), 0) >= minimum
-    ]
-    scored = [(value, event) for value, event in scored if value > 0]
-    scored.sort(key=lambda item: (-item[0], str(item[1].get("event_id"))))
+    eligible = [event for event in events if CONFIDENCE_ORDER.get(str(event.get("confidence") or "low"), 0) >= minimum]
+    scored = rank_events(query, eligible)
     if not scored:
         return {"status": "no_hit", "reason": "no_relevant_event", "hits": [], "scored": []}
     if scored[0][0] < MIN_ISOLATED_SCORE:
         return {"status": "no_hit", "reason": "low_score", "hits": [], "scored": scored}
     score_margin = scored[0][0] - scored[1][0] if len(scored) > 1 else scored[0][0]
-    if (
-        scored[0][0] < MIN_STRONG_SCORE
-        and score_margin < MIN_SCORE_MARGIN
-        and signal_cue_count(query) < 2
-    ):
+    top_event_signal_count = event_signal_cue_count(query, scored[0][1])
+    if scored[0][0] < MIN_STRONG_SCORE and score_margin < MIN_SCORE_MARGIN and top_event_signal_count < 2:
         return {"status": "no_hit", "reason": "ambiguous_candidates", "hits": [], "scored": scored}
-    return {"status": "hit", "reason": "", "hits": scored[:top_k], "scored": scored}
+    selected, _ = qualified_events(
+        scored,
+        top_k=top_k,
+        minimum_score=MIN_ISOLATED_SCORE,
+        max_score_gap=LEXICAL_MAX_SCORE_GAP,
+    )
+    if not selected:
+        return {"status": "no_hit", "reason": "no_relevant_event", "hits": [], "scored": scored}
+    return {"status": "hit", "reason": "", "hits": selected, "scored": scored}
 
 
 def evaluate(eval_set: dict[str, Any], asset: dict[str, Any], top_k: int = 3) -> dict[str, Any]:
@@ -121,8 +75,10 @@ def evaluate(eval_set: dict[str, Any], asset: dict[str, Any], top_k: int = 3) ->
     for case in cases:
         result = retrieve(str(case.get("query", "")), events, top_k=max(3, top_k))
         expected = {str(item) for item in case.get("expected_event_ids", [])}
+        forbidden = {str(item) for item in case.get("forbidden_event_ids", [])}
         event_ids = [str(event.get("event_id")) for _, event in result["hits"]]
         rank = next((index for index, event_id in enumerate(event_ids, 1) if event_id in expected), None)
+        forbidden_hits = sorted(forbidden & set(event_ids))
         kind = str(case.get("kind") or "positive")
         if kind == "positive":
             positive_ranks.append(rank)
@@ -134,8 +90,9 @@ def evaluate(eval_set: dict[str, Any], asset: dict[str, Any], top_k: int = 3) ->
         rows.append(
             {
                 "id": case.get("id"), "kind": kind, "status": result["status"], "reason": result["reason"],
-                "matched": rank is not None if kind == "positive" else result["status"] == "no_hit",
+                "matched": (rank is not None and not forbidden_hits) if kind == "positive" else result["status"] == "no_hit",
                 "rank": rank, "event_ids": event_ids[:top_k], "expected_event_ids": sorted(expected),
+                "forbidden_event_ids": sorted(forbidden), "forbidden_hits": forbidden_hits,
                 "top_score": scored[0][0] if scored else 0.0,
                 "second_score": scored[1][0] if len(scored) > 1 else 0.0,
             }
@@ -181,16 +138,15 @@ def render_report(report: dict[str, Any]) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="评估 M2 事件记忆召回与安全拒绝")
-    parser.add_argument("--eval-set", default="tools/event_memory/eval_set.json")
+    parser.add_argument("--eval-set", default="tools/event_memory/retrieval/eval_set.json")
     parser.add_argument("--asset", default="data/content/akito_event_memories.json")
     parser.add_argument("--top-k", type=int, default=3)
     parser.add_argument("--output", default="docs/conversation_ai/event_memory/M2_EVENT_RECALL.md")
     args = parser.parse_args()
-    root = Path(__file__).resolve().parents[2]
-    eval_set = json.loads((root / args.eval_set).read_text(encoding="utf-8"))
-    asset = json.loads((root / args.asset).read_text(encoding="utf-8"))
+    eval_set = json.loads((ROOT / args.eval_set).read_text(encoding="utf-8"))
+    asset = json.loads((ROOT / args.asset).read_text(encoding="utf-8"))
     report = evaluate(eval_set, asset, top_k=max(1, args.top_k))
-    output = root / args.output
+    output = ROOT / args.output
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(render_report(report), encoding="utf-8")
     summary_keys = (

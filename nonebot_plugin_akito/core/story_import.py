@@ -1347,6 +1347,8 @@ def event_memory_from_draft(payload: dict[str, Any]) -> dict[str, Any]:
     evidence_digest = story_evidence_digest(payload)
     return {
         "event_id": event_id,
+        "source_kind": "curated_story",
+        "review_status": "reviewed",
         "source": {
             "url": source["canonical_url"],
             "draft_id": payload["draft_id"],
@@ -1380,7 +1382,7 @@ def _load_event_inventory(path: Path) -> dict[str, Any]:
         except (OSError, json.JSONDecodeError) as error:
             raise StoryImportError("现有事件记忆文件无法读取") from error
     else:
-        inventory = {"schema_version": 1, "source": {"kind": "story_import"}, "events": []}
+        inventory = {"schema_version": 2, "source": {"kind": "story_import"}, "events": []}
     if not isinstance(inventory, dict) or not isinstance(inventory.get("events"), list):
         raise StoryImportError("现有事件记忆文件格式不正确")
     return inventory
@@ -1521,6 +1523,6 @@ def merge_event_memory(
     events = [item for item in events if item.get("event_id") != memory["event_id"]]
     events.append(memory)
     inventory["events"] = events
-    inventory["schema_version"] = max(int(inventory.get("schema_version", 1)), 1)
+    inventory["schema_version"] = max(int(inventory.get("schema_version", 1)), 2)
     _write_json_atomic(path, inventory)
     return path, memory["event_id"]

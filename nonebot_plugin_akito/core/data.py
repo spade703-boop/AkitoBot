@@ -10,7 +10,7 @@ from nonebot.log import logger
 
 from .paths import find_data_path as _find_data_path
 from .paths import get_data_dir as _get_data_dir
-from .retrieval_assets import build_pjsk_prompt_text, flatten_pjsk_knowledge
+from .retrieval_assets import build_pjsk_prompt_text, event_memory_retrieval_entries, flatten_pjsk_knowledge
 
 PJSK_KNOWLEDGE_BASE = ""
 PJSK_INTRO = ""
@@ -132,6 +132,7 @@ WL2_ROUTINE     = load_json_file("wl2_routine.json", {"late_night": ["独自一�
 SONG_DATA         = load_json_file("akito_songs.json", {})
 RELATIONSHIP_DATA = load_json_file("akito_relationships.json", [])
 EVENT_MEMORY_DB = _load_optional_json("akito_event_memories.json") or {}
+EVENT_MEMORY_ENTRIES: list[dict] = event_memory_retrieval_entries(EVENT_MEMORY_DB)
 
 
 def get_pjsk_knowledge_base() -> str:
@@ -217,6 +218,8 @@ def reload_assets() -> int:
     new_event_memories = _load_optional_json("akito_event_memories.json") or {}
     EVENT_MEMORY_DB.clear()
     EVENT_MEMORY_DB.update(new_event_memories)
+    EVENT_MEMORY_ENTRIES.clear()
+    EVENT_MEMORY_ENTRIES.extend(event_memory_retrieval_entries(EVENT_MEMORY_DB))
     count += 1
 
     new_sleep = load_json_file("akito_sleep.json", {})

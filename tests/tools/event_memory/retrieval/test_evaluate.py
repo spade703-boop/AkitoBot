@@ -1,4 +1,4 @@
-from tools.event_memory.evaluate import evaluate
+from tools.event_memory.retrieval.evaluate import evaluate
 
 
 def test_event_memory_eval_separates_recall_and_safe_abstention():

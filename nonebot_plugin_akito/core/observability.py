@@ -44,6 +44,8 @@ class TurnTrace:
     event_top_score: float = 0.0
     event_score_margin: float = 0.0
     event_candidate_count: int = 0
+    event_retrieval_strategy: str = ""
+    event_candidate_diagnostics: list[dict[str, Any]] = field(default_factory=list)
     fallback_reason: list[str] = field(default_factory=list)
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     model_calls: int = 0
@@ -184,6 +186,8 @@ def record_event_memory(
     top_score: float = 0.0,
     score_margin: float = 0.0,
     candidate_count: int = 0,
+    retrieval_strategy: str = "",
+    candidate_diagnostics: list[dict[str, Any]] | tuple[dict[str, Any], ...] = (),
     fallback_reason: str = "",
 ) -> None:
     trace = _get_trace(request_id)
@@ -197,6 +201,20 @@ def record_event_memory(
     trace.event_top_score = round(float(top_score or 0.0), 3)
     trace.event_score_margin = round(float(score_margin or 0.0), 3)
     trace.event_candidate_count = max(0, int(candidate_count or 0))
+    trace.event_retrieval_strategy = str(retrieval_strategy or "")
+    trace.event_candidate_diagnostics = [
+        {
+            "event_id": str(item.get("event_id") or ""),
+            "source_kind": str(item.get("source_kind") or ""),
+            "lexical_score": round(float(item.get("lexical_score") or 0.0), 3),
+            "cosine_score": round(float(item["cosine_score"]), 6) if item.get("cosine_score") is not None else None,
+            "rerank_score": round(float(item["rerank_score"]), 6) if item.get("rerank_score") is not None else None,
+            "kept": bool(item.get("kept")),
+            "drop_reason": str(item.get("drop_reason") or ""),
+        }
+        for item in candidate_diagnostics[:10]
+        if isinstance(item, dict) and item.get("event_id")
+    ]
     if fallback_reason:
         trace.fallback_reason.append(str(fallback_reason))
 

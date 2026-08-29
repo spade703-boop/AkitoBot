@@ -26,6 +26,7 @@ class SharedPromptContext:
     pjsk_block: str
     song_memories: str
     song_mention: str
+    retrieval_context: RetrievalContext
 
 
 @dataclass(frozen=True)
@@ -120,6 +121,7 @@ async def build_shared_prompt_context(
         pjsk_block=pjsk_block,
         song_memories=get_song_memories(),
         song_mention=get_song_mention(query_text),
+        retrieval_context=active_retrieval_ctx,
     )
 
 

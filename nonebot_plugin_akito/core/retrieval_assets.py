@@ -42,6 +42,51 @@ def script_retrieval_entries(db: list[dict]) -> list[dict]:
     return [entry for _, entry in script_retrieval_items(db)]
 
 
+def event_memory_retrieval_entries(payload: object) -> list[dict]:
+    """Return ordered event rows from the compiled runtime asset."""
+    if not isinstance(payload, dict):
+        return []
+    events = payload.get("events")
+    if not isinstance(events, list):
+        return []
+    return [event for event in events if isinstance(event, dict) and event.get("event_id")]
+
+
+def event_memory_retrieval_text(event: dict) -> str:
+    """Canonical event text for embedding and reranking.
+
+    Curated page titles are intentionally excluded. Legacy titles remain as
+    compatibility aliases because many generated rows store their only concise
+    scene description there.
+    """
+    source_kind = str(event.get("source_kind") or "").strip().lower()
+    source = event.get("source")
+    if not source_kind:
+        source_kind = "curated_story" if isinstance(source, dict) and (source.get("draft_id") or source.get("url")) else "legacy_script"
+    values: list[str] = []
+    if source_kind == "legacy_script":
+        values.append(str(event.get("title") or "").strip())
+    values.extend(
+        str(event.get(field) or "").strip()
+        for field in ("summary", "category")
+    )
+    for field in ("topics", "keywords", "relationship_tags"):
+        raw = event.get(field)
+        if isinstance(raw, list):
+            values.extend(str(item).strip() for item in raw if str(item).strip())
+    evidence = event.get("evidence")
+    if isinstance(evidence, list):
+        for row in evidence:
+            if not isinstance(row, dict):
+                continue
+            values.extend(
+                str(row.get(field) or "").strip()
+                for field in ("context_zh", "context", "dialogue_zh", "dialogue")
+                if row.get(field)
+            )
+    return "\n".join(dict.fromkeys(value for value in values if value)) or "（空）"
+
+
 def _normalize_aliases(raw_aliases: Any) -> list[str]:
     out: list[str] = []
     if isinstance(raw_aliases, str):

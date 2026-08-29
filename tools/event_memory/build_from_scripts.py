@@ -93,6 +93,8 @@ def build_inventory(records: list[dict[str, Any]]) -> dict[str, Any]:
         events.append(
             {
                 "event_id": stable_event_id(title, category),
+                "source_kind": "legacy_script",
+                "review_status": "generated",
                 "source": {"path": "data/content/akito_scripts.json", "record_indices": record_indices},
                 "title": title,
                 "summary": context_values[0] if context_values else title,
@@ -124,7 +126,7 @@ def build_inventory(records: list[dict[str, Any]]) -> dict[str, Any]:
     events.sort(key=lambda event: event["event_id"])
     confidence_counts = Counter(event["confidence"] for event in events)
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "source": {"path": "data/content/akito_scripts.json", "record_count": len(records)},
         "selection": {
             "candidate_rule": "冬弥/青柳/Toya 相关记录或分类为冬弥·彰冬；按 cn_key+category 聚类",

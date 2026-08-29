@@ -3,73 +3,43 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import re
+import os
 from typing import Any
-import unicodedata
 
 from .data import EVENT_MEMORY_DB
+from .event_memory_scoring import (
+    event_signal_cue_count,
+    qualified_events,
+    rank_events,
+    score_event,
+    should_prioritize_curated,
+)
+from .event_memory_scoring import (
+    has_specific_event_cue as _shared_has_specific_event_cue,
+)
+from .event_memory_scoring import (
+    ngrams as _shared_ngrams,
+)
+from .event_memory_scoring import (
+    normalize as _shared_normalize,
+)
+from .event_memory_scoring import (
+    signal_cue_count as _shared_signal_cue_count,
+)
+from .retrieval import RetrievalContext, build_retrieval_context, retrieve_result
+from .retrieval_assets import event_memory_retrieval_text
 from .rollout import mode_is_shadowing
 
 _CONFIDENCE_ORDER = {"low": 0, "medium": 1, "high": 2}
 _MIN_STRONG_SCORE = 4.5
 _MIN_ISOLATED_SCORE = 3.0
 _MIN_SCORE_MARGIN = 1.0
-_GENERIC_TERMS = {"彰人", "冬弥", "青柳", "东云", "東雲", "toya", "akito"}
-_QUERY_STOP_PHRASES = (
-    "你还记得",
-    "还记得",
-    "你们以前",
-    "以前",
-    "那一次",
-    "那次",
-    "那天",
-    "上次",
-    "那个事情",
-    "那个事",
-    "后来",
-    "当时",
-    "发生过什么",
-    "发生了什么",
-    "发生过",
-    "怎么样了",
-    "怎么样",
-    "怎么说的",
-    "怎么说",
-    "说说",
-    "是不是",
-    "有没有",
-    "什么",
-    "青柳冬弥",
-    "东云彰人",
-    "東雲彰人",
-    "冬弥",
-    "彰人",
-    "青柳",
-    "东云",
-    "東雲",
-    "你们",
-    "你自己",
-    "自己",
-    "你",
-    "他",
-    "的",
-    "了",
-    "吗",
-    "吧",
-    "呢",
-    "挺",
-    "有点",
-)
-_QUERY_ALIASES = (
-    ("庆生", "生日"),
-    ("庆祝", "生日"),
-    ("生日歌", "生日唱歌"),
-    ("吃饭", "聚餐"),
-    ("一起吃饭", "聚餐"),
-    ("闹过头", "张扬"),
-    ("别闹", "张扬"),
-    ("努力学习", "学习"),
-)
+_LEXICAL_MAX_SCORE_GAP = 2.0
+_HYBRID_RECALL_K = 20
+_HYBRID_CURATED_MIN_SCORE = 0.10
+_HYBRID_LEGACY_MIN_SCORE = 0.15
+_HYBRID_RELATIVE_SCORE = 0.65
+_HYBRID_CURATED_PRIORITY_MARGIN = 0.05
 _SIGNAL_TERMS = (
     "生日",
     "惊喜",
@@ -99,6 +69,25 @@ _SIGNAL_TERMS = (
 )
 
 
+def event_source_kind(event: dict[str, Any]) -> str:
+    """Resolve provenance for new and legacy event assets."""
+    explicit = str(event.get("source_kind") or "").strip().lower()
+    if explicit in {"curated_story", "legacy_script"}:
+        return explicit
+    source = event.get("source")
+    if isinstance(source, dict) and (source.get("draft_id") or source.get("url")):
+        return "curated_story"
+    return "legacy_script"
+
+
+def event_review_status(event: dict[str, Any]) -> str:
+    """Resolve review status without breaking schema-v1 assets."""
+    explicit = str(event.get("review_status") or "").strip().lower()
+    if explicit in {"reviewed", "generated"}:
+        return explicit
+    return "reviewed" if event_source_kind(event) == "curated_story" else "generated"
+
+
 @dataclass(frozen=True)
 class EventMemoryHit:
     event_id: str
@@ -110,6 +99,33 @@ class EventMemoryHit:
     evidence: tuple[dict[str, Any], ...]
     topics: tuple[str, ...] = ()
     style_examples: tuple[dict[str, Any], ...] = ()
+    source_kind: str = "legacy_script"
+    review_status: str = "generated"
+    lexical_score: float = 0.0
+    cosine_score: float | None = None
+    rerank_score: float | None = None
+
+
+@dataclass(frozen=True)
+class EventMemoryCandidate:
+    event_id: str
+    source_kind: str
+    lexical_score: float = 0.0
+    cosine_score: float | None = None
+    rerank_score: float | None = None
+    kept: bool = False
+    drop_reason: str = ""
+
+    def as_trace_dict(self) -> dict[str, Any]:
+        return {
+            "event_id": self.event_id,
+            "source_kind": self.source_kind,
+            "lexical_score": round(self.lexical_score, 3),
+            "cosine_score": round(self.cosine_score, 6) if self.cosine_score is not None else None,
+            "rerank_score": round(self.rerank_score, 6) if self.rerank_score is not None else None,
+            "kept": self.kept,
+            "drop_reason": self.drop_reason,
+        }
 
 
 @dataclass(frozen=True)
@@ -120,6 +136,9 @@ class EventMemoryResult:
     top_score: float = 0.0
     score_margin: float = 0.0
     candidate_count: int = 0
+    retrieval_strategy: str = "lexical"
+    diagnostics: tuple[EventMemoryCandidate, ...] = ()
+    fallback_reason: str = ""
 
     @property
     def candidates(self) -> list[str]:
@@ -139,6 +158,10 @@ class EventMemoryResult:
                     continue
                 units.append(f"{hit.event_id}:{record_index}")
         return units
+
+    @property
+    def candidate_diagnostics(self) -> list[dict[str, Any]]:
+        return [candidate.as_trace_dict() for candidate in self.diagnostics[:10]]
 
 
 def validate_event_inventory(payload: object) -> list[str]:
@@ -171,34 +194,19 @@ def validate_event_inventory(payload: object) -> list[str]:
 
 
 def _normalize(value: object) -> str:
-    text = unicodedata.normalize("NFKC", str(value or "")).lower().strip()
-    text = re.sub(r"\s+", "", text)
-    for source, target in _QUERY_ALIASES:
-        text = text.replace(source, target)
-    return text
+    return _shared_normalize(value)
 
 
 def _ngrams(text: str) -> set[str]:
-    compact = _normalize(text)
-    terms = set(re.findall(r"[a-z0-9]{2,}|[\u4e00-\u9fff]{2,}", compact))
-    for match in re.findall(r"[\u4e00-\u9fff]+", compact):
-        for size in (2, 3, 4):
-            terms.update(match[index : index + size] for index in range(max(0, len(match) - size + 1)))
-    return {term for term in terms if term and term not in _GENERIC_TERMS}
+    return _shared_ngrams(text)
 
 
 def _has_specific_event_cue(query: str) -> bool:
-    cue_text = _normalize(query)
-    for phrase in _QUERY_STOP_PHRASES:
-        cue_text = cue_text.replace(phrase, "")
-    latin_terms = re.findall(r"[a-z0-9]{2,}", cue_text)
-    chinese_text = "".join(re.findall(r"[\u4e00-\u9fff]+", cue_text))
-    return bool(latin_terms or len(chinese_text) >= 2)
+    return _shared_has_specific_event_cue(query)
 
 
 def _signal_cue_count(query: str) -> int:
-    query_text = _normalize(query)
-    return sum(term in query_text for term in _SIGNAL_TERMS)
+    return _shared_signal_cue_count(query)
 
 
 def _event_rows() -> list[dict[str, Any]]:
@@ -209,36 +217,7 @@ def _event_rows() -> list[dict[str, Any]]:
 
 
 def _score_event(query: str, event: dict[str, Any]) -> float:
-    query_text = _normalize(query)
-    query_terms = _ngrams(query)
-    score = 0.0
-    title = _normalize(event.get("title", ""))
-    summary = _normalize(event.get("summary", ""))
-    category = _normalize(event.get("category", ""))
-    topic_values = event.get("topics", [])
-    keywords = event.get("keywords", [])
-    values = [title, summary, category]
-    if isinstance(topic_values, list):
-        values.extend(_normalize(item) for item in topic_values)
-    if isinstance(keywords, list):
-        values.extend(_normalize(item) for item in keywords)
-    evidence = event.get("evidence", [])
-    if isinstance(evidence, list):
-        for item in evidence:
-            if not isinstance(item, dict):
-                continue
-            values.extend(
-                _normalize(item.get(field))
-                for field in ("context", "context_zh", "dialogue", "dialogue_zh")
-                if item.get(field)
-            )
-    for value in dict.fromkeys(item for item in values if item):
-        if len(value) >= 2 and value in query_text:
-            score += 3.0 if value == title else 1.5
-        overlap = _ngrams(value) & query_terms
-        score += min(3.0, 0.5 * len(overlap))
-        score += 2.0 * sum(term in query_text and term in value for term in _SIGNAL_TERMS)
-    return score
+    return score_event(query, event)
 
 
 def _score_evidence(query: str, evidence: dict[str, Any]) -> float:
@@ -265,13 +244,61 @@ def _rank_evidence(query: str, evidence: tuple[dict[str, Any], ...]) -> tuple[di
     return tuple(item[1] for item in ranked)
 
 
-def retrieve_event_memories(
+def _build_hit(
+    query: str,
+    event: dict[str, Any],
+    *,
+    lexical_score: float,
+    cosine_score: float | None = None,
+    rerank_score: float | None = None,
+) -> EventMemoryHit:
+    evidence = event.get("evidence", [])
+    evidence_rows = tuple(item for item in evidence if isinstance(item, dict)) if isinstance(evidence, list) else ()
+    evidence_rows = _rank_evidence(query, evidence_rows)
+    topics = event.get("topics", [])
+    style_examples = event.get("style_examples", [])
+    style_rows = tuple(item for item in style_examples if isinstance(item, dict)) if isinstance(style_examples, list) else ()
+    score = rerank_score if rerank_score is not None else lexical_score
+    return EventMemoryHit(
+        event_id=str(event.get("event_id")),
+        title=str(event.get("title") or "未命名事件"),
+        summary=str(event.get("summary") or ""),
+        category=str(event.get("category") or ""),
+        confidence=str(event.get("confidence") or "low").lower(),
+        score=round(float(score), 6),
+        evidence=evidence_rows,
+        topics=tuple(str(item) for item in topics if str(item).strip()) if isinstance(topics, list) else (),
+        style_examples=style_rows,
+        source_kind=event_source_kind(event),
+        review_status=event_review_status(event),
+        lexical_score=round(lexical_score, 3),
+        cosine_score=round(cosine_score, 6) if cosine_score is not None else None,
+        rerank_score=round(rerank_score, 6) if rerank_score is not None else None,
+    )
+
+
+def _eligible_events(min_confidence: str) -> list[dict[str, Any]]:
+    minimum = _CONFIDENCE_ORDER.get(str(min_confidence).lower(), _CONFIDENCE_ORDER["high"])
+    return [
+        event
+        for event in _event_rows()
+        if _CONFIDENCE_ORDER.get(str(event.get("confidence") or "low").lower(), 0) >= minimum
+    ]
+
+
+def _rank_lexical(query: str, events: list[dict[str, Any]]) -> list[tuple[float, dict[str, Any]]]:
+    return rank_events(query, events)
+
+
+def _lexical_result(
     query: str,
     *,
     top_k: int = 3,
     min_confidence: str = "high",
+    retrieval_strategy: str = "lexical",
+    fallback_reason: str = "",
 ) -> EventMemoryResult:
-    """Retrieve high-signal event cards without embeddings or mutable memory writes."""
+    """Retrieve and individually filter high-signal lexical event candidates."""
     if not _event_rows():
         return EventMemoryResult(status="unavailable", reason="event_asset_unavailable")
     query_text = str(query or "").strip()
@@ -279,41 +306,16 @@ def retrieve_event_memories(
         return EventMemoryResult(status="no_hit", reason="empty_query")
     if not _has_specific_event_cue(query_text):
         return EventMemoryResult(status="no_hit", reason="insufficient_event_cues")
-    minimum = _CONFIDENCE_ORDER.get(str(min_confidence).lower(), _CONFIDENCE_ORDER["high"])
-    scored: list[EventMemoryHit] = []
-    for event in _event_rows():
-        confidence = str(event.get("confidence") or "low").lower()
-        if _CONFIDENCE_ORDER.get(confidence, 0) < minimum:
-            continue
-        score = _score_event(query_text, event)
-        if score <= 0:
-            continue
-        evidence = event.get("evidence", [])
-        evidence_rows = tuple(item for item in evidence if isinstance(item, dict)) if isinstance(evidence, list) else ()
-        evidence_rows = _rank_evidence(query_text, evidence_rows)
-        topics = event.get("topics", [])
-        style_examples = event.get("style_examples", [])
-        style_rows = (
-            tuple(item for item in style_examples if isinstance(item, dict)) if isinstance(style_examples, list) else ()
-        )
-        scored.append(
-            EventMemoryHit(
-                event_id=str(event.get("event_id")),
-                title=str(event.get("title") or "未命名事件"),
-                summary=str(event.get("summary") or ""),
-                category=str(event.get("category") or ""),
-                confidence=confidence,
-                score=round(score, 3),
-                evidence=evidence_rows,
-                topics=tuple(str(item) for item in topics if str(item).strip()) if isinstance(topics, list) else (),
-                style_examples=style_rows,
-            )
-        )
-    scored.sort(key=lambda hit: (-hit.score, -_CONFIDENCE_ORDER.get(hit.confidence, 0), hit.event_id))
+    scored = _rank_lexical(query_text, _eligible_events(min_confidence))
     if not scored:
-        return EventMemoryResult(status="no_hit", reason="no_relevant_event")
-    top_score = scored[0].score
-    score_margin = round(top_score - scored[1].score, 3) if len(scored) > 1 else top_score
+        return EventMemoryResult(
+            status="no_hit",
+            reason="no_relevant_event",
+            retrieval_strategy=retrieval_strategy,
+            fallback_reason=fallback_reason,
+        )
+    top_score = scored[0][0]
+    score_margin = round(top_score - scored[1][0], 3) if len(scored) > 1 else top_score
     candidate_count = len(scored)
     if top_score < _MIN_ISOLATED_SCORE:
         return EventMemoryResult(
@@ -322,22 +324,212 @@ def retrieve_event_memories(
             top_score=top_score,
             score_margin=score_margin,
             candidate_count=candidate_count,
+            retrieval_strategy=retrieval_strategy,
+            fallback_reason=fallback_reason,
         )
-    if top_score < _MIN_STRONG_SCORE and score_margin < _MIN_SCORE_MARGIN and _signal_cue_count(query_text) < 2:
+    top_event_signal_count = event_signal_cue_count(query_text, scored[0][1])
+    if top_score < _MIN_STRONG_SCORE and score_margin < _MIN_SCORE_MARGIN and top_event_signal_count < 2:
         return EventMemoryResult(
             status="no_hit",
             reason="ambiguous_candidates",
             top_score=top_score,
             score_margin=score_margin,
             candidate_count=candidate_count,
+            retrieval_strategy=retrieval_strategy,
+            fallback_reason=fallback_reason,
         )
-    hits = tuple(scored[: max(1, int(top_k))])
+    selected, curated_priority = qualified_events(
+        scored,
+        top_k=top_k,
+        minimum_score=_MIN_ISOLATED_SCORE,
+        max_score_gap=_LEXICAL_MAX_SCORE_GAP,
+    )
+    selected_ids = {str(event.get("event_id")) for _, event in selected}
+    diagnostics: list[EventMemoryCandidate] = []
+    for score, event in scored[:10]:
+        event_id = str(event.get("event_id"))
+        kept = event_id in selected_ids
+        if kept:
+            reason = ""
+        elif score < _MIN_ISOLATED_SCORE:
+            reason = "lexical_below_min"
+        elif top_score - score > _LEXICAL_MAX_SCORE_GAP:
+            reason = "outside_top_gap"
+        elif curated_priority and event_source_kind(event) != "curated_story":
+            reason = "legacy_shadowed_by_curated"
+        else:
+            reason = "top_k_limit"
+        diagnostics.append(
+            EventMemoryCandidate(
+                event_id=event_id,
+                source_kind=event_source_kind(event),
+                lexical_score=score,
+                kept=kept,
+                drop_reason=reason,
+            )
+        )
+    if not selected:
+        return EventMemoryResult(
+            status="no_hit",
+            reason="no_relevant_event",
+            top_score=top_score,
+            score_margin=score_margin,
+            candidate_count=candidate_count,
+            retrieval_strategy=retrieval_strategy,
+            diagnostics=tuple(diagnostics),
+            fallback_reason=fallback_reason,
+        )
+    hits = tuple(_build_hit(query_text, event, lexical_score=score) for score, event in selected)
     return EventMemoryResult(
         status="hit",
         hits=hits,
         top_score=top_score,
         score_margin=score_margin,
         candidate_count=candidate_count,
+        retrieval_strategy=retrieval_strategy,
+        diagnostics=tuple(diagnostics),
+        fallback_reason=fallback_reason,
+    )
+
+
+def _retrieval_mode(value: str | None = None) -> str:
+    configured = str(value or os.environ.get("AKITO_EVENT_MEMORY_RETRIEVAL") or "lexical").strip().lower()
+    return configured if configured in {"lexical", "hybrid"} else "lexical"
+
+
+async def retrieve_event_memories(
+    query: str,
+    *,
+    top_k: int = 3,
+    min_confidence: str = "high",
+    retrieval_ctx: RetrievalContext | None = None,
+    retrieval_mode: str | None = None,
+) -> EventMemoryResult:
+    """Retrieve event memories with safe lexical or hybrid ranking."""
+    mode = _retrieval_mode(retrieval_mode)
+    lexical = _lexical_result(query, top_k=top_k, min_confidence=min_confidence)
+    if mode != "hybrid" or lexical.status in {"unavailable"}:
+        return lexical
+    query_text = str(query or "").strip()
+    if not query_text or not _has_specific_event_cue(query_text):
+        return lexical
+    events = _eligible_events(min_confidence)
+    event_index = {str(event.get("event_id")): event for event in events}
+    lexical_ranked = _rank_lexical(query_text, events)
+    lexical_scores = {str(event.get("event_id")): score for score, event in lexical_ranked}
+    lexical_ids = [str(event.get("event_id")) for _, event in lexical_ranked[:_HYBRID_RECALL_K]]
+    ctx = retrieval_ctx or await build_retrieval_context(query_text, enable_expansion=len(query_text) >= 3)
+    semantic = await retrieve_result("event_memory", ctx.query, _HYBRID_RECALL_K, ctx=ctx, use_rerank=False)
+    if semantic.status == "unavailable":
+        return _lexical_result(
+            query_text,
+            top_k=top_k,
+            min_confidence=min_confidence,
+            retrieval_strategy="lexical_fallback",
+            fallback_reason=semantic.reason or "semantic_unavailable",
+        )
+    all_rows = _event_rows()
+    cosine_scores = dict(semantic.cosine_scores or [])
+    semantic_ids = [
+        str(all_rows[index].get("event_id"))
+        for index in semantic.ids
+        if 0 <= index < len(all_rows) and str(all_rows[index].get("event_id")) in event_index
+    ]
+    candidate_ids = list(dict.fromkeys([*lexical_ids, *semantic_ids]))
+    candidates = [event_index[event_id] for event_id in candidate_ids if event_id in event_index]
+    if not candidates:
+        return lexical
+    from .api import rerank_documents
+
+    ranked = await rerank_documents(
+        query_text,
+        [event_memory_retrieval_text(event) for event in candidates],
+        top_n=len(candidates),
+    )
+    if ranked is None:
+        return _lexical_result(
+            query_text,
+            top_k=top_k,
+            min_confidence=min_confidence,
+            retrieval_strategy="lexical_fallback",
+            fallback_reason="rerank_unavailable",
+        )
+    reranked = [(float(score), candidates[index]) for index, score in ranked if 0 <= index < len(candidates)]
+    if not reranked:
+        return lexical
+    top_rerank = reranked[0][0]
+    qualifying: list[tuple[float, dict[str, Any]]] = []
+    for score, event in reranked:
+        threshold = _HYBRID_CURATED_MIN_SCORE if event_source_kind(event) == "curated_story" else _HYBRID_LEGACY_MIN_SCORE
+        if score >= threshold and score >= top_rerank * _HYBRID_RELATIVE_SCORE:
+            qualifying.append((score, event))
+    curated = [item for item in qualifying if event_source_kind(item[1]) == "curated_story"]
+    legacy = [item for item in qualifying if event_source_kind(item[1]) != "curated_story"]
+    curated_priority = should_prioritize_curated(
+        curated,
+        legacy,
+        margin=_HYBRID_CURATED_PRIORITY_MARGIN,
+    )
+    selected_pool = curated if curated_priority else qualifying
+    selected = selected_pool[: max(1, min(3, int(top_k)))]
+    selected_ids = {str(event.get("event_id")) for _, event in selected}
+    diagnostics: list[EventMemoryCandidate] = []
+    row_by_id = {str(event.get("event_id")): index for index, event in enumerate(all_rows)}
+    for score, event in reranked[:10]:
+        event_id = str(event.get("event_id"))
+        source_kind = event_source_kind(event)
+        threshold = _HYBRID_CURATED_MIN_SCORE if source_kind == "curated_story" else _HYBRID_LEGACY_MIN_SCORE
+        kept = event_id in selected_ids
+        if kept:
+            reason = ""
+        elif score < threshold:
+            reason = "rerank_below_source_min"
+        elif score < top_rerank * _HYBRID_RELATIVE_SCORE:
+            reason = "rerank_below_relative_min"
+        elif curated_priority and source_kind != "curated_story":
+            reason = "legacy_shadowed_by_curated"
+        else:
+            reason = "top_k_limit"
+        row_index = row_by_id.get(event_id)
+        diagnostics.append(
+            EventMemoryCandidate(
+                event_id=event_id,
+                source_kind=source_kind,
+                lexical_score=lexical_scores.get(event_id, 0.0),
+                cosine_score=cosine_scores.get(row_index) if row_index is not None else None,
+                rerank_score=score,
+                kept=kept,
+                drop_reason=reason,
+            )
+        )
+    hits = tuple(
+        _build_hit(
+            query_text,
+            event,
+            lexical_score=lexical_scores.get(str(event.get("event_id")), 0.0),
+            cosine_score=cosine_scores.get(row_by_id.get(str(event.get("event_id")))),
+            rerank_score=score,
+        )
+        for score, event in selected
+    )
+    if not hits:
+        return EventMemoryResult(
+            status="no_hit",
+            reason="rerank_no_relevant_event",
+            top_score=round(top_rerank, 6),
+            candidate_count=len(candidates),
+            retrieval_strategy="hybrid",
+            diagnostics=tuple(diagnostics),
+        )
+    second_score = reranked[1][0] if len(reranked) > 1 else 0.0
+    return EventMemoryResult(
+        status="hit",
+        hits=hits,
+        top_score=round(top_rerank, 6),
+        score_margin=round(top_rerank - second_score, 6),
+        candidate_count=len(candidates),
+        retrieval_strategy="hybrid",
+        diagnostics=tuple(diagnostics),
     )
 
 
@@ -352,9 +544,15 @@ def format_event_memory_context(result: EventMemoryResult, *, max_evidence_chars
         "群友明确提到已证实经历时，可以用彰人的第一人称自然认领；不要提及检索、资料库或 event_id，也不要逐字复述原台词。",
     ]
     for hit in result.hits:
-        lines.append(f"- 已确认共同经历（置信度：{hit.confidence}）")
+        is_reviewed_story = hit.source_kind == "curated_story" and hit.review_status == "reviewed"
+        if is_reviewed_story:
+            lines.append(f"- 已审核原作共同经历（置信度：{hit.confidence}）")
+            summary_label = "已审核概括"
+        else:
+            lines.append(f"- 原作脚本自动整理片段（未人工复核；置信度：{hit.confidence}）")
+            summary_label = "候选概括（以原始情境和台词为准）"
         if hit.summary:
-            lines.append(f"  已确认概括：{hit.summary}")
+            lines.append(f"  {summary_label}：{hit.summary}")
         if hit.category or hit.topics:
             labels = " / ".join(item for item in (hit.category, *hit.topics) if item)
             lines.append(f"  分类主题：{labels}")
@@ -386,12 +584,23 @@ def format_event_memory_context(result: EventMemoryResult, *, max_evidence_chars
     return "\n".join(lines)
 
 
-def build_event_memory_context(query: str, *, mode: str, top_k: int = 3) -> tuple[str, EventMemoryResult]:
+async def build_event_memory_context(
+    query: str,
+    *,
+    mode: str,
+    top_k: int = 3,
+    retrieval_ctx: RetrievalContext | None = None,
+) -> tuple[str, EventMemoryResult]:
     """Resolve one request under an M2 mode; ``shadow`` never returns prompt text."""
     normalized_mode = str(mode or "off").lower()
     if not mode_is_shadowing(normalized_mode):
         return "", EventMemoryResult(status="disabled", reason="m2_disabled")
-    result = retrieve_event_memories(query, top_k=top_k, min_confidence="high")
+    result = await retrieve_event_memories(
+        query,
+        top_k=top_k,
+        min_confidence="high",
+        retrieval_ctx=retrieval_ctx,
+    )
     if normalized_mode in {"canary", "on"}:
         return format_event_memory_context(result), result
     return "", result

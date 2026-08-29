@@ -666,10 +666,13 @@ def test_review_and_publish_are_evidence_backed_and_idempotent(tmp_path: Path):
     assert path == memory_path
     assert event_id.startswith("akito-toya-web-")
     first = json.loads(memory_path.read_text(encoding="utf-8"))
+    assert first["schema_version"] == 2
     assert len(first["events"]) == 1
     event = first["events"][0]
     assert list(event) == [
         "event_id",
+        "source_kind",
+        "review_status",
         "source",
         "title",
         "summary",
@@ -684,6 +687,8 @@ def test_review_and_publish_are_evidence_backed_and_idempotent(tmp_path: Path):
         "evidence",
         "keywords",
     ]
+    assert event["source_kind"] == "curated_story"
+    assert event["review_status"] == "reviewed"
     assert set(event["source"]) == {"url", "draft_id", "record_indices", "content_digest", "evidence_digest"}
     assert set(event["evidence"][0]) == {"record_index", "type", "context", "dialogue"}
     assert event["evidence"][0]["context"]

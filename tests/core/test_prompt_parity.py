@@ -2,6 +2,7 @@
 
 from nonebot_plugin_akito.core.context import RelationshipMatch, format_relationship_context
 from nonebot_plugin_akito.core.prompt_builder import SharedPromptContext
+from nonebot_plugin_akito.core.retrieval import RetrievalContext
 from nonebot_plugin_akito.features import impression
 from nonebot_plugin_akito.handlers import chat
 
@@ -14,6 +15,7 @@ def _shared_context() -> SharedPromptContext:
         pjsk_block="PJSK_FRAGMENT",
         song_memories="SONG_CATALOG_FRAGMENT",
         song_mention="SONG_MENTION_FRAGMENT",
+        retrieval_context=RetrievalContext(original_query="冬弥", query="冬弥"),
     )
 
 

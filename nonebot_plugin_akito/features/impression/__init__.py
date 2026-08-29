@@ -933,7 +933,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
         context_blocks,
         target_id=target_id,
     )
-    event_memory, event_memory_result = build_event_memory_context(
+    event_memory, event_memory_result = await build_event_memory_context(
         f"{event.get_plaintext()}\n{target_evidence_source}",
         mode=rollout.m2_memory_mode,
     )
@@ -947,7 +947,10 @@ async def _(bot: Bot, event: GroupMessageEvent):
         top_score=event_memory_result.top_score,
         score_margin=event_memory_result.score_margin,
         candidate_count=event_memory_result.candidate_count,
-        fallback_reason=event_memory_result.reason if event_memory_result.status == "unavailable" else "",
+        retrieval_strategy=event_memory_result.retrieval_strategy,
+        candidate_diagnostics=event_memory_result.candidate_diagnostics,
+        fallback_reason=event_memory_result.fallback_reason
+        or (event_memory_result.reason if event_memory_result.status == "unavailable" else ""),
     )
     relationship_context = _build_impression_relationship_context(target_evidence_source)
     context_sources = ["impression_history", "impression_context", "group_context"]
@@ -1239,7 +1242,11 @@ async def _(bot: Bot, event: GroupMessageEvent):
         else ""
     )
     song_info = shared_prompt_context.song_mention
-    event_memory, event_memory_result = build_event_memory_context(msg, mode=rollout.m2_memory_mode)
+    event_memory, event_memory_result = await build_event_memory_context(
+        msg,
+        mode=rollout.m2_memory_mode,
+        retrieval_ctx=getattr(shared_prompt_context, "retrieval_context", None),
+    )
 
     cool_guy_filter = PROMPTS_DB.get("cool_guy_filter", "")
 
@@ -1353,7 +1360,10 @@ async def _(bot: Bot, event: GroupMessageEvent):
         top_score=event_memory_result.top_score,
         score_margin=event_memory_result.score_margin,
         candidate_count=event_memory_result.candidate_count,
-        fallback_reason=event_memory_result.reason if event_memory_result.status == "unavailable" else "",
+        retrieval_strategy=event_memory_result.retrieval_strategy,
+        candidate_diagnostics=event_memory_result.candidate_diagnostics,
+        fallback_reason=event_memory_result.fallback_reason
+        or (event_memory_result.reason if event_memory_result.status == "unavailable" else ""),
     )
     context_sources = ["current_message", "group_context", "persona"]
     if relation_info:
