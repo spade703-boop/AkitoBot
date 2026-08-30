@@ -16,7 +16,7 @@ from ...core import SUPERUSER_QQ
 from ...core.game_store import LOCK, _get_group, _load_data, _today_str
 from ...core.types import GroupRecord
 from ..gift.render import render_bond_page
-from .player import _resolve_group
+from .player import _level_of, _resolve_group
 from .state import _rpg_state
 from .types import MetricMemberField, MetricScalarField, RpgMetricDay, WorldBossRecord
 
@@ -282,6 +282,8 @@ def _period_page_data(summary: dict) -> dict:
     team_attempts = int(summary["team_attempts"])
     team_formed = int(summary["team_formed"])
     boss_spawns = int(summary["world_boss_spawns"]) + int(summary["world_boss_forced_spawns"])
+    active_players = int(summary["active_players"])
+    boss_players = int(summary["world_boss_players"])
     return {
         **summary,
         "label": f"近{summary['period_days']}天",
@@ -290,7 +292,86 @@ def _period_page_data(summary: dict) -> dict:
         "team_rate": _rate(team_formed, team_attempts),
         "team_rate_value": round(team_formed / team_attempts * 100) if team_attempts else 0,
         "boss_spawns": boss_spawns,
+        "boss_completion_rate": _rate(int(summary["world_boss_kills"]), boss_spawns),
+        "boss_completion_rate_value": round(int(summary["world_boss_kills"]) / boss_spawns * 100) if boss_spawns else 0,
+        "boss_participation_rate": _rate(boss_players, active_players),
+        "boss_participation_rate_value": round(boss_players / active_players * 100) if active_players else 0,
+        "avg_exp_per_battle": round(int(summary["exp_gained"]) / battles) if battles else 0,
+        "avg_points_per_battle": round(int(summary["points_gained"]) / battles, 1) if battles else 0,
+        "battle_mix": [
+            {
+                "label": "单人",
+                "value": int(summary["solo_battles"]),
+                "percent": round(int(summary["solo_battles"]) / battles * 100) if battles else 0,
+                "tone": "warm",
+            },
+            {
+                "label": "组队",
+                "value": int(summary["team_battles"]),
+                "percent": round(int(summary["team_battles"]) / battles * 100) if battles else 0,
+                "tone": "cool",
+            },
+            {
+                "label": "回退",
+                "value": int(summary["fallback_battles"]),
+                "percent": round(int(summary["fallback_battles"]) / battles * 100) if battles else 0,
+                "tone": "muted",
+            },
+        ],
     }
+
+
+def _period_days(days: dict, today: str, period_days: int) -> list[tuple[str, dict]]:
+    try:
+        cutoff = (date.fromisoformat(today) - timedelta(days=max(1, int(period_days)) - 1)).isoformat()
+    except ValueError:
+        cutoff = ""
+    return [
+        (str(day), entry)
+        for day, entry in sorted(days.items())
+        if cutoff <= str(day) <= today and isinstance(entry, dict)
+    ]
+
+
+def _activity_trend(group: GroupRecord, today: str, period_days: int = 7) -> list[dict[str, Any]]:
+    trend = []
+    for day, entry in _period_days(_metrics_days(group), today, period_days):
+        battles = max(0, int(entry.get("battles", 0)))
+        wins = max(0, int(entry.get("wins", 0)))
+        trend.append(
+            {
+                "label": day[5:],
+                "battles": battles,
+                "players": len({str(uid) for uid in entry.get("players", []) if str(uid)}),
+                "win_rate": _rate(wins, battles),
+                "win_rate_value": round(wins / battles * 100) if battles else 0,
+            }
+        )
+    return trend
+
+
+def _active_level_distribution(group: GroupRecord, today: str, period_days: int = 30) -> list[dict[str, Any]]:
+    active_ids: set[str] = set()
+    for _day, entry in _period_days(_metrics_days(group), today, period_days):
+        active_ids.update(str(uid) for uid in entry.get("players", []) if str(uid))
+    users = group.get("users", {})
+    levels: dict[int, int] = {}
+    for uid in active_ids:
+        user = users.get(uid) if isinstance(users, dict) else None
+        if not isinstance(user, dict):
+            continue
+        level = _level_of(int(user.get("exp", 0)))
+        levels[level] = levels.get(level, 0) + 1
+    peak = max(levels.values(), default=0)
+    return [
+        {
+            "level": level,
+            "players": players,
+            "percent": round(players / len(active_ids) * 100) if active_ids else 0,
+            "height": round(players / peak * 100) if peak else 0,
+        }
+        for level, players in sorted(levels.items())
+    ]
 
 
 def build_metrics_page_data(group: GroupRecord, today: str) -> dict:
@@ -301,19 +382,77 @@ def build_metrics_page_data(group: GroupRecord, today: str) -> dict:
             "name": name,
             "battles": int(stats["battles"]),
             "wins": int(stats["wins"]),
+            "elite": int(stats.get("elite", 0)),
             "win_rate": _rate(int(stats["wins"]), int(stats["battles"])),
         }
         for name, stats in month["monsters"].items()
         if int(stats["battles"]) >= 3
     ]
     monster_rows.sort(key=lambda row: (row["wins"] / row["battles"], -row["battles"], row["name"]))
+    periods = [_period_page_data(week), _period_page_data(month)]
+    periods[0]["comparison_label"] = "近期表现"
+    periods[1]["comparison_label"] = "30天基线"
     return {
         "title": "RPG 运营看板",
         "today": today,
-        "page_width": 860,
-        "periods": [_period_page_data(week), _period_page_data(month)],
+        "page_width": 820,
+        "periods": periods,
         "low_win_monsters": monster_rows[:3],
+        "activity_trend": _activity_trend(group, today),
+        "level_distribution": _active_level_distribution(group, today),
     }
+
+
+def _build_style_test_group(today: str) -> GroupRecord:
+    user_ids = [f"style-{index}" for index in range(1, 9)]
+    users = {
+        user_id: {
+            "exp": 135 * (index + 1) * index // 2 + 60 * index,
+            "points": 300 + index * 47,
+            "display_name": f"看板测试冒险者{index}",
+        }
+        for index, user_id in enumerate(user_ids, start=1)
+    }
+    days: dict[str, RpgMetricDay] = {}
+    monster_names = ("史莱姆", "泥怪", "哥布林", "野狼")
+    for offset in range(30):
+        day = (date.fromisoformat(today) - timedelta(days=29 - offset)).isoformat()
+        battles = 18 + offset % 9
+        wins = max(1, battles - 3 - offset % 4)
+        players = user_ids[: 4 + offset % 5]
+        monsters = {
+            name: {
+                "battles": battles // 4 + (index == offset % 4),
+                "wins": max(0, battles // 4 - (index == (offset + 1) % 4)),
+                "elite": 1 if index == offset % 4 else 0,
+            }
+            for index, name in enumerate(monster_names)
+        }
+        days[day] = {
+            **{field: 0 for field in _SCALAR_FIELDS},
+            "battles": battles,
+            "wins": wins,
+            "solo_battles": battles // 2,
+            "team_battles": battles - battles // 2 - 1,
+            "fallback_battles": 1,
+            "team_attempts": battles - battles // 2,
+            "team_formed": battles - battles // 2 - 1,
+            "exp_gained": wins * 68,
+            "points_gained": wins * 5,
+            "supply_opens": 1 + offset % 3,
+            "supply_points_spent": (1 + offset % 3) * 140,
+            "supply_exp_gained": (1 + offset % 3) * 30,
+            "world_boss_spawns": 1 if offset % 4 == 0 else 0,
+            "world_boss_attacks": 4 if offset % 4 == 0 else 0,
+            "world_boss_damage": 620 if offset % 4 == 0 else 0,
+            "world_boss_kills": 1 if offset % 4 == 0 else 0,
+            "world_boss_exp_gained": 460 if offset % 4 == 0 else 0,
+            "world_boss_points_gained": 72 if offset % 4 == 0 else 0,
+            "players": players,
+            "world_boss_players": players[: min(5, len(players))] if offset % 4 == 0 else [],
+            "monsters": monsters,
+        }
+    return {"user_ids": user_ids, "users": users, "rpg": {"metrics": {"days": days}}}
 
 
 async def _render_metrics_image(page_data: dict) -> bytes | None:
@@ -325,6 +464,7 @@ async def _render_metrics_image(page_data: dict) -> bytes | None:
 
 
 rpg_metrics_cmd = on_command("RPG数据", priority=5, block=True)
+style_test_cmd = on_command("看板样式测试", priority=5, block=True)
 
 
 @rpg_metrics_cmd.handle()
@@ -346,3 +486,22 @@ async def _(event: GroupMessageEvent, args: Message = CommandArg()):
     if image is not None:
         await rpg_metrics_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(image))
     await rpg_metrics_cmd.finish(MessageSegment.reply(event.message_id) + report)
+
+
+@style_test_cmd.handle()
+async def _(event: GroupMessageEvent, args: Message = CommandArg()):
+    if str(event.get_user_id()) != SUPERUSER_QQ:
+        return
+    group_id, rejection = _resolve_group(event)
+    if rejection:
+        await style_test_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
+    if group_id is None or (args and args.extract_plain_text().strip()):
+        return
+    today = _today_str()
+    group = _build_style_test_group(today)
+    page_data = build_metrics_page_data(group, today)
+    image = await _render_metrics_image(page_data)
+    reply_prefix = MessageSegment.reply(event.message_id)
+    if image is not None:
+        await style_test_cmd.finish(reply_prefix + MessageSegment.image(image))
+    await style_test_cmd.finish(reply_prefix + "看板样式测试渲染失败，已切回文字预览。\n" + build_metrics_report(group, today))

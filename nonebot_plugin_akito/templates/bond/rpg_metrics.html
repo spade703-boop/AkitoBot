@@ -2,167 +2,247 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=860, initial-scale=1">
+<meta name="viewport" content="width=820, initial-scale=1">
 <title>{{ title }}</title>
 <style>
   :root {
-    --warm: #ff914d;
-    --warm-soft: rgba(255, 145, 77, 0.18);
-    --cool: #65a5ff;
-    --cool-soft: rgba(101, 165, 255, 0.16);
-    --text: #fff8ef;
-    --muted: rgba(255, 248, 239, 0.62);
-    --line: rgba(255, 255, 255, 0.09);
-    --surface: rgba(255, 255, 255, 0.055);
+    --bg: #11161f;
+    --bg-soft: #18212d;
+    --surface: rgba(255, 255, 255, 0.065);
+    --surface-strong: rgba(255, 255, 255, 0.095);
+    --line: rgba(255, 255, 255, 0.11);
+    --text: #f8f5ef;
+    --muted: rgba(248, 245, 239, 0.60);
+    --faint: rgba(248, 245, 239, 0.38);
+    --warm: #ff9b57;
+    --warm-light: #ffd29f;
+    --cool: #6caaff;
+    --cool-light: #bcd9ff;
+    --green: #73d5b0;
+    --danger: #ff9d91;
   }
   * { box-sizing: border-box; }
-  html, body { margin: 0; }
+  html, body { margin: 0; min-height: 100%; }
   body {
-    font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
     color: var(--text);
     background:
-      radial-gradient(760px 480px at 0% 0%, rgba(255, 145, 77, 0.20), transparent 62%),
-      radial-gradient(760px 520px at 100% 100%, rgba(101, 165, 255, 0.17), transparent 64%),
-      linear-gradient(155deg, #19161e 0%, #151a24 55%, #11171e 100%);
+      radial-gradient(820px 440px at 0% 0%, rgba(255, 155, 87, 0.20), transparent 64%),
+      radial-gradient(760px 520px at 100% 100%, rgba(108, 170, 255, 0.16), transparent 67%),
+      linear-gradient(155deg, var(--bg-soft) 0%, var(--bg) 56%, #0c1219 100%);
+    font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
     -webkit-font-smoothing: antialiased;
   }
-  .page { width: 860px; margin: 0 auto; padding: 30px 32px 28px; }
-  .header { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; }
-  .eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.17em; color: var(--muted); }
-  h1 { margin: 8px 0 0; font-size: 31px; line-height: 1.15; letter-spacing: 0.03em; }
-  .date { font-size: 13px; color: var(--muted); text-align: right; line-height: 1.6; }
-  .rule {
-    height: 1px;
-    margin: 18px 0;
-    background: linear-gradient(90deg, rgba(255, 145, 77, 0.48), rgba(255, 255, 255, 0.06) 52%, rgba(101, 165, 255, 0.42));
+  .page { width: min(100%, 820px); margin: 0 auto; padding: 30px 30px 26px; }
+  .eyebrow { color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: 0.19em; }
+  .hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; }
+  h1 { margin: 8px 0 0; font-size: 32px; line-height: 1.1; letter-spacing: 0.025em; }
+  .hero-meta { color: var(--muted); font-size: 12px; line-height: 1.7; text-align: right; }
+  .rule { height: 1px; margin: 19px 0 22px; background: linear-gradient(90deg, rgba(255, 155, 87, 0.72), rgba(255, 255, 255, 0.08) 52%, rgba(108, 170, 255, 0.62)); }
+  .section { margin-top: 18px; padding: 20px; border: 1px solid var(--line); border-radius: 22px; background: var(--surface); box-shadow: 0 18px 42px rgba(0, 0, 0, 0.18); }
+  .section.primary { background: linear-gradient(145deg, rgba(255, 155, 87, 0.16), rgba(255, 255, 255, 0.055) 46%); }
+  .section.secondary { background: linear-gradient(145deg, rgba(108, 170, 255, 0.13), rgba(255, 255, 255, 0.045) 46%); }
+  .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  .section-head h2 { margin: 0; font-size: 21px; letter-spacing: 0.02em; }
+  .section-head p { margin: 0; color: var(--muted); font-size: 11px; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 999px; color: var(--muted); font-size: 10px; font-weight: 700; }
+  .pill::before { width: 6px; height: 6px; border-radius: 50%; background: var(--green); content: ""; }
+  .kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 16px; }
+  .kpi { min-width: 0; padding: 14px 15px 13px; border: 1px solid rgba(255, 255, 255, 0.07); border-radius: 16px; background: rgba(0, 0, 0, 0.17); }
+  .kpi-label { color: var(--muted); font-size: 11px; }
+  .kpi-value { margin-top: 5px; font-size: 27px; font-weight: 850; letter-spacing: 0.015em; white-space: nowrap; }
+  .primary .kpi:nth-child(1) .kpi-value, .primary .kpi:nth-child(3) .kpi-value { color: var(--warm-light); }
+  .primary .kpi:nth-child(2) .kpi-value, .primary .kpi:nth-child(4) .kpi-value { color: var(--cool-light); }
+  .kpi-note { margin-top: 4px; color: var(--faint); font-size: 10px; }
+  .two-col { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 16px; }
+  .subsection { min-width: 0; padding: 15px; border-top: 1px solid var(--line); }
+  .subsection h3 { margin: 0; font-size: 14px; }
+  .subsection-caption { margin: 4px 0 12px; color: var(--muted); font-size: 10px; }
+  .metric-list { display: flex; flex-direction: column; gap: 10px; }
+  .metric-line { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--muted); font-size: 11px; }
+  .metric-line strong { color: var(--text); font-size: 13px; white-space: nowrap; }
+  .progress-line { margin-top: 5px; height: 6px; overflow: hidden; border-radius: 999px; background: rgba(255, 255, 255, 0.08); }
+  .progress-line > span { display: block; height: 100%; min-width: 2px; border-radius: inherit; background: linear-gradient(90deg, var(--warm), #ffc773); }
+  .progress-line > span.cool { background: linear-gradient(90deg, var(--cool), #a7d0ff); }
+  .progress-line > span.green { background: linear-gradient(90deg, #58b996, var(--green)); }
+  .progress-line > span.muted { background: rgba(255, 255, 255, 0.24); }
+  .trend { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); align-items: end; gap: 8px; min-height: 132px; margin-top: 14px; padding: 13px 10px 9px; border-radius: 16px; background: rgba(0, 0, 0, 0.16); }
+  .trend-day { display: flex; min-width: 0; height: 105px; flex-direction: column; align-items: center; justify-content: flex-end; gap: 6px; }
+  .trend-bar { display: flex; width: 100%; height: 74px; align-items: flex-end; justify-content: center; }
+  .trend-bar span { display: block; width: min(24px, 70%); min-height: 4px; border-radius: 7px 7px 3px 3px; background: linear-gradient(180deg, var(--warm-light), var(--warm)); }
+  .trend-value { color: var(--text); font-size: 10px; font-weight: 800; }
+  .trend-label { color: var(--muted); font-size: 9px; }
+  .table { overflow: hidden; margin-top: 12px; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 15px; }
+  .table-row { display: grid; grid-template-columns: minmax(120px, 1.3fr) 0.6fr minmax(150px, 1.7fr) 0.55fr; gap: 10px; align-items: center; min-height: 45px; padding: 8px 12px; border-bottom: 1px solid rgba(255, 255, 255, 0.06); font-size: 11px; }
+  .table-row:last-child { border-bottom: 0; }
+  .table-row.head { min-height: 34px; color: var(--muted); background: rgba(255, 255, 255, 0.045); font-size: 10px; }
+  .table-row strong { font-size: 12px; }
+  .table-row .right { text-align: right; white-space: nowrap; }
+  .monster-bar { height: 6px; overflow: hidden; border-radius: 999px; background: rgba(255, 255, 255, 0.08); }
+  .monster-bar span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--danger), var(--warm)); }
+  .level-chart { display: flex; height: 160px; align-items: flex-end; gap: 7px; margin-top: 14px; padding: 14px 12px 9px; border-bottom: 1px solid var(--line); background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent); }
+  .level-column { display: flex; min-width: 0; height: 136px; flex: 1; flex-direction: column; align-items: center; justify-content: flex-end; gap: 5px; }
+  .level-column .count { color: var(--text); font-size: 10px; font-weight: 800; }
+  .level-column .bar { width: 100%; max-width: 28px; min-height: 4px; border-radius: 6px 6px 2px 2px; background: linear-gradient(180deg, var(--cool-light), var(--cool)); }
+  .level-column .label { color: var(--muted); font-size: 9px; }
+  .boss-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; margin-top: 15px; }
+  .boss-stat { padding: 12px; border-radius: 14px; background: rgba(0, 0, 0, 0.17); }
+  .boss-stat span { display: block; color: var(--muted); font-size: 10px; }
+  .boss-stat strong { display: block; margin-top: 4px; font-size: 19px; }
+  .boss-progress { margin-top: 15px; }
+  .boss-progress-head { display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; }
+  .boss-progress .progress-line { height: 8px; }
+  .boss-progress .progress-line span { background: linear-gradient(90deg, var(--green), #a8efd0); }
+  .empty { margin-top: 12px; color: var(--muted); font-size: 11px; }
+  .footnote { display: flex; justify-content: space-between; gap: 15px; margin-top: 18px; color: var(--faint); font-size: 10px; line-height: 1.6; }
+  @media (max-width: 620px) {
+    .page { padding: 24px 18px; }
+    .hero { align-items: flex-start; flex-direction: column; }
+    .hero-meta { text-align: left; }
+    .two-col { grid-template-columns: 1fr; }
+    .table-row { grid-template-columns: minmax(100px, 1.2fr) 0.55fr minmax(110px, 1.4fr) 0.5fr; gap: 6px; padding-inline: 9px; }
+    .footnote { flex-direction: column; }
   }
-  .periods { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-  .period {
-    min-width: 0;
-    padding: 19px;
-    border: 1px solid var(--line);
-    border-radius: 22px;
-    background: var(--surface);
-    box-shadow: 0 18px 42px rgba(0, 0, 0, 0.18);
-  }
-  .period:nth-child(1) { background: linear-gradient(160deg, var(--warm-soft), rgba(255, 255, 255, 0.045) 46%); }
-  .period:nth-child(2) { background: linear-gradient(160deg, var(--cool-soft), rgba(255, 255, 255, 0.045) 46%); }
-  .period-head { display: flex; align-items: center; justify-content: space-between; }
-  .period-head h2 { margin: 0; font-size: 20px; }
-  .tracked { font-size: 12px; color: var(--muted); }
-  .headline { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 15px; }
-  .metric { min-width: 0; padding: 10px 9px; border-radius: 14px; background: rgba(0, 0, 0, 0.16); }
-  .metric .key { font-size: 10px; color: var(--muted); white-space: nowrap; }
-  .metric .value { margin-top: 5px; font-size: 20px; font-weight: 800; white-space: nowrap; }
-  .period:nth-child(1) .metric .value { color: #ffd19f; }
-  .period:nth-child(2) .metric .value { color: #b9d7ff; }
-  .bars { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 13px; }
-  .bar-label { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
-  .track { height: 5px; margin-top: 6px; overflow: hidden; border-radius: 999px; background: rgba(255, 255, 255, 0.08); }
-  .fill { height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--warm), #ffc168); }
-  .fill.cool { background: linear-gradient(90deg, var(--cool), #96c8ff); }
-  .block { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
-  .block-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; }
-  .block-title b { font-size: 14px; }
-  .block-title span { font-size: 11px; color: var(--muted); }
-  .rows { display: flex; flex-direction: column; gap: 8px; }
-  .row { display: grid; grid-template-columns: 82px 1fr; gap: 10px; align-items: baseline; }
-  .row .key { font-size: 11px; color: var(--muted); }
-  .row .value { min-width: 0; font-size: 13px; font-weight: 700; line-height: 1.45; text-align: right; }
-  .monster-panel {
-    margin-top: 14px;
-    padding: 16px 18px;
-    border: 1px solid var(--line);
-    border-radius: 18px;
-    background: rgba(255, 255, 255, 0.045);
-  }
-  .monster-head { display: flex; justify-content: space-between; align-items: center; }
-  .monster-head b { font-size: 15px; }
-  .monster-head span { font-size: 11px; color: var(--muted); }
-  .monsters { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; margin-top: 11px; }
-  .monster { padding: 11px 12px; border-radius: 14px; background: rgba(0, 0, 0, 0.16); }
-  .monster .name { font-size: 13px; font-weight: 800; }
-  .monster .record { margin-top: 5px; font-size: 12px; color: var(--muted); }
-  .empty { margin-top: 10px; font-size: 12px; color: var(--muted); }
-  .footer { display: flex; justify-content: space-between; margin-top: 16px; font-size: 11px; color: rgba(255, 255, 255, 0.40); }
 </style>
 </head>
 <body>
-  <div class="page">
-    <div class="header">
+  {% set recent = periods[0] %}
+  {% set baseline = periods[1] %}
+  <main class="page">
+    <header class="hero">
       <div>
         <div class="eyebrow">AKITOBOT · GROUP RPG</div>
         <h1>{{ title }}</h1>
       </div>
-      <div class="date">统计截至 {{ today }}<br>仅包含看板上线后的记录</div>
-    </div>
+      <div class="hero-meta">统计截止 {{ today }}<br>仅包含看板上线后的滚动记录</div>
+    </header>
     <div class="rule"></div>
 
-    <div class="periods">
-      {% for period in periods %}
-      <section class="period">
-        <div class="period-head">
-          <h2>{{ period.label }}</h2>
-          <span class="tracked">已记录 {{ period.tracked_days }} 天</span>
+    <section class="section primary">
+      <div class="section-head">
+        <div>
+          <h2>{{ baseline.label }} · 运营总览</h2>
+          <p>记录 {{ baseline.tracked_days }} 天，作为当前主要观察窗口</p>
         </div>
+        <span class="pill">数据正常</span>
+      </div>
+      <div class="kpis">
+        <div class="kpi"><div class="kpi-label">活跃玩家</div><div class="kpi-value">{{ baseline.active_players }}</div><div class="kpi-note">周期内参与过战斗</div></div>
+        <div class="kpi"><div class="kpi-label">战斗场次</div><div class="kpi-value">{{ "{:,}".format(baseline.battles) }}</div><div class="kpi-note">普通战斗总量</div></div>
+        <div class="kpi"><div class="kpi-label">战斗胜率</div><div class="kpi-value">{{ baseline.win_rate }}</div><div class="kpi-note">{{ baseline.wins }} 胜 / {{ baseline.battles }} 场</div></div>
+        <div class="kpi"><div class="kpi-label">组队成立率</div><div class="kpi-value">{{ baseline.team_rate }}</div><div class="kpi-note">{{ baseline.team_formed }} / {{ baseline.team_attempts }} 次尝试</div></div>
+      </div>
+    </section>
 
-        <div class="headline">
-          <div class="metric"><div class="key">活跃人数</div><div class="value">{{ period.active_players }}</div></div>
-          <div class="metric"><div class="key">战斗场次</div><div class="value">{{ period.battles }}</div></div>
-          <div class="metric"><div class="key">战斗胜率</div><div class="value">{{ period.win_rate }}</div></div>
-          <div class="metric"><div class="key">组队成立率</div><div class="value">{{ period.team_rate }}</div></div>
+    <section class="section secondary">
+      <div class="section-head">
+        <div>
+          <h2>{{ recent.label }} · 近期表现</h2>
+          <p>与 30 天基线并列观察，不改变原统计口径</p>
         </div>
+        <span class="pill">短期趋势</span>
+      </div>
+      <div class="kpis">
+        <div class="kpi"><div class="kpi-label">活跃玩家</div><div class="kpi-value">{{ recent.active_players }}</div><div class="kpi-note">记录 {{ recent.tracked_days }} 天</div></div>
+        <div class="kpi"><div class="kpi-label">战斗场次</div><div class="kpi-value">{{ recent.battles }}</div><div class="kpi-note">平均每日 {{ (recent.battles / recent.tracked_days)|round(1) if recent.tracked_days else 0 }} 场</div></div>
+        <div class="kpi"><div class="kpi-label">战斗胜率</div><div class="kpi-value">{{ recent.win_rate }}</div><div class="kpi-note">近期战斗结果</div></div>
+        <div class="kpi"><div class="kpi-label">组队成立率</div><div class="kpi-value">{{ recent.team_rate }}</div><div class="kpi-note">协作请求转化</div></div>
+      </div>
+      {% if activity_trend %}
+      <div class="trend">
+        {% set max_battles = activity_trend|map(attribute="battles")|max %}
+        {% for day in activity_trend %}
+        <div class="trend-day">
+          <div class="trend-value">{{ day.battles }}</div>
+          <div class="trend-bar"><span style="height: {{ (day.battles / max_battles * 100)|round if max_battles else 4 }}%;"></span></div>
+          <div class="trend-label">{{ day.label }}</div>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </section>
 
-        <div class="bars">
-          <div>
-            <div class="bar-label"><span>战斗胜率</span><span>{{ period.win_rate }}</span></div>
-            <div class="track"><div class="fill" style="width: {{ period.win_rate_value }}%;"></div></div>
+    <section class="section">
+      <div class="section-head"><div><h2>战斗与经济</h2><p>按 30 天窗口汇总</p></div></div>
+      <div class="two-col">
+        <div class="subsection">
+          <h3>战斗构成</h3>
+          <div class="subsection-caption">不同战斗路径占普通战斗的比例</div>
+          <div class="metric-list">
+            {% for item in baseline.battle_mix %}
+            <div>
+              <div class="metric-line"><span>{{ item.label }}</span><strong>{{ item.value }} · {{ item.percent }}%</strong></div>
+              <div class="progress-line"><span class="{{ item.tone }}" style="width: {{ item.percent }}%;"></span></div>
+            </div>
+            {% endfor %}
           </div>
-          <div>
-            <div class="bar-label"><span>组队成立</span><span>{{ period.team_rate }}</span></div>
-            <div class="track"><div class="fill cool" style="width: {{ period.team_rate_value }}%;"></div></div>
+        </div>
+        <div class="subsection">
+          <h3>奖励投放</h3>
+          <div class="subsection-caption">平均值仅用于观察，不代表单人收益</div>
+          <div class="metric-list">
+            <div class="metric-line"><span>经验总量</span><strong>+{{ "{:,}".format(baseline.exp_gained) }}</strong></div>
+            <div class="metric-line"><span>积分总量</span><strong>+{{ "{:,}".format(baseline.points_gained) }}</strong></div>
+            <div class="metric-line"><span>平均经验 / 场</span><strong>+{{ baseline.avg_exp_per_battle }}</strong></div>
+            <div class="metric-line"><span>平均积分 / 场</span><strong>+{{ baseline.avg_points_per_battle }}</strong></div>
+            <div class="metric-line"><span>冒险补给</span><strong>{{ baseline.supply_opens }} 次</strong></div>
           </div>
         </div>
+      </div>
+    </section>
 
-        <div class="block">
-          <div class="block-title"><b>个人挑战</b><span>普通战斗线</span></div>
-          <div class="rows">
-            <div class="row"><span class="key">战斗构成</span><span class="value">单人 {{ period.solo_battles }} · 组队 {{ period.team_battles }} · 改单刷 {{ period.fallback_battles }}</span></div>
-            <div class="row"><span class="key">组队邀请</span><span class="value">{{ period.team_formed }} / {{ period.team_attempts }} 次成立</span></div>
-            <div class="row"><span class="key">奖励投放</span><span class="value">经验 +{{ "{:,}".format(period.exp_gained) }} · 积分 +{{ "{:,}".format(period.points_gained) }}</span></div>
-            <div class="row"><span class="key">冒险补给</span><span class="value">{{ period.supply_opens }} 次 · 消耗 {{ "{:,}".format(period.supply_points_spent) }} 积分 · 经验 +{{ "{:,}".format(period.supply_exp_gained) }}</span></div>
-          </div>
-        </div>
-
-        <div class="block">
-          <div class="block-title"><b>群挑战</b><span>世界 BOSS 线</span></div>
-          <div class="rows">
-            <div class="row"><span class="key">刷新结算</span><span class="value">刷新 {{ period.boss_spawns }} · 击杀 {{ period.world_boss_kills }} · 离场 {{ period.world_boss_expired }}</span></div>
-            <div class="row"><span class="key">挑战规模</span><span class="value">{{ period.world_boss_attacks }} 次 · {{ period.world_boss_players }} 人 · {{ "{:,}".format(period.world_boss_damage) }} 伤害</span></div>
-            <div class="row"><span class="key">奖励投放</span><span class="value">经验 +{{ "{:,}".format(period.world_boss_exp_gained) }} · 积分 +{{ "{:,}".format(period.world_boss_points_gained) }}</span></div>
-          </div>
-        </div>
-      </section>
-      {% endfor %}
-    </div>
-
-    <section class="monster-panel">
-      <div class="monster-head"><b>近 30 天低胜率怪物</b><span>至少遭遇 3 次后展示</span></div>
+    <section class="section">
+      <div class="section-head"><div><h2>怪物表现</h2><p>30 天内遭遇至少 3 次的怪物</p></div></div>
       {% if low_win_monsters %}
-      <div class="monsters">
+      <div class="table">
+        <div class="table-row head"><span>怪物</span><span class="right">场次</span><span>胜率</span><span class="right">精英</span></div>
         {% for monster in low_win_monsters %}
-        <div class="monster">
-          <div class="name">{{ monster.name }}</div>
-          <div class="record">{{ monster.wins }} 胜 / {{ monster.battles }} 场 · {{ monster.win_rate }}</div>
+        <div class="table-row">
+          <strong>{{ monster.name }}</strong>
+          <span class="right">{{ monster.battles }}</span>
+          <div><div class="metric-line"><span>{{ monster.win_rate }}</span><span>{{ monster.wins }} 胜</span></div><div class="monster-bar"><span style="width: {{ (monster.wins / monster.battles * 100)|round if monster.battles else 0 }}%;"></span></div></div>
+          <span class="right">{{ monster.elite if monster.elite is defined else 0 }}</span>
         </div>
         {% endfor %}
       </div>
       {% else %}
-      <div class="empty">数据还不够，继续跑几场后这里会自动出现怪物表现。</div>
+      <div class="empty">样本还不够，继续积累战斗后这里会显示怪物表现。</div>
       {% endif %}
     </section>
 
-    <div class="footer"><span>30 日滚动保存，不记录聊天内容</span><span>AKITOBOT RPG OPERATIONS</span></div>
-  </div>
+    <section class="section">
+      <div class="section-head"><div><h2>活跃玩家等级</h2><p>当前等级快照，不代表历史成长曲线</p></div><span class="pill">{{ baseline.active_players }} 人</span></div>
+      {% if level_distribution %}
+      <div class="level-chart">
+        {% for item in level_distribution %}
+        <div class="level-column"><div class="count">{{ item.players }}</div><div class="bar" style="height: {{ item.height }}%;"></div><div class="label">Lv{{ item.level }}</div></div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty">当前没有足够的等级快照数据。</div>
+      {% endif %}
+    </section>
+
+    <section class="section primary">
+      <div class="section-head"><div><h2>世界 BOSS</h2><p>参与和完成情况</p></div></div>
+      <div class="boss-summary">
+        <div class="boss-stat"><span>刷新次数</span><strong>{{ baseline.boss_spawns }}</strong></div>
+        <div class="boss-stat"><span>击杀 / 离场</span><strong>{{ baseline.world_boss_kills }} / {{ baseline.world_boss_expired }}</strong></div>
+        <div class="boss-stat"><span>攻击次数</span><strong>{{ baseline.world_boss_attacks }}</strong></div>
+        <div class="boss-stat"><span>参与人数</span><strong>{{ baseline.world_boss_players }}</strong></div>
+        <div class="boss-stat"><span>总伤害</span><strong>{{ "{:,}".format(baseline.world_boss_damage) }}</strong></div>
+        <div class="boss-stat"><span>奖励积分</span><strong>+{{ "{:,}".format(baseline.world_boss_points_gained) }}</strong></div>
+      </div>
+      <div class="boss-progress">
+        <div class="boss-progress-head"><span>完成率</span><strong>{{ baseline.boss_completion_rate }}</strong></div>
+        <div class="progress-line"><span style="width: {{ baseline.boss_completion_rate_value }}%;"></span></div>
+      </div>
+      <div class="boss-progress">
+        <div class="boss-progress-head"><span>周期参与率</span><strong>{{ baseline.boss_participation_rate }}</strong></div>
+        <div class="progress-line"><span style="width: {{ baseline.boss_participation_rate_value }}%;"></span></div>
+      </div>
+    </section>
+
+    <footer class="footnote"><span>30 日滚动保存，不记录聊天内容；历史缺失的细分指标不会被估算。</span><span>AKITOBOT · RPG OPERATIONS</span></footer>
+  </main>
 </body>
 </html>

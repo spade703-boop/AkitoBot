@@ -258,6 +258,7 @@ _HELP_ITEMS = [
     {"command": "强化世界BOSS装备", "description": "世界BOSS存在时强化独立的临时装备，费用为 30 / 60 / 90 积分，最多强化三次。"},
     {"command": "强制开启世界BOSS", "description": "超管指令。立即在本群生成世界BOSS；当前已有世界BOSS时不重复生成。"},
     {"command": "RPG数据", "description": "超管指令。生成本群近 7 日及 30 日的RPG运行数据看板。"},
+    {"command": "看板样式测试", "description": "超管指令。使用固定示例数据预览RPG运行数据看板样式，不读取或修改真实数据。"},
     {"command": "重置RPG功能", "description": "超管指令。为本群今日已签到玩家重新发放普通装备，不重置签到、运势、连签或世界BOSS状态。"},
     {"command": "冒险帮助", "description": "显示当前RPG功能与指令说明。"},
 ]

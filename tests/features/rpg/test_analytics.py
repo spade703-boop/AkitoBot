@@ -154,3 +154,51 @@ async def test_rpg_metrics_command_falls_back_to_text(monkeypatch):
     result = str(exc.value.result)
     assert "RPG运营数据" in result
     assert "普通战斗 1 场" in result
+
+
+@pytest.mark.asyncio
+async def test_style_test_command_is_superuser_only_and_uses_synthetic_data(monkeypatch):
+    monkeypatch.setattr(analytics, "_today_str", lambda: "2026-07-27")
+
+    def _unexpected_load():
+        raise AssertionError("样式测试不应读取真实存储")
+
+    monkeypatch.setattr(analytics, "_load_data", _unexpected_load)
+    rendered_page = {}
+
+    async def _fake_render(page_data):
+        rendered_page.update(page_data)
+        return b"fake-style-test-image"
+
+    monkeypatch.setattr(analytics, "_render_metrics_image", _fake_render)
+
+    assert await analytics.style_test_cmd.handlers[0](Event(group_id=1001, user_id="u1")) is None
+    with pytest.raises(FinishedException) as exc:
+        await analytics.style_test_cmd.handlers[0](
+            Event(group_id=1001, user_id=analytics.SUPERUSER_QQ)
+        )
+
+    result = str(exc.value.result)
+    assert "[image]" in result
+    assert rendered_page["periods"][0]["active_players"] == 8
+    assert len(rendered_page["activity_trend"]) == 7
+    assert rendered_page["level_distribution"]
+
+
+@pytest.mark.asyncio
+async def test_style_test_command_falls_back_to_text(monkeypatch):
+    monkeypatch.setattr(analytics, "_today_str", lambda: "2026-07-27")
+
+    async def _fake_render(_page_data):
+        return None
+
+    monkeypatch.setattr(analytics, "_render_metrics_image", _fake_render)
+
+    with pytest.raises(FinishedException) as exc:
+        await analytics.style_test_cmd.handlers[0](
+            Event(group_id=1001, user_id=analytics.SUPERUSER_QQ)
+        )
+
+    result = str(exc.value.result)
+    assert "看板样式测试渲染失败" in result
+    assert "RPG运营数据" in result
