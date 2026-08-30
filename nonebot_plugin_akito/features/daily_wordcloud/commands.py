@@ -67,7 +67,15 @@ async def _(event: Event, args: Message = CommandArg()):
     group_id = _target_group_id(event)
     if group_id is None:
         return
-    report_date, error = _parse_date_argument(args.extract_plain_text(), default_yesterday=True)
+    raw_date = args.extract_plain_text().strip()
+    if raw_date in {"今天", "今日", "实时"}:
+        report = await analysis.aggregate_current_report(group_id)
+        if not report.get("frequencies"):
+            await query_cmd.finish("截至当前还没有可统计的有效聊天文本。")
+        image = await render_report(report)
+        await query_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(image))
+
+    report_date, error = _parse_date_argument(raw_date, default_yesterday=True)
     if error:
         await query_cmd.finish(error)
     assert report_date is not None
@@ -82,6 +90,23 @@ async def _(event: Event, args: Message = CommandArg()):
         await query_cmd.finish("该日暂无有效聊天文本。")
     image = await render_report(report)
     await query_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(image))
+
+
+live_cmd = on_command("今日群聊词云", aliases={"实时群聊词云"}, priority=5, block=True)
+
+
+@live_cmd.handle()
+async def _(event: Event):
+    if not _is_superuser(event):
+        return
+    group_id = _target_group_id(event)
+    if group_id is None:
+        return
+    report = await analysis.aggregate_current_report(group_id)
+    if not report.get("frequencies"):
+        await live_cmd.finish("截至当前还没有可统计的有效聊天文本。")
+    image = await render_report(report)
+    await live_cmd.finish(_reply_with_image(event, image))
 
 
 help_cmd = on_command("词云帮助", aliases={"词云指令", "群聊词云帮助"}, priority=5, block=True)

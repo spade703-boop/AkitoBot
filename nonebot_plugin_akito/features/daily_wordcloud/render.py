@@ -25,6 +25,7 @@ _RENDER_SEMAPHORE = asyncio.Semaphore(2)
 _WORD_COLORS = ("#ff9f57", "#ffca80", "#79b7ff", "#9bd7ff", "#f7eee6", "#c9b8ff")
 COMMAND_HELP_ITEMS = (
     {"command": "群聊词云 [YYYY-MM-DD]", "description": "查看昨天或指定日期的日报。"},
+    {"command": "今日群聊词云", "description": "查看今天截至当前时刻的实时词云，不写入日报。"},
     {"command": "重算群聊词云 YYYY-MM-DD", "description": "重算最近 7 天内的词云日报。"},
     {"command": "回填群聊词云 YYYY-MM-DD", "description": "从 impression_history.db 按日期回填历史日报。"},
     {"command": "测试群聊词云", "description": "使用示例数据渲染一张测试图片，不写入数据库。"},
@@ -34,6 +35,7 @@ COMMAND_HELP_ITEMS = (
     {"command": "词云排除用户 查看", "description": "查看全局排除的 QQ 号。"},
     {"command": "词云排除用户 添加 QQ号1 QQ号2", "description": "新增全局消息排除对象。"},
     {"command": "词云排除用户 取消 QQ号1 QQ号2", "description": "移除全局消息排除对象。"},
+    {"command": "Bot 指令自动过滤", "description": "所有已注册 Bot 指令、别名及带参数形式自动跳过，无需逐条添加。"},
     {"command": "词云帮助", "description": "显示本功能的全部指令。"},
 )
 

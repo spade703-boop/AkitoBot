@@ -20,7 +20,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
     if event.group_id not in WORDCLOUD_GROUPS or str(event.user_id) == str(bot.self_id):
         return
     content = event.get_plaintext().strip()
-    if not analysis.is_recordable_text(content):
+    if not analysis.is_recordable_text(content) or analysis.is_bot_command_text(content):
         return
     message_id = str(getattr(event, "message_id", "")).strip()
     if not message_id:

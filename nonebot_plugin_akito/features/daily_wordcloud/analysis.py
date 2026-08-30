@@ -6,6 +6,7 @@ from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable
 from datetime import date, datetime, timedelta
 from datetime import time as time_type
+from functools import lru_cache
 import re
 from typing import Any
 import unicodedata
@@ -91,6 +92,53 @@ def clean_message_text(text: str) -> str:
     return _URL_RE.sub(" ", normalized)
 
 
+@lru_cache(maxsize=1)
+def registered_command_prefixes() -> tuple[str, ...]:
+    try:
+        from nonebot.matcher import matchers
+        from nonebot.rule import CommandRule
+    except (ImportError, AttributeError):
+        return ()
+
+    prefixes: set[str] = set()
+    separators = ("",)
+    try:
+        from nonebot import get_driver
+
+        separators += tuple(str(separator) for separator in get_driver().config.command_sep)
+    except (AttributeError, RuntimeError, ValueError):
+        pass
+
+    try:
+        matcher_groups = matchers.values()
+    except AttributeError:
+        return ()
+    for matcher_group in matcher_groups:
+        for matcher in matcher_group:
+            for checker in getattr(getattr(matcher, "rule", None), "checkers", ()):
+                command_rule = getattr(checker, "call", None)
+                if not isinstance(command_rule, CommandRule):
+                    continue
+                for command in command_rule.cmds:
+                    prefixes.update(
+                        unicodedata.normalize("NFKC", separator.join(command)).strip().lower()
+                        for separator in separators
+                    )
+    return tuple(sorted((prefix for prefix in prefixes if prefix), key=lambda value: (-len(value), value)))
+
+
+def is_bot_command_text(text: str) -> bool:
+    cleaned = clean_message_text(text).strip()
+    if not cleaned:
+        return False
+    if cleaned.startswith("/"):
+        return True
+    return any(
+        cleaned == prefix or (cleaned.startswith(prefix) and len(cleaned) > len(prefix) and cleaned[len(prefix)].isspace())
+        for prefix in registered_command_prefixes()
+    )
+
+
 def is_recordable_text(text: str) -> bool:
     stripped = text.strip()
     if not stripped or stripped.startswith("/"):
@@ -148,6 +196,8 @@ def build_report(
     participant_ids: set[str] = set()
 
     for user_id, nickname, content, _event_time in rows:
+        if is_bot_command_text(content):
+            continue
         message_tokens = extract_tokens(
             content,
             cutter=cutter,
@@ -216,6 +266,34 @@ async def aggregate_report(
     )
     await store.save_report(group_id, report_date.isoformat(), report)
     return report
+
+
+async def aggregate_current_report(
+    group_id: str,
+    *,
+    now: datetime | None = None,
+    cutter: TokenCutter | None = None,
+) -> dict[str, Any]:
+    """Build today's report up to the current time without persisting it."""
+    current_time = now or datetime.now(TZ_CN)
+    if current_time.tzinfo is None:
+        current_time = current_time.replace(tzinfo=TZ_CN)
+    current_time = current_time.astimezone(TZ_CN)
+    report_date = current_time.date()
+    start_time, end_time = date_bounds(report_date)
+    end_time = min(end_time, int(current_time.timestamp()) + 1)
+    rows = await store.fetch_raw_messages(group_id, start_time, end_time)
+    excluded_user_ids = set(await store.list_excluded_user_ids())
+    if excluded_user_ids:
+        rows = [row for row in rows if row[0] not in excluded_user_ids]
+    blocked_words = set(await store.list_blocked_words())
+    return build_report(
+        group_id,
+        report_date,
+        rows,
+        blocked_words=blocked_words,
+        cutter=cutter or create_jieba_cutter(blocked_words),
+    )
 
 
 async def aggregate_history_report(

@@ -82,6 +82,15 @@ def test_excluded_user_argument_normalization():
     ]
 
 
+def test_registered_bot_commands_are_filtered_with_arguments(monkeypatch):
+    monkeypatch.setattr(analysis, "registered_command_prefixes", lambda: ("签到", "今日打怪"))
+
+    assert analysis.is_bot_command_text("签到") is True
+    assert analysis.is_bot_command_text("签到 现在") is True
+    assert analysis.is_bot_command_text("/任意指令") is True
+    assert analysis.is_bot_command_text("签到啦") is False
+
+
 def test_recordable_text_rejects_commands_links_and_non_text_noise():
     assert analysis.is_recordable_text("普通聊天") is True
     assert analysis.is_recordable_text("hello") is True
