@@ -18,6 +18,7 @@ from PIL import Image as PILImage
 
 from . import SILICONFLOW_API_KEY, TAVILY_API_KEY, ZHIPU_API_KEY, client, embedding_client, vision_client
 from .observability import current_request_id, record_model_call
+from .types import ToolResult
 
 # ── LLM JSON 输出的提取与救援（chat.py / impression.py 共用） ──────────────────
 
@@ -177,39 +178,104 @@ async def call_deepseek_api_agent(messages, tools: list, model_name="deepseek-v4
         return None
 
 
-async def smart_search(query: str) -> str:
-    """用 Tavily 搜索 query，返回前 2 条结果摘要拼成的文本；失败或无结果返回空串。"""
+async def smart_search_result(query: str, *, timeout: float = 8.0) -> ToolResult:
+    """Run Tavily and return a normalized, privacy-safe tool envelope."""
+    started_at = asyncio.get_running_loop().time()
+    normalized_query = str(query or "").strip()
+    if not normalized_query:
+        return {
+            "name": "search",
+            "status": "error",
+            "query": "",
+            "summary": "",
+            "content": "",
+            "sources": [],
+            "latency_ms": 0.0,
+            "error_code": "empty_query",
+        }
+    if len(normalized_query) > 200:
+        return {
+            "name": "search",
+            "status": "error",
+            "query": normalized_query[:200],
+            "summary": "",
+            "content": "",
+            "sources": [],
+            "latency_ms": 0.0,
+            "error_code": "query_too_long",
+        }
+    base = {
+        "name": "search",
+        "status": "error",
+        "query": normalized_query,
+        "summary": "",
+        "content": "",
+        "sources": [],
+        "latency_ms": 0.0,
+    }
     try:
         url = "https://api.tavily.com/search"
         payload = {
             "api_key": TAVILY_API_KEY,
-            "query": query,
+            "query": normalized_query,
             "search_depth": "basic",
             "include_images": False,
         }
-        timeout = aiohttp.ClientTimeout(total=8)
-        async with aiohttp.ClientSession(timeout=timeout) as session, session.post(url, json=payload) as resp:
+        client_timeout = aiohttp.ClientTimeout(total=max(0.1, float(timeout)))
+        async with aiohttp.ClientSession(timeout=client_timeout) as session, session.post(url, json=payload) as resp:
             if resp.status != 200:
                 error_text = await resp.text()
                 logger.error(f"❌ Tavily 搜索API报错: HTTP {resp.status} - {error_text}")
-                return ""
+                base["error_code"] = f"http_{resp.status}"
+                base["latency_ms"] = round((asyncio.get_running_loop().time() - started_at) * 1000, 2)
+                return base
             data = await resp.json()
             results = data.get("results", [])
             if not results:
                 logger.warning("⚠️ 搜索API未返回任何有效结果")
-                return ""
-            summary = ""
+                base["status"] = "empty"
+                base["latency_ms"] = round((asyncio.get_running_loop().time() - started_at) * 1000, 2)
+                return base
+            sources: list[dict[str, str]] = []
+            summary_lines: list[str] = []
             for item in results[:2]:
-                title   = item.get("title", "无标题")
-                content = item.get("content", "无内容")
+                if not isinstance(item, dict):
+                    continue
+                title = str(item.get("title") or "无标题").strip()
+                item_url = str(item.get("url") or "").strip()
+                content = str(item.get("content") or "无内容").strip()
                 if len(content) > 150:
                     content = content[:150] + "..."
-                summary += f"- {title}: {content}\n"
-            logger.info(f"🔍 网络搜索成功！提取了 {len(results[:2])} 条摘要。")
-            return summary
+                sources.append({"title": title, "url": item_url, "summary": content})
+                summary_lines.append(f"- {title}: {content}")
+            if not sources:
+                base["status"] = "empty"
+            else:
+                summary = "\n".join(summary_lines)
+                base["status"] = "success"
+                base["summary"] = summary
+                base["content"] = summary
+                base["sources"] = sources
+                logger.info(f"🔍 网络搜索成功！提取了 {len(sources)} 条摘要。")
+            base["latency_ms"] = round((asyncio.get_running_loop().time() - started_at) * 1000, 2)
+            return base
+    except asyncio.TimeoutError:
+        base["status"] = "timeout"
+        base["error_code"] = "timeout"
     except Exception as e:
         logger.error(f"❌ 搜索过程中发生严重错误: {e}")
-        return ""
+        base["error_code"] = "request_error"
+    base["latency_ms"] = round((asyncio.get_running_loop().time() - started_at) * 1000, 2)
+    return base
+
+
+async def smart_search(query: str) -> str:
+    """Backward-compatible text search facade used by the legacy pipeline."""
+    result = await smart_search_result(query)
+    return str(result.get("content") or "") if result.get("status") == "success" else ""
+
+
+smart_search_detailed = smart_search_result
 
 
 # ── GLM-4.6V 视觉识别：结构化输出 + 代码侧裁决 ─────────────────────────────

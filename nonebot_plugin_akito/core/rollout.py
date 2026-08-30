@@ -23,6 +23,7 @@ class RolloutConfig:
     arm: str
     m1_context_mode: str
     m2_memory_mode: str
+    m3_tool_mode: str = "off"
 
 
 def _normalize_mode(value: object, default: str) -> str:
@@ -35,7 +36,25 @@ def _base_config() -> RolloutConfig:
         arm="default",
         m1_context_mode=_normalize_mode(os.environ.get("AKITO_M1_CONTEXT_MODE"), "shadow"),
         m2_memory_mode=_normalize_mode(os.environ.get("AKITO_M2_MEMORY_MODE"), "off"),
+        m3_tool_mode=_normalize_mode(os.environ.get("AKITO_M3_TOOL_MODE"), "off"),
     )
+
+
+def _tool_group_modes() -> dict[str, str]:
+    raw = os.environ.get("AKITO_M3_TOOL_GROUPS", "").strip()
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except (TypeError, ValueError):
+        return {}
+    if not isinstance(parsed, dict):
+        return {}
+    return {
+        str(group_id): str(mode).strip().lower()
+        for group_id, mode in parsed.items()
+        if str(mode).strip().lower() in _VALID_MODES
+    }
 
 
 def _group_arms() -> dict[str, str]:
@@ -64,10 +83,21 @@ def resolve_rollout(group_id: int | str | None = None) -> RolloutConfig:
     """
     base = _base_config()
     arm = _group_arms().get(str(group_id)) if group_id is not None else None
+    tool_mode = _tool_group_modes().get(str(group_id)) if group_id is not None else None
     if arm is None:
-        return base
+        return RolloutConfig(
+            arm=base.arm,
+            m1_context_mode=base.m1_context_mode,
+            m2_memory_mode=base.m2_memory_mode,
+            m3_tool_mode=tool_mode or base.m3_tool_mode,
+        )
     m1_mode, m2_mode = _ARM_MODES[arm]
-    return RolloutConfig(arm=arm, m1_context_mode=m1_mode, m2_memory_mode=m2_mode)
+    return RolloutConfig(
+        arm=arm,
+        m1_context_mode=m1_mode,
+        m2_memory_mode=m2_mode,
+        m3_tool_mode=tool_mode or base.m3_tool_mode,
+    )
 
 
 def mode_is_active(mode: str) -> bool:
@@ -85,4 +115,5 @@ def rollout_as_dict(config: RolloutConfig) -> dict[str, Any]:
         "experiment_arm": config.arm,
         "m1_context_mode": config.m1_context_mode,
         "m2_memory_mode": config.m2_memory_mode,
+        "m3_tool_mode": config.m3_tool_mode,
     }

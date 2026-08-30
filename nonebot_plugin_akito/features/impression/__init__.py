@@ -37,6 +37,8 @@ from ...core import (
     parse_json_object,
     parse_sqlite_timestamp,
     record_bot_message,
+    evaluate_auto_reply_shadow,
+    record_auto_reply_shadow,
     record_context_shadow,
     record_event_memory,
     record_message,
@@ -801,11 +803,17 @@ def _build_impression_reply_user_prompt(*, target_name: str, analysis: Impressio
 
 def _should_skip_random_chat(msg: str) -> bool:
     """Return True when a message should never trigger random chat."""
+    return bool(_random_chat_skip_reason(msg))
+
+
+def _random_chat_skip_reason(msg: str) -> str:
     if len(msg) < 2:
-        return True
+        return "short_message"
     if any(msg.startswith(prefix) for prefix in BLOCK_PREFIXES):
-        return True
-    return any(keyword in msg for keyword in BLOCK_KEYWORDS)
+        return "blocked_prefix"
+    if any(keyword in msg for keyword in BLOCK_KEYWORDS):
+        return "blocked_keyword"
+    return ""
 
 
 def _is_grounded_random_reply(msg: str, anchor: str, reply: str) -> bool:
@@ -876,6 +884,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
         experiment_arm=rollout.arm,
         m1_context_mode=rollout.m1_context_mode,
         m2_memory_mode=rollout.m2_memory_mode,
+        m3_tool_mode=getattr(rollout, "m3_tool_mode", "off"),
     )
 
     target_id, target_name, is_querying_other, is_querying_bot = _resolve_impression_target(event, str(bot.self_id))
@@ -1202,25 +1211,58 @@ random_chat = on_message(rule=is_in_auto_group, priority=99, block=False)
 
 @random_chat.handle()
 async def _(bot: Bot, event: GroupMessageEvent):
+    group_id = str(event.group_id)
+    trace_request_id = new_request_id()
+    start_turn_trace(trace_request_id, group_id=event.group_id, surface="auto_chat", stage="response")
+    record_intent(trace_request_id, "auto_chat")
+    rollout = resolve_rollout(group_id)
+    record_rollout(
+        trace_request_id,
+        experiment_arm=rollout.arm,
+        m1_context_mode=rollout.m1_context_mode,
+        m2_memory_mode=rollout.m2_memory_mode,
+        m3_tool_mode=getattr(rollout, "m3_tool_mode", "off"),
+    )
+    msg = event.get_plaintext().strip()
+
+    def finish_silently(reason: str, *, reply: str = "", anchor: str = "") -> None:
+        try:
+            report = evaluate_auto_reply_shadow(
+                msg,
+                addressed_to_bot=any(name in msg for name in ("小彰", "彰人", "东云彰人")),
+                silence_reason=reason,
+                reply=reply,
+                anchor=anchor,
+            )
+            record_auto_reply_shadow(trace_request_id, report)
+        except Exception:
+            pass
+        finish_turn_trace(trace_request_id, outcome="silent")
+
     now_ts = time.time()
     if is_sleeping():
+        finish_silently("sleeping")
         return
     now = datetime.datetime.now(TZ_CN)
 
-    msg = event.get_plaintext().strip()
-    if _should_skip_random_chat(msg): return
+    skip_reason = _random_chat_skip_reason(msg)
+    if skip_reason:
+        finish_silently(skip_reason)
+        return
 
-    group_id = str(event.group_id)
     last_time = AUTO_CHAT_COOLDOWN.get(group_id, 0)
     if time.time() < get_safe_until():
+        finish_silently("safety_period")
         return
     if now_ts - last_time < 10:
+        finish_silently("cooldown")
         return
 
-    if random.random() > CHAT_PROBABILITY: return
+    if random.random() > CHAT_PROBABILITY:
+        finish_silently("probability_gate")
+        return
 
     AUTO_CHAT_COOLDOWN[group_id] = now_ts
-    rollout = resolve_rollout(group_id)
 
     reply_segment = MessageSegment.reply(event.message_id)
     group_context = await get_group_context(
@@ -1341,15 +1383,6 @@ async def _(bot: Bot, event: GroupMessageEvent):
         event_memory=auto_selected_text("event_memory", event_memory),
     )
 
-    trace_request_id = new_request_id()
-    start_turn_trace(trace_request_id, group_id=event.group_id, surface="auto_chat", stage="response")
-    record_intent(trace_request_id, "auto_chat")
-    record_rollout(
-        trace_request_id,
-        experiment_arm=rollout.arm,
-        m1_context_mode=rollout.m1_context_mode,
-        m2_memory_mode=rollout.m2_memory_mode,
-    )
     record_event_memory(
         trace_request_id,
         candidates=event_memory_result.candidates,
@@ -1408,7 +1441,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
 
             if not _is_grounded_random_reply(msg, anchor, reply):
                 logger.warning(f"⚠️ [AutoChat] 当前消息锚点校验失败，静音丢弃: anchor={anchor!r} reply={reply[:40]!r}")
-                finish_turn_trace(trace_request_id, outcome="silent")
+                finish_silently("anchor_failed", reply=reply, anchor=anchor)
                 return
 
             clean_msg = msg.strip("。，！？.!?~ \n\r")
@@ -1416,7 +1449,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
 
             if len(clean_reply) >= 4 and (clean_reply in clean_msg or clean_msg in clean_reply):
                 logger.warning(f"⚠️ [AutoChat] 触发片段/缝合复读拦截！静音丢弃: {reply}")
-                finish_turn_trace(trace_request_id, outcome="silent")
+                finish_silently("repeat", reply=reply, anchor=anchor)
                 return
 
         except json.JSONDecodeError:
@@ -1434,22 +1467,22 @@ async def _(bot: Bot, event: GroupMessageEvent):
                 anchor = rescue_field(raw_result, "anchor") or ""
                 if not _is_grounded_random_reply(msg, anchor, reply):
                     logger.warning("⚠️ [AutoChat] 救援结果缺少有效当前消息锚点，静音丢弃")
-                    finish_turn_trace(trace_request_id, outcome="silent")
+                    finish_silently("anchor_failed", reply=reply, anchor=anchor)
                     return
                 logger.info(f"🔧 插嘴救援成功，reply={repr(reply[:40])}")
                 # reply 为空 = 模型决定静默，走正常静默流程
             else:
-                finish_turn_trace(trace_request_id, outcome="silent")
+                finish_silently("json_parse_failed")
                 return
 
         if "念叨" in reply or "自言自语" in reply:
-            finish_turn_trace(trace_request_id, outcome="silent")
+            finish_silently("self_talk", reply=reply, anchor=anchor)
             return
         if not reply or reply.strip() == "……":
-            finish_turn_trace(trace_request_id, outcome="silent")
+            finish_silently("model_empty", reply=reply, anchor=anchor)
             return
         if len(reply) < 2:
-            finish_turn_trace(trace_request_id, outcome="silent")
+            finish_silently("reply_too_short", reply=reply, anchor=anchor)
             return
 
         await save_my_response(str(event.group_id), str(bot.self_id), reply)
@@ -1460,6 +1493,17 @@ async def _(bot: Bot, event: GroupMessageEvent):
         if total_delay > 8: total_delay = 8
 
         await asyncio.sleep(total_delay)
+        try:
+            report = evaluate_auto_reply_shadow(
+                msg,
+                addressed_to_bot=any(name in msg for name in ("小彰", "彰人", "东云彰人")),
+                reply=reply,
+                anchor=anchor,
+                actual_interjected=True,
+            )
+            record_auto_reply_shadow(trace_request_id, report, actual_interjected=True)
+        except Exception:
+            pass
         finish_turn_trace(trace_request_id, outcome="completed")
         await random_chat.finish(reply_segment + reply)
     except FinishedException:
@@ -1467,5 +1511,14 @@ async def _(bot: Bot, event: GroupMessageEvent):
         raise
     except Exception as e:
         # 随机插嘴是尽力而为的可选行为：失败只记日志，不打扰群聊
+        try:
+            report = evaluate_auto_reply_shadow(
+                msg,
+                addressed_to_bot=any(name in msg for name in ("小彰", "彰人", "东云彰人")),
+                silence_reason="exception",
+            )
+            record_auto_reply_shadow(trace_request_id, report)
+        except Exception:
+            pass
         finish_turn_trace(trace_request_id, outcome="failed")
         logger.debug(f"💦 随机插嘴流程异常，本次静默放弃: {e}")

@@ -26,6 +26,7 @@ from .types import (
     MemorySession,
     ResponseEnvelope,
     ToolResult,
+    TOOL_STATUSES,
     Turn,
 )
 
@@ -110,7 +111,8 @@ from .life_state import (
 )
 from .api import (
     ImageAnalysis,
-    call_deepseek_api, call_deepseek_api_agent, smart_search, describe_image, to_image_data, embed_text,
+    call_deepseek_api, call_deepseek_api_agent, smart_search, smart_search_result, smart_search_detailed,
+    describe_image, to_image_data, embed_text,
     expand_query_for_retrieval, extract_json_block, format_image_analysis_for_chat, parse_json_object,
     rerank_documents, rescue_field, rescue_tail_after_field,
 )
@@ -133,13 +135,15 @@ from .retrieval import (
     RetrievalContext, RetrievalResult, build_retrieval_context, retrieve, retrieve_result, reload_indices,
 )
 from .observability import (
-    TurnTrace,
+    AutoReplyShadowReport, TurnTrace,
     current_request_id,
     finish_turn_trace,
     get_turn_trace,
     new_request_id,
     record_context_sources,
     record_context_shadow,
+    record_auto_reply_shadow,
+    evaluate_auto_reply_shadow,
     record_event_memory,
     record_fallback_reason,
     record_ambiguity_guard,
@@ -150,6 +154,7 @@ from .observability import (
     record_repeat_detection,
     record_retry,
     record_tool_call,
+    record_tool_route,
     record_rollout,
     reset_metrics,
     set_trace_stage,
@@ -210,7 +215,7 @@ __all__ = [
     "GROUP_IMAGE_PERMISSIONS",
     # memory
     "BaseUserRecord", "GameData", "GroupRecord", "MemorySession",
-    "Turn", "ConversationState", "ContextBlock", "ToolResult", "ResponseEnvelope",
+    "Turn", "ConversationState", "ContextBlock", "ToolResult", "TOOL_STATUSES", "ResponseEnvelope",
     "MEMORY_DB", "MessageRow", "load_memory", "save_memory", "get_memory_key", "get_user_memory",
     "MessageReader", "delete_group_messages", "get_group_context", "open_message_reader",
     "parse_sqlite_timestamp", "record_bot_message", "record_message",
@@ -228,7 +233,8 @@ __all__ = [
     "is_sleeping", "sleep_block",
     # api
     "ImageAnalysis",
-    "call_deepseek_api", "call_deepseek_api_agent", "smart_search", "describe_image", "to_image_data", "embed_text",
+    "call_deepseek_api", "call_deepseek_api_agent", "smart_search", "smart_search_result", "smart_search_detailed",
+    "describe_image", "to_image_data", "embed_text",
     "expand_query_for_retrieval", "extract_json_block", "format_image_analysis_for_chat", "parse_json_object",
     "rerank_documents", "rescue_field", "rescue_tail_after_field",
     # context
@@ -255,8 +261,8 @@ __all__ = [
     # retrieval
     "RetrievalContext", "RetrievalResult", "build_retrieval_context", "retrieve", "retrieve_result", "reload_indices",
     # observability
-    "TurnTrace", "new_request_id", "start_turn_trace", "get_turn_trace", "finish_turn_trace", "current_request_id",
-    "record_intent", "record_context_sources", "record_context_shadow", "record_event_memory", "record_fallback_reason", "record_ambiguity_guard", "record_rollout", "record_model_call", "record_parse_result",
-    "record_repeat_detection", "record_memory_hit", "record_retry", "record_tool_call",
+    "TurnTrace", "AutoReplyShadowReport", "new_request_id", "start_turn_trace", "get_turn_trace", "finish_turn_trace", "current_request_id",
+    "record_intent", "record_context_sources", "record_context_shadow", "record_auto_reply_shadow", "evaluate_auto_reply_shadow", "record_event_memory", "record_fallback_reason", "record_ambiguity_guard", "record_rollout", "record_model_call", "record_parse_result",
+    "record_repeat_detection", "record_memory_hit", "record_retry", "record_tool_call", "record_tool_route",
     "set_trace_stage", "snapshot_metrics", "reset_metrics",
 ]

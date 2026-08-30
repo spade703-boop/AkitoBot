@@ -354,6 +354,28 @@ def _summarize_trace_group(traces: list[dict[str, Any]]) -> dict[str, Any]:
         for report in shadow_reports
         for source in report.get("omitted_sources", [])
     )
+    auto_reports = [
+        item.get("auto_reply_shadow")
+        for item in traces
+        if str(item.get("surface") or "") == "auto_chat"
+        and isinstance(item.get("auto_reply_shadow"), dict)
+    ]
+    auto_silence_reasons = Counter(
+        str(report.get("silence_reason") or "")
+        for report in auto_reports
+        if report.get("silence_reason")
+    )
+    auto_relevance = Counter(str(report.get("relevance") or "unknown") for report in auto_reports)
+    auto_labeled = [report for report in auto_reports if report.get("should_interject") is not None]
+    auto_correct = sum(
+        bool(report.get("should_interject")) == bool(report.get("actual_interjected"))
+        for report in auto_labeled
+    )
+    tool_route_modes = Counter(str(item.get("tool_route_mode") or "off") for item in traces)
+    auto_turns = len(auto_reports)
+    auto_interjected = sum(bool(report.get("actual_interjected")) for report in auto_reports)
+    auto_anchor_failures = sum(not bool(report.get("anchor_valid", True)) for report in auto_reports)
+    auto_cross_turn_breaches = sum(bool(report.get("cross_turn_breach")) for report in auto_reports)
 
     def percentile(percentile_value: float) -> float:
         index = (len(latencies) - 1) * percentile_value / 100
@@ -401,6 +423,20 @@ def _summarize_trace_group(traces: list[dict[str, Any]]) -> dict[str, Any]:
             int(report.get("estimated_tokens", 0) or 0) for report in shadow_reports
         ),
         "context_shadow_omitted_sources": dict(sorted(shadow_omitted_sources.items())),
+        "auto_reply_shadow": {
+            "turns": auto_turns,
+            "interjected": auto_interjected,
+            "silent": auto_turns - auto_interjected,
+            "interjection_rate": round(auto_interjected / auto_turns, 4) if auto_turns else None,
+            "anchor_failures": auto_anchor_failures,
+            "anchor_failure_rate": round(auto_anchor_failures / auto_turns, 4) if auto_turns else None,
+            "cross_turn_breaches": auto_cross_turn_breaches,
+            "cross_turn_breach_rate": round(auto_cross_turn_breaches / auto_turns, 4) if auto_turns else None,
+            "accuracy": round(auto_correct / len(auto_labeled), 4) if auto_labeled else None,
+            "silence_reasons": dict(sorted(auto_silence_reasons.items())),
+            "relevance": dict(sorted(auto_relevance.items())),
+        },
+        "tool_route_modes": dict(sorted(tool_route_modes.items())),
         "p50_latency_ms": percentile(50),
         "p95_latency_ms": percentile(95),
     }

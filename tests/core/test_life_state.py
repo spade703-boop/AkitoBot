@@ -201,6 +201,17 @@ def test_query_intent_explicit_online_role_search_can_use_web(patch_life_state_d
     assert intent.explicit_search is True
 
 
+def test_query_intent_exposes_routing_categories(patch_life_state_deps):
+    classify = patch_life_state_deps.classify_query_intent
+
+    assert classify("你好").category == "small_talk"
+    assert classify("你怎么看冬弥的演出").category == "roleplay"
+    assert classify("记住我喜欢咖啡").category == "memory_operation"
+    assert classify("/重置对话").category == "admin_command"
+    assert classify("帮我查天气然后总结").category == "multi_step"
+    assert classify("看这张图", has_image=True).category == "image_understanding"
+
+
 def test_sleep_third_party_search_word_cannot_wake_bot(patch_life_state_deps):
     ls = patch_life_state_deps
     fake_now = _make_dt(2026, 5, 30, 0, 30, tzinfo=TZ_CN)

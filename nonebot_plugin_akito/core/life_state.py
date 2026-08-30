@@ -33,6 +33,21 @@ class QueryIntent:
     explicit_search: bool
     query: str
     confidence: float
+    category: str = ""
+
+    def __post_init__(self) -> None:
+        if self.category:
+            return
+        category = {
+            "mention": "small_talk",
+            "local_question": "local_knowledge",
+            "web_search": "web_fact",
+        }.get(self.intent, self.intent or "small_talk")
+        object.__setattr__(self, "category", category)
+
+    @property
+    def kind(self) -> str:
+        return self.category
 
 
 _SEARCH_VERBS = ("搜索", "查询", "查找", "检索", "搜", "查")
@@ -57,6 +72,10 @@ _ROLEPLAY_TOPICS = ("彰人", "小彰", "冬弥", "青柳", "东云", "VBS", "vb
 _THIRD_PARTY_SEARCH_RE = re.compile(
     r"^(?P<subject>[^，。！？,.!?]{1,16}?)(?:要|想|准备|打算|正在|刚刚|已经|会|得去)(?:去)?(?:搜|搜索|查|查询|检查)"
 )
+_MEMORY_CUES = ("记住", "记下", "记忆", "忘记", "删除记忆", "长期记忆", "不要记")
+_ADMIN_CUES = ("重置对话", "热更新", "清空记忆", "刷新资源", "看板样式测试")
+_MULTI_STEP_CUES = ("然后", "接着", "并且", "同时", "先", "再", "最后")
+_ROLEPLAY_CUES = ("rp", "角色扮演", "扮演", "演绎", "模拟")
 
 
 def _normalize_query_text(msg: str) -> str:
@@ -115,14 +134,20 @@ def _is_explicit_search_request(text: str) -> bool:
     return False
 
 
-def classify_query_intent(msg: str) -> QueryIntent:
+def classify_query_intent(msg: str, *, has_image: bool = False) -> QueryIntent:
     """区分闲聊提及、本地问题与需要联网判断的查询。"""
     text = _normalize_query_text(msg)
+    if has_image:
+        return QueryIntent("image_understanding", True, False, text, 0.99, "image_understanding")
     if not text:
         return QueryIntent("mention", False, False, "", 1.0)
 
+    if text.startswith("/") or any(cue in text for cue in _ADMIN_CUES):
+        return QueryIntent("admin_command", True, False, text, 0.99, "admin_command")
+    if any(cue in text for cue in _MEMORY_CUES):
+        return QueryIntent("memory_operation", True, False, text, 0.95, "memory_operation")
     if _is_third_party_search_mention(text):
-        return QueryIntent("mention", False, False, text, 0.99)
+        return QueryIntent("mention", False, False, text, 0.99, "small_talk")
 
     has_question_mark = text.endswith(("?", "？"))
     has_general_question = has_question_mark or any(cue in text for cue in _GENERAL_QUESTION_CUES)
@@ -130,24 +155,37 @@ def classify_query_intent(msg: str) -> QueryIntent:
     has_opinion_cue = any(cue in text for cue in _OPINION_CUES)
     has_web_signal = any(signal in text for signal in _WEB_SIGNALS)
     has_roleplay_topic = any(topic in text for topic in _ROLEPLAY_TOPICS)
+    has_roleplay_cue = any(cue in text.lower() for cue in _ROLEPLAY_CUES)
+    has_multi_step = sum(text.count(cue) for cue in _MULTI_STEP_CUES) >= 1 and any(
+        marker in text for marker in ("帮我", "请", "需要", "任务", "处理")
+    )
     has_search_verb = any(verb in text for verb in _SEARCH_VERBS)
     explicit_search = _is_explicit_search_request(text)
     explicit_web_search = any(marker in text for marker in _EXPLICIT_WEB_MARKERS)
 
     if explicit_search:
         if has_roleplay_topic and not explicit_web_search:
-            return QueryIntent("local_question", True, False, text, 0.98)
-        return QueryIntent("web_search", True, True, text, 0.99)
+            return QueryIntent("local_question", True, False, text, 0.98, "multi_step" if has_multi_step else "roleplay")
+        return QueryIntent("web_search", True, True, text, 0.99, "multi_step" if has_multi_step else "web_fact")
 
     if has_opinion_cue or has_roleplay_topic:
-        return QueryIntent("local_question", has_general_question or has_factual_question, False, text, 0.95)
+        return QueryIntent(
+            "local_question",
+            has_general_question or has_factual_question,
+            False,
+            text,
+            0.95,
+            "multi_step" if has_multi_step else ("roleplay" if has_roleplay_topic or has_roleplay_cue else "local_knowledge"),
+        )
+    if has_multi_step or has_roleplay_cue:
+        return QueryIntent("multi_step" if has_multi_step else "local_question", True, False, text, 0.8, "multi_step" if has_multi_step else "roleplay")
     if has_web_signal and (has_general_question or has_factual_question or has_search_verb):
-        return QueryIntent("web_search", True, False, text, 0.9)
+        return QueryIntent("web_search", True, False, text, 0.9, "multi_step" if has_multi_step else "web_fact")
     if has_factual_question:
-        return QueryIntent("web_search", True, False, text, 0.85)
+        return QueryIntent("web_search", True, False, text, 0.85, "web_fact")
     if has_general_question:
-        return QueryIntent("local_question", True, False, text, 0.85)
-    return QueryIntent("mention", False, False, text, 0.9)
+        return QueryIntent("local_question", True, False, text, 0.85, "local_knowledge")
+    return QueryIntent("mention", False, False, text, 0.9, "small_talk")
 
 
 def grant_safety_pass(seconds: int = 5) -> None:

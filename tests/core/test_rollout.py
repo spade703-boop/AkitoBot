@@ -33,3 +33,14 @@ def test_invalid_arm_falls_back_to_base_modes(monkeypatch):
     assert config.arm == "default"
     assert config.m1_context_mode == "on"
     assert config.m2_memory_mode == "shadow"
+
+
+def test_m3_tool_mode_is_independent_and_group_scoped(monkeypatch):
+    monkeypatch.setenv("AKITO_M3_TOOL_MODE", "off")
+    monkeypatch.setenv("AKITO_M3_TOOL_GROUPS", '{"1001": "shadow"}')
+
+    scoped = resolve_rollout(1001)
+    other = resolve_rollout(1002)
+
+    assert scoped.m3_tool_mode == "shadow"
+    assert other.m3_tool_mode == "off"

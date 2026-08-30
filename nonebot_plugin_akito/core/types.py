@@ -103,9 +103,15 @@ class ToolResult(TypedDict, total=False):
     name: str
     status: str
     query: str
+    summary: str
     content: str
+    sources: list[dict[str, str]]
     source: str
     latency_ms: float
+    error_code: str
+
+
+TOOL_STATUSES = {"success", "empty", "timeout", "error", "stale"}
 
 
 class ResponseEnvelope(TypedDict, total=False):

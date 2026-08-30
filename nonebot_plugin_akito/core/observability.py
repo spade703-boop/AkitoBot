@@ -33,9 +33,11 @@ class TurnTrace:
     intent: str = ""
     context_sources: list[str] = field(default_factory=list)
     context_shadow: list[dict[str, Any]] = field(default_factory=list)
+    auto_reply_shadow: dict[str, Any] | None = None
     experiment_arm: str = "default"
     m1_context_mode: str = ""
     m2_memory_mode: str = ""
+    m3_tool_mode: str = "off"
     event_candidates: list[str] = field(default_factory=list)
     event_evidence_units: list[str] = field(default_factory=list)
     event_confidence: list[str] = field(default_factory=list)
@@ -51,6 +53,9 @@ class TurnTrace:
     ambiguity_guard_reason: str = ""
     ambiguity_guard_signals: list[str] = field(default_factory=list)
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
+    tool_route_mode: str = "off"
+    tool_route_category: str = ""
+    tool_route_decision: str = ""
     model_calls: int = 0
     prompt_tokens: int = 0
     completion_tokens: int = 0
@@ -61,6 +66,29 @@ class TurnTrace:
     retries: int = 0
     outcome: str = "running"
     elapsed_ms: float = 0.0
+
+
+@dataclass(frozen=True)
+class AutoReplyShadowReport:
+    """Privacy-safe rule evaluation for one optional random-chat turn."""
+
+    should_interject: bool | None = None
+    silence_reason: str = ""
+    anchor_valid: bool | None = None
+    current_message_only: bool | None = None
+    cross_turn_breach: bool = False
+    actual_interjected: bool = False
+    relevance: str = "unknown"
+
+
+_DETERMINISTIC_AUTO_SILENCE_REASONS = {
+    "short_message",
+    "blocked_prefix",
+    "blocked_keyword",
+    "sleeping",
+    "safety_period",
+    "cooldown",
+}
 
 
 _LOCK = threading.Lock()
@@ -88,6 +116,16 @@ def _new_metric_bucket() -> dict[str, Any]:
         "guarded_turns": 0,
         "tool_calls": 0,
         "tool_successes": 0,
+        "tool_route_modes": {},
+        "auto_reply_turns": 0,
+        "auto_reply_interjected": 0,
+        "auto_reply_silent": 0,
+        "auto_reply_anchor_failures": 0,
+        "auto_reply_cross_turn_breaches": 0,
+        "auto_reply_labeled": 0,
+        "auto_reply_correct": 0,
+        "auto_reply_silence_reasons": {},
+        "auto_reply_relevance": {},
         "retries": 0,
         "latencies_ms": [],
     }
@@ -164,12 +202,78 @@ def record_context_shadow(request_id: str | None, report: dict[str, Any]) -> Non
         trace.context_shadow.append(dict(report))
 
 
+def record_auto_reply_shadow(
+    request_id: str | None,
+    report: AutoReplyShadowReport | dict[str, Any],
+    *,
+    actual_interjected: bool | None = None,
+) -> None:
+    """Attach a bounded auto-reply evaluation without retaining message text."""
+    trace = _get_trace(request_id)
+    if trace is None:
+        return
+    if isinstance(report, AutoReplyShadowReport):
+        payload = asdict(report)
+    else:
+        payload = asdict(AutoReplyShadowReport(**{
+            key: value
+            for key, value in report.items()
+            if key in AutoReplyShadowReport.__dataclass_fields__
+        }))
+    if actual_interjected is not None:
+        payload["actual_interjected"] = bool(actual_interjected)
+    trace.auto_reply_shadow = payload
+
+
+def evaluate_auto_reply_shadow(
+    message: str,
+    *,
+    addressed_to_bot: bool = False,
+    silence_reason: str = "",
+    reply: str = "",
+    anchor: str = "",
+    actual_interjected: bool = False,
+) -> AutoReplyShadowReport:
+    """Evaluate deterministic signals for random-chat shadow metrics.
+
+    Passive group messages deliberately remain ``unknown`` so the report never
+    pretends to know whether an optional interjection was socially necessary.
+    """
+    compact_message = "".join(str(message or "").split())
+    compact_anchor = "".join(str(anchor or "").split())
+    has_reply = bool(str(reply or "").strip())
+    anchor_valid = True if not has_reply else bool(len(compact_anchor) >= 2 and compact_anchor in compact_message)
+    cross_turn_breach = bool(has_reply and not anchor_valid)
+    if addressed_to_bot:
+        should_interject: bool | None = True
+    elif silence_reason in _DETERMINISTIC_AUTO_SILENCE_REASONS:
+        should_interject = False
+    else:
+        should_interject = None
+    if cross_turn_breach:
+        relevance = "irrelevant"
+    elif has_reply and anchor_valid:
+        relevance = "relevant"
+    else:
+        relevance = "unknown"
+    return AutoReplyShadowReport(
+        should_interject=should_interject,
+        silence_reason=str(silence_reason or ""),
+        anchor_valid=anchor_valid,
+        current_message_only=anchor_valid,
+        cross_turn_breach=cross_turn_breach,
+        actual_interjected=bool(actual_interjected),
+        relevance=relevance,
+    )
+
+
 def record_rollout(
     request_id: str | None,
     *,
     experiment_arm: str,
     m1_context_mode: str,
     m2_memory_mode: str,
+    m3_tool_mode: str = "off",
 ) -> None:
     trace = _get_trace(request_id)
     if trace is None:
@@ -177,6 +281,7 @@ def record_rollout(
     trace.experiment_arm = str(experiment_arm or "default")
     trace.m1_context_mode = str(m1_context_mode or "")
     trace.m2_memory_mode = str(m2_memory_mode or "")
+    trace.m3_tool_mode = str(m3_tool_mode or "off")
 
 
 def record_event_memory(
@@ -304,10 +409,29 @@ def record_tool_call(
     name: str,
     status: str,
     latency_ms: float = 0.0,
+    error_code: str = "",
 ) -> None:
     trace = _get_trace(request_id)
     if trace is not None:
-        trace.tool_calls.append({"name": name, "status": status, "latency_ms": round(latency_ms, 2)})
+        payload = {"name": name, "status": status, "latency_ms": round(latency_ms, 2)}
+        if error_code:
+            payload["error_code"] = str(error_code)
+        trace.tool_calls.append(payload)
+
+
+def record_tool_route(
+    request_id: str | None,
+    *,
+    mode: str,
+    category: str = "",
+    decision: str = "",
+) -> None:
+    trace = _get_trace(request_id)
+    if trace is None:
+        return
+    trace.tool_route_mode = str(mode or "off")
+    trace.tool_route_category = str(category or "")
+    trace.tool_route_decision = str(decision or "")
 
 
 def finish_turn_trace(request_id: str, *, outcome: str) -> dict[str, Any] | None:
@@ -367,12 +491,33 @@ def _accumulate_metrics(
     metrics["guarded_turns"] += trace.ambiguity_guard_triggered
     metrics["tool_calls"] += len(trace.tool_calls)
     metrics["tool_successes"] += sum(item["status"] == "success" for item in trace.tool_calls)
+    route_mode = str(trace.tool_route_mode or "off")
+    route_modes = metrics["tool_route_modes"]
+    route_modes[route_mode] = int(route_modes.get(route_mode, 0)) + 1
     metrics["search_requests"] += sum(item["name"] == "search" for item in trace.tool_calls)
     metrics["search_successes"] += sum(
         item["name"] == "search" and item["status"] == "success" for item in trace.tool_calls
     )
     metrics["retries"] += trace.retries
     metrics["latencies_ms"].append(trace.elapsed_ms)
+    report = trace.auto_reply_shadow
+    if trace.surface == "auto_chat" and report:
+        metrics["auto_reply_turns"] += 1
+        metrics["auto_reply_interjected"] += bool(report.get("actual_interjected"))
+        metrics["auto_reply_silent"] += not bool(report.get("actual_interjected"))
+        metrics["auto_reply_anchor_failures"] += not bool(report.get("anchor_valid", True))
+        metrics["auto_reply_cross_turn_breaches"] += bool(report.get("cross_turn_breach"))
+        reason = str(report.get("silence_reason") or "")
+        if reason:
+            reasons = metrics["auto_reply_silence_reasons"]
+            reasons[reason] = int(reasons.get(reason, 0)) + 1
+        relevance = str(report.get("relevance") or "unknown")
+        relevance_counts = metrics["auto_reply_relevance"]
+        relevance_counts[relevance] = int(relevance_counts.get(relevance, 0)) + 1
+        expected = report.get("should_interject")
+        if expected is not None:
+            metrics["auto_reply_labeled"] += 1
+            metrics["auto_reply_correct"] += bool(expected) == bool(report.get("actual_interjected"))
 
 
 def _percentile(values: list[float], percentile: float) -> float | None:
@@ -393,6 +538,7 @@ def snapshot_metrics() -> dict[str, Any]:
             for arm, metrics in _ARM_METRICS.items()
         }
     total = snapshot["total_turns"] or 1
+    auto_reply_summary = _summarize_auto_reply_metrics(snapshot)
     snapshot.update(
         {
             "parse_success_rate": round(snapshot["parse_successes"] / total, 4),
@@ -406,6 +552,10 @@ def snapshot_metrics() -> dict[str, Any]:
             else None,
             "p50_latency_ms": _percentile(latencies, 50),
             "p95_latency_ms": _percentile(latencies, 95),
+            "auto_reply_shadow": auto_reply_summary,
+            "auto_reply_accuracy": auto_reply_summary["accuracy"],
+            "auto_reply_silence_reasons": auto_reply_summary["silence_reasons"],
+            "tool_route_modes": dict(snapshot.get("tool_route_modes", {})),
             "by_experiment_arm": {
                 arm: _summarize_metric_bucket(metrics)
                 for arm, metrics in sorted(arm_metrics.items())
@@ -449,4 +599,26 @@ def _summarize_metric_bucket(metrics: dict[str, Any]) -> dict[str, Any]:
         "guard_rate": round(
             int(metrics["guarded_turns"]) / total_turns, 4
         ) if total_turns else None,
+        "tool_route_modes": dict(metrics.get("tool_route_modes", {})),
+        "auto_reply": _summarize_auto_reply_metrics(metrics),
+    }
+
+
+def _summarize_auto_reply_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
+    labeled = int(metrics.get("auto_reply_labeled", 0))
+    turns = int(metrics.get("auto_reply_turns", 0))
+    anchor_failures = int(metrics.get("auto_reply_anchor_failures", 0))
+    cross_turn_breaches = int(metrics.get("auto_reply_cross_turn_breaches", 0))
+    return {
+        "turns": turns,
+        "interjected": int(metrics.get("auto_reply_interjected", 0)),
+        "silent": int(metrics.get("auto_reply_silent", 0)),
+        "interjection_rate": round(int(metrics.get("auto_reply_interjected", 0)) / turns, 4) if turns else None,
+        "anchor_failures": anchor_failures,
+        "anchor_failure_rate": round(anchor_failures / turns, 4) if turns else None,
+        "cross_turn_breaches": cross_turn_breaches,
+        "cross_turn_breach_rate": round(cross_turn_breaches / turns, 4) if turns else None,
+        "accuracy": round(int(metrics.get("auto_reply_correct", 0)) / labeled, 4) if labeled else None,
+        "silence_reasons": dict(metrics.get("auto_reply_silence_reasons", {})),
+        "relevance": dict(metrics.get("auto_reply_relevance", {})),
     }
