@@ -75,6 +75,13 @@ def test_token_filtering_and_blocked_argument_normalization():
     assert analysis.parse_blocked_word_arguments(" AKITO，coffee akito 123 😀 ") == ["akito", "coffee"]
 
 
+def test_excluded_user_argument_normalization():
+    assert analysis.parse_excluded_user_arguments(" 834285229，123456789 834285229 abc 123 ") == [
+        "834285229",
+        "123456789",
+    ]
+
+
 def test_recordable_text_rejects_commands_links_and_non_text_noise():
     assert analysis.is_recordable_text("普通聊天") is True
     assert analysis.is_recordable_text("hello") is True

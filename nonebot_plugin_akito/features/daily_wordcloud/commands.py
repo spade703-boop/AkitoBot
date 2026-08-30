@@ -5,14 +5,15 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 
 from nonebot import on_command
-from nonebot.adapters import Event, Message
+from nonebot.adapters import Bot, Event, Message
 from nonebot.adapters.onebot.v11 import MessageSegment
+from nonebot.log import logger
 from nonebot.params import CommandArg
 
 from ...core import SUPERUSER_QQ, TZ_CN, WORDCLOUD_GROUPS
 from . import analysis, store
 from .jobs import ensure_report
-from .render import render_report
+from .render import render_command_help, render_report
 
 
 def _is_superuser(event: Event) -> bool:
@@ -42,6 +43,20 @@ def _parse_date_argument(raw: str, *, today: date | None = None, default_yesterd
     return parsed, None
 
 
+def _reply_with_image(event: Event, image: bytes) -> Message:
+    message_id = getattr(event, "message_id", None)
+    if message_id:
+        return MessageSegment.reply(message_id) + MessageSegment.image(image)
+    return MessageSegment.image(image)
+
+
+def _reply_with_text(event: Event, text: str) -> Message:
+    message_id = getattr(event, "message_id", None)
+    if message_id:
+        return MessageSegment.reply(message_id) + text
+    return Message(text)
+
+
 query_cmd = on_command("群聊词云", priority=5, block=True)
 
 
@@ -67,6 +82,21 @@ async def _(event: Event, args: Message = CommandArg()):
         await query_cmd.finish("该日暂无有效聊天文本。")
     image = await render_report(report)
     await query_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(image))
+
+
+help_cmd = on_command("词云帮助", aliases={"词云指令", "群聊词云帮助"}, priority=5, block=True)
+
+
+@help_cmd.handle()
+async def _(event: Event):
+    if not _is_superuser(event):
+        return
+    try:
+        image = await render_command_help()
+    except Exception as exc:
+        logger.warning(f"[每日词云] 指令帮助图片渲染失败: {exc}")
+        await help_cmd.finish(_reply_with_text(event, "词云帮助图片暂时无法生成，请稍后重试。"))
+    await help_cmd.finish(_reply_with_image(event, image))
 
 
 test_cmd = on_command("测试群聊词云", priority=5, block=True)
@@ -149,6 +179,77 @@ async def _(event: Event, args: Message = CommandArg()):
     )
 
 
+backfill_cmd = on_command("回填群聊词云", priority=5, block=True)
+
+
+@backfill_cmd.handle()
+async def _(bot: Bot, event: Event, args: Message = CommandArg()):
+    if not _is_superuser(event):
+        return
+    group_id = _target_group_id(event)
+    if group_id is None:
+        return
+    report_date, error = _parse_date_argument(args.extract_plain_text())
+    if error:
+        await backfill_cmd.finish(error)
+    assert report_date is not None
+
+    try:
+        report = await analysis.aggregate_history_report(
+            group_id,
+            report_date,
+            excluded_user_ids={str(bot.self_id)},
+        )
+    except FileNotFoundError:
+        await backfill_cmd.finish("未找到历史消息库 impression_history.db，请确认它位于 data/ 目录。")
+    except Exception as exc:
+        logger.exception(f"[每日词云] 回填群 {group_id} 的 {report_date.isoformat()} 失败: {exc}")
+        await backfill_cmd.finish("读取历史消息库失败，请检查数据库切片是否完整。")
+
+    if not report.get("frequencies"):
+        await backfill_cmd.finish("回填完成，但该日期没有可统计的有效聊天文本。")
+    image = await render_report(report)
+    await backfill_cmd.finish(
+        _reply_with_text(event, "回填完成。") + MessageSegment.image(image)
+    )
+
+
+excluded_users_cmd = on_command("词云排除用户", priority=5, block=True)
+
+
+@excluded_users_cmd.handle()
+async def _(event: Event, args: Message = CommandArg()):
+    if not _is_superuser(event):
+        return
+    raw = args.extract_plain_text().strip()
+    if raw in {"查看", "列表"}:
+        user_ids = await store.list_excluded_user_ids()
+        message = "当前没有排除的 QQ 号。" if not user_ids else "词云排除用户：\n" + "、".join(user_ids)
+        await excluded_users_cmd.finish(message)
+    if not raw:
+        return
+
+    command_parts = raw.split(None, 1)
+    action = command_parts[0]
+    values = command_parts[1] if len(command_parts) > 1 else ""
+    user_ids = analysis.parse_excluded_user_arguments(values)
+    if action == "添加":
+        if not user_ids:
+            return
+        changed = await store.add_excluded_user_ids(user_ids, event.get_user_id())
+        await excluded_users_cmd.finish(
+            f"已新增 {changed} 个排除 QQ 号。新消息会立即跳过；历史日报请执行“回填群聊词云 YYYY-MM-DD”。"
+        )
+    if action == "取消":
+        if not user_ids:
+            return
+        changed = await store.remove_excluded_user_ids(user_ids)
+        await excluded_users_cmd.finish(
+            f"已取消 {changed} 个排除 QQ 号。历史日报如需恢复，请重新执行“回填群聊词云 YYYY-MM-DD”。"
+        )
+    return
+
+
 blocked_words_cmd = on_command("词云屏蔽词", priority=5, block=True)
 
 
@@ -157,27 +258,29 @@ async def _(event: Event, args: Message = CommandArg()):
     if not _is_superuser(event):
         return
     raw = args.extract_plain_text().strip()
-    if not raw or raw in {"查看", "列表"}:
+    if raw in {"查看", "列表"}:
         words = await store.list_blocked_words()
         message = "当前没有额外的词云屏蔽词。" if not words else "词云屏蔽词：\n" + "、".join(words)
         await blocked_words_cmd.finish(message)
+    if not raw:
+        return
 
     command_parts = raw.split(None, 1)
     action = command_parts[0]
     values = command_parts[1] if len(command_parts) > 1 else ""
     words = analysis.parse_blocked_word_arguments(values)
-    if action in {"添加", "屏蔽"}:
+    if action == "添加":
         if not words:
-            await blocked_words_cmd.finish("用法：词云屏蔽词 添加 词1 词2")
+            return
         changed = await store.add_blocked_words(words, event.get_user_id())
         await blocked_words_cmd.finish(
             f"已新增 {changed} 个屏蔽词。需要修改近 7 天旧日报时，请执行“重算群聊词云 YYYY-MM-DD”。"
         )
-    if action in {"取消", "删除", "移除"}:
+    if action == "取消":
         if not words:
-            await blocked_words_cmd.finish("用法：词云屏蔽词 取消 词1 词2")
+            return
         changed = await store.remove_blocked_words(words)
         await blocked_words_cmd.finish(
             f"已取消 {changed} 个屏蔽词。需要修改近 7 天旧日报时，请执行“重算群聊词云 YYYY-MM-DD”。"
         )
-    await blocked_words_cmd.finish("用法：词云屏蔽词 查看｜添加 词1 词2｜取消 词1 词2")
+    return

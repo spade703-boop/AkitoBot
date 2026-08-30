@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from datetime import date
+import sqlite3
+
 import pytest
 
-from nonebot_plugin_akito.features.daily_wordcloud import store
+from nonebot_plugin_akito.features.daily_wordcloud import analysis, store
 
 
 @pytest.fixture
@@ -21,6 +24,45 @@ async def test_raw_messages_are_deduplicated_and_filtered_by_time(isolated_datab
     rows = await store.fetch_raw_messages("1001", 100, 200)
 
     assert rows == [("u1", "阿一", "hello", 100)]
+
+
+async def test_excluded_users_are_persistent_and_skipped_for_new_messages(isolated_database):
+    assert await store.add_excluded_user_ids(["834285229", "123456789", "834285229"], "9001") == 2
+    assert await store.list_excluded_user_ids() == ["123456789", "834285229"]
+    assert await store.record_raw_message("1001", "834285229", "bot", "hello", "excluded", 100) is False
+    assert await store.record_raw_message("1001", "123456789", "user", "hello", "excluded-2", 100) is False
+    assert await store.record_raw_message("1001", "u1", "user", "hello", "kept", 100) is True
+
+    assert await store.remove_excluded_user_ids(["834285229"]) == 1
+    assert await store.list_excluded_user_ids() == ["123456789"]
+
+
+async def test_history_messages_can_be_read_from_a_live_database_slice(tmp_path):
+    history_path = tmp_path / "impression_history.db"
+    with sqlite3.connect(history_path) as connection:
+        connection.execute(
+            "CREATE TABLE messages (id INTEGER PRIMARY KEY, group_id TEXT, user_id TEXT, nickname TEXT, content TEXT, timestamp DATETIME)"
+        )
+        connection.executemany(
+            "INSERT INTO messages (group_id, user_id, nickname, content, timestamp) VALUES (?, ?, ?, ?, ?)",
+            [
+                ("1001", "u1", "甲", "start", "2026-08-28 16:00:00"),
+                ("1001", "u2", "乙", "end", "2026-08-29 15:59:59"),
+                ("1001", "u3", "丙", "next", "2026-08-29 16:00:00"),
+                ("1002", "u4", "丁", "other", "2026-08-29 10:00:00"),
+            ],
+        )
+        connection.commit()
+
+    start_time, end_time = analysis.date_bounds(date(2026, 8, 29))
+    rows = await store.fetch_history_messages(
+        "1001",
+        start_time,
+        end_time,
+        database_path=history_path,
+    )
+
+    assert rows == [("u1", "甲", "start", start_time), ("u2", "乙", "end", end_time - 1)]
 
 
 async def test_report_keeps_sent_state_when_recomputed(isolated_database):

@@ -498,9 +498,11 @@ Galgame 级导演骰子，由 `chat.py` 调用 `build_director_note()`。
 - `store.py`：`data/daily_wordcloud.db` 的原始消息、日报聚合与超管屏蔽词；原始正文由定时任务保留 7 天
 - `analysis.py`：Unicode/链接/CQ 清理、Jieba 分词、停用词及屏蔽词过滤、确定性排名
 - `render.py`：WordCloud 词云和 HTMLRender 日报图片；榜单头像加载失败时由模板降级为首字占位
-- `commands.py`：`群聊词云`、`重算群聊词云`、`测试群聊词云` 和 `词云屏蔽词`，均限 `SUPERUSER_QQ`
+- `commands.py`：`群聊词云`、`重算群聊词云`、`回填群聊词云`、`测试群聊词云`、`词云帮助`、`词云屏蔽词` 和 `词云排除用户`，均限 `SUPERUSER_QQ`
 - `jobs.py`：每天 00:00 发送前一天日报，启动连接时只恢复昨天未发送的日报，并执行 7 天原始消息清理
 - `WORDCLOUD_GROUPS`：独立于其他白名单的目标群配置；未配置时只注册空闲任务，不记录或发送
+- `WORDCLOUD_HISTORY_DB`：历史回填库路径，默认 `data/impression_history.db`；可指向在线复制的 SQLite 切片
+- 屏蔽词和排除用户均为全局配置；前者过滤词 token，后者按 QQ 号过滤整条消息
 
 ### scheduled.py
 
@@ -644,7 +646,7 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（戳一戳
 | `data/paro_egg_log.jsonl` | 读写 | 派生做饭 / 狐兔饭历史明细（供个人页回放） |
 | `data/fanfic_keywords.json` | 读写 | 今日关键词池子数据 |
 | `data/keyword_draws.json` | 读写 | 今日关键词每日抽取记录 |
-| `data/daily_wordcloud.db` | 读写 | 词云原始消息（7 天）/日报聚合/屏蔽词 |
+| `data/daily_wordcloud.db` | 读写 | 词云原始消息（7 天）/日报聚合/全局屏蔽词与排除用户 |
 | `data/content/wordcloud_stopwords.txt` / `wordcloud_user_dict.txt` | 读写 | 词云静态停用词与 Jieba 用户词典 |
 | `data/pending_verify.json` / `bond_verify.json` / `hold_verify.json` | 读写 | 待审核 / 待刷羁绊 / 特殊挂起名单 |
 | `data/verify_config.json` | 只读 | 审核系统群号配置 |

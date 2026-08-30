@@ -13,7 +13,7 @@ import unicodedata
 from ...core import TZ_CN, find_data_path
 from . import store
 
-MAX_WORDS = 80
+MAX_WORDS = 50
 RAW_RETENTION_DAYS = 7
 
 _URL_RE = re.compile(r"(?i)\b(?:https?://|www\.)\S+")
@@ -44,6 +44,19 @@ def parse_blocked_word_arguments(raw: str) -> list[str]:
         seen.add(word)
         words.append(word)
     return words
+
+
+def parse_excluded_user_arguments(raw: str) -> list[str]:
+    """Parse whitespace- or comma-separated QQ IDs for global exclusion."""
+    user_ids: list[str] = []
+    seen: set[str] = set()
+    for part in re.split(r"[\s,，]+", unicodedata.normalize("NFKC", raw)):
+        user_id = part.strip()
+        if not re.fullmatch(r"\d{5,20}", user_id) or user_id in seen:
+            continue
+        seen.add(user_id)
+        user_ids.append(user_id)
+    return user_ids
 
 
 def _load_stopwords() -> set[str]:
@@ -190,6 +203,35 @@ async def aggregate_report(
 ) -> dict[str, Any]:
     start_time, end_time = date_bounds(report_date)
     rows = await store.fetch_raw_messages(group_id, start_time, end_time)
+    excluded_user_ids = set(await store.list_excluded_user_ids())
+    if excluded_user_ids:
+        rows = [row for row in rows if row[0] not in excluded_user_ids]
+    blocked_words = set(await store.list_blocked_words())
+    report = build_report(
+        group_id,
+        report_date,
+        rows,
+        blocked_words=blocked_words,
+        cutter=cutter or create_jieba_cutter(blocked_words),
+    )
+    await store.save_report(group_id, report_date.isoformat(), report)
+    return report
+
+
+async def aggregate_history_report(
+    group_id: str,
+    report_date: date,
+    *,
+    excluded_user_ids: Iterable[str] = (),
+    cutter: TokenCutter | None = None,
+) -> dict[str, Any]:
+    """Aggregate a report from the long-lived impression history database."""
+    start_time, end_time = date_bounds(report_date)
+    rows = await store.fetch_history_messages(group_id, start_time, end_time)
+    excluded = {str(user_id) for user_id in excluded_user_ids}
+    excluded.update(await store.list_excluded_user_ids())
+    if excluded:
+        rows = [row for row in rows if row[0] not in excluded]
     blocked_words = set(await store.list_blocked_words())
     report = build_report(
         group_id,

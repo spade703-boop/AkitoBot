@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import closing
+from datetime import datetime, timezone
 import json
+import os
+from pathlib import Path
 import sqlite3
 import time
 from typing import Any, cast
@@ -15,6 +18,14 @@ from ...core import get_data_dir
 
 DATABASE_PATH = get_data_dir() / "daily_wordcloud.db"
 _WRITE_LOCK = asyncio.Lock()
+_EXCLUDED_USER_IDS: set[str] = set()
+
+
+def get_history_database_path() -> Path:
+    configured_path = os.environ.get("WORDCLOUD_HISTORY_DB", "").strip()
+    if configured_path:
+        return Path(configured_path).expanduser()
+    return get_data_dir() / "impression_history.db"
 
 
 def init_database() -> None:
@@ -64,6 +75,17 @@ def init_database() -> None:
             )
             """
         )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS excluded_users (
+                user_id TEXT PRIMARY KEY,
+                created_by TEXT NOT NULL,
+                created_at INTEGER NOT NULL
+            )
+            """
+        )
+        _EXCLUDED_USER_IDS.clear()
+        _EXCLUDED_USER_IDS.update(str(row[0]) for row in cursor.execute("SELECT user_id FROM excluded_users"))
 
 
 init_database()
@@ -82,6 +104,8 @@ async def record_raw_message(
     event_time: int,
 ) -> bool:
     """Insert one incoming message, returning whether it was new."""
+    if str(user_id) in _EXCLUDED_USER_IDS:
+        return False
     async with _WRITE_LOCK, aiosqlite.connect(DATABASE_PATH) as connection:
         await _configure(connection)
         cursor = await connection.execute(
@@ -114,6 +138,54 @@ async def fetch_raw_messages(
             (str(group_id), int(start_time), int(end_time)),
         ) as cursor:
             return cast(list[tuple[str, str, str, int]], await cursor.fetchall())
+
+
+def _sqlite_timestamp_to_epoch(value: object) -> int | None:
+    if value is None:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return int(parsed.timestamp())
+
+
+async def fetch_history_messages(
+    group_id: str,
+    start_time: int,
+    end_time: int,
+    *,
+    database_path: Path | None = None,
+) -> list[tuple[str, str, str, int]]:
+    """Read legacy impression messages for a Beijing-time date window."""
+    source_path = database_path or get_history_database_path()
+    if not source_path.is_file():
+        raise FileNotFoundError(f"历史消息库不存在: {source_path}")
+
+    start_text = datetime.fromtimestamp(start_time, timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    end_text = datetime.fromtimestamp(end_time, timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    async with aiosqlite.connect(source_path) as connection:
+        await _configure(connection)
+        async with connection.execute(
+            """
+            SELECT user_id, nickname, content, timestamp
+            FROM messages
+            WHERE group_id=? AND timestamp>=? AND timestamp<?
+            ORDER BY id ASC
+            """,
+            (str(group_id), start_text, end_text),
+        ) as cursor:
+            fetched_rows = await cursor.fetchall()
+
+    rows: list[tuple[str, str, str, int]] = []
+    for user_id, nickname, content, timestamp in fetched_rows:
+        event_time = _sqlite_timestamp_to_epoch(timestamp)
+        if event_time is None or not (start_time <= event_time < end_time):
+            continue
+        rows.append((str(user_id), str(nickname or ""), str(content or ""), event_time))
+    return rows
 
 
 async def save_report(group_id: str, report_date: str, payload: dict[str, Any]) -> None:
@@ -205,6 +277,44 @@ async def list_blocked_words() -> list[str]:
         async with connection.execute("SELECT word FROM blocked_words ORDER BY word ASC") as cursor:
             rows = await cursor.fetchall()
     return [str(row[0]) for row in rows]
+
+
+async def list_excluded_user_ids() -> list[str]:
+    return sorted(_EXCLUDED_USER_IDS)
+
+
+async def add_excluded_user_ids(user_ids: list[str], created_by: str) -> int:
+    if not user_ids:
+        return 0
+    normalized_ids = sorted({str(user_id) for user_id in user_ids})
+    async with _WRITE_LOCK, aiosqlite.connect(DATABASE_PATH) as connection:
+        await _configure(connection)
+        before = connection.total_changes
+        await connection.executemany(
+            "INSERT OR IGNORE INTO excluded_users(user_id, created_by, created_at) VALUES (?, ?, ?)",
+            [(user_id, str(created_by), int(time.time())) for user_id in normalized_ids],
+        )
+        await connection.commit()
+        changed = connection.total_changes - before
+    _EXCLUDED_USER_IDS.update(normalized_ids)
+    return changed
+
+
+async def remove_excluded_user_ids(user_ids: list[str]) -> int:
+    if not user_ids:
+        return 0
+    normalized_ids = sorted({str(user_id) for user_id in user_ids})
+    placeholders = ",".join("?" for _ in normalized_ids)
+    async with _WRITE_LOCK, aiosqlite.connect(DATABASE_PATH) as connection:
+        await _configure(connection)
+        cursor = await connection.execute(
+            f"DELETE FROM excluded_users WHERE user_id IN ({placeholders})",
+            normalized_ids,
+        )
+        await connection.commit()
+        changed = max(0, int(cursor.rowcount))
+    _EXCLUDED_USER_IDS.difference_update(normalized_ids)
+    return changed
 
 
 async def add_blocked_words(words: list[str], created_by: str) -> int:
