@@ -142,6 +142,7 @@ from .observability import (
     record_context_shadow,
     record_event_memory,
     record_fallback_reason,
+    record_ambiguity_guard,
     record_intent,
     record_memory_hit,
     record_model_call,
@@ -169,6 +170,16 @@ from .event_memory import (
     build_event_memory_context,
     format_event_memory_context,
     retrieve_event_memories,
+)
+from .ambiguity_guard import (
+    AmbiguityGuardDecision,
+    AmbiguitySignals,
+    choose_clarification_template,
+    detect_ambiguity,
+    detect_ambiguity_signals,
+    evaluate_ambiguity_guard,
+    is_ambiguity_guard_enabled,
+    select_clarification_template,
 )
 from .story_import import (
     FetchedAsset,
@@ -232,6 +243,9 @@ __all__ = [
     # context orchestration
     "ContextOrchestrator", "ContextShadowReport", "build_context_blocks", "estimate_token_count", "select_context_for_mode", "shadow_context",
     "EventMemoryHit", "EventMemoryResult", "build_event_memory_context", "format_event_memory_context", "retrieve_event_memories",
+    "AmbiguitySignals", "AmbiguityGuardDecision", "detect_ambiguity", "detect_ambiguity_signals",
+    "evaluate_ambiguity_guard", "is_ambiguity_guard_enabled", "select_clarification_template",
+    "choose_clarification_template",
     "FetchedAsset", "StoryRoute", "StoryImportError", "StoryAssetError", "parse_story_url", "capture_story",
     "validate_story_draft", "save_draft", "update_review", "event_memory_from_draft", "merge_event_memory",
     "preview_event_memory", "story_content_digest", "story_evidence_digest",
@@ -242,7 +256,7 @@ __all__ = [
     "RetrievalContext", "RetrievalResult", "build_retrieval_context", "retrieve", "retrieve_result", "reload_indices",
     # observability
     "TurnTrace", "new_request_id", "start_turn_trace", "get_turn_trace", "finish_turn_trace", "current_request_id",
-    "record_intent", "record_context_sources", "record_context_shadow", "record_event_memory", "record_fallback_reason", "record_rollout", "record_model_call", "record_parse_result",
+    "record_intent", "record_context_sources", "record_context_shadow", "record_event_memory", "record_fallback_reason", "record_ambiguity_guard", "record_rollout", "record_model_call", "record_parse_result",
     "record_repeat_detection", "record_memory_hit", "record_retry", "record_tool_call",
     "set_trace_stage", "snapshot_metrics", "reset_metrics",
 ]

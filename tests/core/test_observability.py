@@ -2,6 +2,7 @@
 
 from nonebot_plugin_akito.core.observability import (
     finish_turn_trace,
+    record_ambiguity_guard,
     record_context_shadow,
     record_context_sources,
     record_event_memory,
@@ -107,6 +108,31 @@ def test_turn_trace_collects_structured_fields_and_metrics():
     assert metrics["by_experiment_arm"]["combined"]["turns"] == 1
     assert metrics["by_experiment_arm"]["combined"]["event_hit_rate"] == 1.0
     assert metrics["by_experiment_arm"]["combined"]["avg_tokens"] == 14.0
+
+
+def test_ambiguity_guard_is_not_a_fallback_or_event_retrieval_hit():
+    reset_metrics()
+    trace = start_turn_trace("m0-guard-001", surface="main_chat", stage="response")
+    record_ambiguity_guard(
+        trace.request_id,
+        triggered=True,
+        reason="ambiguous_event_reference",
+        signals=["event_reference", "follow_up"],
+    )
+    record_event_memory(trace.request_id, status="skipped", reason="ambiguity_guard")
+
+    payload = finish_turn_trace(trace.request_id, outcome="completed")
+    metrics = snapshot_metrics()
+
+    assert payload is not None
+    assert payload["ambiguity_guard_triggered"] is True
+    assert payload["ambiguity_guard_reason"] == "ambiguous_event_reference"
+    assert payload["ambiguity_guard_signals"] == ["event_reference", "follow_up"]
+    assert payload["fallback_reason"] == []
+    assert metrics["guarded_turns"] == 1
+    assert metrics["guard_rate"] == 1.0
+    assert metrics["event_retrieval_observed"] == 0
+    assert metrics["event_hits"] == 0
 
 
 def test_trace_can_persist_sanitized_jsonl(monkeypatch, tmp_path):

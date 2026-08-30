@@ -47,6 +47,9 @@ class TurnTrace:
     event_retrieval_strategy: str = ""
     event_candidate_diagnostics: list[dict[str, Any]] = field(default_factory=list)
     fallback_reason: list[str] = field(default_factory=list)
+    ambiguity_guard_triggered: bool = False
+    ambiguity_guard_reason: str = ""
+    ambiguity_guard_signals: list[str] = field(default_factory=list)
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     model_calls: int = 0
     prompt_tokens: int = 0
@@ -82,6 +85,7 @@ def _new_metric_bucket() -> dict[str, Any]:
         "event_retrieval_observed": 0,
         "event_hits": 0,
         "fallbacks": 0,
+        "guarded_turns": 0,
         "tool_calls": 0,
         "tool_successes": 0,
         "retries": 0,
@@ -225,6 +229,22 @@ def record_fallback_reason(request_id: str | None, reason: str) -> None:
         trace.fallback_reason.append(str(reason))
 
 
+def record_ambiguity_guard(
+    request_id: str | None,
+    *,
+    triggered: bool,
+    reason: str = "",
+    signals: list[str] | tuple[str, ...] = (),
+) -> None:
+    """Record deterministic ambiguity preflight separately from model fallbacks."""
+    trace = _get_trace(request_id)
+    if trace is None:
+        return
+    trace.ambiguity_guard_triggered = bool(triggered)
+    trace.ambiguity_guard_reason = str(reason or "")
+    trace.ambiguity_guard_signals = list(dict.fromkeys(str(item) for item in signals if str(item)))
+
+
 def record_model_call(request_id: str | None, *, usage: Any = None) -> None:
     trace = _get_trace(request_id)
     if trace is None:
@@ -340,10 +360,11 @@ def _accumulate_metrics(
     metrics["parse_failures"] += trace.parse_success is False
     metrics["repeat_detections"] += trace.repeat_detected
     metrics["memory_hits"] += trace.memory_hit
-    event_observed = trace.event_retrieval_status not in {"", "disabled"}
+    event_observed = trace.event_retrieval_status not in {"", "disabled", "skipped"}
     metrics["event_retrieval_observed"] += event_observed
     metrics["event_hits"] += event_observed and trace.event_retrieval_status == "hit"
     metrics["fallbacks"] += bool(trace.fallback_reason)
+    metrics["guarded_turns"] += trace.ambiguity_guard_triggered
     metrics["tool_calls"] += len(trace.tool_calls)
     metrics["tool_successes"] += sum(item["status"] == "success" for item in trace.tool_calls)
     metrics["search_requests"] += sum(item["name"] == "search" for item in trace.tool_calls)
@@ -377,6 +398,7 @@ def snapshot_metrics() -> dict[str, Any]:
             "parse_success_rate": round(snapshot["parse_successes"] / total, 4),
             "repeat_rate": round(snapshot["repeat_detections"] / total, 4),
             "memory_hit_rate": round(snapshot["memory_hits"] / total, 4),
+            "guard_rate": round(snapshot["guarded_turns"] / total, 4),
             "search_success_rate": round(
                 snapshot["search_successes"] / snapshot["search_requests"], 4
             )
@@ -411,6 +433,7 @@ def _summarize_metric_bucket(metrics: dict[str, Any]) -> dict[str, Any]:
         "completed": metrics["completed_turns"],
         "failed": metrics["failed_turns"],
         "silent": metrics["silent_turns"],
+        "guarded_turns": metrics["guarded_turns"],
         "parse_success_rate": round(
             int(metrics["parse_successes"]) / parse_observed, 4
         ) if parse_observed else None,
@@ -422,5 +445,8 @@ def _summarize_metric_bucket(metrics: dict[str, Any]) -> dict[str, Any]:
         ) if event_observed else None,
         "fallback_rate": round(
             int(metrics["fallbacks"]) / total_turns, 4
+        ) if total_turns else None,
+        "guard_rate": round(
+            int(metrics["guarded_turns"]) / total_turns, 4
         ) if total_turns else None,
     }

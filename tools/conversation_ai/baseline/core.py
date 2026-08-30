@@ -340,7 +340,7 @@ def _summarize_trace_group(traces: list[dict[str, Any]]) -> dict[str, Any]:
     event_observed = [
         item
         for item in traces
-        if item.get("event_retrieval_status") not in {None, "", "disabled"}
+        if item.get("event_retrieval_status") not in {None, "", "disabled", "skipped"}
     ]
     event_hits = sum(item.get("event_retrieval_status") == "hit" for item in event_observed)
     shadow_reports = [
@@ -367,6 +367,7 @@ def _summarize_trace_group(traces: list[dict[str, Any]]) -> dict[str, Any]:
         "completed_turns": sum(item.get("outcome") == "completed" for item in traces),
         "failed_turns": sum(item.get("outcome") == "failed" for item in traces),
         "silent_turns": sum(item.get("outcome") == "silent" for item in traces),
+        "guarded_turns": sum(bool(item.get("ambiguity_guard_triggered")) for item in traces),
         "model_calls": sum(int(item.get("model_calls", 0) or 0) for item in traces),
         "prompt_tokens": sum(int(item.get("prompt_tokens", 0) or 0) for item in traces),
         "completion_tokens": sum(int(item.get("completion_tokens", 0) or 0) for item in traces),
@@ -381,6 +382,10 @@ def _summarize_trace_group(traces: list[dict[str, Any]]) -> dict[str, Any]:
         "event_hit_rate": round(event_hits / len(event_observed), 4) if event_observed else None,
         "fallback_rate": round(
             sum(bool(item.get("fallback_reason")) for item in traces) / len(traces),
+            4,
+        ),
+        "guard_rate": round(
+            sum(bool(item.get("ambiguity_guard_triggered")) for item in traces) / len(traces),
             4,
         ),
         "search_requests": len(search_calls),

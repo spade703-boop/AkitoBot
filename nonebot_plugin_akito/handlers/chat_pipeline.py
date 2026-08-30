@@ -23,6 +23,7 @@ from ..core import (
     TZ_CN,
     TZ_JST,
     WL2_ROUTINE,
+    AmbiguityGuardDecision,
     ImageAnalysis,
     MemorySession,
     QueryIntent,
@@ -35,6 +36,7 @@ from ..core import (
     check_sleep_status,
     classify_query_intent,
     describe_image,
+    evaluate_ambiguity_guard,
     finish_turn_trace,
     format_image_analysis_for_chat,
     format_relationship_context,
@@ -48,6 +50,7 @@ from ..core import (
     get_user_memory,
     mode_is_active,
     new_request_id,
+    record_ambiguity_guard,
     record_bot_message,
     record_bot_response,
     record_context_shadow,
@@ -107,12 +110,15 @@ class PreparedTurn:
     event_memory: str = ""
     rollout: RolloutConfig | None = None
     legacy_messages_list: list[dict[str, Any]] | None = None
+    ambiguity_guard: AmbiguityGuardDecision | None = None
+    program_reply: str | None = None
 
 
 @dataclass(frozen=True)
 class ChatReply:
     text: str
     inner_os: str
+    program_generated: bool = False
 
 
 @dataclass(frozen=True)
@@ -282,6 +288,28 @@ async def prepare_turn(turn: IncomingTurn, sleep_instruction: str) -> PreparedTu
     user_mem = get_user_memory(turn.session_key)
 
     is_wl2 = any(item.get("id") == "WL2" for item in user_mem.get("temp_implants", []))
+    implants = user_mem.get("temp_implants", [])
+    valid_implants = [item for item in implants if time.time() < item.get("expire_at", item.get("expire_time", 0))]
+    user_mem["temp_implants"] = valid_implants
+
+    query_intent = classify_query_intent(turn.plain_text_content)
+    record_intent(turn.request_id, query_intent.intent)
+    guard_decision = evaluate_ambiguity_guard(
+        turn.plain_text_content,
+        has_history=bool(user_mem.get("history")),
+        has_image=turn.has_image,
+        has_valid_temporary_state=bool(valid_implants),
+        explicit_web_intent=bool(
+            query_intent.intent == "web_search" or getattr(query_intent, "explicit_search", False)
+        ),
+    )
+    record_ambiguity_guard(
+        turn.request_id,
+        triggered=guard_decision.triggered,
+        reason=guard_decision.reason,
+        signals=guard_decision.signals.trace_names(),
+    )
+
     if is_wl2:
         if 0 <= hour_24 < 6:
             time_key = "late_night"
@@ -309,6 +337,28 @@ async def prepare_turn(turn: IncomingTurn, sleep_instruction: str) -> PreparedTu
         or turn.reply_target_is_toya
         or chat._is_toya_roleplay_message(turn.plain_text_content)
     )
+    if guard_decision.triggered:
+        tagged_user_msg = f"[{turn.sender_nickname}({turn.user_id})]: {turn.plain_text_content}"
+        record_event_memory(
+            turn.request_id,
+            status="skipped",
+            reason="ambiguity_guard",
+        )
+        record_context_sources(turn.request_id, ["current_turn", "ambiguity_guard"])
+        return PreparedTurn(
+            turn=turn,
+            user_mem=user_mem,
+            messages_list=[],
+            tagged_user_msg_for_llm=tagged_user_msg,
+            tagged_user_msg_for_history=tagged_user_msg,
+            is_toya_context=is_toya_context,
+            search_mode="local",
+            query_intent=query_intent,
+            rollout=rollout,
+            ambiguity_guard=guard_decision,
+            program_reply=guard_decision.clarification,
+        )
+
     interact_instruction = chat._build_interact_instruction(
         plain_text_content=turn.plain_text_content,
         sender_nickname=turn.sender_nickname,
@@ -337,9 +387,6 @@ async def prepare_turn(turn: IncomingTurn, sleep_instruction: str) -> PreparedTu
         turn.group_id,
     )
 
-    implants = user_mem.get("temp_implants", [])
-    valid_implants = [item for item in implants if time.time() < item.get("expire_at", item.get("expire_time", 0))]
-    user_mem["temp_implants"] = valid_implants
     implant_context = ""
     if valid_implants:
         details = [
@@ -362,8 +409,6 @@ async def prepare_turn(turn: IncomingTurn, sleep_instruction: str) -> PreparedTu
             reality_overwrite_instruction = template.replace("{implant}", implant_context)
 
     toya_anchor = get_toya_anchor(is_wl2=is_wl2) if is_toya_context else ""
-    query_intent = classify_query_intent(turn.plain_text_content)
-    record_intent(turn.request_id, query_intent.intent)
     is_info_request = query_intent.intent == "web_search"
     search_mode = chat._select_search_mode(query_intent, has_image=turn.has_image)
     long_term_facts = user_mem.get("long_term_facts", [])
@@ -642,6 +687,8 @@ async def _dispatch_model(prepared: PreparedTurn) -> str:
 
 async def generate_reply(prepared: PreparedTurn) -> ChatReply:
     chat = _chat_module()
+    if prepared.program_reply is not None:
+        return ChatReply(text=prepared.program_reply, inner_os="", program_generated=True)
     try:
         raw_result = await _dispatch_model(prepared)
     except Exception:
@@ -656,6 +703,9 @@ async def generate_reply(prepared: PreparedTurn) -> ChatReply:
 
 
 async def post_process_reply(prepared: PreparedTurn, reply: ChatReply) -> ChatReply:
+    if reply.program_generated:
+        return reply
+
     result = reply.text
     inner_os = reply.inner_os
 

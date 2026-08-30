@@ -556,6 +556,43 @@ async def test_generate_reply_falls_back_to_legacy_prompt_on_m1_failure():
 
 
 @pytest.mark.asyncio
+async def test_generate_reply_uses_program_guard_without_model_call():
+    prepared = _prepared_turn(program_reply="……你说的是哪一次？")
+    with mock.patch.object(chat_pipeline, "_dispatch_model", new=mock.AsyncMock()) as dispatch_mock:
+        reply = await chat_pipeline.generate_reply(prepared)
+
+    assert reply == chat_pipeline.ChatReply(
+        text="……你说的是哪一次？",
+        inner_os="",
+        program_generated=True,
+    )
+    dispatch_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_pipeline_prepare_guard_skips_shared_context_and_event_retrieval():
+    user_mem = {"history": [], "temp_implants": [], "long_term_facts": []}
+    with (
+        mock.patch.object(chat_pipeline, "get_user_memory", return_value=user_mem),
+        mock.patch.object(chat_pipeline, "build_shared_prompt_context", new=mock.AsyncMock()) as shared_mock,
+        mock.patch.object(chat_pipeline, "build_event_memory_context", new=mock.AsyncMock()) as event_mock,
+        mock.patch.object(chat_pipeline, "classify_query_intent", return_value=SimpleNamespace(
+            intent="mention", explicit_search=False, query=""
+        )),
+    ):
+        prepared = await chat_pipeline.prepare_turn(
+            _incoming_turn(plain_text_content="后来呢"),
+            "",
+        )
+
+    assert prepared.program_reply
+    assert prepared.ambiguity_guard is not None
+    assert prepared.ambiguity_guard.triggered is True
+    shared_mock.assert_not_awaited()
+    event_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_pipeline_post_process_keeps_memory_and_ooc_behavior():
     prepared = _prepared_turn()
     with mock.patch.object(chat_pipeline, "save_memory") as save_mock:
