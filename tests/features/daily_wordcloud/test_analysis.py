@@ -39,7 +39,7 @@ def test_build_report_counts_repeated_words_and_contributors():
     ]
 
 
-def test_build_report_message_volume_keeps_all_users_for_rendering_top_seven_plus_other():
+def test_build_report_message_volume_keeps_all_users_for_rendering_top_five_plus_other():
     rows = [(f"u{index}", f"用户{index}", "hello", index) for index in range(1, 9)]
     rows.extend([("u8", "用户8", "hello", 100), ("u8", "用户8", "hello", 101)])
 

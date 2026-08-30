@@ -14,7 +14,7 @@ import unicodedata
 from ...core import TZ_CN, find_data_path
 from . import store
 
-MAX_WORDS = 50
+MAX_WORDS = 40
 RAW_RETENTION_DAYS = 7
 PENDING_MIDNIGHT_REFRESH_KEY = "_pending_midnight_refresh"
 

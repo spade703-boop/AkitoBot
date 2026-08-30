@@ -24,6 +24,7 @@ _RENDER_SEMAPHORE = asyncio.Semaphore(2)
 
 _WORD_COLORS = ("#ff9f57", "#ffca80", "#79b7ff", "#9bd7ff", "#f7eee6", "#c9b8ff")
 _VOLUME_COLORS = ("#ff9750", "#ffc16b", "#f3d56b", "#79b7ff", "#5c9ded", "#8c7ae6", "#c9b8ff", "#667085")
+MESSAGE_VOLUME_VISIBLE_USERS = 5
 COMMAND_HELP_ITEMS = (
     {"command": "群聊词云 [YYYY-MM-DD]", "description": "超管查看昨天或指定日期的日报。"},
     {"command": "今日群聊词云", "description": "目标群成员可用；查看今天实时词云，同群共享 30 分钟冷却。"},
@@ -99,8 +100,8 @@ def _message_volume_data(report: dict[str, Any]) -> tuple[list[dict[str, Any]], 
     if not raw_items:
         return [], ""
 
-    visible_items = raw_items[:7]
-    other_count = sum(item["count"] for item in raw_items[7:])
+    visible_items = raw_items[:MESSAGE_VOLUME_VISIBLE_USERS]
+    other_count = sum(item["count"] for item in raw_items[MESSAGE_VOLUME_VISIBLE_USERS:])
     if other_count:
         visible_items.append({"user_id": "", "nickname": "其他", "count": other_count})
 
@@ -118,6 +119,7 @@ def _message_volume_data(report: dict[str, Any]) -> tuple[list[dict[str, Any]], 
                 "color": color,
                 "percentage": f"{percentage:.1f}",
                 "initial": item["nickname"][:1],
+                "avatar": qq_avatar_uri(item["user_id"]) if item["user_id"] else "",
             }
         )
         chart_segments.append(f"{color} {offset:.4f}% {end:.4f}%")

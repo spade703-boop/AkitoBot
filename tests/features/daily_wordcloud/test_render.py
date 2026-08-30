@@ -26,36 +26,43 @@ def test_build_page_data_adds_avatar_and_initial_for_contributors():
     assert person["avatar"].endswith("nk=10001&s=100")
 
 
-def test_build_page_data_builds_top_seven_plus_other_message_volume_chart():
+def test_build_page_data_builds_top_five_plus_other_message_volume_chart():
     report = {
         "frequencies": [],
         "top_words": [],
-        "message_count": 12,
+        "message_count": 11,
         "message_volume": [
             {"user_id": f"u{index}", "nickname": f"用户{index}", "count": count}
-            for index, count in enumerate((4, 3, 2, 1, 1, 1), start=1)
+            for index, count in enumerate((4, 3, 2, 1, 1), start=1)
         ],
     }
     with mock.patch.object(render, "_wordcloud_data_uri", return_value=""):
         data = render.build_page_data(report)
 
-    assert len(data["message_volume"]) == 6
-    assert data["message_volume"][0]["percentage"] == "33.3"
+    assert len(data["message_volume"]) == 5
+    assert data["message_volume"][0]["percentage"] == "36.4"
     assert data["volume_chart_style"].startswith("background: conic-gradient(")
     assert "其他" not in [item["nickname"] for item in data["message_volume"]]
 
+    report["message_volume"].append({"user_id": "u6", "nickname": "用户6", "count": 1})
     report["message_volume"].append({"user_id": "u7", "nickname": "用户7", "count": 1})
     report["message_volume"].append({"user_id": "u8", "nickname": "用户8", "count": 1})
-    report["message_volume"].append({"user_id": "u9", "nickname": "用户9", "count": 1})
     with mock.patch.object(render, "_wordcloud_data_uri", return_value=""):
         data = render.build_page_data(report)
 
     assert data["message_volume"][-1]["nickname"] == "其他"
-    assert data["message_volume"][-1]["count"] == 2
+    assert data["message_volume"][-1]["count"] == 3
+    assert data["message_volume"][0]["avatar"].endswith("nk=u1&s=100")
 
 
 async def test_render_report_delegates_to_html_renderer():
-    report = {"frequencies": [], "top_words": [], "report_date": "2026-08-29"}
+    report = {
+        "frequencies": [],
+        "top_words": [],
+        "report_date": "2026-08-29",
+        "message_count": 1,
+        "message_volume": [{"user_id": "10001", "nickname": "橘子汽水", "count": 1}],
+    }
     with (
         mock.patch.object(render, "_wordcloud_data_uri", return_value=""),
         mock.patch.object(render, "html_to_pic", new=mock.AsyncMock(return_value=b"jpeg")) as html_to_pic,
@@ -64,3 +71,7 @@ async def test_render_report_delegates_to_html_renderer():
 
     assert image == b"jpeg"
     html_to_pic.assert_awaited_once()
+    html = html_to_pic.await_args.args[0]
+    assert "volume-hole" not in html
+    assert "TOP 5 + 其他" in html
+    assert "nk=10001&amp;s=100" in html
