@@ -192,6 +192,7 @@ def build_report(
     effective_stopwords = stopwords if stopwords is not None else _load_stopwords()
     frequencies: Counter[str] = Counter()
     per_word_users: dict[str, Counter[str]] = defaultdict(Counter)
+    message_counts: Counter[str] = Counter()
     latest_names: dict[str, str] = {}
     effective_message_count = 0
     participant_ids: set[str] = set()
@@ -210,6 +211,7 @@ def build_report(
         effective_message_count += 1
         participant_ids.add(user_id)
         latest_names[user_id] = nickname.strip() or f"用户{user_id}"
+        message_counts[user_id] += 1
         frequencies.update(message_tokens)
         for token, count in Counter(message_tokens).items():
             per_word_users[token][user_id] += count
@@ -236,11 +238,21 @@ def build_report(
             }
         )
 
+    message_volume = [
+        {
+            "user_id": user_id,
+            "nickname": latest_names.get(user_id, f"用户{user_id}"),
+            "count": count,
+        }
+        for user_id, count in sorted(message_counts.items(), key=lambda item: (-item[1], item[0]))
+    ]
+
     return {
         "group_id": str(group_id),
         "report_date": report_date.isoformat(),
         "message_count": effective_message_count,
         "participant_count": len(participant_ids),
+        "message_volume": message_volume,
         "frequencies": [[word, count] for word, count in sorted_frequencies],
         "top_words": top_words,
     }

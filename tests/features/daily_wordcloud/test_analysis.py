@@ -33,6 +33,28 @@ def test_build_report_counts_repeated_words_and_contributors():
         {"user_id": "u2", "nickname": "阿二", "count": 3},
         {"user_id": "u1", "nickname": "新名片", "count": 2},
     ]
+    assert report["message_volume"] == [
+        {"user_id": "u1", "nickname": "新名片", "count": 2},
+        {"user_id": "u2", "nickname": "阿二", "count": 1},
+    ]
+
+
+def test_build_report_message_volume_keeps_all_users_for_rendering_top_seven_plus_other():
+    rows = [(f"u{index}", f"用户{index}", "hello", index) for index in range(1, 9)]
+    rows.extend([("u8", "用户8", "hello", 100), ("u8", "用户8", "hello", 101)])
+
+    report = analysis.build_report(
+        "1001",
+        date(2026, 8, 29),
+        rows,
+        blocked_words=set(),
+        cutter=_simple_cutter,
+        stopwords=set(),
+    )
+
+    assert report["message_count"] == 10
+    assert report["message_volume"][0] == {"user_id": "u8", "nickname": "用户8", "count": 3}
+    assert len(report["message_volume"]) == 8
 
 
 def test_build_report_applies_blocked_words_before_all_rankings():

@@ -31,10 +31,26 @@
   h1 { margin: 8px 0 0; font-size: 34px; line-height: 1.1; }
   .date { font-size: 15px; font-weight: 700; color: #ffd0a9; }
   .rule { height: 1px; margin: 20px 0; background: linear-gradient(90deg, rgba(255,151,80,.5), rgba(255,255,255,.06), rgba(111,174,255,.48)); }
-  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-  .stat { padding: 14px 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
+  .stats { display: grid; grid-template-columns: minmax(170px, .72fr) minmax(0, 2fr); gap: 12px; min-height: 236px; }
+  .stats-summary { display: grid; grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .stat { display: flex; flex-direction: column; justify-content: center; padding: 14px 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
   .stat b { display: block; font-size: 25px; color: #fff2e4; }
   .stat span { display: block; margin-top: 4px; font-size: 11px; color: var(--muted); }
+  .volume-card { display: grid; grid-template-columns: 190px minmax(0, 1fr); align-items: center; gap: 20px; min-width: 0; padding: 18px 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
+  .volume-chart { position: relative; width: 182px; height: 182px; border-radius: 50%; box-shadow: 0 10px 28px rgba(0,0,0,.20); }
+  .volume-hole { position: absolute; inset: 31px; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 50%; background: #191820; box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); }
+  .volume-hole b { font-size: 25px; line-height: 1; color: #fff2e4; }
+  .volume-hole span { margin-top: 6px; color: var(--muted); font-size: 10px; }
+  .volume-info { min-width: 0; }
+  .volume-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .volume-title { font-size: 17px; font-weight: 800; }
+  .volume-note { color: var(--muted); font-size: 11px; white-space: nowrap; }
+  .volume-legend { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; margin-top: 15px; }
+  .volume-item { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; align-items: center; gap: 7px; min-width: 0; }
+  .volume-swatch { width: 10px; height: 10px; border-radius: 3px; }
+  .volume-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #fff2e4; font-size: 11px; }
+  .volume-count { color: #ffd0a9; font-size: 10px; white-space: nowrap; }
+  .volume-empty { color: var(--muted); font-size: 12px; }
   .cloud { margin-top: 16px; height: 410px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 24px; background: rgba(0,0,0,.12); overflow: hidden; }
   .cloud img { width: 820px; height: 390px; object-fit: contain; }
   .section-title { margin: 24px 0 13px; font-size: 17px; font-weight: 800; }
@@ -68,9 +84,31 @@
   </header>
   <div class="rule"></div>
   <section class="stats">
-    <div class="stat"><b>{{ message_count }}</b><span>有效文本消息</span></div>
-    <div class="stat"><b>{{ participant_count }}</b><span>参与成员</span></div>
-    <div class="stat"><b>{{ unique_word_count }}</b><span>上榜词语</span></div>
+    <div class="stats-summary">
+      <div class="stat"><b>{{ message_count }}</b><span>有效文本消息</span></div>
+      <div class="stat"><b>{{ participant_count }}</b><span>参与成员</span></div>
+    </div>
+    <div class="volume-card">
+      {% if message_volume %}
+      <div class="volume-chart" style="{{ volume_chart_style }}">
+        <div class="volume-hole"><b>{{ message_count }}</b><span>有效消息</span></div>
+      </div>
+      <div class="volume-info">
+        <div class="volume-head"><div class="volume-title">消息发送量分布</div><div class="volume-note">单人 TOP 7 + 其他</div></div>
+        <div class="volume-legend">
+          {% for item in message_volume %}
+          <div class="volume-item">
+            <span class="volume-swatch" style="background: {{ item.color }}"></span>
+            <span class="volume-name">{{ item.nickname }}</span>
+            <span class="volume-count">{{ item.count }} 条 · {{ item.percentage }}%</span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% else %}
+      <div class="volume-empty">暂无可统计的有效文本消息</div>
+      {% endif %}
+    </div>
   </section>
   <section class="cloud"><img src="{{ cloud_image }}" alt="群聊词云"></section>
   <div class="section-title">今日热词贡献榜</div>

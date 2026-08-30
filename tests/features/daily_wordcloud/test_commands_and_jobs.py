@@ -81,6 +81,9 @@ async def test_superuser_can_render_non_persistent_demo_image():
             await commands.test_cmd.handlers[0](Event(group_id=9999, user_id="9001"))
 
     render_report.assert_awaited_once()
+    demo_report = render_report.await_args.args[0]
+    assert len(demo_report["message_volume"]) == 8
+    assert sum(item["count"] for item in demo_report["message_volume"]) == demo_report["message_count"]
     assert "[image]" in str(exc_info.value)
 
 

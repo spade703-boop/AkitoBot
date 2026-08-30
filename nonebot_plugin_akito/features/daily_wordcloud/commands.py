@@ -160,6 +160,16 @@ async def _(event: Event):
         "report_date": datetime.now(TZ_CN).date().isoformat(),
         "message_count": 128,
         "participant_count": 17,
+        "message_volume": [
+            {"user_id": "10001", "nickname": "橘子汽水", "count": 32},
+            {"user_id": "10002", "nickname": "夜航星", "count": 24},
+            {"user_id": "10003", "nickname": "蓝莓苏打", "count": 19},
+            {"user_id": "10004", "nickname": "小熊饼干", "count": 15},
+            {"user_id": "10005", "nickname": "玻璃海", "count": 12},
+            {"user_id": "10006", "nickname": "白桃乌龙", "count": 10},
+            {"user_id": "10007", "nickname": "月面散步", "count": 8},
+            {"user_id": "10008", "nickname": "午后电台", "count": 8},
+        ],
         "frequencies": [
             ["彰冬", 36], ["练习", 29], ["咖啡", 24], ["直播", 20], ["活动", 17],
             ["周末", 15], ["新曲", 13], ["akito", 11], ["toya", 9], ["晚安", 8],

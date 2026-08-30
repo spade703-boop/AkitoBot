@@ -24,7 +24,34 @@ def test_build_page_data_adds_avatar_and_initial_for_contributors():
     person = data["top_words"][0]["contributors"][0]
     assert person["initial"] == "橘"
     assert person["avatar"].endswith("nk=10001&s=100")
-    assert data["unique_word_count"] == 1
+
+
+def test_build_page_data_builds_top_seven_plus_other_message_volume_chart():
+    report = {
+        "frequencies": [],
+        "top_words": [],
+        "message_count": 12,
+        "message_volume": [
+            {"user_id": f"u{index}", "nickname": f"用户{index}", "count": count}
+            for index, count in enumerate((4, 3, 2, 1, 1, 1), start=1)
+        ],
+    }
+    with mock.patch.object(render, "_wordcloud_data_uri", return_value=""):
+        data = render.build_page_data(report)
+
+    assert len(data["message_volume"]) == 6
+    assert data["message_volume"][0]["percentage"] == "33.3"
+    assert data["volume_chart_style"].startswith("background: conic-gradient(")
+    assert "其他" not in [item["nickname"] for item in data["message_volume"]]
+
+    report["message_volume"].append({"user_id": "u7", "nickname": "用户7", "count": 1})
+    report["message_volume"].append({"user_id": "u8", "nickname": "用户8", "count": 1})
+    report["message_volume"].append({"user_id": "u9", "nickname": "用户9", "count": 1})
+    with mock.patch.object(render, "_wordcloud_data_uri", return_value=""):
+        data = render.build_page_data(report)
+
+    assert data["message_volume"][-1]["nickname"] == "其他"
+    assert data["message_volume"][-1]["count"] == 2
 
 
 async def test_render_report_delegates_to_html_renderer():

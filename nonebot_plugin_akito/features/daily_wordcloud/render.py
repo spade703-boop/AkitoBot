@@ -23,6 +23,7 @@ _TEMPLATE_ENV = Environment(
 _RENDER_SEMAPHORE = asyncio.Semaphore(2)
 
 _WORD_COLORS = ("#ff9f57", "#ffca80", "#79b7ff", "#9bd7ff", "#f7eee6", "#c9b8ff")
+_VOLUME_COLORS = ("#ff9750", "#ffc16b", "#f3d56b", "#79b7ff", "#5c9ded", "#8c7ae6", "#c9b8ff", "#667085")
 COMMAND_HELP_ITEMS = (
     {"command": "群聊词云 [YYYY-MM-DD]", "description": "超管查看昨天或指定日期的日报。"},
     {"command": "今日群聊词云", "description": "目标群成员可用；查看今天实时词云，同群共享 30 分钟冷却。"},
@@ -81,6 +82,49 @@ def _wordcloud_data_uri(report: dict[str, Any]) -> str:
     return f"data:image/png;base64,{encoded}"
 
 
+def _message_volume_data(report: dict[str, Any]) -> tuple[list[dict[str, Any]], str]:
+    raw_items = []
+    for item in report.get("message_volume", []):
+        try:
+            count = int(item.get("count", 0))
+        except (AttributeError, TypeError, ValueError):
+            continue
+        if count <= 0:
+            continue
+        user_id = str(item.get("user_id", ""))
+        nickname = str(item.get("nickname", "")).strip() or f"用户{user_id}"
+        raw_items.append({"user_id": user_id, "nickname": nickname, "count": count})
+
+    raw_items.sort(key=lambda item: (-item["count"], item["user_id"]))
+    if not raw_items:
+        return [], ""
+
+    visible_items = raw_items[:7]
+    other_count = sum(item["count"] for item in raw_items[7:])
+    if other_count:
+        visible_items.append({"user_id": "", "nickname": "其他", "count": other_count})
+
+    total = sum(item["count"] for item in visible_items)
+    offset = 0.0
+    chart_segments = []
+    rendered_items = []
+    for index, item in enumerate(visible_items):
+        percentage = item["count"] / total * 100
+        end = 100.0 if index == len(visible_items) - 1 else offset + percentage
+        color = _VOLUME_COLORS[index % len(_VOLUME_COLORS)]
+        rendered_items.append(
+            {
+                **item,
+                "color": color,
+                "percentage": f"{percentage:.1f}",
+                "initial": item["nickname"][:1],
+            }
+        )
+        chart_segments.append(f"{color} {offset:.4f}% {end:.4f}%")
+        offset = end
+    return rendered_items, f"background: conic-gradient({', '.join(chart_segments)});"
+
+
 def build_page_data(report: dict[str, Any]) -> dict[str, Any]:
     top_words = []
     for index, item in enumerate(report.get("top_words", []), start=1):
@@ -99,11 +143,13 @@ def build_page_data(report: dict[str, Any]) -> dict[str, Any]:
             )
         top_words.append({**item, "rank": index, "contributors": contributors})
 
+    message_volume, volume_chart_style = _message_volume_data(report)
     return {
         **report,
         "cloud_image": _wordcloud_data_uri(report),
+        "message_volume": message_volume,
+        "volume_chart_style": volume_chart_style,
         "top_words": top_words,
-        "unique_word_count": len(report.get("frequencies", [])),
     }
 
 
