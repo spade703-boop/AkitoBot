@@ -54,6 +54,7 @@
   .primary .kpi:nth-child(2) .kpi-value, .primary .kpi:nth-child(4) .kpi-value { color: var(--cool-light); }
   .kpi-note { margin-top: 4px; color: var(--faint); font-size: 10px; }
   .two-col { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 16px; }
+  .detail-wide { grid-column: 1 / -1; }
   .subsection { min-width: 0; padding: 15px; border-top: 1px solid var(--line); }
   .subsection h3 { margin: 0; font-size: 14px; }
   .subsection-caption { margin: 4px 0 12px; color: var(--muted); font-size: 10px; }
@@ -92,6 +93,21 @@
   .boss-progress-head { display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; }
   .boss-progress .progress-line { height: 8px; }
   .boss-progress .progress-line span { background: linear-gradient(90deg, var(--green), #a8efd0); }
+  .detail-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+  .detail-row + .detail-row { margin-top: 10px; }
+  .detail-row .metric-line { min-width: 0; }
+  .detail-bar { height: 5px; margin-top: 5px; overflow: hidden; border-radius: 999px; background: rgba(255, 255, 255, 0.08); }
+  .detail-bar span { display: block; height: 100%; min-width: 3px; border-radius: inherit; background: linear-gradient(90deg, var(--cool), var(--cool-light)); }
+  .detail-list { display: flex; flex-direction: column; gap: 11px; margin-top: 13px; }
+  .boss-instance-row { display: grid; grid-template-columns: minmax(112px, 1.3fr) 0.75fr minmax(104px, 1fr) minmax(90px, 0.9fr) minmax(125px, 1.35fr); gap: 8px; align-items: center; min-height: 46px; padding: 8px 11px; border-bottom: 1px solid rgba(255, 255, 255, 0.06); font-size: 10px; }
+  .boss-instance-row:last-child { border-bottom: 0; }
+  .boss-instance-row.head { min-height: 34px; color: var(--muted); background: rgba(255, 255, 255, 0.045); font-size: 9px; }
+  .boss-instance-row strong { font-size: 11px; }
+  .boss-instance-row .right { text-align: right; white-space: nowrap; }
+  .boss-instance-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .status { color: var(--green); font-weight: 700; }
+  .status.pending { color: var(--warm-light); }
+  .status.expired { color: var(--danger); }
   .empty { margin-top: 12px; color: var(--muted); font-size: 11px; }
   .footnote { display: flex; justify-content: space-between; gap: 15px; margin-top: 18px; color: var(--faint); font-size: 10px; line-height: 1.6; }
   @media (max-width: 620px) {
@@ -99,7 +115,9 @@
     .hero { align-items: flex-start; flex-direction: column; }
     .hero-meta { text-align: left; }
     .two-col { grid-template-columns: 1fr; }
+    .detail-wide { grid-column: auto; }
     .table-row { grid-template-columns: minmax(100px, 1.2fr) 0.55fr minmax(110px, 1.4fr) 0.5fr; gap: 6px; padding-inline: 9px; }
+    .boss-instance-row { grid-template-columns: minmax(92px, 1.15fr) 0.7fr minmax(84px, 1fr) minmax(74px, 0.85fr) minmax(98px, 1.2fr); gap: 5px; padding-inline: 8px; font-size: 9px; }
     .footnote { flex-direction: column; }
   }
 </style>
@@ -159,6 +177,109 @@
         {% endfor %}
       </div>
       {% endif %}
+    </section>
+
+    <section class="section secondary">
+      <div class="section-head"><div><h2>签到与成长投放</h2><p>记录签到参与和背景经验来源</p></div></div>
+      {% if baseline.signin_metrics_available %}
+      <div class="kpis">
+        <div class="kpi"><div class="kpi-label">签到次数</div><div class="kpi-value">{{ "{:,}".format(baseline.signins) }}</div><div class="kpi-note">成功完成的签到结算</div></div>
+        <div class="kpi"><div class="kpi-label">签到玩家</div><div class="kpi-value">{{ baseline.signin_players }}</div><div class="kpi-note">周期内至少签到一次</div></div>
+        <div class="kpi"><div class="kpi-label">签到经验</div><div class="kpi-value">+{{ "{:,}".format(baseline.signin_exp_gained) }}</div><div class="kpi-note">签到直接投放</div></div>
+        <div class="kpi"><div class="kpi-label">连签奖励</div><div class="kpi-value">+{{ "{:,}".format(baseline.signin_streak_bonus) }}</div><div class="kpi-note">连续签到额外经验</div></div>
+      </div>
+      <div class="two-col">
+        <div class="subsection">
+          <h3>签到参与</h3>
+          <div class="subsection-caption">按实际签到次数和去重玩家计算</div>
+          <div class="metric-list">
+            <div class="metric-line"><span>人均签到次数</span><strong>{{ baseline.signin_avg_per_player }}</strong></div>
+            <div class="metric-line"><span>签到玩家 / 战斗玩家</span><strong>{{ baseline.signin_players }} / {{ baseline.active_players }}</strong></div>
+          </div>
+        </div>
+        <div class="subsection">
+          <h3>经验拆分</h3>
+          <div class="subsection-caption">连签奖励已经包含在签到经验总量内</div>
+          <div class="metric-list">
+            <div class="metric-line"><span>基础与常规经验</span><strong>+{{ "{:,}".format(baseline.signin_base_exp) }}</strong></div>
+            <div class="metric-line"><span>连签经验占比</span><strong>{{ baseline.signin_streak_percent }}%</strong></div>
+          </div>
+        </div>
+      </div>
+      {% else %}
+      <div class="empty">暂无历史埋点（从本版本上线后开始累计）</div>
+      {% endif %}
+    </section>
+
+    <section class="section">
+      <div class="section-head"><div><h2>强化与购买支出</h2><p>仅记录成功扣款后的实际净消耗</p></div></div>
+      {% if baseline.spending_metrics_available %}
+      <div class="kpis">
+        <div class="kpi"><div class="kpi-label">普通强化</div><div class="kpi-value">{{ baseline.forge_uses }} 次</div><div class="kpi-note">消耗 {{ "{:,}".format(baseline.forge_points_spent) }} 积分 · 均 {{ baseline.forge_avg_cost }}</div></div>
+        <div class="kpi"><div class="kpi-label">BOSS 强化</div><div class="kpi-value">{{ baseline.world_boss_forge_uses }} 次</div><div class="kpi-note">消耗 {{ "{:,}".format(baseline.world_boss_forge_points_spent) }} 积分</div></div>
+        <div class="kpi"><div class="kpi-label">购买替换装</div><div class="kpi-value">{{ baseline.rebuy_uses }} 次</div><div class="kpi-note">消耗 {{ "{:,}".format(baseline.rebuy_points_spent) }} 积分 · 均 {{ baseline.rebuy_avg_cost }}</div></div>
+        <div class="kpi"><div class="kpi-label">强化与购买总支出</div><div class="kpi-value">{{ "{:,}".format(baseline.forge_rebuy_points_spent) }}</div><div class="kpi-note">不含普通送礼和补给支出</div></div>
+      </div>
+      {% else %}
+      <div class="empty">暂无历史埋点（从本版本上线后开始累计）</div>
+      {% endif %}
+    </section>
+
+    <section class="section">
+      <div class="section-head"><div><h2>事件与掉落</h2><p>按触发次数和物品数量展示，不估算历史概率</p></div></div>
+      <div class="two-col">
+        <div class="subsection">
+          <h3>特殊事件</h3>
+          {% if baseline.event_metrics_available and event_rows %}
+          <div class="detail-list">
+            {% for item in event_rows %}
+            <div class="detail-row"><div><div class="metric-line"><span>{{ item.label }}</span><strong>{{ item.value }}</strong></div><div class="detail-bar"><span style="width: {{ item.percent }}%;"></span></div></div></div>
+            {% endfor %}
+          </div>
+          {% elif not baseline.event_metrics_available %}
+          <div class="empty">暂无历史埋点（从本版本上线后开始累计）</div>
+          {% else %}
+          <div class="empty">本窗口暂无事件触发记录</div>
+          {% endif %}
+        </div>
+        <div class="subsection">
+          <h3>战斗掉落</h3>
+          {% if baseline.drop_metrics_available %}
+          <div class="metric-list">
+            <div class="metric-line"><span>掉落命中率</span><strong>{{ baseline.drop_hit_rate }}</strong></div>
+            <div class="metric-line"><span>掉落判定 / 命中</span><strong>{{ baseline.drop_attempts }} / {{ baseline.drop_hits }}</strong></div>
+          </div>
+          {% if drop_rows %}
+          <div class="detail-list">
+            {% for item in drop_rows %}
+            <div class="detail-row"><div><div class="metric-line"><span>{{ item.label }}</span><strong>{{ item.value }}</strong></div><div class="detail-bar"><span style="width: {{ item.percent }}%;"></span></div></div></div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="empty">本窗口暂无掉落物命中</div>
+          {% endif %}
+          {% else %}
+          <div class="empty">暂无历史埋点（从本版本上线后开始累计）</div>
+          {% endif %}
+        </div>
+        <div class="subsection detail-wide">
+          <h3>冒险补给物品</h3>
+          {% if baseline.supply_metrics_available %}
+          <div class="subsection-caption">{{ baseline.supply_players }} 名玩家参与过补给开启</div>
+          {% if supply_rows %}
+          <div class="detail-list">
+            {% for item in supply_rows %}
+            <div class="detail-row"><div><div class="metric-line"><span>{{ item.label }}</span><strong>{{ item.value }}</strong></div><div class="detail-bar"><span style="width: {{ item.percent }}%;"></span></div></div></div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="empty">本窗口暂无补给物品记录</div>
+          {% endif %}
+          {% else %}
+          <div class="empty">暂无历史埋点（从本版本上线后开始累计）</div>
+          {% endif %}
+        </div>
+      </div>
     </section>
 
     <section class="section">
@@ -239,6 +360,28 @@
       <div class="boss-progress">
         <div class="boss-progress-head"><span>周期参与率</span><strong>{{ baseline.boss_participation_rate }}</strong></div>
         <div class="progress-line"><span style="width: {{ baseline.boss_participation_rate_value }}%;"></span></div>
+      </div>
+      <div class="subsection">
+        <h3>世界 BOSS 实例</h3>
+        <div class="subsection-caption">展示最近 10 只 BOSS 的参与、伤害和奖励汇总</div>
+        {% if baseline.world_boss_instance_metrics_available and boss_instance_rows %}
+        <div class="table">
+          <div class="boss-instance-row head"><span>日期 / BOSS</span><span>状态</span><span class="right">参与 / 攻击</span><span class="right">伤害</span><span class="right">奖励经验 / 积分</span></div>
+          {% for boss in boss_instance_rows %}
+          <div class="boss-instance-row">
+            <div class="boss-instance-name"><strong>{{ boss.date }}</strong><br>{{ boss.name }}</div>
+            <span class="status{% if boss.status == '已离场' %} expired{% elif boss.status == '未结算' %} pending{% endif %}">{{ boss.status }}</span>
+            <span class="right">{{ boss.participants }} / {{ boss.attacks }}</span>
+            <span class="right">{{ "{:,}".format(boss.damage) }}</span>
+            <span class="right">+{{ "{:,}".format(boss.reward_exp) }} / +{{ "{:,}".format(boss.reward_points) }}</span>
+          </div>
+          {% endfor %}
+        </div>
+        {% elif not baseline.world_boss_instance_metrics_available %}
+        <div class="empty">暂无历史埋点（从本版本上线后开始累计）</div>
+        {% else %}
+        <div class="empty">本窗口暂无 BOSS 实例记录</div>
+        {% endif %}
       </div>
     </section>
 

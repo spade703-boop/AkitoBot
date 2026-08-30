@@ -71,6 +71,136 @@ def test_metrics_template_renders_periods_and_monsters():
     assert "RPG 运营看板" in html
     assert "近7天" in html and "近30天" in html
     assert "石像鬼" in html
+    assert "签到与成长投放" in html
+
+
+def test_metrics_records_growth_events_spending_supply_and_boss_instances():
+    group = {"users": {"u1": {}}, "rpg": {}}
+    analytics.record_signin(
+        group,
+        "2026-07-27",
+        user_id="u1",
+        exp_gained=65,
+        streak_bonus=15,
+        fortune="daji",
+    )
+    analytics.record_battle(
+        group,
+        "2026-07-27",
+        mode="solo",
+        user_ids=["u1"],
+        outcome={
+            "win": True,
+            "elite": True,
+            "monster": {"name": "史莱姆"},
+            "event": "insight",
+            "support_scene": "akito_success",
+            "battle_guard_triggered": True,
+            "buff": {"key": "festival"},
+            "drops": ["经验书"],
+            "exp_buffed": True,
+        },
+        exp_gained=30,
+        points_gained=4,
+    )
+    analytics.record_battle(
+        group,
+        "2026-07-27",
+        mode="team",
+        user_ids=["u1", "u2"],
+        outcome={
+            "win": False,
+            "monster": {"name": "史莱姆"},
+            "team_event": "focus_fire",
+            "negative_event": "friction",
+            "team_minor_event": "campfire",
+            "b": {"drops": ["地图"]},
+            "a": {"drops": []},
+        },
+        exp_gained=10,
+        points_gained=2,
+    )
+    analytics.record_forge(group, "2026-07-27", points_spent=90, refund=20)
+    analytics.record_forge(group, "2026-07-27", points_spent=30, world_boss=True)
+    analytics.record_rebuy(group, "2026-07-27", points_spent=100)
+    analytics.record_supply_open(
+        group,
+        "2026-07-27",
+        points_spent=140,
+        exp_gained=30,
+        user_id="u1",
+        items={"旅人的行囊": 1, "地图": 2},
+    )
+
+    boss = {"date": "2026-07-27", "name": "赤鳞灾龙", "max_hp": 1200}
+    boss["metric_id"] = analytics.record_world_boss_spawn(group, "2026-07-27", boss=boss)
+    boss["contributors"] = {"u1": 420, "u2": 180}
+    analytics.record_world_boss_attack(
+        group,
+        "2026-07-27",
+        user_ids=["u1", "u2"],
+        damage=600,
+        boss=boss,
+    )
+    analytics.record_world_boss_settlement(
+        group,
+        boss,
+        [{"exp": 40, "points": 5}, {"exp": 30, "points": 4}],
+        killed=True,
+    )
+
+    metric = group["rpg"]["metrics"]["days"]["2026-07-27"]
+    assert group["users"]["u1"]["rpg_first_seen"] == "2026-07-27"
+    assert metric["signins"] == 1
+    assert metric["signin_exp_gained"] == 65
+    assert metric["signin_streak_bonus"] == 15
+    assert metric["forge_points_spent"] == 100
+    assert metric["world_boss_forge_points_spent"] == 30
+    assert metric["rebuy_points_spent"] == 100
+    assert metric["supply_players"] == ["u1"]
+    assert metric["supply_items"] == {"旅人的行囊": 1, "地图": 2}
+    assert metric["drop_attempts"] == 3
+    assert metric["drop_hits"] == 2
+    assert metric["events"]["battle:insight"] == 1
+    assert metric["events"]["team_negative:friction"] == 1
+    assert metric["events"]["daily_buff:festival"] == 1
+    assert metric["events"]["exp_buff"] == 1
+    assert metric["world_boss_instances"][0]["participants"] == 2
+    assert metric["world_boss_instances"][0]["attacks"] == 1
+    assert metric["world_boss_instances"][0]["damage"] == 600
+    assert metric["world_boss_instances"][0]["reward_exp"] == 70
+
+    page_data = analytics.build_metrics_page_data(group, "2026-07-27")
+    baseline = page_data["periods"][1]
+    assert baseline["signin_metrics_available"] is True
+    assert baseline["spending_metrics_available"] is True
+    assert baseline["event_metrics_available"] is True
+    assert baseline["drop_metrics_available"] is True
+    assert baseline["supply_metrics_available"] is True
+    assert baseline["world_boss_instance_metrics_available"] is True
+    assert page_data["event_rows"]
+    assert page_data["drop_rows"]
+    assert page_data["supply_rows"]
+    assert page_data["boss_instance_rows"][0]["status"] == "已击杀"
+
+
+def test_metrics_old_entries_do_not_claim_new_instrumentation():
+    group = {"rpg": {"metrics": {"days": {"2026-07-27": {"battles": 2, "wins": 1}}}}}
+
+    page_data = analytics.build_metrics_page_data(group, "2026-07-27")
+    baseline = page_data["periods"][1]
+    assert baseline["signin_metrics_available"] is False
+    assert baseline["spending_metrics_available"] is False
+    assert baseline["event_metrics_available"] is False
+    assert baseline["drop_metrics_available"] is False
+    assert baseline["supply_metrics_available"] is False
+    assert baseline["world_boss_instance_metrics_available"] is False
+    assert page_data["event_rows"] == []
+    assert page_data["drop_rows"] == []
+    assert page_data["supply_rows"] == []
+    assert page_data["boss_instance_rows"] == []
+    html = bond_render._TEMPLATE_ENV.get_template("rpg_metrics.html").render(**page_data)
+    assert "暂无历史埋点" in html
 
 
 @pytest.mark.asyncio
@@ -183,6 +313,10 @@ async def test_style_test_command_is_superuser_only_and_uses_synthetic_data(monk
     assert rendered_page["periods"][0]["active_players"] == 8
     assert len(rendered_page["activity_trend"]) == 7
     assert rendered_page["level_distribution"]
+    assert rendered_page["event_rows"]
+    assert rendered_page["drop_rows"]
+    assert rendered_page["supply_rows"]
+    assert rendered_page["boss_instance_rows"]
 
 
 @pytest.mark.asyncio

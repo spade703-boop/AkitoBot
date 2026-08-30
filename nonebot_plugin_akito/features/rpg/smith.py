@@ -11,6 +11,7 @@ from nonebot.params import CommandArg
 
 from ...core import SUPERUSER_QQ, is_sleeping
 from ...core.game_store import LOCK, _display_name, _get_group, _load_data, _save_data, _today_str
+from .analytics import record_forge, record_rebuy
 from .boss import _active_world_boss, _cleanup_stale_world_boss, _ensure_boss_participant
 from .config import _cfg, _error, _line
 from .player import _ensure_player, _grant_equip, _resolve_group
@@ -135,8 +136,10 @@ async def _(event: Event, args: Message = CommandArg()):
         data = _load_data()
         group = _get_group(data, group_id)
         user = _ensure_player(group, event.get_user_id(), _display_name(event))
+        before_points = int(user.get("points", 0))
         ok, result = _forge(user, today)
         if ok:
+            record_forge(group, today, points_spent=before_points - int(user.get("points", 0)))
             _save_data(data)
     await forge_cmd.finish(MessageSegment.reply(event.message_id) + result)
 
@@ -171,8 +174,15 @@ async def _(event: Event, args: Message = CommandArg()):
             await boss_forge_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
         user_id = event.get_user_id()
         user = _ensure_player(group, user_id, _display_name(event))
+        before_points = int(user.get("points", 0))
         ok, result = _forge_world_boss(boss, user_id, user, today, rng=random)
         if ok:
+            record_forge(
+                group,
+                today,
+                points_spent=before_points - int(user.get("points", 0)),
+                world_boss=True,
+            )
             _save_data(data)
     await boss_forge_cmd.finish(MessageSegment.reply(event.message_id) + result)
 
@@ -199,8 +209,10 @@ async def _(event: Event, args: Message = CommandArg()):
         data = _load_data()
         group = _get_group(data, group_id)
         user = _ensure_player(group, event.get_user_id(), _display_name(event))
+        before_points = int(user.get("points", 0))
         ok, result = _rebuy_equip(user, today)
         if ok:
+            record_rebuy(group, today, points_spent=before_points - int(user.get("points", 0)))
             _save_data(data)
     await rebuy_cmd.finish(MessageSegment.reply(event.message_id) + result)
 

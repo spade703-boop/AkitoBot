@@ -12,6 +12,7 @@ import random
 from ...core import TZ_CN
 from ...core.game_store import _today_str, _weighted_choice, register_signin_hook
 from ...core.types import GroupRecord
+from .analytics import record_signin
 from .config import _cfg, _line
 from .player import _ensure_player, _grant_equip, _level_of
 from .types import RpgUserRecord
@@ -83,8 +84,17 @@ def on_signin(group: GroupRecord, user_id: str, rng=random) -> str:
     streak_bonus = min(max(streak - 1, 0) * int(scfg.get("per_day", 10)), int(scfg.get("cap", 100)))
 
     base_exp = int(_cfg("signin", {}).get("exp", 50))
+    old_exp = int(user.get("exp", 0))
     user["exp"] = int(user.get("exp", 0)) + base_exp + streak_bonus
     _grant_equip(user, today, rng)  # 发今日装备（按发放后的等级）
+    record_signin(
+        group,
+        today,
+        user_id=user_id,
+        exp_gained=int(user.get("exp", 0)) - old_exp,
+        streak_bonus=streak_bonus,
+        fortune=key,
+    )
 
     line = _line("signin_exp", exp=base_exp, level=_level_of(user["exp"]))
     if streak_bonus > 0:

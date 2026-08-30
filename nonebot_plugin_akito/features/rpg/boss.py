@@ -236,7 +236,7 @@ def _spawn_world_boss(
         "spawned_by": str(user_id),
     }
     _rpg_state(group)["world_boss"] = boss
-    record_world_boss_spawn(group, today, forced=forced)
+    boss["metric_id"] = record_world_boss_spawn(group, today, forced=forced, boss=boss)
     return boss
 
 
@@ -983,7 +983,7 @@ async def _(event: GroupMessageEvent, args: Message = CommandArg()):
             {user_id: _boss_damage(participant, user, today, rng=random)},
         ).get(str(user_id), 0)
         _consume_equip(participant)
-        record_world_boss_attack(group, today, user_ids=[user_id], damage=dealt)
+        record_world_boss_attack(group, today, user_ids=[user_id], damage=dealt, boss=boss)
 
         head_key = "world_boss_attack_kill" if int(boss.get("hp", 0)) <= 0 else "world_boss_attack"
         if int(boss.get("hp", 0)) <= 0:
@@ -1102,6 +1102,8 @@ async def _(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
                 today,
                 user_ids=[initiator, target],
                 damage=sum(dealt.values()),
+                boss=boss,
+                event="team_attack",
             )
             kill_done = int(boss.get("hp", 0)) <= 0
             if kill_done:
@@ -1166,6 +1168,8 @@ async def _(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
                 today,
                 user_ids=[initiator],
                 damage=sum(dealt.values()),
+                boss=boss,
+                event=f"team_fail:{fail_event}" if fail_event else "team_fail",
             )
             attack_line = _boss_at_line(
                 "world_boss_attack_kill" if int(boss.get("hp", 0)) <= 0 else "world_boss_attack",

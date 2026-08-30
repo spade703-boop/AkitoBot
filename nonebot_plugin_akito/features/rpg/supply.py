@@ -170,6 +170,8 @@ async def _(event: Event, args: Message = CommandArg()):
             points_spent=cost,
             exp_gained=exp_gain,
             count=requested,
+            user_id=user_id,
+            items=item_counts,
         )
         new_level = _level_of(int(user.get("exp", 0)))
         _save_data(data)
