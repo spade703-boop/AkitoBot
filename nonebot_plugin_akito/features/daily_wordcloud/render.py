@@ -24,6 +24,7 @@ _RENDER_SEMAPHORE = asyncio.Semaphore(2)
 
 _WORD_COLORS = ("#ff9f57", "#ffca80", "#79b7ff", "#9bd7ff", "#f7eee6", "#c9b8ff")
 _VOLUME_COLORS = ("#ff9750", "#ffc16b", "#f3d56b", "#79b7ff", "#5c9ded", "#8c7ae6", "#c9b8ff", "#667085")
+_OTHER_VOLUME_COLOR = "#98A2B3"
 MESSAGE_VOLUME_VISIBLE_USERS = 5
 COMMAND_HELP_ITEMS = (
     {"command": "群聊词云 [YYYY-MM-DD]", "description": "超管查看昨天或指定日期的日报。"},
@@ -112,7 +113,7 @@ def _message_volume_data(report: dict[str, Any]) -> tuple[list[dict[str, Any]], 
     for index, item in enumerate(visible_items):
         percentage = item["count"] / total * 100
         end = 100.0 if index == len(visible_items) - 1 else offset + percentage
-        color = _VOLUME_COLORS[index % len(_VOLUME_COLORS)]
+        color = _OTHER_VOLUME_COLOR if not item["user_id"] else _VOLUME_COLORS[index % len(_VOLUME_COLORS)]
         rendered_items.append(
             {
                 **item,

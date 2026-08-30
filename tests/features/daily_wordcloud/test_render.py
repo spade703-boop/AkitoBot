@@ -52,6 +52,7 @@ def test_build_page_data_builds_top_five_plus_other_message_volume_chart():
 
     assert data["message_volume"][-1]["nickname"] == "其他"
     assert data["message_volume"][-1]["count"] == 3
+    assert data["message_volume"][-1]["color"] == "#98A2B3"
     assert data["message_volume"][0]["avatar"].endswith("nk=u1&s=100")
 
 
