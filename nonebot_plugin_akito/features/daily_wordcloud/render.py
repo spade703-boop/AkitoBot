@@ -22,9 +22,9 @@ _TEMPLATE_ENV = Environment(
 )
 _RENDER_SEMAPHORE = asyncio.Semaphore(2)
 
-_WORD_COLORS = ("#ff9f57", "#ffca80", "#79b7ff", "#9bd7ff", "#f7eee6", "#c9b8ff")
-_VOLUME_COLORS = ("#ff9750", "#ffc16b", "#f3d56b", "#79b7ff", "#5c9ded", "#8c7ae6", "#c9b8ff", "#667085")
-_OTHER_VOLUME_COLOR = "#98A2B3"
+_WORD_COLORS = ("#ff9750", "#ffb27d", "#6faeff", "#9bd7ff", "#fff8ef", "#eef4ff")
+_VOLUME_COLORS = ("#ff9750", "#ffb27d", "#6faeff", "#9bd7ff", "#d1d5db")
+_OTHER_VOLUME_COLOR = "#667085"
 MESSAGE_VOLUME_VISIBLE_USERS = 5
 COMMAND_HELP_ITEMS = (
     {"command": "群聊词云 [YYYY-MM-DD]", "description": "超管查看昨天或指定日期的日报。"},

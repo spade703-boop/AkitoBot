@@ -5,6 +5,15 @@ from unittest import mock
 from nonebot_plugin_akito.features.daily_wordcloud import render
 
 
+def test_wordcloud_palette_uses_only_orange_blue_and_white_shades():
+    assert render._WORD_COLORS == ("#ff9750", "#ffb27d", "#6faeff", "#9bd7ff", "#fff8ef", "#eef4ff")
+
+
+def test_message_volume_palette_uses_distinct_orange_blue_and_gray_shades():
+    assert render._VOLUME_COLORS == ("#ff9750", "#ffb27d", "#6faeff", "#9bd7ff", "#d1d5db")
+    assert render._OTHER_VOLUME_COLOR == "#667085"
+
+
 def test_build_page_data_adds_avatar_and_initial_for_contributors():
     report = {
         "group_id": "1001",
@@ -52,7 +61,7 @@ def test_build_page_data_builds_top_five_plus_other_message_volume_chart():
 
     assert data["message_volume"][-1]["nickname"] == "其他"
     assert data["message_volume"][-1]["count"] == 3
-    assert data["message_volume"][-1]["color"] == "#98A2B3"
+    assert data["message_volume"][-1]["color"] == "#667085"
     assert data["message_volume"][0]["avatar"].endswith("nk=u1&s=100")
 
 
