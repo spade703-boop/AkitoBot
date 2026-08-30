@@ -86,6 +86,54 @@ async def test_superuser_can_render_wordcloud_command_help_image():
     assert "[image]" in str(exc_info.value)
 
 
+async def test_group_member_can_render_live_wordcloud():
+    commands._LIVE_LAST_REQUEST.clear()
+    report = {"frequencies": [["hello", 2]], "top_words": []}
+    with (
+        mock.patch.object(commands.analysis, "aggregate_current_report", new=mock.AsyncMock(return_value=report)) as aggregate,
+        mock.patch.object(commands, "render_report", new=mock.AsyncMock(return_value=b"live-image")) as render_report,
+    ):
+        with pytest.raises(FinishedException) as exc_info:
+            await commands.live_cmd.handlers[0](Event(group_id=1001, user_id="ordinary-user"))
+
+    aggregate.assert_awaited_once_with("1001")
+    render_report.assert_awaited_once_with(report)
+    assert "[image]" in str(exc_info.value)
+
+
+async def test_live_wordcloud_cooldown_is_shared_by_group_members():
+    commands._LIVE_LAST_REQUEST.clear()
+    assert commands.LIVE_COOLDOWN_SECONDS == 30 * 60
+    report = {"frequencies": [["hello", 2]], "top_words": []}
+    with (
+        mock.patch.object(commands.analysis, "aggregate_current_report", new=mock.AsyncMock(return_value=report)) as aggregate,
+        mock.patch.object(commands, "render_report", new=mock.AsyncMock(return_value=b"live-image")),
+    ):
+        with pytest.raises(FinishedException):
+            await commands.live_cmd.handlers[0](Event(group_id=1001, user_id="first-user"))
+        with pytest.raises(FinishedException) as exc_info:
+            await commands.live_cmd.handlers[0](Event(group_id=1001, user_id="second-user"))
+
+    aggregate.assert_awaited_once_with("1001")
+    assert "实时词云正在冷却" in str(exc_info.value)
+
+
+async def test_group_member_can_use_today_argument_for_live_wordcloud():
+    commands._LIVE_LAST_REQUEST.clear()
+    report = {"frequencies": [["hello", 2]], "top_words": []}
+    with (
+        mock.patch.object(commands.analysis, "aggregate_current_report", new=mock.AsyncMock(return_value=report)),
+        mock.patch.object(commands, "render_report", new=mock.AsyncMock(return_value=b"live-image")),
+    ):
+        with pytest.raises(FinishedException) as exc_info:
+            await commands.query_cmd.handlers[0](
+                Event(group_id=1001, user_id="ordinary-user"),
+                Message("今天"),
+            )
+
+    assert "[image]" in str(exc_info.value)
+
+
 async def test_superuser_can_backfill_report_from_history():
     report = {"frequencies": [["hello", 2]], "top_words": []}
     bot = type("BotStub", (), {"self_id": "bot-id"})()

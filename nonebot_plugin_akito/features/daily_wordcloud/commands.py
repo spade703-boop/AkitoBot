@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
+import time
 
 from nonebot import on_command
 from nonebot.adapters import Bot, Event, Message
@@ -14,6 +15,9 @@ from ...core import SUPERUSER_QQ, TZ_CN, WORDCLOUD_GROUPS
 from . import analysis, store
 from .jobs import ensure_report
 from .render import render_command_help, render_report
+
+LIVE_COOLDOWN_SECONDS = 30 * 60
+_LIVE_LAST_REQUEST: dict[str, float] = {}
 
 
 def _is_superuser(event: Event) -> bool:
@@ -57,23 +61,42 @@ def _reply_with_text(event: Event, text: str) -> Message:
     return Message(text)
 
 
+def _live_cooldown_remaining(group_id: str) -> int:
+    now = time.monotonic()
+    last_request = _LIVE_LAST_REQUEST.get(group_id)
+    if last_request is not None:
+        elapsed = now - last_request
+        if elapsed < LIVE_COOLDOWN_SECONDS:
+            return max(1, int(LIVE_COOLDOWN_SECONDS - elapsed + 0.999))
+    _LIVE_LAST_REQUEST[group_id] = now
+    return 0
+
+
+async def _send_live_report(matcher, event: Event, group_id: str) -> None:
+    remaining = _live_cooldown_remaining(group_id)
+    if remaining:
+        await matcher.finish(_reply_with_text(event, f"实时词云正在冷却，请 {remaining} 秒后再试。"))
+    report = await analysis.aggregate_current_report(group_id)
+    if not report.get("frequencies"):
+        await matcher.finish(_reply_with_text(event, "截至当前还没有可统计的有效聊天文本。"))
+    image = await render_report(report)
+    await matcher.finish(_reply_with_image(event, image))
+
+
 query_cmd = on_command("群聊词云", priority=5, block=True)
 
 
 @query_cmd.handle()
 async def _(event: Event, args: Message = CommandArg()):
-    if not _is_superuser(event):
-        return
+    raw_date = args.extract_plain_text().strip()
     group_id = _target_group_id(event)
     if group_id is None:
         return
-    raw_date = args.extract_plain_text().strip()
     if raw_date in {"今天", "今日", "实时"}:
-        report = await analysis.aggregate_current_report(group_id)
-        if not report.get("frequencies"):
-            await query_cmd.finish("截至当前还没有可统计的有效聊天文本。")
-        image = await render_report(report)
-        await query_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(image))
+        await _send_live_report(query_cmd, event, group_id)
+
+    if not _is_superuser(event):
+        return
 
     report_date, error = _parse_date_argument(raw_date, default_yesterday=True)
     if error:
@@ -97,16 +120,10 @@ live_cmd = on_command("今日群聊词云", aliases={"实时群聊词云"}, prio
 
 @live_cmd.handle()
 async def _(event: Event):
-    if not _is_superuser(event):
-        return
     group_id = _target_group_id(event)
     if group_id is None:
         return
-    report = await analysis.aggregate_current_report(group_id)
-    if not report.get("frequencies"):
-        await live_cmd.finish("截至当前还没有可统计的有效聊天文本。")
-    image = await render_report(report)
-    await live_cmd.finish(_reply_with_image(event, image))
+    await _send_live_report(live_cmd, event, group_id)
 
 
 help_cmd = on_command("词云帮助", aliases={"词云指令", "群聊词云帮助"}, priority=5, block=True)
