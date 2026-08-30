@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Iterable
 from contextlib import closing
 from datetime import datetime, timezone
 import json
@@ -160,6 +161,23 @@ async def fetch_history_messages(
     database_path: Path | None = None,
 ) -> list[tuple[str, str, str, int]]:
     """Read legacy impression messages for a Beijing-time date window."""
+    records = await fetch_history_records(
+        group_id,
+        start_time,
+        end_time,
+        database_path=database_path,
+    )
+    return [(user_id, nickname, content, event_time) for user_id, nickname, content, _message_id, event_time in records]
+
+
+async def fetch_history_records(
+    group_id: str,
+    start_time: int,
+    end_time: int,
+    *,
+    database_path: Path | None = None,
+) -> list[tuple[str, str, str, str, int]]:
+    """Read legacy impression messages with stable source message IDs."""
     source_path = database_path or get_history_database_path()
     if not source_path.is_file():
         raise FileNotFoundError(f"历史消息库不存在: {source_path}")
@@ -168,9 +186,12 @@ async def fetch_history_messages(
     end_text = datetime.fromtimestamp(end_time, timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     async with aiosqlite.connect(source_path) as connection:
         await _configure(connection)
+        async with connection.execute("PRAGMA table_info(messages)") as cursor:
+            columns = {str(row[1]) for row in await cursor.fetchall()}
+        message_id_expression = "message_id" if "message_id" in columns else "NULL"
         async with connection.execute(
-            """
-            SELECT user_id, nickname, content, timestamp
+            f"""
+            SELECT id, user_id, nickname, content, timestamp, {message_id_expression}
             FROM messages
             WHERE group_id=? AND timestamp>=? AND timestamp<?
             ORDER BY id ASC
@@ -179,13 +200,44 @@ async def fetch_history_messages(
         ) as cursor:
             fetched_rows = await cursor.fetchall()
 
-    rows: list[tuple[str, str, str, int]] = []
-    for user_id, nickname, content, timestamp in fetched_rows:
+    rows: list[tuple[str, str, str, str, int]] = []
+    for row_id, user_id, nickname, content, timestamp, message_id in fetched_rows:
         event_time = _sqlite_timestamp_to_epoch(timestamp)
         if event_time is None or not (start_time <= event_time < end_time):
             continue
-        rows.append((str(user_id), str(nickname or ""), str(content or ""), event_time))
+        stable_message_id = str(message_id or f"history:{row_id}")
+        rows.append((str(user_id), str(nickname or ""), str(content or ""), stable_message_id, event_time))
     return rows
+
+
+async def import_raw_messages(
+    group_id: str,
+    rows: Iterable[tuple[str, str, str, str, int]],
+    *,
+    excluded_user_ids: Iterable[str] = (),
+) -> int:
+    """Import historical rows into the local raw table, deduplicated by message ID."""
+    excluded = _EXCLUDED_USER_IDS | {str(user_id) for user_id in excluded_user_ids}
+    values = [
+        (str(group_id), str(user_id), str(nickname), str(content), str(message_id), int(event_time))
+        for user_id, nickname, content, message_id, event_time in rows
+        if str(user_id) not in excluded and str(message_id).strip()
+    ]
+    if not values:
+        return 0
+    async with _WRITE_LOCK, aiosqlite.connect(DATABASE_PATH) as connection:
+        await _configure(connection)
+        before = connection.total_changes
+        await connection.executemany(
+            """
+            INSERT OR IGNORE INTO raw_messages
+                (group_id, user_id, nickname, content, message_id, event_time)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            values,
+        )
+        await connection.commit()
+        return connection.total_changes - before
 
 
 async def save_report(group_id: str, report_date: str, payload: dict[str, Any]) -> None:

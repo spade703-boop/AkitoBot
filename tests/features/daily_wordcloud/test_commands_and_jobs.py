@@ -1,22 +1,29 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from unittest import mock
 
 from nonebot.adapters import Event, Message
 from nonebot.exception import FinishedException
 import pytest
 
+from nonebot_plugin_akito.core import TZ_CN
 from nonebot_plugin_akito.features.daily_wordcloud import commands, jobs
 
 
 def test_date_argument_defaults_to_yesterday_and_rejects_current_day():
     parsed, error = commands._parse_date_argument("", today=date(2026, 8, 30), default_yesterday=True)
     current, current_error = commands._parse_date_argument("2026-08-30", today=date(2026, 8, 30))
+    backfill_current, backfill_error = commands._parse_date_argument(
+        "2026-08-30",
+        today=date(2026, 8, 30),
+        allow_today=True,
+    )
 
     assert (parsed, error) == (date(2026, 8, 29), None)
     assert current is None
     assert "已经结束" in current_error
+    assert (backfill_current, backfill_error) == (date(2026, 8, 30), None)
 
 
 async def test_non_superuser_cannot_manage_blocked_words():
@@ -152,8 +159,60 @@ async def test_superuser_can_backfill_report_from_history():
         "1001",
         date(2026, 8, 29),
         excluded_user_ids={"bot-id"},
+        pending_midnight_refresh=False,
+        persist_raw_messages=False,
     )
     assert "[image]" in str(exc_info.value)
+
+
+async def test_superuser_can_backfill_current_day_from_history():
+    report = {"frequencies": [["hello", 2]], "top_words": []}
+    bot = type("BotStub", (), {"self_id": "bot-id"})()
+    current_date = datetime.now(TZ_CN).date()
+    with (
+        mock.patch.object(commands.analysis, "aggregate_history_report", new=mock.AsyncMock(return_value=report)) as aggregate,
+        mock.patch.object(commands, "render_report", new=mock.AsyncMock(return_value=b"history-image")),
+    ):
+        with pytest.raises(FinishedException) as exc_info:
+            await commands.backfill_cmd.handlers[0](
+                bot,
+                Event(group_id=1001, user_id="9001", message_id="backfill-today-1"),
+                Message(current_date.isoformat()),
+            )
+
+    aggregate.assert_awaited_once_with(
+        "1001",
+        current_date,
+        excluded_user_ids={"bot-id"},
+        pending_midnight_refresh=True,
+        persist_raw_messages=True,
+    )
+    assert "[image]" in str(exc_info.value)
+
+
+async def test_midnight_refresh_rebuilds_a_current_day_backfill():
+    report = {
+        "frequencies": [["partial", 1]],
+        "top_words": [],
+        jobs.analysis.PENDING_MIDNIGHT_REFRESH_KEY: True,
+    }
+    refreshed_report = {"frequencies": [["complete", 3]], "top_words": []}
+    with (
+        mock.patch.object(jobs.store, "load_report", new=mock.AsyncMock(return_value=report)),
+        mock.patch.object(jobs.analysis, "aggregate_report", new=mock.AsyncMock(return_value=refreshed_report)) as aggregate,
+    ):
+        actual = await jobs.ensure_report(
+            "1001",
+            date(2026, 8, 30),
+            refresh_pending=True,
+            excluded_user_ids={"bot-id"},
+        )
+
+    assert actual == refreshed_report
+    aggregate.assert_awaited_once_with(
+        "1001",
+        date(2026, 8, 30),
+    )
 
 
 async def test_publish_group_report_marks_sent_only_after_success():

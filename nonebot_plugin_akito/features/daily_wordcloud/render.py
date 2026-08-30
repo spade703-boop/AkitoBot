@@ -29,7 +29,7 @@ COMMAND_HELP_ITEMS = (
     {"command": "实时群聊词云", "description": "今日群聊词云的别名，目标群成员可用。"},
     {"command": "群聊词云 今天", "description": "查看今天实时词云，目标群成员可用并共享群级冷却。"},
     {"command": "重算群聊词云 YYYY-MM-DD", "description": "超管重算最近 7 天内的词云日报。"},
-    {"command": "回填群聊词云 YYYY-MM-DD", "description": "超管从 impression_history.db 按日期回填历史日报。"},
+    {"command": "回填群聊词云 YYYY-MM-DD", "description": "超管按日期回填；当天快照会并入实时数据，零点自动刷新。"},
     {"command": "测试群聊词云", "description": "超管使用示例数据渲染测试图片，不写入数据库。"},
     {"command": "词云屏蔽词 查看", "description": "超管查看当前全局屏蔽词。"},
     {"command": "词云屏蔽词 添加 词1 词2", "description": "超管新增全局精确屏蔽词。"},

@@ -16,6 +16,7 @@ from . import store
 
 MAX_WORDS = 50
 RAW_RETENTION_DAYS = 7
+PENDING_MIDNIGHT_REFRESH_KEY = "_pending_midnight_refresh"
 
 _URL_RE = re.compile(r"(?i)\b(?:https?://|www\.)\S+")
 _CQ_RE = re.compile(r"\[CQ:[^\]]+\]")
@@ -302,14 +303,23 @@ async def aggregate_history_report(
     *,
     excluded_user_ids: Iterable[str] = (),
     cutter: TokenCutter | None = None,
+    pending_midnight_refresh: bool = False,
+    persist_raw_messages: bool = False,
 ) -> dict[str, Any]:
     """Aggregate a report from the long-lived impression history database."""
     start_time, end_time = date_bounds(report_date)
-    rows = await store.fetch_history_messages(group_id, start_time, end_time)
+    history_records = await store.fetch_history_records(group_id, start_time, end_time)
+    rows = [(user_id, nickname, content, event_time) for user_id, nickname, content, _message_id, event_time in history_records]
     excluded = {str(user_id) for user_id in excluded_user_ids}
     excluded.update(await store.list_excluded_user_ids())
     if excluded:
         rows = [row for row in rows if row[0] not in excluded]
+    if persist_raw_messages:
+        await store.import_raw_messages(
+            group_id,
+            history_records,
+            excluded_user_ids=excluded,
+        )
     blocked_words = set(await store.list_blocked_words())
     report = build_report(
         group_id,
@@ -318,5 +328,7 @@ async def aggregate_history_report(
         blocked_words=blocked_words,
         cutter=cutter or create_jieba_cutter(blocked_words),
     )
+    if pending_midnight_refresh:
+        report[PENDING_MIDNIGHT_REFRESH_KEY] = True
     await store.save_report(group_id, report_date.isoformat(), report)
     return report

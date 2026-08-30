@@ -26,6 +26,18 @@ async def test_raw_messages_are_deduplicated_and_filtered_by_time(isolated_datab
     assert rows == [("u1", "阿一", "hello", 100)]
 
 
+async def test_import_history_rows_are_deduplicated_and_excluded(isolated_database):
+    rows = [
+        ("u1", "甲", "hello", "history:1", 100),
+        ("u1", "甲", "hello", "history:1", 100),
+        ("bot", "机器人", "ignored", "history:2", 101),
+    ]
+
+    assert await store.import_raw_messages("1001", rows, excluded_user_ids={"bot"}) == 1
+    assert await store.import_raw_messages("1001", rows, excluded_user_ids={"bot"}) == 0
+    assert await store.fetch_raw_messages("1001", 0, 200) == [("u1", "甲", "hello", 100)]
+
+
 async def test_excluded_users_are_persistent_and_skipped_for_new_messages(isolated_database):
     assert await store.add_excluded_user_ids(["834285229", "123456789", "834285229"], "9001") == 2
     assert await store.list_excluded_user_ids() == ["123456789", "834285229"]

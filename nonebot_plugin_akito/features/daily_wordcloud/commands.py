@@ -31,7 +31,13 @@ def _target_group_id(event: Event) -> str | None:
     return str(group_id)
 
 
-def _parse_date_argument(raw: str, *, today: date | None = None, default_yesterday: bool = False) -> tuple[date | None, str | None]:
+def _parse_date_argument(
+    raw: str,
+    *,
+    today: date | None = None,
+    default_yesterday: bool = False,
+    allow_today: bool = False,
+) -> tuple[date | None, str | None]:
     current_date = today or datetime.now(TZ_CN).date()
     value = raw.strip()
     if not value and default_yesterday:
@@ -42,7 +48,7 @@ def _parse_date_argument(raw: str, *, today: date | None = None, default_yesterd
         parsed = date.fromisoformat(value)
     except ValueError:
         return None, "日期格式应为 YYYY-MM-DD。"
-    if parsed >= current_date:
+    if parsed > current_date or (parsed == current_date and not allow_today):
         return None, "只能查询或重算已经结束的自然日。"
     return parsed, None
 
@@ -231,16 +237,19 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
     group_id = _target_group_id(event)
     if group_id is None:
         return
-    report_date, error = _parse_date_argument(args.extract_plain_text())
+    report_date, error = _parse_date_argument(args.extract_plain_text(), allow_today=True)
     if error:
         await backfill_cmd.finish(error)
     assert report_date is not None
 
     try:
+        pending_midnight_refresh = report_date == datetime.now(TZ_CN).date()
         report = await analysis.aggregate_history_report(
             group_id,
             report_date,
             excluded_user_ids={str(bot.self_id)},
+            pending_midnight_refresh=pending_midnight_refresh,
+            persist_raw_messages=pending_midnight_refresh,
         )
     except FileNotFoundError:
         await backfill_cmd.finish("未找到历史消息库 impression_history.db，请确认它位于 data/ 目录。")

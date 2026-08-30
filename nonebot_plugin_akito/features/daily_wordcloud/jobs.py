@@ -21,15 +21,28 @@ from .render import render_report  # noqa: E402
 _PUBLISH_LOCK = asyncio.Lock()
 
 
-async def ensure_report(group_id: str, report_date: date) -> dict[str, Any]:
+async def ensure_report(
+    group_id: str,
+    report_date: date,
+    *,
+    refresh_pending: bool = False,
+    excluded_user_ids: set[str] | None = None,
+) -> dict[str, Any]:
     existing = await store.load_report(group_id, report_date.isoformat())
     if existing is not None:
+        if refresh_pending and existing.get(analysis.PENDING_MIDNIGHT_REFRESH_KEY):
+            return await analysis.aggregate_report(group_id, report_date)
         return existing
     return await analysis.aggregate_report(group_id, report_date)
 
 
 async def publish_group_report(bot: Bot, group_id: int, report_date: date) -> bool:
-    report = await ensure_report(str(group_id), report_date)
+    report = await ensure_report(
+        str(group_id),
+        report_date,
+        refresh_pending=True,
+        excluded_user_ids={str(bot.self_id)},
+    )
     if not report.get("frequencies"):
         return False
     if not await store.report_needs_delivery(str(group_id), report_date.isoformat()):
