@@ -8,6 +8,7 @@ if os.environ.get("AKITO_SKIP_PLUGIN_LOAD") != "1":
     from . import event_mode
     from . import random_paro
     from . import random_keyword
+    from . import daily_wordcloud
     from . import gift
     from . import rpg
     try:

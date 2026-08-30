@@ -72,6 +72,7 @@ ALLOWED_CHAT_GROUPS   = _parse_group_list("ALLOWED_CHAT_GROUPS")
 ALLOWED_CP_GROUPS     = _parse_group_list("ALLOWED_CP_GROUPS")
 ALLOWED_MEMORY_GROUPS = _parse_group_list("ALLOWED_MEMORY_GROUPS")
 TARGET_GROUPS         = _parse_group_list("TARGET_GROUPS")
+WORDCLOUD_GROUPS      = _parse_group_list("WORDCLOUD_GROUPS")
 
 GROUP_IMAGE_PERMISSIONS = {}
 _raw_img = os.environ.get("GROUP_IMAGE_PERMISSIONS", "")
@@ -194,7 +195,7 @@ __all__ = [
     "DEEPSEEK_API_KEY", "TAVILY_API_KEY", "ZHIPU_API_KEY", "SILICONFLOW_API_KEY",
     "client", "vision_client", "embedding_client", "np",
     "TOYA_QQ_ID", "SUPERUSER_QQ", "TRIGGER_NAMES",
-    "ALLOWED_CHAT_GROUPS", "ALLOWED_CP_GROUPS", "ALLOWED_MEMORY_GROUPS", "TARGET_GROUPS",
+    "ALLOWED_CHAT_GROUPS", "ALLOWED_CP_GROUPS", "ALLOWED_MEMORY_GROUPS", "TARGET_GROUPS", "WORDCLOUD_GROUPS",
     "GROUP_IMAGE_PERMISSIONS",
     # memory
     "BaseUserRecord", "GameData", "GroupRecord", "MemorySession",

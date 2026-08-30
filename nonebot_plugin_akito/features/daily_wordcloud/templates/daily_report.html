@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=900, initial-scale=1">
+<title>群聊每日词云</title>
+<style>
+  :root {
+    --warm: #ff9750;
+    --cool: #6faeff;
+    --text: #fff8ef;
+    --muted: rgba(255, 248, 239, 0.62);
+    --line: rgba(255, 255, 255, 0.10);
+    --surface: rgba(255, 255, 255, 0.055);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    width: 900px;
+    font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    color: var(--text);
+    background:
+      radial-gradient(760px 480px at 0% 0%, rgba(255, 145, 77, 0.21), transparent 62%),
+      radial-gradient(760px 520px at 100% 100%, rgba(101, 165, 255, 0.18), transparent 64%),
+      linear-gradient(155deg, #19161e 0%, #151a24 55%, #11171e 100%);
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { width: 900px; padding: 34px 38px 30px; }
+  .header { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; }
+  .eyebrow { font-size: 12px; font-weight: 800; letter-spacing: 0.19em; color: var(--muted); }
+  h1 { margin: 8px 0 0; font-size: 34px; line-height: 1.1; }
+  .date { font-size: 15px; font-weight: 700; color: #ffd0a9; }
+  .rule { height: 1px; margin: 20px 0; background: linear-gradient(90deg, rgba(255,151,80,.5), rgba(255,255,255,.06), rgba(111,174,255,.48)); }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .stat { padding: 14px 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
+  .stat b { display: block; font-size: 25px; color: #fff2e4; }
+  .stat span { display: block; margin-top: 4px; font-size: 11px; color: var(--muted); }
+  .cloud { margin-top: 16px; height: 410px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 24px; background: rgba(0,0,0,.12); overflow: hidden; }
+  .cloud img { width: 820px; height: 390px; object-fit: contain; }
+  .section-title { margin: 24px 0 13px; font-size: 17px; font-weight: 800; }
+  .ranking { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .word-card { min-width: 0; padding: 16px; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); }
+  .word-card:nth-child(1) { background: linear-gradient(155deg, rgba(255,151,80,.18), rgba(255,255,255,.04) 55%); }
+  .word-card:nth-child(2) { background: linear-gradient(155deg, rgba(111,174,255,.16), rgba(255,255,255,.04) 55%); }
+  .word-card:nth-child(3) { background: linear-gradient(155deg, rgba(201,184,255,.15), rgba(255,255,255,.04) 55%); }
+  .word-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .word { min-width: 0; font-size: 21px; font-weight: 900; overflow-wrap: anywhere; }
+  .word-rank { color: var(--muted); font-size: 11px; white-space: nowrap; }
+  .word-count { margin-top: 4px; font-size: 12px; color: var(--muted); }
+  .people { display: flex; flex-direction: column; gap: 9px; margin-top: 14px; }
+  .person { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+  .avatar { position: relative; width: 34px; height: 34px; overflow: hidden; border: 1px solid rgba(255,255,255,.13); border-radius: 50%; background: rgba(255,255,255,.11); }
+  .avatar span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; }
+  .avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 700; }
+  .count { font-size: 11px; color: #ffd0a9; white-space: nowrap; }
+  .footer { display: flex; justify-content: space-between; margin-top: 20px; color: rgba(255,255,255,.38); font-size: 11px; }
+</style>
+</head>
+<body>
+<main class="page">
+  <header class="header">
+    <div>
+      <div class="eyebrow">AKITOBOT · DAILY CHAT</div>
+      <h1>群聊每日词云</h1>
+    </div>
+    <div class="date">{{ report_date }}</div>
+  </header>
+  <div class="rule"></div>
+  <section class="stats">
+    <div class="stat"><b>{{ message_count }}</b><span>有效文本消息</span></div>
+    <div class="stat"><b>{{ participant_count }}</b><span>参与成员</span></div>
+    <div class="stat"><b>{{ unique_word_count }}</b><span>上榜词语</span></div>
+  </section>
+  <section class="cloud"><img src="{{ cloud_image }}" alt="群聊词云"></section>
+  <div class="section-title">今日热词贡献榜</div>
+  <section class="ranking">
+    {% for item in top_words %}
+    <article class="word-card">
+      <div class="word-head"><div class="word">{{ item.word }}</div><div class="word-rank">TOP {{ item.rank }}</div></div>
+      <div class="word-count">共提及 {{ item.count }} 次</div>
+      <div class="people">
+        {% for person in item.contributors %}
+        <div class="person">
+          <div class="avatar"><span>{{ person.initial }}</span><img src="{{ person.avatar }}" alt="" onerror="this.style.display='none'"></div>
+          <div class="name">{{ person.nickname }}</div>
+          <div class="count">{{ person.count }} 次</div>
+        </div>
+        {% endfor %}
+      </div>
+    </article>
+    {% endfor %}
+  </section>
+  <footer class="footer"><span>统计自然文本 · 按词出现次数累计</span><span>AkitoBot · 群聊日报</span></footer>
+</main>
+</body>
+</html>

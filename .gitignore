@@ -12,6 +12,8 @@
 !/data/content/gift_config.json
 !/data/content/rpg_config.json
 !/data/content/akito_event_memories.json
+!/data/content/wordcloud_stopwords.txt
+!/data/content/wordcloud_user_dict.txt
 
 # Python
 __pycache__/

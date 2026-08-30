@@ -41,6 +41,7 @@ nonebot_plugin_akito/
     ├── verify/               # 新人审核名单管理
     ├── random_paro/          # 派生抽取器（CP 同人灵感配对）
     ├── random_keyword/       # 今日关键词（同人写作灵感关键词）
+    ├── daily_wordcloud/      # 每日群聊词云、热词贡献榜与屏蔽词
     ├── scheduled/            # 定时任务（早晚安 / 过期记忆清理）
     ├── event_mode/           # WL2 世界线剧情模式开关
     ├── gift/                 # 送礼系统（积分/送礼/偷分/羁绊/签到闸门/超管重置）
@@ -490,6 +491,17 @@ Galgame 级导演骰子，由 `chat.py` 调用 `build_director_note()`。
 - 数据文件：`data/fanfic_keywords.json`（关键词池）、`data/keyword_draws.json`（每日抽取记录），已接入 `reload_assets()` 热重载
 - 字体：复用 `features/_shared/msyhbd.ttc`
 
+### daily_wordcloud/
+
+独立记录群成员自然文本，按北京时间自然日生成词频、词云和前三热词贡献榜；不复用 `impression_history.db`，避免改变群印象历史口径。
+
+- `store.py`：`data/daily_wordcloud.db` 的原始消息、日报聚合与超管屏蔽词；原始正文由定时任务保留 7 天
+- `analysis.py`：Unicode/链接/CQ 清理、Jieba 分词、停用词及屏蔽词过滤、确定性排名
+- `render.py`：WordCloud 词云和 HTMLRender 日报图片；榜单头像加载失败时由模板降级为首字占位
+- `commands.py`：`群聊词云`、`重算群聊词云`、`测试群聊词云` 和 `词云屏蔽词`，均限 `SUPERUSER_QQ`
+- `jobs.py`：每天 00:00 发送前一天日报，启动连接时只恢复昨天未发送的日报，并执行 7 天原始消息清理
+- `WORDCLOUD_GROUPS`：独立于其他白名单的目标群配置；未配置时只注册空闲任务，不记录或发送
+
 ### scheduled.py
 
 | 任务 | 触发时间 | 说明 |
@@ -632,6 +644,8 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（戳一戳
 | `data/paro_egg_log.jsonl` | 读写 | 派生做饭 / 狐兔饭历史明细（供个人页回放） |
 | `data/fanfic_keywords.json` | 读写 | 今日关键词池子数据 |
 | `data/keyword_draws.json` | 读写 | 今日关键词每日抽取记录 |
+| `data/daily_wordcloud.db` | 读写 | 词云原始消息（7 天）/日报聚合/屏蔽词 |
+| `data/content/wordcloud_stopwords.txt` / `wordcloud_user_dict.txt` | 读写 | 词云静态停用词与 Jieba 用户词典 |
 | `data/pending_verify.json` / `bond_verify.json` / `hold_verify.json` | 读写 | 待审核 / 待刷羁绊 / 特殊挂起名单 |
 | `data/verify_config.json` | 只读 | 审核系统群号配置 |
 | `data/images/<category>/`、`paro_avatars/彰人\|冬弥/` | 读写 / 只读 | 本地图库 / 派生头像素材 |

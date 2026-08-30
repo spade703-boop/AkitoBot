@@ -21,7 +21,7 @@
 
 ```bash
 pip install "nonebot2[fastapi]" nonebot-adapter-onebot openai python-dotenv Pillow aiohttp \
-            aiosqlite numpy nonebot-plugin-htmlrender nonebot-plugin-alconna nonebot-plugin-apscheduler nonebot-plugin-uninfo
+            aiosqlite jieba wordcloud numpy nonebot-plugin-htmlrender nonebot-plugin-alconna nonebot-plugin-apscheduler nonebot-plugin-uninfo
 ```
 
 > `nonebot-plugin-htmlrender` 首次运行会自动下载 Playwright 浏览器内核（用于图库清单等 HTML 渲染）。
@@ -94,6 +94,18 @@ python bot.py        # 或：nb run
 - 精确发送 `群印象` / `评价我` / `说说印象` / `我的印象` 时，读取目标用户最近 50 条发言并结合近期对话片段生成盐系侧写
 - 支持 @ 查看他人印象
 - 3% 概率随机插嘴
+
+### 群聊每日词云
+
+- `WORDCLOUD_GROUPS` 中的群会记录群成员自然文本，并在每天北京时间 `00:00` 发送前一天词云
+- 日报展示最多 80 个高频词，以及前三热词各自提及次数最多的 5 位成员（QQ 头像、当日最后群名片、次数）
+- 排除机器人消息、斜杠命令、纯链接、CQ 码、纯数字、表情和停用词；同一消息重复出现的词按实际次数累计
+- 原始词云消息独立保存在 `data/daily_wordcloud.db` 且只留 7 天；日报聚合长期保存，不影响群印象历史
+- `群聊词云 [YYYY-MM-DD]`：超管补查本群日报，省略日期时查询昨天
+- `测试群聊词云`：超管查看一张不写入数据库的示例渲染图
+- `重算群聊词云 YYYY-MM-DD`：超管重算仍在 7 天原始消息窗口内的日报
+- `词云屏蔽词 查看` / `添加 词1 词2` / `取消 词1 词2`：超管维护全局屏蔽词；近 7 天旧日报需手动重算
+- 可编辑 `data/content/wordcloud_stopwords.txt` 和 `wordcloud_user_dict.txt`，补充静态停用词及群内专有词
 
 ### 派生抽取器（`抽派生`）
 
@@ -264,6 +276,7 @@ AI 也会在对话中通过 `[[记下: ...]]` 标记自动提取长期记忆。
 
 ### 定时任务
 
+- 每天 0:00 生成并发送前一天群聊词云，同时清理超过 7 天的词云原始消息
 - 每天早上 6:00 早安问候
 - 每天晚上 23:50 晚安问候
 - 每小时清理过期临时记忆
@@ -329,6 +342,7 @@ akito_bot/
 │       ├── gallery/                # 相册图库
 │       ├── random_paro/            # 派生抽取器
 │       ├── random_keyword/         # 今日关键词
+│       ├── daily_wordcloud/        # 每日群聊词云、热词贡献榜与屏蔽词
 │       ├── verify/                 # 新人审核管理
 │       ├── scheduled/              # 定时任务
 │       ├── event_mode/             # WL2 世界线开关
@@ -429,6 +443,7 @@ ALLOWED_CHAT_GROUPS=群号1,群号2
 ALLOWED_CP_GROUPS=群号1,群号2
 ALLOWED_MEMORY_GROUPS=群号1
 TARGET_GROUPS=群号1,群号2
+WORDCLOUD_GROUPS=群号1,群号2
 GROUP_IMAGE_PERMISSIONS={"群号1":["all"],"群号2":["toya","self"]}
 ```
 
@@ -456,6 +471,8 @@ openai                    >= 1.0.0
 python-dotenv             >= 1.0.0
 Pillow                    >= 10.0.0
 aiohttp                   >= 3.9.0
+jieba                     >= 0.42.1
+wordcloud                 >= 1.9.3
 numpy                     >= 1.21.0
 nonebot-plugin-htmlrender >= 0.3.0
 nonebot-plugin-alconna    >= 0.50.0

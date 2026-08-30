@@ -34,6 +34,7 @@ os.environ.setdefault("ALLOWED_CHAT_GROUPS", "1001,1002")
 os.environ.setdefault("ALLOWED_CP_GROUPS", "1001")
 os.environ.setdefault("ALLOWED_MEMORY_GROUPS", "1001,1002")
 os.environ.setdefault("TARGET_GROUPS", "1001")
+os.environ.setdefault("WORDCLOUD_GROUPS", "1001,1002")
 os.environ.setdefault("GROUP_IMAGE_PERMISSIONS", '{"1001":["all"],"1002":["self","meme"]}')
 
 
