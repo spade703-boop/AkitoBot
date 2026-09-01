@@ -14,13 +14,14 @@
 |------|------|
 | 框架 | NoneBot2 (>=2.4.4) + OneBot V11 适配器 |
 | AI 对话 | DeepSeek API (`deepseek-v4-flash`) |
-| 图像识别 | 智谱 GLM-4.6V-Flash（免费，thinking 开启） |
+| 图像识别 | 智谱 GLM-4.6V-Flash（免费，首轮 thinking 开启；视觉 45s / OCR 30s 超时） |
 | 网络搜索 | Tavily API |
 | 语义检索 | SiliconFlow BGE-M3 embedding + bge-reranker-v2-m3 精排 + numpy（可选，未配置自动降级） |
 | 图像渲染 | Pillow + nonebot-plugin-htmlrender |
-| 持久化 | JSON 文件 + SQLite |
+| 持久化 | JSON 文件 + SQLite（aiosqlite 异步访问） |
 | 定时任务 | APScheduler |
-| 运行环境 | Python 3.9+（生产 Docker 容器实际为 3.10+） |
+| HTML 模板渲染 | Jinja2 + nonebot-plugin-htmlrender |
+| 运行环境 | Python 3.10+（生产 Docker 容器为 `python:3.10`） |
 
 ### 1.3 架构
 
@@ -31,16 +32,19 @@ nonebot_plugin_akito/
 └── features/     独立功能模块：按功能分包（director 可安全删除，scheduled 为定时基础设施）
 ```
 
-依赖方向：`features/` → `core/` ← `handlers/`，三层默认单向依赖。
+依赖方向：`features/` → `core/` ← `handlers/`，三层默认单向依赖；`core/` 不得反向引用上层。
 
-`core/__init__.py` 是统一导出入口，模块应**优先**通过 `from ..core import ...` 获取核心能力。
+`core/__init__.py` 提供稳定公共接口，但不要求所有调用都经过包入口；跨模块引用应保持显式、最小化，并遵守下列受控例外。
 
 **已知的合理例外**（不视为违规，刻意保留）：
 
 - `handlers/chat.py` 通过 `try/except` **惰性导入**可选功能 `features/director/`，以保证该模块可被一键删除；
 - `core/data.py` 的 `reload_assets()` 惰性导入各 feature 的热重载钩子（注册式刷新，非启动期依赖）；
-- `core/retrieval.py` 与 `core/data.py` 互为惰性导入（函数内 import，规避循环依赖）；core 子模块之间允许直接引用兄弟模块的内部工具（如 `_DATA_SEARCH_DIRS`），不必经过包入口。
-  （历史例外已收敛：features 层现统一走公共 `find_data_path` / `get_data_dir`，不再直引 core 内部工具。）
+- `core/retrieval.py` 与 `core/data.py` 互为惰性导入（函数内 import，规避循环依赖）；core 子模块之间可按需显式引用同层基础工具，不要求所有调用经过包入口。
+  features 层优先使用公共 `find_data_path` / `get_data_dir`，但共享存储和类型模块的受控显式引用仍以实际接口为准。
+- `features/rpg/` 对 `features/gift/` 保留单向依赖：`team.py` / `boss.py` 读取羁绊，`inventory.py` 复用礼物结算；`gift/` 不得反向依赖 `rpg/`。
+- `features/scheduled/` 可按定时任务需要调用 `features/rpg/boss.py` 的世界 BOSS 刷新/收尾入口；该依赖必须保持单向且不可扩散到其他 feature。
+- `features/` 对 `core.game_store`、`core.types` 等共享存储/类型模块可直接引用；这些是稳定的基础设施例外，不得借此反向引入 handlers 或其他 feature。
 
 ### 1.4 生产环境基线
 
@@ -102,12 +106,19 @@ gemini_bot/
 │   └── CLAUDE.md
 │
 ├── docs/                         # 项目文档
+│   ├── WORK_PLAN_INDEX.md        # 当前工作计划唯一导航
+│   ├── conversation_ai/          # 对话 AI 计划、报告与操作资料
+│   ├── rpg/                      # RPG 计划与成长基线
+│   ├── archive/                  # 历史计划（仅追溯）
 │   └── PROJECT_SPEC.md           # 本规范文件
 │
-├── data/                         # 本地语料/运行时数据；仅两份默认配置模板可提交
-│   ├── content/gift_config.json  # 送礼默认配置模板（纳入 Git）
-│   ├── content/rpg_config.json   # RPG 默认配置模板（纳入 Git）
-│   └── ...                       # 其余语料、索引、记忆、数据库与图片均不提交
+├── data/                         # 静态内容与运行时数据（按 Git 追踪规则分类）
+│   ├── content/akito_event_memories.json # 静态事件记忆（纳入 Git）
+│   ├── content/gift_config.json           # 送礼默认配置模板（纳入 Git）
+│   ├── content/rpg_config.json            # RPG 默认配置模板（纳入 Git）
+│   ├── content/wordcloud_stopwords.txt   # 静态停用词（纳入 Git）
+│   ├── content/wordcloud_user_dict.txt   # 静态词典（纳入 Git）
+│   └── ...                       # 其余语料、索引、记忆、数据库与图片不提交
 │
 ├── tests/                        # 测试代码（按源码功能分目录）
 │   ├── README.md                 # 测试入口说明（目录映射 / 命令 / 沙箱策略）
@@ -117,22 +128,34 @@ gemini_bot/
 │   ├── handlers/
 │   └── features/
 │
-├── tools/                        # 维护工具脚本（剧本分类 / LLM 富集 / 向量库构建 / 检索评测）
+├── tools/                        # 维护工具与事件记忆工具链
+│   ├── classify_scripts.py / enrich_scripts.py / build_embeddings.py
+│   ├── eval_retrieval.py / eval_set.json / simulate_rpg_growth.py
+│   ├── backfill_paro_stats.py
+│   ├── event_memory/             # 事件记忆构建、检索评测与覆盖率工具
+│   └── conversation_ai/          # 对话 AI 基线与 rollout 评测工具
 │
 └── nonebot_plugin_akito/         # 主插件包
     ├── __init__.py               # 插件入口：元数据 + require() + 导入三大子包
     ├── core/                     # 基础层
     │   ├── __init__.py           # 常量 + 统一导出
     │   ├── api.py                # API 封装
+    │   ├── ambiguity_guard.py    # 模糊指代护栏
+    │   ├── context_orchestrator.py # 上下文选择与 Token 预算
     │   ├── context.py            # Prompt 组装
     │   ├── data.py               # 数据加载 + 热重载
     │   ├── game_store.py         # gift/rpg 共享存储层
     │   ├── life_state.py         # 状态机
     │   ├── memory.py             # 记忆系统
+    │   ├── event_memory.py       # 事件记忆召回与安全门控
+    │   ├── event_memory_scoring.py # 事件候选评分
+    │   ├── observability.py      # 脱敏 trace 与 shadow 观测
     │   ├── paths.py              # 数据路径定位
     │   ├── prompt_builder.py     # 共享 Prompt 骨架与 schema
     │   ├── retrieval.py          # 语义检索引擎
     │   ├── retrieval_assets.py   # 检索语料规范化
+    │   ├── rollout.py            # 灰度实验臂与回退
+    │   ├── story_import.py       # 剧情导入运行时适配
     │   ├── time_awareness.py     # 时间感知
     │   └── types.py              # core 数据结构类型
     ├── handlers/                 # 消息处理层
@@ -149,8 +172,9 @@ gemini_bot/
         ├── impression/           # 群印象 + 随机插嘴
         ├── random_keyword/       # 今日关键词
         ├── random_paro/          # 抽派生
+        ├── daily_wordcloud/      # 每日群聊词云
         ├── rpg/                  # 文字 RPG（含 state.py / types.py）
-        ├── scheduled/            # 定时任务
+        ├── scheduled/            # 定时任务（含 world_boss_settlement）
         └── verify/               # 加群审核
 ```
 
@@ -163,7 +187,7 @@ gemini_bot/
 | 模块/文件 | `snake_case` | `life_state.py`, `random_paro.py` |
 | 函数 | `snake_case` | `get_daily_activity()`, `build_time_gap_prompt()` |
 | 常量 | `UPPER_SNAKE_CASE` | `MAX_HISTORY_LEN`, `TZ_CN`, `STATE_DURATION` |
-| 私有函数/变量 | `_leading_underscore` | `_normalize_period()`, `_find_data_path()` |
+| 私有函数/变量 | `_leading_underscore` | `_normalize_period()`, `_find_npz_path()` |
 | 模块级变量 | `UPPER_SNAKE_CASE` | `MEMORY_DB`, `AKITO_STATUS` |
 | 类 | `PascalCase` | `RetrievalContext`, `ImpressionAnalysis` |
 
@@ -194,7 +218,7 @@ from ..core import (
 )
 ```
 
-- **优先**使用 `from ..core import` 导入核心能力，不直接引用 core 的子模块（少数共享内部工具的例外见 §1.3）
+- **优先**使用 `from ..core import` 导入公共核心能力；`core.game_store`、`core.types` 及定时任务调用世界 BOSS 入口等受控基础设施可显式引用子模块（详见 §1.3）。
 - 如需 `from __future__ import annotations`，放在文件最顶部（docstring 之后）
 
 ---
@@ -227,11 +251,9 @@ from ..core import (
 
 ### 6.2 Python 版本兼容
 
-项目 `pyproject.toml` 声明 `requires-python = ">=3.9"`。`Path | None` 等新式联合类型是 Python 3.10+ 语法，在 3.9 中运行时不可用。
+项目运行口径为 **Python 3.10+**，生产 Docker 基础镜像为 `python:3.10`。不承诺 Python 3.9 兼容性；开发、测试、维护命令均应使用 3.10 或更新版本解释器。
 
-**本项目采用方案 A**：所有用到新式联合类型注解的模块均需在文件顶部添加 `from __future__ import annotations`，使注解延迟求值，因此 **3.9+ 均可正常运行**；生产 Docker 容器实际为 3.10+。
-
-新增模块若使用 `X | None` 等写法，同样需在文件顶部添加 `from __future__ import annotations`。
+模块可继续使用 `from __future__ import annotations` 以延迟解析注解，但这不降低项目的最低 Python 版本要求。
 
 ### 6.3 示例
 
@@ -244,7 +266,7 @@ def load_json_file(filename: str, default_data: Any = None) -> Any:
     """加载 JSON 数据文件。"""
     ...
 
-def _find_data_path(filename: str) -> Optional[Path]:
+def find_data_path(filename: str) -> Optional[Path]:
     """在多个搜索目录中定位数据文件。"""
     ...
 ```
@@ -499,9 +521,11 @@ def grant_safety_pass(seconds: int = 5):
 
 - 格式：JSON（UTF-8 编码）
 - 位置：只读内容文件归入 `data/persona/`（人设 / prompt）与 `data/content/`（语料 / 行为 / 世界观）子目录；功能 / 运行时（写回）文件留在 `data/` 根目录。
-- 加载：通过 `core/data.py` 的 `load_json_file()` 统一加载；`_find_data_path()` 自动搜索 `persona/`、`content/` 子目录与根目录（向后兼容旧 flat 布局）。
+- 加载：通过 `core/data.py` 的 `load_json_file()` 统一加载；公共 `find_data_path()` 自动搜索 `data/persona/`、`data/content/` 与 `data/` 根目录（向后兼容旧 flat 布局）。
 - 热重载：通过 `reload_assets()` 实现。
 - 拆分文件合并加载：`PROMPTS_DB`（= `prompts_system.json` + `prompts_character.json`）、`REACTIONS_DB`（= `akito_reactions.json` + `gallery_text.json` + `greetings.json`）在加载时合并回单一 DB，consumer 不感知拆分。
+
+世界 BOSS 由 `features/scheduled/` 每日北京时间 `00:00` 结算并广播前一天未完成实例；查询路径必须保留幂等补结算兜底，定时任务重复执行或查询触发时不得重复发放奖励。
 
 ### 14.2 新增数据文件
 
@@ -528,19 +552,23 @@ def reload_assets():
 
 | 区域 | 路径 | 规则 |
 |------|------|------|
-| **版本控制区** | 源码、测试、文档及两份默认配置模板 | 纳入 Git，随版本迭代更新 |
-| **本地数据区** | `/data` 中除 `content/gift_config.json`、`content/rpg_config.json` 外的内容 | **不纳入版本控制**；迁移到新环境需按需手动拷贝 |
+| **版本控制区** | 源码、测试、文档及 `data/content/` 下五个静态内容文件 | 纳入 Git，随版本迭代更新 |
+| **本地数据区** | `/data` 中其余语料、索引、素材与运行时文件 | **不纳入版本控制**；迁移到新环境需按需手动拷贝 |
 
 ### 15.1 绝不提交到 Git
 
 - `.env` — 含 DeepSeek / Tavily / 智谱 API Key
 - `.claude/settings.local.json` — 含本地 Auth Token
-- `data/` 中除两份默认配置模板外的内容 — 运行时数据、本地语料、索引与素材
+- `data/` 中除以下五个 Git-tracked 静态内容文件外的内容 — 运行时数据、本地语料、索引与素材：
+  `content/akito_event_memories.json`、`content/gift_config.json`、`content/rpg_config.json`、
+  `content/wordcloud_stopwords.txt`、`content/wordcloud_user_dict.txt`
 
 ### 15.2 可以提交
 
 - `.env.example` — 仅保留字段名和占位符值
+- `data/content/akito_event_memories.json` — 事件记忆静态语料
 - `data/content/gift_config.json`、`data/content/rpg_config.json` — 可编辑的默认配置模板
+- `data/content/wordcloud_stopwords.txt`、`data/content/wordcloud_user_dict.txt` — 词云静态词表
 
 ### 15.3 代码中禁止
 
@@ -550,7 +578,7 @@ def reload_assets():
 ### 15.4 推送前检查清单
 
 1. 确认 `.env` 未被追踪（`git status` 中不出现）
-2. 确认 `/data` 下除 `gift_config.json`、`rpg_config.json` 外无新增被追踪文件
+2. 确认 `/data` 下只有前述五个 `data/content/` 静态内容文件被追踪，其余新增数据文件均保持未跟踪
 3. 确认 `.env.example` 已同步最新的可配置项
 4. `ruff check nonebot_plugin_akito/` 通过（必需，应为 0 错误）；`python -m mypy` 检查 M4 已传播模块（当前覆盖 17 个模块，可选，暂未纳入 CI）
 5. 测试执行遵循“**先测改动处，再看风险补全量**”：

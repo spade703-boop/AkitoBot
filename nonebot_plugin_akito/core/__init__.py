@@ -1,4 +1,9 @@
-"""core 包入口：定义全局常量与 API 客户端，并统一导出 memory/data/life_state/api/context/time_awareness/retrieval 七个子模块的公共接口。"""
+"""AkitoBot 核心包入口。
+
+集中加载 `.env` 中的 API 密钥、群组/时区常量与 DeepSeek、GLM-4.6V-Flash、
+SiliconFlow 客户端，并统一导出数据、记忆、状态机、检索和 Prompt 组装等核心接口。
+该模块必须先于其他 `core` 子模块完成常量初始化；未配置可选服务时由调用方降级。
+"""
 
 # ============================================================================
 # core/__init__.py — 包入口

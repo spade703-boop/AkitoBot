@@ -11,6 +11,8 @@
 抓取、草稿与修订工作区位于 `data/event_memory/story_import/`，发布后的紧凑事件记忆仍写入 `data/content/akito_event_memories.json`。
 可提交的覆盖元数据位于相邻的 `coverage/` 目录；剧情原文、完整草稿和缓存不会复制进去。
 
+生产与验证统一使用 Python 3.10。先安装基础依赖 `python -m pip install -r tools/event_memory/story_import/requirements.txt`；仅在使用 `--enrich llm` 时额外安装 `requirements-llm.txt` 并配置 `DEEPSEEK_API_KEY`（可选 `DEEPSEEK_BASE_URL`、`DEEPSEEK_MODEL`）。
+
 在仓库根目录可直接双击 `start_story_import.bat`，或运行：
 
 ```text

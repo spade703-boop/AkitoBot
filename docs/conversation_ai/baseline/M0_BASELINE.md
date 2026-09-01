@@ -1,6 +1,8 @@
 # M0 对话基线报告
 
 > 这是 M0 的可重复基线。剧情样例使用原作证据进行结构化评测，不进行逐字匹配。
+>
+> 这是基线快照，不是当前放量结论；回复样本和 AI 裁判分数仍需按 [`../rollout/ACCEPTANCE_TEMPLATE.md`](../rollout/ACCEPTANCE_TEMPLATE.md) 的流程补采。
 
 ## 评测集
 

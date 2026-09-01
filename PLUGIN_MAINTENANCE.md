@@ -2,8 +2,8 @@
 
 **角色**：东云彰人（初音未来：缤纷舞台 同人 AI，CP 立场：彰冬不拆不逆）  
 **框架**：NoneBot2 + OneBot V11  
-**AI 后端**：DeepSeek API / 智谱 GLM-4V（视觉）/ Tavily（搜索）  
-**文档更新**：2026-08-18
+**AI 后端**：DeepSeek API / 智谱 GLM-4.6V-Flash（视觉）/ Tavily（搜索）
+**文档更新**：2026-09-01
 
 ---
 
@@ -14,7 +14,14 @@ nonebot_plugin_akito/
 ├── __init__.py               # 插件入口：元数据 + require() + 导入三大子包
 ├── core/                     # 共享基础层（部分模块导入时会加载本地配置）
 │   ├── __init__.py           # 常量定义（时区/密钥/客户端/群白名单）+ 统一导出入口
+│   ├── ambiguity_guard.py    # 主对话模糊指代护栏
+│   ├── context_orchestrator.py # 上下文选择与 Token 预算
 │   ├── memory.py             # 长期记忆 JSON 读写 + SQLite 群聊上下文
+│   ├── event_memory.py       # 事件记忆召回与安全门控
+│   ├── event_memory_scoring.py # 事件候选评分
+│   ├── observability.py      # 脱敏 trace 与 shadow 观测
+│   ├── rollout.py            # 灰度实验臂与回退
+│   ├── story_import.py       # 剧情导入运行时适配
 │   ├── data.py               # JSON 数据文件加载（reactions/prompts/routine 等）
 │   ├── life_state.py         # 彰人状态机（routine 缓存 / 节日 buff / 安全期管理）
 │   ├── api.py                # DeepSeek / 智谱 / Tavily API 封装
@@ -42,10 +49,10 @@ nonebot_plugin_akito/
     ├── random_paro/          # 派生抽取器（CP 同人灵感配对）
     ├── random_keyword/       # 今日关键词（同人写作灵感关键词）
     ├── daily_wordcloud/      # 每日群聊词云、热词贡献榜与屏蔽词
-    ├── scheduled/            # 定时任务（早晚安 / 过期记忆清理）
+    ├── scheduled/            # 定时任务（早晚安 / 过期记忆清理 / 世界 BOSS 收尾）
     ├── event_mode/           # WL2 世界线剧情模式开关
     ├── gift/                 # 送礼系统（积分/送礼/偷分/羁绊/签到闸门/超管重置）
-    └── rpg/                  # RPG 子包：签到/打怪/小奇遇/世界BOSS/组队/强化/背包/群排行榜（详见 rpg/README.md）
+    └── rpg/                  # RPG 子包：签到/打怪/小奇遇/世界BOSS/组队/强化/背包/群排行榜（详见 nonebot_plugin_akito/features/rpg/README.md）
                                    ├── __init__.py
                                    ├── config.py         # 全部数值/文案/配置 + 热更新前强校验
                                    ├── types.py          # RPG 存档与结算 TypedDict
@@ -87,15 +94,16 @@ game_store.py  (← __init__；gift/rpg 共用存储层)         │
 types.py       (共享 TypedDict)                           │
      └────────────────────────────────────────────────── ┘
                            ↓
-             handlers/ 和 features/ 均通过
-             `from ..core import ...` 访问
+             handlers/ 和 features/ 优先通过
+             `core` 公共接口访问；受控 helper 可显式导入
 ```
 
 **导入层级规则**：
 
 - `core/` 子模块只能用相对导入 `.` 访问同层文件，**严禁**向上引用 `handlers/` 或 `features/`
-- `handlers/` 和 `features/` 均使用 `from ..core import ...`（两个点 = 上一级包）
+- `handlers/` 和 `features/` 优先使用 `from ..core import ...`（两个点 = 上一级包）；共享存储/类型等稳定基础设施可按需显式导入 `core.game_store` / `core.types`
 - `handlers/` 和 `features/` 之间**无互相引用**；`features/rpg/` 对 `features/gift/` 有单向依赖：`team.py` / `boss.py` 消费羁绊等级，`inventory.py` 复用礼物结算，gift 不反向依赖 rpg，无环
+- `features/scheduled/` 只允许调用 `features/rpg/boss.py` 的世界 BOSS 定时收尾 helper；不得扩散为 feature 之间的循环依赖
 - `features/verify/` 无任何内部依赖，完全独立
 - `features/director/` 仅被 `handlers/chat.py` 调用，可整体删除（chat.py 有安全降级）
 
@@ -124,7 +132,7 @@ GLOBAL_PROFILE_SOURCE_GROUP=691188576  # gift_data v2→v3 合并时的优先来
 
 ### `__init__.py`（含原 constants.py）
 
-无内部依赖。从 `.env` 读取密钥，定义全局常量。子模块通过 `from . import ...` 获取，外部通过 `from ..core import ...` 获取。
+无内部依赖。从 `.env` 读取密钥，定义全局常量。普通共享能力通过 `from ..core import ...` 获取；`core.game_store`、`core.types` 等稳定基础设施允许显式导入其子模块。
 
 | 变量 | 来源 | 说明 |
 |------|------|------|
@@ -186,7 +194,7 @@ GLOBAL_PROFILE_SOURCE_GROUP=691188576  # gift_data v2→v3 合并时的优先来
 | `DAILY_ROUTINE` | `akito_routine.json` | 每日状态日程，键为时间段（每条含 `status` 和 `poke` 字段） |
 | `WL2_ROUTINE` | `wl2_routine.json` | WL2 世界线状态 |
 | `SONG_DATA` | `akito_songs.json` | 歌曲背景知识 |
-| `RELATIONSHIP_DATA` | `akito_relationships.json` | 人物关系档案（含 `keywords` 白名单） |
+| `RELATIONSHIP_DATA` | `akito_relationships.json` | 人物关系档案（含 `keywords` 关键词） |
 | `PJSK_KNOWLEDGE_BASE` | `pjsk_knowledge.json` | PJSK 黑话知识库全文（str，热重载会重新赋值——消费方**必须**经 `get_pjsk_knowledge_base()` 在调用时读取，不可模块级导入旧引用） |
 | `PJSK_INTRO` | `pjsk_knowledge.json` 的 `introduction` | 语境锁前言（同上，经 `get_pjsk_intro()` 读取） |
 | `PJSK_ENTRIES` | `pjsk_knowledge.json` 的 `knowledge_list` 拍平 | 结构化条目列表 `list[dict]`，每条 `{"category": str, "text": str}`，供检索引擎使用 |
@@ -240,7 +248,7 @@ AKITO_SAFE_UNTIL = time.time() + 10   # 无效！
 | `get_festival_buff(date_obj)` | 返回今日节日 Prompt 片段 |
 | `get_morning_run_buff(hour)` | 返回晨跑状态 Prompt（6 点整段生效） |
 | `get_sleep_buffer_buff(hour, minute)` | 返回睡前准备状态 Prompt（23:45-23:59 生效），若存在 `previous_context` 则自动注入前一时段的活动记忆 |
-| `get_toya_anchor()` | 据当前 routine 推断冬弥去向并附跨轮连贯锁；文本明确提到冬弥时才可据此回答，同框时段只能保守推断“在附近/刚分开/稍后碰头”，没有位置证据时只能遵守普通世界线“住在家里”的保守规则；WL2 或无更高证据时不编造具体位置。由 chat.py 在涉冬弥话题且非 WL2 时注入 |
+| `get_toya_anchor()` | 据当前 routine 推断冬弥去向并附跨轮连贯锁；文本明确提到冬弥时才可据此回答，同框时段只能保守推断“在附近/刚分开/稍后碰头”，没有位置证据时只能遵守普通世界线“住在家里”的保守规则；WL2 或无更高证据时不编造具体位置。由 `chat_pipeline.py` 在涉冬弥话题且非 WL2 时注入 |
 | `parse_duration_and_content(text)` | 解析 `"10m 下雨了"` → `(600, "下雨了")` |
 | `check_img_permission(group_id, category)` | 判断该群是否有某分类图库权限 |
 
@@ -266,19 +274,19 @@ AKITO_SAFE_UNTIL = time.time() + 10   # 无效！
 | `rescue_field(raw, *fields)` | 从残缺 JSON 中正则抠出第一个命中的字符串字段值；覆盖字段值截断到 EOF 的场景。无匹配返回 None，调用方需用 `is not None` 判断命中 |
 | `rescue_tail_after_field(raw, anchor_field="inner_os")` | 当 JSON 在已知锚点字段后损坏时，提取尾部残留正文；用于 key 名跑偏或 reply/dialogue 残段救援 |
 
-> `call_deepseek_api_agent` 专供 `chat.py` 的 ReAct 循环，其他调用方用 `call_deepseek_api`。
+> `call_deepseek_api_agent` 专供 `chat_pipeline.py` 的 ReAct 循环，其他调用方用 `call_deepseek_api`。
 
 ### context.py
 
 | 函数 | 说明 |
 |------|------|
-| `get_base_persona()` | 读取 `data/akito_persona.txt` 人设文本 |
+| `get_base_persona()` | 读取 canonical path `data/persona/akito_persona.txt` 人设文本 |
 | `get_random_examples(n)` | 从 `SCRIPT_DB` 随机抽取 n 条语气示例，并为每条附加“发言者=彰人 / 不得迁移主语、事实和因果”的归因锁（仅检索不可用时兜底） |
 | `get_relevant_examples(query, n)` | 语义检索剧本示例；命中条目附 `cn_key` 事实标签与彰人发言者锁；检索不可用时回退带锁随机样本，精排明确无相关时返回空串 |
 | `get_relevant_pjsk(query, n)` | 语义检索 PJSK 黑话（检索前与剧本一致做 query 扩散 blend）；检索不可用回退全量 `PJSK_KNOWLEDGE_BASE`，无相关命中仅注入前言（降噪）；`PJSK_INTRO` 始终在前 |
 | `get_song_memories()` | 将 `SONG_DATA` 格式化为静态曲名清单，每次对话先注入；具体点名某首歌时再补充详细记忆 |
 | `get_song_mention(text)` | 对消息做 `keywords` 子串匹配，命中时最多注入 2 首歌的完整 `description` |
-| `get_hybrid_relationship(text)` | 仅扫描本地关系档案并返回 Prompt 片段；不得自行调用 `smart_search`，所有联网统一由 chat.py 的 `QueryIntent` 调度 |
+| `get_hybrid_relationship(text)` | 仅扫描本地关系档案并返回 Prompt 片段；不得自行调用 `smart_search`，所有联网统一由 `chat_pipeline.py` 的 `QueryIntent` 调度 |
 | `reload_persona()` | 重新读取 `akito_persona.txt`，返回新内容（`重载配置 persona` 触发） |
 
 ### retrieval.py
@@ -290,7 +298,7 @@ AKITO_SAFE_UNTIL = time.time() + 10   # 无效！
 | `retrieve(corpus, query, top_k)` | 异步语义检索（cosine 召回 → 精排重排）。三态返回：None=不可用（降级）、`[]`=无相关命中、`[id, ...]`=命中的源 DB 下标 |
 | `reload_indices()` | 重读所有 `.npz` 并重建缓存，返回成功加载数（`reload_assets()` 联动调用） |
 
-精排开关与调参均为模块常量：`_RERANK_ENABLED`（一键回退纯 cosine）、`_RERANK_RECALL_K`（召回深度，默认 20）、`_RERANK_MIN_SCORE`（相关分阈值，默认 0.0=不过滤；用 `tools/eval_retrieval.py` 调参后上调）。
+精排开关与调参均为模块常量：`_RERANK_ENABLED`（一键回退纯 cosine）、`_RERANK_RECALL_K`（召回深度，默认 20）、`_RERANK_MIN_SCORE`（相关分阈值，默认 `0.1`；低于此分数的候选视为无相关命中；用 `tools/eval_retrieval.py` 调参）。
 
 **.npz schema**（每语料一份 `data/content/<name>_embeddings.npz`）：
 `vectors`(N×1024 float32)、`mean`(1024 float32)、`indices`(N int32)、`count`(int)
@@ -316,7 +324,7 @@ AKITO_SAFE_UNTIL = time.time() + 10   # 无效！
 | gap ≥ 30 分钟，时段变化 1 次 | 中提示：场景已切换，自然开启新话题 |
 | gap ≥ 8 小时，或时段变化 ≥ 2 次 | 强提示：场景重置，旧话题以「那会儿」带过 |
 
-强/中提示触发时，`chat.py` 同步将 `history` 压缩为背景摘要注释并清空，防止模型续接旧话题。
+强/中提示触发时，`chat_pipeline.py` 调用 `chat.py` 的兼容 helper，将 `history` 压缩为背景摘要注释并清空，防止模型续接旧话题。
 
 持久化文件：`data/last_interactions.json`
 
@@ -332,7 +340,7 @@ AKITO_SAFE_UNTIL = time.time() + 10   # 无效！
 
 ```
 1. 回复溯源        提取 Reply 引用的原始文本和图片
-2. 文本/视觉解析   分离纯文本和图片；图片（最多 3 张）一次调用 GLM-4.6V 结构化识别
+2. 文本/视觉解析   分离纯文本和图片；图片（最多 3 张）一次调用 GLM-4.6V-Flash 结构化识别
                    （JSON + 布尔特征裁决，26 角色名册，截图自动二次 OCR）
 3. 并发保护        asyncio.Lock（per 会话键）防止同一会话并发
 4. 睡眠检测        check_sleep_status → 仅明确联网请求可继续；其余 80% 静默 / 20% 梦话
@@ -394,7 +402,7 @@ LLM 输出三字段，Python 端决定最终格式：
 
 ### commands.py
 
-全部指令受 `ALLOWED_MEMORY_GROUPS` 白名单保护。`_stamp_trigger(event)` 为统一前置函数，所有指令处理器在实际逻辑前调用，负责：
+记忆查询/植入/清除/遗忘指令使用 `ALLOWED_MEMORY_GROUPS` 白名单；`重置对话` 还要求 `SUPERUSER_QQ` 并使用 `ALLOWED_CHAT_GROUPS`，`重载配置` 仅要求 `SUPERUSER_QQ`。私聊事件不受群白名单判断。`_stamp_trigger(event)` 为统一前置函数，所有实际回复的指令处理器在逻辑前调用，负责：
 1. 记录触发者身份到 `AKITO_STATUS["last_trigger_user"]`
 2. 调用 `grant_safety_pass(5)` 防止指令回复触发深夜抱怨
 3. 若触发者为超管，更新 `AKITO_STATUS["last_superuser_trigger_time"][group_id]`（per-group dict）
@@ -418,7 +426,7 @@ LLM 输出三字段，Python 端决定最终格式：
 | `self_monitor` | bot 自身发送消息事件（`message_sent`） | 深夜 0-6 点若未在安全期内，延迟 2-4s 发送自言自语（10s 冷却，超管**per-group** 30s 窗口抑制） |
 
 > ℹ️ **冬弥去向已收敛到主对话引擎**：原独立的 `冬弥呢` 指令（`toya_status_cmd` / `get_toya_location_reply` / `toya_radar` 模板）已移除；
-> routine 锚定的冬弥位置推断 + 连贯锁现由 `core.life_state.get_toya_anchor()` 提供、在 chat.py 涉冬弥话题时统一注入（用「小彰冬弥呢」触发）。
+> routine 锚定的冬弥位置推断 + 连贯锁现由 `core.life_state.get_toya_anchor()` 提供、在 `chat_pipeline.py` 涉冬弥话题时统一注入（用「小彰冬弥呢」触发）。
 
 > ⚠️ **`poke` 的 routine 获取**：必须无条件调用 `get_daily_activity(hour, weekday, minute)`，
 > 让其内部做时段校验和缓存更新。不能用 `if not cached_content` 跳过调用，
@@ -432,13 +440,13 @@ LLM 输出三字段，Python 端决定最终格式：
 
 > ℹ️ **已并轨**：该文件直接使用 `core` 的共享 `client`（AsyncOpenAI）调用 DeepSeek（带自定义温度/超时参数），
 > JSON 提取与救援也统一走 `core.api.extract_json_block` / `rescue_field`。
-> 群印象现在分为两个阶段：材料分析输出 `mode/evidence/observations/uncertainties/avoid_patterns`，表达阶段输出 `inner_os/replies`；AutoChat 使用 `inner_os/anchor/reply`，chat.py 使用 `inner_os/action/dialogue`。
+> 群印象现在分为两个阶段：材料分析输出 `mode/evidence/observations/uncertainties/avoid_patterns`，表达阶段输出 `inner_os/replies`；AutoChat 使用 `inner_os/anchor/reply`，主对话使用 `inner_os/action/dialogue`。
 
 | 功能 | 说明 |
 |------|------|
 | `recorder` (priority=1) | 静默录制群聊消息到 SQLite `impression_history.db` |
 | `um_cmd`（群印象） | 精确指令触发；目标用户最近 50 条整体样本 + 最近 14 天最多 6 段对话片段；支持 @；WL2 状态覆写；先做证据锚定材料分析，再生成 3 条候选并进行称呼/事实/近期表达复用校验；3-5s 思考延迟 |
-| `random_chat` (priority=99) | 3% 概率随机插嘴；10 分钟冷却；深夜 0-6 点不触发；有 JSON 解析救援 |
+| `random_chat` (priority=99) | 3% 概率随机插嘴；10 秒冷却；深夜 0-6 点不触发；有 JSON 解析救援；LLM 调用 10 秒超时 |
 
 JSON 输出格式：群印象分析使用 `{"mode": "specific|limited", "evidence": [...], "observations": [...], "uncertainties": [...], "avoid_patterns": [...]}`；表达阶段使用 `{"inner_os": "...", "replies": [...]}`；AutoChat 使用 `{"inner_os": "...", "anchor": "...", "reply": "..."}`，均不含 `action`。
 
@@ -448,9 +456,9 @@ JSON 输出格式：群印象分析使用 `{"mode": "specific|limited", "evidenc
 
 ### director.py
 
-Galgame 级导演骰子，由 `chat.py` 调用 `build_director_note()`。
+Galgame 级导演骰子，由 `chat_pipeline.py` 通过 `chat.py` 暴露的 helper 调用 `build_director_note()`。
 
-**可安全删除**：删除后 chat.py 自动降级：
+**可安全删除**：删除后 `chat_pipeline.py` 自动降级：
 - `is_physical_or_drama = False`
 - `is_really_spicy = False`
 - `acting_guide = ""`（cool_guy_filter 不生效）
@@ -489,7 +497,7 @@ Galgame 级导演骰子，由 `chat.py` 调用 `build_director_note()`。
 - 模糊匹配：`_fuzzy_match()` 三级匹配（精确 → 前缀 → 包含），大小写不敏感；歧义时列出候选
 - PIL 渲染：`_render_categories_image()` 分类展示全池；`今日关键词`命令直接发送文本结果
 - 数据文件：`data/fanfic_keywords.json`（关键词池）、`data/keyword_draws.json`（每日抽取记录），已接入 `reload_assets()` 热重载
-- 字体：复用 `features/_shared/msyhbd.ttc`
+- 字体：复用 canonical path `nonebot_plugin_akito/features/_shared/msyhbd.ttc`
 
 ### daily_wordcloud/
 
@@ -511,6 +519,7 @@ Galgame 级导演骰子，由 `chat.py` 调用 `build_director_note()`。
 | `akito_morning` | 06:00 (UTC+8) | 从 `REACTIONS_DB.greetings.morning` 推送到 `TARGET_GROUPS` |
 | `akito_night` | 23:50 (UTC+8) | 从 `REACTIONS_DB.greetings.night` 推送（此时处于 `sleep_buffer` 睡前缓冲区） |
 | `clean_expired_memory` | 每小时 | 扫描所有会话，清理过期的 temp_implants |
+| `world_boss_settlement` | 每日 00:00 (UTC+8) | 结算并广播前一天未完成的世界 BOSS；查询路径仍有幂等补结算兜底 |
 
 所有定时推送前调用 `grant_safety_pass(10)`。
 
@@ -523,13 +532,13 @@ Galgame 级导演骰子，由 `chat.py` 调用 `build_director_note()`。
 | `开启WL2模式` | SUPERUSER_QQ | 注入 ID 为 `"WL2"` 的永久临时记忆（expire 2099 年） |
 | `关闭WL2模式` | SUPERUSER_QQ | 移除 ID 为 `"WL2"` 的 temp_implant |
 
-WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（戳一戳）、chat.py（`get_toya_anchor` 同框锚定门控跳过，避免与决裂世界线冲突）。
+WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（戳一戳）、`chat_pipeline.py`（`get_toya_anchor` 同框锚定门控跳过，避免与决裂世界线冲突）。
 
 ### gift/
 
 彰冬同人圈主题的群友互送小游戏。通过 `core/game_store.py` 与 RPG 共用全局玩家档案；同一 QQ 的积分、每日闸门、羁绊和 RPG 用户字段跨群共享，群记录只保留成员索引与世界 BOSS 等群级状态。
 
-游戏闭环：`签到` 赚积分 → `送礼@对方` 送随机礼物、累积两人亲密度（同好羁绊）→ `偷@对方` 顺走少量积分（反效果：偷必掉羁绊）→ 循环。6 档羁绊梯（从「初识」到「从今往后直到永远」=Lv6），羁绊越高送礼暴击/共识收益越大，偷的惩罚也越大。被偷保护机制（protect_until + 硬上限）防止泛滥。
+游戏闭环：`签到` 赚积分 → `送礼@对方` 送随机礼物、累积两人亲密度（同好羁绊）→ `偷@对方` 顺走少量积分（反效果：偷必掉羁绊）→ 循环。羁绊梯由 `gift_config.json` 的 `bond_levels` 驱动，当前共 14 档（6 个非负/正向等级、8 个负向/摩擦等级，从「不共戴天」到「从今往后直到永远」），羁绊越高送礼暴击/共识收益越大，偷的惩罚也越大。被偷保护机制（protect_until + 硬上限）防止泛滥。
 
 | 指令 | 权限 | 说明 |
 |------|------|------|
@@ -538,9 +547,9 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（戳一戳
 | `偷@对方` | 普通用户 | 每日 2 次，小概率顺走对方少量积分；强保护 + 偷必掉羁绊 |
 | `我的积分` | 普通用户 | 查看当前积分余额 |
 | `礼物列表` | 普通用户 | 查看所用礼池中各档位的礼物清单 |
-| `我的羁绊` | 普通用户 | 查看与指定群友的亲密度等级/进度 |
+| `我的羁绊` | 普通用户 | 带 @ 查看指定群友的亲密度等级/进度；不带 @ 列出自己的羁绊关系 |
 | `群羁绊排行` | 普通用户 | 全局所有羁绊关系排行 |
-| `测试我的羁绊` | 普通用户 | 渲染「我的羁绊」HTML 卡片预览 |
+| `测试我的羁绊` | **SUPERUSER_QQ** | 使用固定测试数据渲染「我的羁绊」HTML 卡片预览 |
 | `送礼功能帮助` / `送礼帮助` / `送礼说明` | 普通用户 | 指令帮助 |
 | `重置送礼` | **SUPERUSER_QQ** | 清空全局送礼/积分/羁绊/RPG 玩家数据及群级状态 |
 | `重置本群签到` / `重置全群签到` / `重置签到次数` | **SUPERUSER_QQ** | 清掉当前群成员的全局签到闸门，不改 RPG 连签/装备/运势状态 |
@@ -556,13 +565,13 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（戳一戳
 
 在送礼社交玩法之上的轻量群文字 RPG。设计原则是：**平时走轻量个人挑战线，低频再用世界 BOSS 承接群体参与感**。不是送礼的附庸，而是和送礼并列的积分去向：给手上有分但一时没地方送礼的人一个稳定的消耗口。
 
-完整架构与指令说明见 `features/rpg/README.md`，此处仅记维护要点：
+完整架构与指令说明见 `nonebot_plugin_akito/features/rpg/README.md`，此处仅记维护要点：
 
 **文件职责速查**：
 
 | 文件 | 职责 |
 |------|------|
-| `config.py` | 全部数值（战斗/运势/强化/掉落/连签/精英/小奇遇/冒险补给/世界BOSS）/ 文案 / 错误的默认配置 `DEFAULT_RPG_CONFIG`；`validate_rpg_config()` 会在启动和热更新前校验怪物、遭遇分段、补给成本/奖池/倍率、概率与称号结构；热更新校验失败时保留当前运行配置 |
+| `config.py` | 全部数值（战斗/运势/强化/掉落/连签/精英/小奇遇/冒险补给/世界BOSS）、文案和错误提示的默认配置 `DEFAULT_RPG_CONFIG`；`validate_rpg_config()` 会在启动和热更新前校验怪物、遭遇分段、补给成本/奖池/倍率、概率与称号结构；热更新校验失败时保留当前运行配置 |
 | `player.py` | 纯函数：`_level_of(exp)` 经验→等级、`_level_progress(exp)` 进度、`_title_of(level)` 称号分档、`_cum_exp(level)` 升到此级所需累计经验、`_ensure_player(group, uid, name)` 初始化玩家记录；`_combat_power(user)` 计算今日装备隐藏战力；`_resolve_group(event)` 群校验 |
 | `fortune.py` | `on_signin(group, uid, rng, today)` 签到钩子入口（暗掷运势 + 发经验 + 今日装备 + 连签记录 + 断签重置）；`_fortune_by_key` 提供运势配置查询；连签保底机制（连凶天数达阈值自动转大吉）。战斗和掉落系数由 `utils.py` 统一接入 |
 | `hunt.py` | `今日打怪` / `test打怪掉落` 指令入口和普通战斗播报组装；调用 `rewards._settle_solo` 取得结构化结果，再展示事件、奖励、援护追击和小奇遇，最后触发一次世界 BOSS 刷出判定 |
@@ -583,11 +592,13 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（戳一戳
 
 **配置热更**：修改 `data/content/rpg_config.json` → 群内 `重载配置 assets` → `reload_assets()` → `rpg_config.reload_rpg_config()`，无需重启。遭遇分段引用不存在的怪物、旧版位置权重长度不符、分段顺序/概率/称号结构非法时会拒绝更新并保留上一版。
 
+**睡眠写入门控**：北京时间 00:00–06:00，普通用户的签到、送礼、偷取、RPG 战斗/组队、强化、购买等写操作统一拦截，超管可绕过这些指令；`使用` 道具单独拦截且超管也不享有豁免。查询类指令照常。世界 BOSS 每日 00:00 由 `world_boss_settlement` 结算并广播前一天未完成实例，查询入口保留幂等补结算，避免重复发奖。
+
 **数值断言规则**：测试一律从 `rpg_config._cfg(...)` 走读取，不硬编码数字——调 `rpg_config.json` 数值不会导致测试变脆。
 
 **当前维护重点**：
-- RPG 的成长硬约束已整理到 `features/rpg/GROWTH_BASELINE.md`；以后先看这份基线，再调签到、怪物、组队或世界 BOSS 数值。
-- `py tools/simulate_rpg_growth.py --runs 1000` 默认复现 360 天单人成长；`--strict` 仍以 30/90/180 天基线判定。当前 300 条轨迹约为 Lv7/Lv14/Lv22/Lv29/Lv37，Lv30 中位第 271 天到达（P10/P90 第 264/280 天）。
+- RPG 的成长硬约束已整理到 `docs/rpg/GROWTH_BASELINE.md`，RPG 玩法/看板/代码维护待办统一在 `docs/rpg/PLAN.md`；以后先看这两份文档，再调签到、怪物、组队或世界 BOSS 数值。
+- `py tools/simulate_rpg_growth.py --runs 1000` 默认复现 360 天单人成长；`--strict` 仍以 30/90/180 天基线判定。当前 1000 条轨迹约为 Lv7/Lv14/Lv22/Lv29/Lv37，Lv30 中位第 271 天到达（P10/P90 第 264/280 天）。
 - Lv16-30 已按每 3 级一档补齐高阶怪，依次配置 `reward_exp_mult=1.03/1.05/1.07/1.09/1.12`，只修正经验、不增加积分。`combat.encounter_brackets[*].weights` 默认使用“怪物名 → 权重”映射；新增怪物不会进入旧分段，只有在新分段中显式配置后才会出现。继续扩等级时，把当前 `max_level=null` 回退档改成有限上限，再追加新分段和新的 `null` 回退档。
 - 小奇遇现在分单人 `events` 与双人 `team_events` 两张表：主动单刷与成功组队都可能触发；双人小奇遇里，道具奖励两人各拿一份，数值奖励按总额对半结算。组队失败后退化单刷时，不应误吃到这层双人奖励。
 - 冒险补给按全局玩家跨群共享周次数，满周 7 次共消耗 1200 积分、固定投放 210 经验。常规战备互斥，护符独立；组队各算各的战备，护符失败救场按发起人优先。远征套装不与双倍经验卡叠加或消耗卡片，所有战备都不得进入 `boss.py` 世界 BOSS 链路。
@@ -601,37 +612,40 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（戳一戳
 
 ## 数据文件清单
 
-> 只读内容文件归入 `data/persona/` 与 `data/content/` 子目录；`_find_data_path` 自动搜子目录与根目录（兼容旧 flat 布局）。`PROMPTS_DB` / `REACTIONS_DB` 由各自拆分文件合并加载，consumer 不感知。
-> 版本控制只收录 `data/content/gift_config.json` 与 `data/content/rpg_config.json` 两份默认配置模板；其余 `data/` 内容为本地语料、索引、素材或运行时数据，不纳入 Git。
+> 只读内容文件归入 canonical `data/persona/` 与 `data/content/` 子目录；公共 `find_data_path()` 自动搜这两个子目录与 `data/` 根目录（兼容旧 flat 布局）。`PROMPTS_DB` / `REACTIONS_DB` 由各自拆分文件合并加载，consumer 不感知。
+> Git 当前追踪 `data/content/akito_event_memories.json`、`data/content/gift_config.json`、`data/content/rpg_config.json`、`data/content/wordcloud_stopwords.txt`、`data/content/wordcloud_user_dict.txt` 五个静态内容文件；其余 `data/` 内容为本地语料、索引、素材或运行时数据，不纳入 Git。
 
 ### 只读内容 — `data/persona/`（人设 + Prompt，热重载）
 
 | 路径 | 说明 |
 |------|------|
-| `persona/akito_persona.txt` | 主人设 Prompt |
-| `persona/wl2_persona.txt` | WL2 世界线人设 Prompt |
-| `persona/prompts_system.json` | Prompt 模板·系统机制（system_header / schema_* / memory_capture_rule / memory_*_template） |
-| `persona/prompts_character.json` | Prompt 模板·角色演绎（vitality / tone_limiter / reliable_mode / cool_guy_filter / toya_*） |
+| `data/persona/akito_persona.txt` | 主人设 Prompt |
+| `data/persona/wl2_persona.txt` | WL2 世界线人设 Prompt |
+| `data/persona/prompts_system.json` | Prompt 模板·系统机制（system_header / schema_* / memory_capture_rule / memory_*_template） |
+| `data/persona/prompts_character.json` | Prompt 模板·角色演绎（vitality / tone_limiter / reliable_mode / cool_guy_filter / toya_*） |
 
 ### 只读内容 — `data/content/`（语料 / 行为 / 世界观，热重载）
 
 | 路径 | 说明 |
 |------|------|
-| `content/akito_routine.json` | 每日状态日程（各时段 status + poke 字段） |
-| `content/wl2_routine.json` | WL2 世界线状态 |
-| `content/akito_sleep.json` | 睡眠场景文案（complaints / sleep_* 各场景） |
-| `content/akito_reactions.json` | 被动反应（旧 flat 布局兼容读取；`behavior_seeds` 已随冬弥雷达退役、`fallback_poke` 在 routine.json） |
-| `content/gallery_text.json` | 图库文案（save_img_replies / send_img_angles） |
-| `content/greetings.json` | 早晚安问候（morning / night） |
-| `content/akito_relationships.json` | 人物关系档案（keywords 白名单 + content） |
-| `content/akito_songs.json` | 歌曲背景知识（song_name / description / keywords；其中 `keywords` 由 `get_song_mention` 消费，用于歌曲别名匹配） |
-| `content/akito_scripts.json` | 台词剧本库（每条含 `type`/`category`/`topics`/`cn_key`/`context`/`dialogue`；检索 key 为 `cn_key`，缺失回退 `context`） |
-| `content/pjsk_knowledge.json` | PJSK 黑话知识库（`introduction` + `knowledge_list` → `PJSK_INTRO` + `PJSK_ENTRIES`） |
-| `content/scripts_embeddings.npz` | 剧本语义向量库（`tools/build_embeddings.py` 生成；embed key=`cn_key`，gitignore） |
-| `content/pjsk_embeddings.npz` | PJSK 语义向量库（`tools/build_embeddings.py` 生成，gitignore） |
-| `content/akito_director.json` | 导演骰子资产（toya_directions / dynamic_lexicon） |
-| `content/gift_config.json` | 送礼系统默认配置模板（礼物档位/随机事件权重/偷参数/签到延迟，纳入 Git） |
-| `content/rpg_config.json` | RPG 默认配置模板（战斗/运势/强化/掉落/精英/小奇遇/世界BOSS/文案/错误，纳入 Git） |
+| `data/content/akito_routine.json` | 每日状态日程（各时段 status + poke 字段） |
+| `data/content/wl2_routine.json` | WL2 世界线状态 |
+| `data/content/akito_sleep.json` | 睡眠场景文案（complaints / sleep_* 各场景） |
+| `data/content/akito_reactions.json` | 被动反应（旧 flat 布局兼容读取；`behavior_seeds` 已随冬弥雷达退役、`fallback_poke` 在 routine.json） |
+| `data/content/gallery_text.json` | 图库文案（save_img_replies / send_img_angles） |
+| `data/content/greetings.json` | 早晚安问候（morning / night） |
+| `data/content/akito_relationships.json` | 人物关系档案（keywords 关键词 + content） |
+| `data/content/akito_songs.json` | 歌曲背景知识（song_name / description / keywords；其中 `keywords` 由 `get_song_mention` 消费，用于歌曲别名匹配） |
+| `data/content/akito_scripts.json` | 台词剧本库（每条含 `type`/`category`/`topics`/`cn_key`/`context`/`dialogue`；检索 key 为 `cn_key`，缺失回退 `context`） |
+| `data/content/pjsk_knowledge.json` | PJSK 黑话知识库（`introduction` + `knowledge_list` → `PJSK_INTRO` + `PJSK_ENTRIES`） |
+| `data/content/scripts_embeddings.npz` | 剧本语义向量库（`tools/build_embeddings.py` 生成；embed key=`cn_key`，gitignore） |
+| `data/content/pjsk_embeddings.npz` | PJSK 语义向量库（`tools/build_embeddings.py` 生成，gitignore） |
+| `data/content/akito_director.json` | 导演骰子资产（toya_directions / dynamic_lexicon） |
+| `data/content/akito_event_memories.json` | 事件记忆静态语料（纳入 Git；运行时只读） |
+| `data/content/gift_config.json` | 送礼系统默认配置模板（礼物档位/随机事件权重/偷参数/签到延迟，纳入 Git） |
+| `data/content/rpg_config.json` | RPG 默认配置模板（战斗/运势/强化/掉落/精英/小奇遇/世界BOSS/文案/错误，纳入 Git） |
+| `data/content/wordcloud_stopwords.txt` | 词云静态停用词表（纳入 Git；运行时只读） |
+| `data/content/wordcloud_user_dict.txt` | Jieba 词云静态用户词典（纳入 Git；运行时只读） |
 
 ### 功能 / 运行时 — `data/` 根目录（多为写回）
 
@@ -647,11 +661,10 @@ WL2 模式影响：impression.py（印象/AutoChat）、reactions.py（戳一戳
 | `data/fanfic_keywords.json` | 读写 | 今日关键词池子数据 |
 | `data/keyword_draws.json` | 读写 | 今日关键词每日抽取记录 |
 | `data/daily_wordcloud.db` | 读写 | 词云原始消息（7 天）/日报聚合/全局屏蔽词与排除用户 |
-| `data/content/wordcloud_stopwords.txt` / `wordcloud_user_dict.txt` | 读写 | 词云静态停用词与 Jieba 用户词典 |
 | `data/pending_verify.json` / `bond_verify.json` / `hold_verify.json` | 读写 | 待审核 / 待刷羁绊 / 特殊挂起名单 |
 | `data/verify_config.json` | 只读 | 审核系统群号配置 |
 | `data/images/<category>/`、`paro_avatars/彰人\|冬弥/` | 读写 / 只读 | 本地图库 / 派生头像素材 |
-| `features/_shared/msyhbd.ttc` | 只读 | random_paro / random_keyword 渲染加粗字体 |
+| `nonebot_plugin_akito/features/_shared/msyhbd.ttc` | 只读 | random_paro / random_keyword 渲染加粗字体 |
 
 ---
 
@@ -814,7 +827,7 @@ py tools/eval_retrieval.py rerank 0.2  # 用指定阈值试跑精排臂
 修改后需运行 `py tools/build_embeddings.py scripts` 重建向量库。
 
 ### 新增人物关系档案
-在 `data/akito_relationships.json` 追加一条 entry：
+在 canonical path `data/content/akito_relationships.json` 追加一条 entry：
 ```json
 {"keywords": ["角色名", "别名"], "content": "关系描述"}
 ```
@@ -836,7 +849,7 @@ py tools/eval_retrieval.py rerank 0.2  # 用指定阈值试跑精排臂
 
 ## 关键设计说明
 
-1. **QueryIntent + ReAct 搜索调度**：chat.py 先用 `classify_query_intent()` 把消息分成闲聊提及、本地问题、联网候选。`explicit_search=True` 时直接 `smart_search`；普通 `web_search` 候选才进入 `call_deepseek_api_agent`，返回 `tool_calls` 后执行搜索并二次生成；`mention/local_question` 与图片消息都直接调用标准对话，不经过搜索 Agent。关系档案、RAG 等上下文构建层不得私自联网。
+1. **QueryIntent + ReAct 搜索调度**：`chat_pipeline.py` 先用 `classify_query_intent()` 把消息分成闲聊提及、本地问题、联网候选。`explicit_search=True` 时直接 `smart_search`；普通 `web_search` 候选才进入 `call_deepseek_api_agent`，返回 `tool_calls` 后执行搜索并二次生成；`mention/local_question` 与图片消息都直接调用标准对话，不经过搜索 Agent。关系档案、RAG 等上下文构建层不得私自联网。
 
 2. **MVVM 渲染分离**：LLM 输出 `action`（动作）+ `dialogue`（台词）纯语义字段，Python 端随机拼装最终格式。history 存储已渲染的纯文本，切断格式复读传染链。
 
@@ -846,17 +859,17 @@ py tools/eval_retrieval.py rerank 0.2  # 用指定阈值试跑精排臂
 
 5. **`AKITO_STATUS` vs 浮点量**：`AKITO_STATUS` 是 dict（可变），`from ..core import AKITO_STATUS` 后操作其字段是安全的。`AKITO_SAFE_UNTIL` 和 `AKITO_LAST_COMPLAINT` 是 float（不可变），必须用 getter/setter。
 
-6. **self_monitor 的超管抑制逻辑**：`last_superuser_trigger_time` 是一个 `{group_id: timestamp}` dict，不是全局单值。A 群超管说话不应压制 B 群的深夜抱怨，commands.py 和 chat.py 更新时都要写 `[group_id]` 子键。
+6. **self_monitor 的超管抑制逻辑**：`last_superuser_trigger_time` 是一个 `{group_id: timestamp}` dict，不是全局单值。A 群超管说话不应压制 B 群的深夜抱怨，`commands.py` 和 `chat_pipeline.py` 更新时都要写 `[group_id]` 子键。
 
-7. **JSON 历史记录格式**：chat.py 将 assistant 回复以 `{"inner_os": ..., "reply": ...}` 存入 history，但 system prompt 要求输出 `{"inner_os": ..., "action": ..., "dialogue": ...}`。读取历史时（time_awareness 压缩、复读检测等）需同时兼容 `reply` 和 `dialogue` 两个字段名。
+7. **JSON 历史记录格式**：`chat_pipeline.py` 将 assistant 回复以 `{"inner_os": ..., "reply": ...}` 存入 history，但 system prompt 要求输出 `{"inner_os": ..., "action": ..., "dialogue": ...}`。读取历史时（time_awareness 压缩、复读检测等）需同时兼容 `reply` 和 `dialogue` 两个字段名。
 
-8. **群印象与 chat.py 的 schema 差异**：两者已共用 `core` 的 `client` 与 `core.api` 的 JSON 提取/救援工具，但群印象分析阶段是 `mode/evidence/observations/uncertainties/avoid_patterns`，表达阶段是 `inner_os/replies`，AutoChat 是 `inner_os/anchor/reply`，chat.py 是 `inner_os/action/dialogue`；调用形态不能互换。
+8. **群印象与主对话 schema 差异**：两者已共用 `core` 的 `client` 与 `core.api` 的 JSON 提取/救援工具，但群印象分析阶段是 `mode/evidence/observations/uncertainties/avoid_patterns`，表达阶段是 `inner_os/replies`，AutoChat 是 `inner_os/anchor/reply`，主对话是 `inner_os/action/dialogue`；调用形态不能互换。
 
 9. **handler 注册时机**：`on_command`/`on_message` 在模块被 import 时立即注册。`features/__init__.py` 中缺少某行 `from . import xxx`，对应功能会完全静默失效，不报任何错误。
 
-10. **渲染字体路径**：`features/random_paro/` 与 `features/random_keyword/` 统一通过 `features/_shared/__init__.py` 的 `load_msyhbd_font()` 取字体，`msyhbd.ttc` 固定放在 `features/_shared/`。
+10. **渲染字体路径**：`nonebot_plugin_akito/features/random_paro/` 与 `nonebot_plugin_akito/features/random_keyword/` 统一通过 `nonebot_plugin_akito/features/_shared/__init__.py` 的 `load_msyhbd_font()` 取字体，`msyhbd.ttc` 固定放在 `nonebot_plugin_akito/features/_shared/`。
 
-11. **冬弥去向 = 当前 routine 派生 + 连贯锁，单一大脑收敛到 chat.py**：曾有两套「冬弥在哪」逻辑（reactions.py 的 `冬弥呢` 指令 + chat.py 的窄触发片段）。现统一为 `core.life_state.get_toya_anchor()`：当前状态明确提到冬弥时才据此回答；常见共同活动时段只允许保守推断“在附近/刚分开/稍后碰头”，其余情况不得补写具体位置，并始终附带跨轮连贯锁和普通世界线住处规则。chat.py 在涉冬弥话题且非 WL2 时注入；独立指令与 `toya_radar.json` 已退役。
+11. **冬弥去向 = 当前 routine 派生 + 连贯锁，单一大脑收敛到 `chat_pipeline.py`**：曾有两套「冬弥在哪」逻辑（`reactions.py` 的 `冬弥呢` 指令 + 旧主对话窄触发片段）。现统一为 `core.life_state.get_toya_anchor()`：当前状态明确提到冬弥时才据此回答；常见共同活动时段只允许保守推断“在附近/刚分开/稍后碰头”，其余情况不得补写具体位置，并始终附带跨轮连贯锁和普通世界线住处规则。`chat_pipeline.py` 在涉冬弥话题且非 WL2 时注入；独立指令与 `toya_radar.json` 已退役。
 
 ---
 
@@ -900,7 +913,7 @@ python -c "import json; [json.load(open(path, encoding='utf-8')) for path in ('d
 
 ### 风险四：修改 `self_monitor` 的超管抑制逻辑
 
-`AKITO_STATUS["last_superuser_trigger_time"]` 必须是 `{group_id: timestamp}` dict。若简化成单个时间戳，超管在 A 群说话会导致 B 群的深夜抱怨也被静默。三处更新位置：`commands.py` 的 `_stamp_trigger()`、`chat.py` 的超管触发记录段、`reactions.py` 的 `self_monitor`。
+`AKITO_STATUS["last_superuser_trigger_time"]` 必须是 `{group_id: timestamp}` dict。若简化成单个时间戳，超管在 A 群说话会导致 B 群的深夜抱怨也被静默。三处更新位置：`commands.py` 的 `_stamp_trigger()`、`chat_pipeline.py` 的超管触发记录段、`reactions.py` 的 `self_monitor`。
 
 ---
 
@@ -926,7 +939,7 @@ async def smart_finish(matcher, result):
 
 ### 风险七：history 中助手消息的字段名
 
-chat.py 存入 history 的 assistant 条目格式：
+`chat_pipeline.py` 存入 history 的 assistant 条目格式：
 ```json
 {"inner_os": "...", "reply": "..."}
 ```
@@ -945,9 +958,9 @@ chat.py 存入 history 的 assistant 条目格式：
 
 ---
 
-### 风险九：impression.py 的 JSON 格式与 chat.py 不同
+### 风险九：impression.py 的 JSON 格式与主对话不同
 
-群印象已拆成“材料分析 → 表达候选”两次调用：分析使用 `mode/evidence/observations/uncertainties/avoid_patterns`，表达使用 `inner_os/replies`；AutoChat 使用 `inner_os/anchor/reply`，chat.py 使用 `inner_os/action/dialogue`。它们虽共用 `core.api` 的 JSON 提取/救援工具，但解析和校验逻辑不同，不能互相套用。
+群印象已拆成“材料分析 → 表达候选”两次调用：分析使用 `mode/evidence/observations/uncertainties/avoid_patterns`，表达使用 `inner_os/replies`；AutoChat 使用 `inner_os/anchor/reply`，主对话使用 `inner_os/action/dialogue`。它们虽共用 `core.api` 的 JSON 提取/救援工具，但解析和校验逻辑不同，不能互相套用。
 
 ---
 

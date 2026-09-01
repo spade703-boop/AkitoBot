@@ -2,7 +2,23 @@
 
 > 目标：让彰人在群友提到具体剧情经历时，能够回忆起“当时发生了什么、冬弥怎么反应、自己说了什么”，再以当前彰人的口吻自然复述。原始剧情是事实证据，模型只负责在证据范围内组织表达。
 >
+> 最后核对：2026-09-01。本文是事件记忆的唯一详细计划；总路线只保留阶段依赖，数字以本目录下的生成报告为准。
+>
 > 更新规则：每完成一个可验证的里程碑就勾选对应项，并记录日期、验证命令和已知限制。未经审核的候选内容不进入线上事件记忆库。
+
+## 当前状态
+
+| 方向 | 状态 | 结论 |
+| --- | --- | --- |
+| 导入契约、证据链和去重 | ✅ 已完成 | 网页/CLI、草稿、修订快照、发布前校验和稳定 ID 已落地。 |
+| 事件级召回与安全降级 | ✅ 已完成 | 826 条事件资产；44 条离线集 Recall@3=1.0、负例误认率=0、模糊问法拒绝率=1.0。 |
+| 跨 surface 接入 | ✅ 已完成 | 主对话、自动回复、群印象共用事件召回入口，并保留各自输出约束。 |
+| 人工剧情覆盖 | 🟡 进行中 | 仅 2 条 `curated_story/reviewed`，824 条仍是 `legacy_script/generated`；已知来源台账有 2 条有效发布记录。 |
+| 会话承接、覆盖闭环和 Hybrid | ⏳ 待完成 | `event_id` 短期主题、未覆盖信息边界、覆盖矩阵/补录队列和生产 Lexical/Hybrid 对照尚未完成。 |
+
+关联导航：[`../../WORK_PLAN_INDEX.md`](../../WORK_PLAN_INDEX.md) · [`../UPGRADE_PLAN.md`](../UPGRADE_PLAN.md) · 评测报告 [`M2_EVENT_RECALL.md`](M2_EVENT_RECALL.md) · 覆盖报告 [`COVERAGE_REPORT.md`](COVERAGE_REPORT.md)
+
+最新验证（2026-09-01）：事件记忆/剧情导入相关测试与全量回归均通过；仓库当前全量为 861 passed。历史里程碑中的测试数量保留原日期，不与当前回归数字混用。
 
 ## 1. 数据职责
 
@@ -61,7 +77,8 @@
 
 - [x] `event/71/8` 完成双方共同经历单元候选。
 - [x] 人工确认后发布到本地事件库，旧记录可通过修订快照恢复。
-- [x] 验证命令：`pytest -q tests/core/test_story_import.py tests/core/test_event_memory.py`（42 passed）。
+- [x] 历史验证（2026-08-27）：旧测试路径曾执行 `pytest -q tests/core/test_story_import.py tests/core/test_event_memory.py`（42 passed）；旧路径和数字仅作里程碑记录。
+- [x] 当前镜像测试路径：`pytest -q tests/tools/event_memory/story_import/test_core.py tests/core/test_event_memory.py`，以当前回归结果为准。
 
 ### M2-B：运行时多单元召回
 
@@ -91,7 +108,9 @@
 - [x] trace 记录候选来源、各阶段分数、保留状态和丢弃原因，不记录用户或剧情原文。
 - [x] 检索构建与评测工具归入 `tools/event_memory/retrieval/`，测试放入对应镜像目录。
 - [x] 提供生产索引构建工具；索引保持 Git 忽略，必须完整覆盖全部事件并通过指纹校验才会加载。
-- [ ] 人工审核剧情形成首批系统性覆盖后，在生产构建 `event_memory_embeddings.npz`，完成 Lexical/Hybrid 离线与测试群对照后再切换模式。
+- [ ] 人工审核剧情形成首批系统性覆盖后，先在生产构建 `event_memory_embeddings.npz` 并确认全量指纹，再完成同一问题集的 Lexical/Hybrid 离线对照；不能在索引构建后立即切换 `hybrid`。
+- [ ] 离线对照达到门槛后，仅在指定测试群启用 `hybrid` canary，观察命中、误召回、延迟和 API 稳定性；通过 canary 门槛后才扩大群覆盖。
+- [ ] 任一门槛未通过或出现异常时，将 `AKITO_EVENT_MEMORY_RETRIEVAL` 回滚为 `lexical`（必要时关闭 `AKITO_M2_MEMORY_MODE`），保留旧索引和 trace 供复盘。
 - [x] 定向误召回、三种 surface、完整回归、Ruff 与 `git diff --check` 全部通过后记录结果。
 
 ## 8. 当前实施记录

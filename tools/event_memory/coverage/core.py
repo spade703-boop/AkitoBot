@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Callable
 from copy import deepcopy
 import hashlib
 import json
 from pathlib import Path
 import tempfile
-from typing import Any, Callable
+from typing import Any
 from urllib.parse import urlparse, urlunparse
 
 TIMELINE_STAGES = (

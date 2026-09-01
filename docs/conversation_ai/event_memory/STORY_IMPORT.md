@@ -1,6 +1,10 @@
 # 彰人/冬弥剧情采集
 
+> 这是采集与发布操作手册，不是路线清单。事件记忆的当前进度和待办统一见 [`REFACTOR_PLAN.md`](REFACTOR_PLAN.md)。
+
 `tools/event_memory/story_import/web.py` 提供独立的本地网页工作台；`tools/event_memory/story_import/cli.py` 是同一套核心的命令行备用入口。它们把资讯站剧情页面转换为可审核的本地草稿，再把已确认的内容合并进事件记忆。运行时只读取本地事件记忆，不会因为聊天请求访问网页。
+
+运行环境为 Python 3.10（与生产容器一致）。基础依赖安装 `tools/event_memory/story_import/requirements.txt`；启用 `--enrich llm` 时再安装 `requirements-llm.txt`，其中包含 `openai`，并配置 `.env` 的 `DEEPSEEK_API_KEY`（可选 `DEEPSEEK_BASE_URL`、`DEEPSEEK_MODEL`）。
 
 ## 网页工作台
 

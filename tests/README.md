@@ -68,6 +68,7 @@ tests/
   - `helpers.py`
 - `tests/features/rpg/`
   - `test_config.py` / `test_simulation.py` / `test_analytics.py`
+  - `test_state.py` / `test_supply.py`
   - `test_player.py`
   - `test_fortune.py`
   - `test_hunt.py`
@@ -94,6 +95,9 @@ tests/
 - 改 `nonebot_plugin_akito/features/random_paro/` → `pytest -q tests/features/random_paro`
 - 改 `nonebot_plugin_akito/features/random_keyword/` → `pytest -q tests/features/random_keyword`
 - 改 `nonebot_plugin_akito/features/impression/` → `pytest -q tests/features/impression`
+
+事件记忆导入工具的测试位于 `tests/tools/event_memory/story_import/`，可用
+`pytest -q tests/tools/event_memory/story_import` 运行。
 
 如果一次改了多块，直接跑全量：
 

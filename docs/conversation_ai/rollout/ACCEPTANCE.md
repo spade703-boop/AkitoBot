@@ -1,10 +1,13 @@
 # 灰度验收报告
 
 > 本报告只使用匿名化 trace 元数据；它不能替代对实际回复内容的人工抽查。
+>
+> 这是当前灰度快照；自动回复与工具链的待办分别见 [`../auto_reply/PLAN.md`](../auto_reply/PLAN.md) 和 [`../tooling/PLAN.md`](../tooling/PLAN.md)。
 
 - 结论：**single_arm_observation**
-- Trace 文件：`data\conversation_traces.jsonl`
-- 总回合：252
+- Trace 文件（本报告历史来源）：`data/conversation_ai/traces/conversation_traces.jsonl`
+- 总回合：252（历史快照数字，保留不改）
+- 路径核对：仓库根路径 `data/conversation_traces.jsonl` 当前有 863 行；它与上述嵌套路径不是同一批采集，不能合并或互相替代。
 - 对照臂：未启用（单臂观察，不提供因果比较）
 - 实验臂：`combined`（233 回合）
 - 最低样本要求：实验臂 30 回合

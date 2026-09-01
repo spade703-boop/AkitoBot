@@ -3,7 +3,7 @@ name = "akito_bot"
 version = "0.4.5"
 description = "akito_bot"
 readme = "README.md"
-requires-python = ">=3.9, <4.0"
+requires-python = ">=3.10, <4.0"
 dependencies = [
     "nonebot2[fastapi]>=2.4.4",
     "nonebot-adapter-onebot>=2.4.6",
@@ -48,7 +48,7 @@ dev = [
 # ── Ruff Linter ───────────────────────────────────────────────────────────
 
 [tool.ruff]
-target-version = "py39"
+target-version = "py310"
 line-length = 120
 
 [tool.ruff.lint]
@@ -68,7 +68,8 @@ ignore = [
     "E501",  # line too long (handled by formatter)
     "E701",  # multiple statements on one line (colon) — 既有紧凑写法，可接受
     "E702",  # multiple statements on one line (semicolon) — 既有紧凑写法，可接受
-    "UP007", # Use X | Y for type annotations (keep Optional for py39 compat)
+    "UP007", # 保留既有 Optional 写法，避免无关重写
+    "UP045", # 保留既有 Optional[T] 写法，避免无关类型注解重写
     "N806",  # 函数内常量性局部变量允许 UPPER_SNAKE_CASE（见 PROJECT_SPEC §3）
     "N812",  # lowercase imported as non-lowercase (NoneBot2 convention)
     "B008",  # do not perform function calls in argument defaults (false positives with nonebot)
@@ -96,7 +97,7 @@ line-ending = "lf"
 # ── Mypy Type Checker ─────────────────────────────────────────────────────
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.10"
 warn_return_any = false
 warn_unused_configs = true
 ignore_missing_imports = true

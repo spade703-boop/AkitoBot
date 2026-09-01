@@ -3,7 +3,7 @@
 基于 [NoneBot2](https://nonebot.dev) + OneBot V11 的「初音未来：缤纷舞台」同人角色扮演 QQ 机器人，以「东云彰人」身份在群内进行 AI 驱动的沉浸式互动。
 
 - **CP 立场**：彰冬（不拆不逆）
-- **AI 后端**：DeepSeek API（对话）/ 智谱 GLM-4V（图片识别）/ Tavily（联网搜索）
+- **AI 后端**：DeepSeek API（对话）/ 智谱 GLM-4.6V-Flash（图片识别）/ Tavily（联网搜索）
 - **当前版本**：0.4.5
 
 ---
@@ -12,7 +12,7 @@
 
 ### 1. 环境要求
 
-- Python ≥ 3.9
+- Python ≥ 3.10
 - 一个 NoneBot2 兼容的 OneBot V11 实现（[NapCat](https://github.com/NapNeko/NapCatQQ)、[LLOneBot](https://github.com/LLOneBot/LLOneBot) 等），并配置好正向 WebSocket
 
 ### 2. 安装依赖
@@ -21,7 +21,7 @@
 
 ```bash
 pip install "nonebot2[fastapi]" nonebot-adapter-onebot openai python-dotenv Pillow aiohttp \
-            aiosqlite jieba wordcloud numpy nonebot-plugin-htmlrender nonebot-plugin-alconna nonebot-plugin-apscheduler nonebot-plugin-uninfo
+            aiosqlite jinja2 jieba wordcloud numpy nonebot-plugin-htmlrender nonebot-plugin-alconna nonebot-plugin-apscheduler nonebot-plugin-uninfo
 ```
 
 > `nonebot-plugin-htmlrender` 首次运行会自动下载 Playwright 浏览器内核（用于图库清单等 HTML 渲染）。
@@ -37,7 +37,7 @@ ONEBOT_WS_URLS=["ws://127.0.0.1:3000"]
 # API Keys
 DEEPSEEK_API_KEY=sk-your-deepseek-key    # DeepSeek 对话
 TAVILY_API_KEY=tvly-your-tavily-key      # Tavily 联网搜索
-ZHIPU_API_KEY=your-zhipu-key             # 智谱 GLM-4V 图片识别
+ZHIPU_API_KEY=your-zhipu-key             # 智谱 GLM-4.6V-Flash 图片识别
 SILICONFLOW_API_KEY=sk-your-siliconflow  # SiliconFlow embedding（语义检索，可选）
 
 # 管理
@@ -88,6 +88,7 @@ python bot.py        # 或：nb run
 - 多图识别（单条消息最多 3 张一次分析）与动图多帧理解（自动抽首/中/尾帧）
 - 周边谷子识别（吧唧 / 立牌 / 橡胶挂件）
 - 游戏截图识别 + OCR 文字提取（截图类自动追加一次高清专项 OCR）
+- 视觉首轮调用超时 45 秒；截图/截断时追加的高清 OCR 轮超时 30 秒，失败则静默降级，不阻断主对话
 
 ### 印象系统（`群印象`）
 
@@ -110,7 +111,7 @@ python bot.py        # 或：nb run
 - `词云屏蔽词 查看` / `添加 词1 词2` / `取消 词1 词2`：超管维护全局屏蔽词；近 7 天旧日报需手动重算
 - `词云排除用户 查看` / `添加 QQ号1 QQ号2` / `取消 QQ号1 QQ号2`：超管维护全局消息排除名单；新消息立即跳过，历史数据需重新回填
 - 回填默认读取 `data/impression_history.db`；可通过 `WORDCLOUD_HISTORY_DB` 指向在线复制的历史库切片，读取不会暂停 Bot
-- 可编辑 `data/content/wordcloud_stopwords.txt` 和 `wordcloud_user_dict.txt`，补充静态停用词及群内专有词
+- 可编辑 `data/content/wordcloud_stopwords.txt` 和 `data/content/wordcloud_user_dict.txt`，补充静态停用词及群内专有词
 
 ### 派生抽取器（`抽派生`）
 
@@ -166,20 +167,21 @@ python bot.py        # 或：nb run
 | `签到` | 全部群合计每天 1 次领取积分，随机 50–100 分；在一个群签过后，其他群重复签到静默不应答 |
 | `送礼@对方` | 全部群合计每天 1 次，从当前积分买得起的礼物里随机送一份给对方（越贵的越容易抽中） |
 | `偷@对方`（`偷积分`） | 全部群合计每天 2 次，小概率顺走对方少量积分；有强保护，且每次都会掉一点和对方的羁绊 |
-| `我的积分`（`积分`） | 查看自己的积分、今日签到 / 送礼状态、冒险补给是否可开启，以及今日偷取 / 被偷次数与剩余次数 |
-| `礼物列表`（`送礼帮助`） | 查看礼物档位与价位 |
-| `亲密度 [@对方]`（`羁绊`） | 查看与某人的同好羁绊：等级称号 + 距下一级进度 + 分方向送礼次数；不带 @ 则列出自己羁绊最高的几位 |
-| `亲密度排行`（`羁绊排行`） | 全局同好羁绊对子排行（带等级称号） |
+| `我的积分` | 查看自己的积分、今日签到 / 送礼状态、冒险补给是否可开启，以及今日偷取 / 被偷次数与剩余次数 |
+| `礼物列表` | 查看礼物档位与价位 |
+| `我的羁绊 [@对方]` | 带 @ 查看指定对象的同好羁绊详情；不带 @ 列出自己的羁绊关系 |
+| `群羁绊排行`（`羁绊排行`） | 全局同好羁绊对子排行（带等级称号） |
+| `测试我的羁绊` | 使用固定测试数据渲染羁绊卡片（仅 `SUPERUSER_QQ`） |
 | `重置送礼` | 清空全局送礼 / 积分 / 羁绊 / RPG 玩家数据（**超管**） |
 | `重置偷群友` | 重置当前群成员的全局偷积分次数与被偷保护闸门（**超管**） |
 
 - 礼物 10 档，按「心意 / 稀有度」递增（无料 → 谷子 → 豆豆眼 → 亚克力立牌 → 同人本 → 画集 → 约稿点图 → 手办 → 自己产的彰冬饭 → 彰冬婚礼邀请函）；越贵的礼基础羁绊越高，攒钱送贵礼更划算
 - 送礼按权重触发随机事件：普通 / 暴击（羁绊翻倍）/ 回礼（对方随机回赠 5 种彰冬周边之一，礼尚往来额外加羁绊、稀有档还退部分积分，全部可在 `return_gifts` 配置增删调）/ 失败（不涨羁绊，退回部分积分安慰，比例见 `fail_refund_ratio`）/ 意外（9 种小概率：加赠·稀有·手写卡·被夸·上头·迟到·翻车·撞款·寄丢，偏正向小惊喜，羁绊随礼物档位缩放、部分返还积分，全部可在 `mishaps` 配置增删调）
 - 保证礼「自己产的彰冬饭」「彰冬婚礼邀请函」一旦抽中**必定惊喜升级**（不暴击不失败、固定加满羁绊）；达到 1112 积分后，婚礼邀请函以独立 40% 概率判定，未抽中则改抽其他礼物。邀请函固定消耗 1112、基础羁绊 +819；只有送出者此前从未送过邀请函，且双方关系中尚无一份 +1314 邀请函时，才追加 +495 纪念加成。同一关系可以重复互送，其他情况均按 +819 结算
-- 羁绊分 6 级：初识 → 相熟 → 要好 → 挚友 → 知己 → 莫逆之交；`亲密度@某人` 显示当前等级、距下一级进度、以及你和 ta 分方向的送礼次数（门槛/称号见 `bond_levels`，可改可热重载）
+- 羁绊等级完全由 `data/content/gift_config.json` 的 `bond_levels` 驱动：当前共 14 档（8 个负向档位、6 个非负/正向档位）；`我的羁绊@某人` 显示当前档位、距下一档进度及分方向送礼次数，名称和阈值可热重载。
 - `偷`：对抗玩法（轻量·欢乐向）——得手 / 被抓（倒赔对方）/ 扑空 / 反被顺 四种结果；金额小且封顶、低分免疫、每日被偷上限、签到后保护期；**偷必掉羁绊、偷越亲近掉越多**（社交代价当刹车）；偷多了羁绊会跌进负数（关系会沿着：小有摩擦 → 心生芥蒂 → 渐行渐远 → 积怨渐深 → 关系破裂 → 反目成仇 → 势不两立 → 不共戴天逐步恶化，封底 -3000）。数值/文案见 `steal` 配置
 - 仅白名单群可用（与聊天同一白名单）；同一 QQ 的积分、签到/送礼/偷取闸门、羁绊和 RPG 角色档案跨群共享；群之间只隔离世界 BOSS 等群级状态
-- 0–6 点（北京时间）小彰睡觉，签到 / 送礼 / 偷会收到固定回复、暂不结算（接入全局 `is_sleeping()`）；查询类（积分 / 亲密度 / 排行 / 我的角色 / 世界BOSS）照常。超管不受睡眠限制，便于测试
+- 0–6 点（北京时间）小彰睡觉；普通用户的签到、送礼、偷取及 RPG 战斗/强化等写操作会收到固定回复且不结算，超管可绕过这些限制。`使用` 道具始终受睡眠拦截且没有超管豁免；积分、羁绊、排行、角色和世界 BOSS 查询照常。
 - 礼物档位 / 事件权重 / 签到积分 / 羁绊等级 / 偷窃参数 / 全部文案都在 `data/content/gift_config.json`（可热重载，仓库附带模板），缺省值同时内置于代码
 - 「重置本群签到 / 重置全群签到 / 重置签到次数」会清掉当前群成员的全局签到闸门，不碰 RPG 连签和装备状态（**超管**）
 - `重置偷群友` 会重置当前群成员的全局偷取次数、被偷次数与保护闸门，不改积分和羁绊（**超管**）
@@ -211,7 +213,7 @@ python bot.py        # 或：nb run
 | `冒险帮助` | 列出以上所有指令 |
 
 - 角色对外的唯一数值是「等级」；战力/运势/今日增益均为隐藏值（暗中影响打怪），只在面板和播报中给模糊反馈
-- RPG 的成长硬约束已单独整理在 `features/rpg/GROWTH_BASELINE.md`；可运行 `py tools/simulate_rpg_growth.py` 复现单人 30/90/180/270/360 天成长及 Lv30 到达时间。当前模拟中位约为第 271 天到达 Lv30
+- RPG 的成长硬约束已单独整理在 `docs/rpg/GROWTH_BASELINE.md`，玩法/看板/维护待办统一见 `docs/rpg/PLAN.md`；可运行 `py tools/simulate_rpg_growth.py --runs 1000` 复现单人 30/90/180/270/360 天成长及 Lv30 到达时间。当前中位约为第 271 天到达 Lv30
 - 常规怪池现有 16 只：Lv1-15 保留原有推进，Lv16-30 每 3 级逐步加入风暴狮鹫、魔化奇美拉、深渊骑士、冰霜巨人和远古巨龙；五只高阶怪依次提供 3%/5%/7%/9%/12% 经验修正，积分不额外增加；遭遇权重按怪物名配置，后续可继续追加等级分段与怪物
 - 普通打怪结算后现在有两层低频尾声：一层是轻量特判，单刷胜利时可能触发彰人追击补一笔额外经验/积分；单刷失败时，可能被冬弥援护或彰冬联携拉回成功；组队失败则有低概率在改单刷前被支援拉回成立。另一层是旅途小奇遇：主动单刷与成功组成的双人战斗都会低概率刷出，双人情况下道具奖励两人各发一份，数值奖励按总额对半到每个人
 - 冒险补给可用 `开启冒险补给 [数量]` 一次开启本周剩余次数；每抽独立判定奖池，跨第 6/7 次时按对应档位累计费用，积分不足或数量超过本周剩余次数时整单不结算。奖池为 `旅人的行囊` 34% / `龙骑士的地图` 30% / `厨子的美食` 20% / `神官的护符` 12% / `勇者的远征套装` 3% / `大葱味蛋糕` 1%
@@ -219,6 +221,7 @@ python bot.py        # 或：nb run
 - 经验书和双倍经验卡支持 `使用 [道具名] [数量]` 一次消耗多个；经验书按总量立即结算，双倍经验卡只叠加 ×2 的生效场次。礼物券、常规战备、神官护符和大葱味蛋糕仍需逐个使用
 - 冒险补给和付费送礼共用积分账本，不做硬路线锁定；系统按 ISO 周跨群记录两边实际投入供后台统计，不在角色面板展示。礼物券不计送礼投入，普通送礼按事件返还后的净消耗记录
 - 世界 BOSS 只会在普通 `今日打怪` / `组队@某人` 后以 `3%` 概率出现；强度按近 7 日活跃签到人数生成，12 人后血量继续软扩容，但奖励扩容更慢；基础奖励仍以经验和积分为主，不计入普通战绩
+- 世界 BOSS 每日北京时间 `00:00` 由定时任务结算并广播前一天未完成的 BOSS；若定时任务未运行，后续查询会幂等补结算，避免重复发放
 - 世界 BOSS 与普通打怪是两条独立线：普通装备是否已损坏，不影响你打世界 BOSS；每只 BOSS 会给每个已签到玩家单独记录一套临时装备与 1 次出手机会
 - 世界 BOSS 双人挑战的羁绊成长是独立于普通 `组队@某人` 的轻量补充；结算页会展示本次新增羁绊，但不再额外叠数值收益
 - 世界 BOSS 击杀结算时，参与者会按各自独立概率判定该 BOSS 的专属收藏掉落；当前收藏为 `赤鳞龙鳞` / `断潮虾壳` / `焦香披萨块`，每种只会获得一次，仅用于 `我的角色` 展示，不提供数值效果
@@ -226,7 +229,7 @@ python bot.py        # 或：nb run
 - 组队把「送礼攒羁绊 → 拉人成功率 → 共同作战后再涨一点羁绊」串成了社交闭环：羁绊越深越容易拉动，负羁绊则更难磨合，但也可能靠并肩作战慢慢回暖
 - `重置RPG功能` 会为今天签到过的人重发普通今日装备，不改运势、连签和世界 BOSS 状态（**超管**）
 - 数值 / 野怪 / 掉落 / 文案全部在 `data/content/rpg_config.json`（热重载），缺省值内置于代码
-- 睡眠时段 0–6 点拦截写操作（打怪 / 组队 / 世界 BOSS 攻击 / 强化 / 购买装备），查询类照常；超管不受限
+- 睡眠时段 0–6 点拦截普通用户的写操作（打怪 / 组队 / 世界 BOSS 攻击 / 强化 / 购买装备等），超管可绕过这些指令；`使用` 道具单独拦截且超管也不能绕过，查询类照常
 
 ### 记忆系统
 
@@ -282,6 +285,7 @@ AI 也会在对话中通过 `[[记下: ...]]` 标记自动提取长期记忆。
 ### 定时任务
 
 - 每天 0:00 生成并发送前一天群聊词云，同时清理超过 7 天的词云原始消息
+- 每天 0:00 结算并广播前一天未完成的世界 BOSS；查询入口提供幂等补结算
 - 每天早上 6:00 早安问候
 - 每天晚上 23:50 晚安问候
 - 每小时清理过期临时记忆
@@ -312,24 +316,40 @@ akito_bot/
 ├── pyproject.toml                  # 项目配置 + 依赖声明
 ├── README.md                       # 本文件（用户向）
 ├── PLUGIN_MAINTENANCE.md           # 维护手册（开发 / 维护向）
-├── docs/PROJECT_SPEC.md            # 项目规范（编码 / 提交 / 安全）
-├── tools/                          # 维护工具脚本
+├── docs/                           # 规范、功能计划、报告与操作手册
+│   ├── WORK_PLAN_INDEX.md          # 当前计划唯一导航
+│   ├── conversation_ai/            # 对话 AI 各功能计划与验收资料
+│   ├── rpg/                        # RPG 计划与成长基线
+│   ├── archive/                    # 历史计划（仅追溯）
+│   └── PROJECT_SPEC.md             # 项目规范（编码 / 提交 / 安全）
+├── tools/                          # 维护工具与评测脚本
 │   ├── classify_scripts.py         # 剧本分类打标（home/story/noise）
 │   ├── enrich_scripts.py           # LLM 富集（生成 cn_key + category + topics，断点续跑）
 │   ├── build_embeddings.py         # 语义向量库构建（scripts/pjsk/all）
 │   ├── eval_retrieval.py           # 检索精度评测（cosine 基线 vs bge-reranker 精排）
-│   └── eval_set.json               # 评测黄金考题集（纯文本可直接编辑）
+│   ├── eval_set.json               # 评测黄金考题集（纯文本可直接编辑）
+│   ├── simulate_rpg_growth.py      # RPG 单人成长模拟
+│   ├── backfill_paro_stats.py      # 派生历史统计回补
+│   ├── conversation_ai/            # 对话 AI 基线与灰度评测
+│   └── event_memory/               # 事件记忆构建、覆盖与检索评测
 ├── tests/                          # 测试目录（pytest，详见 tests/README.md）
 ├── nonebot_plugin_akito/
 │   ├── __init__.py                 # 插件入口
 │   ├── core/                       # 基础层（部分模块导入时会加载本地配置）
 │   │   ├── __init__.py             # 常量定义 & 统一导出
 │   │   ├── api.py                  # DeepSeek / 智谱 / Tavily API 封装
+│   │   ├── ambiguity_guard.py      # 主对话模糊指代护栏
+│   │   ├── context_orchestrator.py # 上下文选择与 Token 预算
 │   │   ├── context.py              # Prompt 组装（人设 / 剧本 / 歌曲 / 关系）
 │   │   ├── data.py                 # JSON 数据文件加载 & 热重载
 │   │   ├── prompt_builder.py       # 主聊天 / 群印象 / 自动插嘴的 Prompt 骨架与 schema
 │   │   ├── life_state.py           # 状态机（routine / 睡眠 / 节日）
 │   │   ├── memory.py               # 长期记忆 & SQLite 群聊上下文
+│   │   ├── event_memory.py         # 事件记忆召回与安全门控
+│   │   ├── event_memory_scoring.py # 事件候选评分
+│   │   ├── observability.py        # 脱敏 trace 与 shadow 观测
+│   │   ├── rollout.py              # 灰度实验臂与回退
+│   │   ├── story_import.py         # 剧情导入运行时适配
 │   │   ├── retrieval.py            # 语义检索引擎（BGE-M3 + 均值中心化）
 │   │   ├── retrieval_assets.py     # 检索语料规范化与 Prompt 文本构建
 │   │   ├── time_awareness.py       # 时间流逝感知
@@ -349,7 +369,7 @@ akito_bot/
 │       ├── random_keyword/         # 今日关键词
 │       ├── daily_wordcloud/        # 每日群聊词云、热词贡献榜与屏蔽词
 │       ├── verify/                 # 新人审核管理
-│       ├── scheduled/              # 定时任务
+│       ├── scheduled/              # 定时任务（含 world_boss_settlement）
 │       ├── event_mode/             # WL2 世界线开关
 │       ├── director/               # 导演骰子（可安全删除，删除后主对话自动降级）
 │       ├── gift/                   # 送礼系统（积分/送礼/偷分/羁绊/签到闸门）
@@ -373,7 +393,7 @@ akito_bot/
 │           ├── supply.py           # 每周冒险补给 / 阶梯成本 / 战备投放
 │           ├── inventory.py        # 背包 / 使用道具
 │           └── character.py        # 角色面板 / 群排行榜 / 冒险帮助
-└── data/                           # 持久化数据 + 本地素材；仅两份默认配置模板纳入 Git
+└── data/                           # 持久化数据 + 本地素材；五个静态内容文件纳入 Git
 ```
 
 > 依赖方向：`features/` → `core/` ← `handlers/`，三层职责与每个文件的接口详见 `PLUGIN_MAINTENANCE.md`。
@@ -423,15 +443,17 @@ akito_bot/
 | `akito_scripts.json` | 台词剧本库（含 `type`/`category`/`topics`/`cn_key`/`context`/`dialogue`，检索键为 `cn_key`） |
 | `scripts_embeddings.npz` | 剧本语义向量库（`tools/build_embeddings.py` 生成，embed key=cn_key） |
 | `akito_songs.json` | 歌曲知识库（含 `keywords`，用于歌曲圈内昵称 / 别名匹配） |
-| `akito_relationships.json` | 人物关系档案（含 `keywords` 白名单） |
+| `akito_relationships.json` | 人物关系档案（含 `keywords` 关键词） |
 | `akito_director.json` | 导演骰子资产 |
 | `pjsk_knowledge.json` | PJSK 世界观 / 黑话库 |
 | `gift_config.json` | 送礼系统配置（礼物档位 / 事件权重 / 签到积分 / 播报文案，可热重载；仓库附带一份可直接编辑的模板，缺省值同时内置于代码） |
 | `rpg_config.json` | RPG 全量配置（战斗/运势/强化/掉落/精英/小奇遇/世界BOSS/野怪/道具/文案/错误信息，热重载；仓库附带模板，缺省值内置于代码） |
+| `akito_event_memories.json` | 事件记忆静态语料（运行时只读，纳入 Git） |
+| `wordcloud_stopwords.txt` / `wordcloud_user_dict.txt` | 词云静态停用词和 Jieba 用户词典（运行时只读，纳入 Git） |
 
 **`data/` 根目录（功能 / 运行时，多为自动读写）**：`paro_pools.json`、`fanfic_keywords.json`、`keyword_draws.json`、`gift_data.json`、`akito_memories.json`、`verify_*.json`、`last_interactions.json`、`impression_history.db`
 
-> 版本控制只收录 `data/content/gift_config.json` 与 `data/content/rpg_config.json` 两份可编辑默认配置模板；其余 `data/` 内容均为本地语料、素材、索引或运行时数据，不纳入 Git。
+> Git 当前收录 `data/content/akito_event_memories.json`、`data/content/gift_config.json`、`data/content/rpg_config.json`、`data/content/wordcloud_stopwords.txt`、`data/content/wordcloud_user_dict.txt` 五个静态内容文件；索引、图片、缓存、数据库和其他运行时数据不纳入 Git。
 
 > `core/data.py` 自动搜索 `persona/`、`content/` 子目录（兼容旧扁平布局）；`PROMPTS_DB` / `REACTIONS_DB` 由各自的拆分文件合并加载。
 
@@ -462,6 +484,9 @@ GROUP_IMAGE_PERMISSIONS={"群号1":["all"],"群号2":["toya","self"]}
 |------|------|------|
 | `README.md` | 用户 | 项目介绍、功能、部署（本文件） |
 | `PLUGIN_MAINTENANCE.md` | 维护者 | 模块地图、每文件接口、数据清单、维护操作、AI 风险点 |
+| `docs/WORK_PLAN_INDEX.md` | 全部维护者 | 工作计划总览、当前进度、功能计划与报告索引 |
+| `docs/conversation_ai/` | 对话 AI 维护者 | 总路线、自动回复、工具编排、事件记忆计划及验收资料 |
+| `docs/rpg/` | RPG 维护者 | RPG 玩法/看板/代码维护计划与成长基线 |
 | `docs/PROJECT_SPEC.md` | 开发者 | 编码规范、命名、类型注解 / docstring、版本号与 Commit、安全规则 |
 | `tests/README.md` | AI / 维护者 | 测试目录映射、执行命令、沙箱约束、补测试规则 |
 
@@ -476,9 +501,11 @@ openai                    >= 1.0.0
 python-dotenv             >= 1.0.0
 Pillow                    >= 10.0.0
 aiohttp                   >= 3.9.0
+aiosqlite                 >= 0.20.0
 jieba                     >= 0.42.1
 wordcloud                 >= 1.9.3
 numpy                     >= 1.21.0
+jinja2                    >= 3.1.0
 nonebot-plugin-htmlrender >= 0.3.0
 nonebot-plugin-alconna    >= 0.50.0
 nonebot-plugin-apscheduler>= 0.4.0

@@ -8,7 +8,7 @@
   py tools/eval_retrieval.py compare 0.15
 
 前置条件：
-  - Python 3.9+（用跑 bot 的同一个解释器 / 虚拟环境即可，依赖完全相同；
+  - Python 3.10+（用跑 bot 的同一个解释器 / 虚拟环境即可，依赖完全相同；
     Linux 下把示例里的 py 换成对应的 python3）
   - 在仓库根目录运行；.env 中配置 SILICONFLOW_API_KEY
   - data/content/ 已有语料 JSON 与 .npz 向量库（先跑 tools/build_embeddings.py all）
@@ -289,7 +289,7 @@ def run() -> None:
                 print("   精排: ⚠️ 调用失败，跳过")
                 print()
                 continue
-            ranked = sorted(zip(cand, scores), key=lambda x: x[1], reverse=True)
+            ranked = sorted(zip(cand, scores, strict=False), key=lambda x: x[1], reverse=True)
             kept = [(i, cos, rr) for (i, cos), rr in ranked if rr >= threshold][:k]
             kept_entries = [db[i] for i, _, _ in kept]
 

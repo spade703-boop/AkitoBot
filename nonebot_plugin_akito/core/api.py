@@ -1,5 +1,10 @@
-"""外部 API 封装：DeepSeek 对话 / Agent、Tavily 搜索、智谱 GLM-4V 图像识别，均带超时与降级处理；
-另提供 LLM JSON 输出的提取 / 救援工具（chat 与 impression 共用的单一真相源）。"""
+"""外部 API 适配与 LLM 输出救援工具。
+
+封装 DeepSeek 对话/Agent、Tavily 搜索、智谱 GLM-4.6V-Flash 视觉识别及
+SiliconFlow embedding/rerank；网络调用均设置超时并在失败时返回降级结果。
+视觉首轮超时为 45 秒，高清 OCR 补充轮为 30 秒。模块同时提供 chat 与
+impression 共用的 JSON 提取、字段救援和尾部救援工具。
+"""
 
 from __future__ import annotations
 

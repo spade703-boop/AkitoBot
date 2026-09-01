@@ -1,5 +1,7 @@
 # 定向探针复核记录（2026-08-27）
 
+> 这是历史人工复核记录，不是已完成证明；后续行动项回填到 [`../auto_reply/PLAN.md`](../auto_reply/PLAN.md) 或 [`../event_memory/REFACTOR_PLAN.md`](../event_memory/REFACTOR_PLAN.md)。
+
 ## 当前人工结论
 
 - `P01`：回复中的“本来只是去接绘名”没有在本次命中的事件证据中出现；与“相遇并组队”的实际时间线不够可靠。

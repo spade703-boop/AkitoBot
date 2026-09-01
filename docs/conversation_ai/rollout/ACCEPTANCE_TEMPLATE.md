@@ -1,10 +1,13 @@
 # 灰度验收操作模板
 
+> 这是操作流程，不是路线清单。自动回复和工具链的当前待办分别见 [`../auto_reply/PLAN.md`](../auto_reply/PLAN.md) 与 [`../tooling/PLAN.md`](../tooling/PLAN.md)。
+
 ## 1. 采集前确认
 
 - 测试群的 `AKITO_EXPERIMENT_GROUPS` 已映射到 `combined`。
 - 至少保留一个未映射群作为 `default` 对照；不要把所有群同时切到实验臂。`default` 默认是 M1 shadow、M2 off，不改变回复行为。
 - `AKITO_CONVERSATION_TRACE_PATH` 已配置，且运行用户对目标目录有写权限。
+- 报告只读取明确指定的输入路径；仓库根目录的 `data/conversation_traces.jsonl` 是另一份历史采集，不能与嵌套路径的 252 回合快照混算（根路径当前 863 行）。
 - trace 只包含 schema 版本、UTC 记录时间、群组标识、request id、实验臂、表面、状态、耗时、Token 和事件元数据，不应包含用户原文。
 
 ## 2. 生成报告
