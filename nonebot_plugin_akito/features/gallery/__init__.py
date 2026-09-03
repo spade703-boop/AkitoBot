@@ -612,6 +612,41 @@ def _resolve_send_image_request(text: str) -> tuple[str, str]:
     return (gallery.storage_key, gallery.prompt_hint) if gallery else ("", "")
 
 
+def _parse_send_image_request(text: str) -> tuple[str, int, bool]:
+    """Parse an exact gallery target with an optional trailing image count."""
+    raw = text.strip()
+    if not raw:
+        return "", 1, False
+
+    if _find_gallery_exact(raw) is not None:
+        return raw, 1, True
+
+    parts = raw.split()
+    if len(parts) == 2:
+        target, count_text = parts
+        if not count_text.isdecimal():
+            return target, 1, False
+        try:
+            requested_count = int(count_text)
+        except ValueError:
+            return target, 1, False
+        return target, requested_count, 1 <= requested_count <= MAX_SEND_IMAGE_COUNT
+    if len(parts) != 1:
+        return parts[0] if parts else raw, 1, False
+
+    attached_count = re.fullmatch(r"(?P<target>.+?)(?P<count>\d+)", raw)
+    if not attached_count:
+        return raw, 1, True
+    target = attached_count.group("target")
+    if _find_gallery_exact(target) is None:
+        return raw, 1, True
+    try:
+        requested_count = int(attached_count.group("count"))
+    except ValueError:
+        return target, 1, False
+    return target, requested_count, 1 <= requested_count <= MAX_SEND_IMAGE_COUNT
+
+
 def _has_gallery_name_prefix(text: str) -> bool:
     """Return whether text starts with a gallery name but contains extra content."""
     normalized = _normalize_gallery_name(text)
@@ -1404,20 +1439,7 @@ async def _(bot: Bot, event: Event):
         return
 
     request_text = re.sub(r"^发张\s*", "", event.get_plaintext().strip(), count=1).strip()
-    request_parts = request_text.split()
-    target = request_parts[0] if request_parts else ""
-    requested_count = 1
-    count_valid = len(request_parts) <= 1
-    if len(request_parts) == 2:
-        if request_parts[1].isdigit():
-            try:
-                requested_count = int(request_parts[1])
-            except ValueError:
-                count_valid = False
-            else:
-                count_valid = 1 <= requested_count <= MAX_SEND_IMAGE_COUNT
-        else:
-            count_valid = False
+    target, requested_count, count_valid = _parse_send_image_request(request_text)
     category, prompt_hint = _resolve_send_image_request(target)
     if not category:
         if not target or _has_gallery_name_prefix(target):
@@ -1459,7 +1481,7 @@ async def _(bot: Bot, event: Event):
         await send_img_cmd.finish(f"（翻了翻相册）……啧，相册里还没存【{gallery.name}】的照片。你先发给我几张？")
 
     try:
-        if not gallery.caption_enabled:
+        if requested_count > 1 or not gallery.caption_enabled:
             caption = ""
         else:
             random_angles = REACTIONS_DB.get("send_img_angles") or ["语气切入点：随意的发言，像是随手丢过去的。"]

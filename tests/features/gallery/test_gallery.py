@@ -87,6 +87,26 @@ def test_resolve_send_image_request_only_accepts_exact_gallery_name_or_alias():
     assert fallback_hint == ""
 
 
+def test_parse_send_image_request_accepts_spaced_and_attached_counts():
+    assert gallery._parse_send_image_request("宠物 3") == ("宠物", 3, True)
+    assert gallery._parse_send_image_request("宠物3") == ("宠物", 3, True)
+    assert gallery._parse_send_image_request("宠物 0") == ("宠物", 0, False)
+    assert gallery._parse_send_image_request("宠物6") == ("宠物", 6, False)
+
+
+def test_parse_send_image_request_prioritizes_numeric_gallery_names(monkeypatch):
+    custom = gallery.GalleryDefinition(
+        storage_key="custom/33",
+        name="33",
+        caption_enabled=False,
+        permission_tokens=("33",),
+        custom=True,
+    )
+    monkeypatch.setattr(gallery, "CUSTOM_GALLERIES", [custom])
+
+    assert gallery._parse_send_image_request("33") == ("33", 1, True)
+
+
 def test_resolve_send_image_request_rejects_unknown_non_empty_category():
     category, hint = gallery._resolve_send_image_request("根本不存在的图库")
     compatible_category, _ = gallery._resolve_send_image_request("冬弥照片")
@@ -607,6 +627,35 @@ async def test_send_multiple_pet_images_as_forward_message(monkeypatch, tmp_path
     assert node["type"] == "node"
     assert node["data"]["name"] == "东云彰人"
     assert str(node["data"]["content"]) == "[image]" * 5
+
+
+@pytest.mark.asyncio
+async def test_send_multiple_captioned_gallery_images_without_default_caption(monkeypatch, tmp_path):
+    image_paths = []
+    for index in range(3):
+        image_path = tmp_path / f"food-{index}.jpg"
+        image_path.write_bytes(f"food-image-{index}".encode())
+        image_paths.append(image_path)
+    caption_api = AsyncMock(return_value="不应该附带这句评价")
+    monkeypatch.setattr(gallery, "GROUP_IMAGE_PERMISSIONS", {1001: ["all"]})
+    monkeypatch.setattr(gallery, "sleep_block", lambda *args, **kwargs: "")
+    monkeypatch.setattr(gallery, "get_memory_key", lambda event: "group_1001")
+    monkeypatch.setattr(gallery, "get_user_memory", lambda key: {"temp_implants": []})
+    monkeypatch.setattr(gallery, "get_random_local_images", lambda category, count: image_paths[:count])
+    monkeypatch.setattr(gallery, "call_deepseek_api", caption_api)
+    monkeypatch.setattr(gallery, "grant_safety_pass", lambda seconds: None)
+    bot = Bot()
+
+    result = await gallery.send_img_cmd.handlers[0](
+        bot,
+        Event(plain_text="发张美食3", group_id=1001),
+    )
+
+    assert result is None
+    caption_api.assert_not_awaited()
+    payload = bot.call_api.await_args.kwargs
+    node_content = payload["messages"][0]["data"]["content"]
+    assert str(node_content) == "[image]" * 3
 
 
 @pytest.mark.asyncio
