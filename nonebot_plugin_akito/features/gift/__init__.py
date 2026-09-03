@@ -530,7 +530,10 @@ async def _handle_bond_rank(event: Event, *, negative: bool, command) -> None:
         for key, value in group.get("intimacy", {}).items()
         if (int(value) < 0 if negative else int(value) > 0)
     ]
-    pairs.sort(key=lambda kv: kv[1], reverse=not negative)
+    if negative:
+        pairs.sort(key=lambda kv: abs(kv[1]), reverse=True)
+    else:
+        pairs.sort(key=lambda kv: kv[1], reverse=True)
     pairs = pairs[:10]
     if not pairs:
         empty_text = "目前还没有负羁绊数据，先去偷几次吧～" if negative else "目前还没有正向羁绊数据，快去送礼吧～"
