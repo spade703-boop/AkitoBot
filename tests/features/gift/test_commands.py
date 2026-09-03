@@ -5,6 +5,7 @@ from nonebot.exception import FinishedException
 import pytest
 
 import nonebot_plugin_akito.features.gift as gift
+from nonebot_plugin_akito.features.gift.pages import build_bond_rank_page_data
 
 from .helpers import _at, _bot, _g0, _patch_runtime, _top
 
@@ -70,6 +71,15 @@ async def test_bond_rank_commands_separate_positive_and_negative_pairs(monkeypat
     assert "全局负羁绊排行" in negative_text
     assert negative_text.index("乙 × 丙：-1800") < negative_text.index("乙 × 丁：-1000")
     assert negative_text.index("乙 × 丁：-1000") < negative_text.index("甲 × 丁：-300")
+
+
+def test_negative_bond_rank_page_sorts_deepest_negative_first():
+    entries = [
+        {"left": {"qq": "a"}, "right": {"qq": "b"}, "intimacy": -446},
+        {"left": {"qq": "c"}, "right": {"qq": "d"}, "intimacy": -2471},
+    ]
+    page = build_bond_rank_page_data(entries, negative=True)
+    assert [row["intimacy"] for row in page["rows"]] == [-2471, -446]
 
 
 @pytest.mark.asyncio

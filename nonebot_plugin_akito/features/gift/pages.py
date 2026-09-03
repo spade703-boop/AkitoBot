@@ -158,6 +158,7 @@ def build_bond_rank_page_data(
     title: str = "羁绊排行榜",
     eyebrow_tail: str = "BOND RANKING",
     pill: str | None = None,
+    negative: bool = False,
     limit: int | None = None,
     footer_left: str | None = None,
     footer_right: str = FOOTER_BRAND,
@@ -171,7 +172,10 @@ def build_bond_rank_page_data(
     if levels is None:
         levels = _default_levels()
 
-    ranked = sorted(entries, key=lambda e: int(e.get("intimacy", 0)), reverse=True)
+    if negative:
+        ranked = sorted(entries, key=lambda e: abs(int(e.get("intimacy", 0))), reverse=True)
+    else:
+        ranked = sorted(entries, key=lambda e: int(e.get("intimacy", 0)), reverse=True)
     if limit is not None:
         ranked = ranked[:limit]
 

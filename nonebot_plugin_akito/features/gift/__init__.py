@@ -561,6 +561,7 @@ async def _handle_bond_rank(event: Event, *, negative: bool, command) -> None:
                 title=title,
                 eyebrow_tail=eyebrow_tail,
                 pill=pill,
+                negative=negative,
             )
             img_bytes = await render_bond_page("bond_rank.html", rank_data)
         except Exception:
