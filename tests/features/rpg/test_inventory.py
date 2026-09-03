@@ -69,7 +69,10 @@ def test_only_exp_items_support_batch_use():
 def test_parse_use_args_accepts_only_space_separated_positive_quantity():
     assert inventory._parse_use_args(Message("经验书")) == ("经验书", 1)
     assert inventory._parse_use_args(Message("经验书 3")) == ("经验书", 3)
+    assert inventory._parse_use_args(Message("经验书3")) == ("经验书", 3)
+    assert inventory._parse_use_args(Message("双倍经验卡3")) == ("双倍经验卡", 3)
     assert inventory._parse_use_args(Message("经验书×3")) == ("经验书×3", 1)
+    assert inventory._parse_use_args(Message("经验书0")) is None
     assert inventory._parse_use_args(Message("经验书 0")) is None
     assert inventory._parse_use_args(Message("经验书 -1")) is None
     assert inventory._parse_use_args(Message("经验书 1.5")) is None
@@ -155,6 +158,20 @@ async def test_use_command_batches_exp_items(monkeypatch):
     assert user["exp_buff_uses"] == 4 and user["exp_buff_mult"] == 2
     assert "经验 +240" in str(book_exc.value.result)
     assert "剩余 4 场" in str(card_exc.value.result)
+
+
+@pytest.mark.asyncio
+async def test_use_command_accepts_quantity_without_space(monkeypatch):
+    state = _patch_io(monkeypatch, inventory, store={"groups": {"1001": {"users": {
+        "u1": {"exp": 0, "inventory": {"经验书": 3}},
+    }}}})
+
+    with pytest.raises(FinishedException) as exc:
+        await inventory.use_cmd.handlers[0](_bot(), Event(group_id=1001, user_id="u1"), Message("经验书3"))
+
+    user = state["users"]["u1"]
+    assert user["exp"] == 240 and "经验书" not in user["inventory"]
+    assert "经验 +240" in str(exc.value.result)
 
 
 @pytest.mark.asyncio

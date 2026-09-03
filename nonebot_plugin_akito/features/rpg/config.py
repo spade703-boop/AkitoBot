@@ -552,7 +552,7 @@ DEFAULT_RPG_CONFIG: dict = {
         "rebuy_limit": "今天已经买过 {max} 套替换装了，明天再来。",
         "bag_empty": "🎒 背包是空的。先去打一趟再说。",
         "use_need_name": "要用什么？比如：使用 经验书。",
-        "use_bad_quantity": "使用数量要写成空格后的正整数，例如：使用经验书 3。",
+        "use_bad_quantity": "使用数量要写成正整数，例如：使用经验书 3 或使用经验书3。",
         "item_unknown": "没这个道具：{name}。",
         "item_none": "你背包里没有【{name}】。",
         "item_not_enough": "你只有【{name}】×{have}，不能一次使用 {count} 个。",

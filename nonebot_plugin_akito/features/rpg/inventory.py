@@ -310,11 +310,25 @@ def _supports_batch_use(item: dict) -> bool:
 
 
 def _parse_use_args(args: Message) -> tuple[str, int] | None:
-    parts = args.extract_plain_text().strip().split()
+    text = args.extract_plain_text().strip()
+    parts = text.split()
     if not parts:
         return "", 1
     if len(parts) == 1:
-        return parts[0], 1
+        token = parts[0]
+        for item in sorted(_items(), key=lambda value: len(str(value.get("name", ""))), reverse=True):
+            item_name = str(item.get("name", ""))
+            if not item_name or not token.startswith(item_name):
+                continue
+            suffix = token[len(item_name):]
+            if not suffix or not suffix.isdecimal():
+                break
+            try:
+                quantity = int(suffix)
+            except ValueError:
+                return None
+            return (item_name, quantity) if quantity > 0 else None
+        return token, 1
     if len(parts) != 2 or not parts[1].isdecimal():
         return None
     try:
