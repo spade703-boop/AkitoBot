@@ -37,6 +37,42 @@ async def test_points_cmd_shows_supply_and_steal_status(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_bond_rank_commands_separate_positive_and_negative_pairs(monkeypatch):
+    monkeypatch.setattr(gift, "GIFT_USE_HTML_RENDER", False)
+    _patch_runtime(
+        monkeypatch,
+        store={"groups": {"1001": {
+            "users": {
+                "a": {"display_name": "甲"}, "b": {"display_name": "乙"},
+                "c": {"display_name": "丙"}, "d": {"display_name": "丁"},
+            },
+            "intimacy": {
+                "a|||b": 120,
+                "a|||c": 0,
+                "a|||d": -300,
+                "b|||c": -1800,
+                "b|||d": -1000,
+            },
+        }}},
+    )
+    event = Event(group_id=1001, user_id="a")
+
+    with pytest.raises(FinishedException) as positive_exc:
+        await gift.rank_cmd.handlers[0](event)
+    positive_text = str(positive_exc.value.result)
+    assert "甲 × 乙：120" in positive_text
+    assert "甲 × 丙：0" not in positive_text
+    assert "甲 × 丁：-300" not in positive_text
+
+    with pytest.raises(FinishedException) as negative_exc:
+        await gift.negative_rank_cmd.handlers[0](event)
+    negative_text = str(negative_exc.value.result)
+    assert "全局负羁绊排行" in negative_text
+    assert negative_text.index("乙 × 丙：-1800") < negative_text.index("乙 × 丁：-1000")
+    assert negative_text.index("乙 × 丁：-1000") < negative_text.index("甲 × 丁：-300")
+
+
+@pytest.mark.asyncio
 async def test_gift_cmd_requires_at_target(monkeypatch):
     _patch_runtime(monkeypatch)
     event = Event(group_id=1001, user_id="10001", original_message=[])

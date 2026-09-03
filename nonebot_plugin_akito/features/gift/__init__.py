@@ -7,7 +7,7 @@
   高档保证礼「自己产的彰冬饭」「彰冬婚礼邀请函」一旦抽中，必定触发「惊喜升级」固定结算；
   达到 1112 积分后会独立判定婚礼邀请函；送出者首次赠送且该关系尚无 1314 邀请函时带纪念加成。
 - `偷@对方`：每天 2 次，小概率顺走对方少量积分（强保护 + 偷必掉羁绊，偷越亲近掉越多）。
-- `我的积分` / `礼物列表` / `亲密度` / `群羁绊排行` 查询；玩家档案与羁绊跨群共享；
+- `我的积分` / `礼物列表` / `亲密度` / `群羁绊排行` / `负羁绊排行` 查询；玩家档案与羁绊跨群共享；
   `重置送礼`（超管）清空全局玩家数据。
 
 数据与套路对照 features/random_keyword/：按 QQ 绑定玩家状态、每日按日期重置、原子读写、文件优先+缺省兜底配置。
@@ -508,21 +508,38 @@ async def _(event: Event):
 # ==================== 指令：群羁绊排行 ====================
 
 rank_cmd = on_command("群羁绊排行", aliases={"群羁绊排行", "羁绊排行"}, priority=5, block=True)
+negative_rank_cmd = on_command(
+    "负羁绊排行",
+    aliases={"负羁绊排行榜", "负向羁绊排行", "负向羁绊排行榜", "负面羁绊排行"},
+    priority=5,
+    block=True,
+)
 
 
-@rank_cmd.handle()
-async def _(event: Event):
+async def _handle_bond_rank(event: Event, *, negative: bool, command) -> None:
     group_id, rejection = _resolve_group(event)
     if rejection:
-        await rank_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
+        await command.finish(MessageSegment.reply(event.message_id) + rejection)
     if group_id is None:
         return
 
     data = _load_data()
     group = _get_group(data, group_id)
-    pairs = sorted(group.get("intimacy", {}).items(), key=lambda kv: int(kv[1]), reverse=True)[:10]
+    pairs = [
+        (key, int(value))
+        for key, value in group.get("intimacy", {}).items()
+        if (int(value) < 0 if negative else int(value) > 0)
+    ]
+    pairs.sort(key=lambda kv: kv[1], reverse=not negative)
+    pairs = pairs[:10]
     if not pairs:
-        await rank_cmd.finish(MessageSegment.reply(event.message_id) + "目前还没有全局羁绊数据，快去送礼吧～")
+        empty_text = "目前还没有负羁绊数据，先去偷几次吧～" if negative else "目前还没有正向羁绊数据，快去送礼吧～"
+        await command.finish(MessageSegment.reply(event.message_id) + empty_text)
+
+    title = "负羁绊排行榜" if negative else "羁绊排行榜"
+    eyebrow_tail = "NEGATIVE BOND RANKING" if negative else "BOND RANKING"
+    pill = f"本群负羁绊 TOP {len(pairs)}" if negative else f"本群羁绊 TOP {len(pairs)}"
+    heading = "🖤 全局负羁绊排行：" if negative else "💞 全局同好羁绊排行："
 
     if GIFT_USE_HTML_RENDER:
         entries: list[dict] = []
@@ -535,26 +552,42 @@ async def _(event: Event):
             })
         img_bytes = None
         try:
-            rank_data = build_bond_rank_page_data(entries, levels=_bond_levels())
+            rank_data = build_bond_rank_page_data(
+                entries,
+                levels=_bond_levels(),
+                title=title,
+                eyebrow_tail=eyebrow_tail,
+                pill=pill,
+            )
             img_bytes = await render_bond_page("bond_rank.html", rank_data)
         except Exception:
             logger.warning("bond rank render failed, falling back to text")
         if img_bytes is not None:
-            await rank_cmd.finish(
+            await command.finish(
                 MessageSegment.reply(event.message_id) + MessageSegment.image(img_bytes)
             )
         else:
-            lines = ["\U0001f49e 全局同好羁绊排行："]
+            lines = [heading]
             for idx, (key, value) in enumerate(pairs, 1):
                 a, b = key.split("|||")
                 lines.append(f"{idx}. {_name_of(group, a)} × {_name_of(group, b)}：{value}（{_bond_level(value)['name']}）")
-            await rank_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
+            await command.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
     else:
-        lines = ["💞 全局同好羁绊排行："]
+        lines = [heading]
         for idx, (key, value) in enumerate(pairs, 1):
             a, b = key.split("|||")
             lines.append(f"{idx}. {_name_of(group, a)} × {_name_of(group, b)}：{value}（{_bond_level(value)['name']}）")
-        await rank_cmd.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
+        await command.finish(MessageSegment.reply(event.message_id) + "\n".join(lines))
+
+
+@rank_cmd.handle()
+async def _(event: Event):
+    await _handle_bond_rank(event, negative=False, command=rank_cmd)
+
+
+@negative_rank_cmd.handle()
+async def _(event: Event):
+    await _handle_bond_rank(event, negative=True, command=negative_rank_cmd)
 
 
 # ==================== 指令：重置送礼（超管） ====================
@@ -657,6 +690,7 @@ async def _(event: Event):
         "· 礼物列表 — 查看全部礼物档位和花费\n"
         "· 我的羁绊@某人 — 查看你与 ta 的羁绊详情图\n"
         "· 群羁绊排行 — 查看全局羁绊排行榜\n"
+        "· 负羁绊排行 — 查看全局负羁绊排行榜（最差关系排第 1）\n"
         "\n"
         "💡 礼物越贵羁绊加得越多；送礼有概率暴击/回礼/意外事件。\n"
         "💡 偷人需谨慎：偷越亲近的人掉羁绊越多，还可能被反杀。"
