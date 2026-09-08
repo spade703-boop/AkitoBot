@@ -88,7 +88,12 @@ def create_jieba_cutter(extra_words: Iterable[str] = ()) -> TokenCutter:
 
 
 def clean_message_text(text: str) -> str:
-    normalized = unicodedata.normalize("NFKC", text).lower()
+    return clean_command_text(text).lower()
+
+
+def clean_command_text(text: str) -> str:
+    """Normalize a command candidate without changing its letter case."""
+    normalized = unicodedata.normalize("NFKC", text)
     normalized = _CQ_RE.sub(" ", normalized)
     return _URL_RE.sub(" ", normalized)
 
@@ -128,15 +133,44 @@ def registered_command_prefixes() -> tuple[str, ...]:
     return tuple(sorted((prefix for prefix in prefixes if prefix), key=lambda value: (-len(value), value)))
 
 
+@lru_cache(maxsize=1)
+def registered_command_regexes() -> tuple[tuple[str, int], ...]:
+    """Return regex rules registered by Bot command matchers."""
+    try:
+        from nonebot.matcher import matchers
+        from nonebot.rule import RegexRule
+    except (ImportError, AttributeError):
+        return ()
+
+    patterns: set[tuple[str, int]] = set()
+    try:
+        matcher_groups = matchers.values()
+    except AttributeError:
+        return ()
+    for matcher_group in matcher_groups:
+        for matcher in matcher_group:
+            for checker in getattr(getattr(matcher, "rule", None), "checkers", ()):
+                regex_rule = getattr(checker, "call", None)
+                if isinstance(regex_rule, RegexRule):
+                    patterns.add((regex_rule.regex, regex_rule.flags))
+    return tuple(sorted(patterns, key=lambda item: item[0]))
+
+
 def is_bot_command_text(text: str) -> bool:
-    cleaned = clean_message_text(text).strip()
+    command_text = clean_command_text(text).strip()
+    cleaned = command_text.lower()
     if not cleaned:
         return False
     if cleaned.startswith("/"):
         return True
-    return any(
+    if any(
         cleaned == prefix or (cleaned.startswith(prefix) and len(cleaned) > len(prefix) and cleaned[len(prefix)].isspace())
         for prefix in registered_command_prefixes()
+    ):
+        return True
+    return any(
+        re.search(pattern, command_text, flags) is not None
+        for pattern, flags in registered_command_regexes()
     )
 
 
