@@ -6,7 +6,7 @@
   （普通/暴击/回礼/失败/意外），累积两个群友之间的「亲密度（同好羁绊）」。
   高档保证礼「自己产的彰冬饭」「彰冬婚礼邀请函」一旦抽中，必定触发「惊喜升级」固定结算；
   达到 1112 积分后会独立判定婚礼邀请函；送出者首次赠送且该关系尚无 1314 邀请函时带纪念加成。
-- `偷@对方`：每天 2 次，小概率顺走对方少量积分（强保护 + 偷必掉羁绊，偷越亲近掉越多）。
+- `偷@对方`：每天 2 次，成功或反转时有概率转移背包道具，否则按原规则结算积分（强保护 + 偷必掉羁绊，偷越亲近掉越多）。
 - `我的积分` / `礼物列表` / `亲密度` / `群羁绊排行` / `负羁绊排行` 查询；玩家档案与羁绊跨群共享；
   `重置送礼`（超管）清空全局玩家数据。
 
@@ -300,9 +300,14 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
             victim["robbed_date"], victim["robbed_count"] = today, int(victim.get("robbed_count", 0)) + 1
         _save_data(data)
 
-        template = random.choice(_copy(f"steal_{outcome}"))
+        copy_key = f"steal_item_{outcome}" if out.get("item_name") else f"steal_{outcome}"
+        template = random.choice(_copy(copy_key))
         msg = _render_with_ats(template, {
-            "a": thief_id, "b": target_qq, "amount": out["amount"], "bond": out["bond"],
+            "a": thief_id,
+            "b": target_qq,
+            "amount": out["amount"],
+            "bond": out["bond"],
+            "item": out.get("item_name", ""),
         })
         await steal_cmd.finish(MessageSegment.reply(event.message_id) + msg)
 
@@ -689,7 +694,7 @@ async def _(event: Event):
         "━━━━━━━━━━━━━━\n"
         "· 签到 — 每天领一次积分（50~100）\n"
         "· 送礼@某人 — 每天一次，随机送礼物给对方，累积羁绊值\n"
-        "· 偷@某人 — 每天两次，冒险顺走对方积分（会掉羁绊）\n"
+        "· 偷@某人 — 每天两次，冒险顺走对方积分或背包道具（会掉羁绊）\n"
         "· 我的积分 — 查看当前积分和今日状态\n"
         "· 礼物列表 — 查看全部礼物档位和花费\n"
         "· 我的羁绊@某人 — 查看你与 ta 的羁绊详情图\n"

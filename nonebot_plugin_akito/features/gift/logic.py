@@ -279,20 +279,61 @@ def _steal_bond_loss(cfg: dict, outcome: str, amount: int, bond: int, rng=random
     return rng.randint(int(cfg.get("bond_neg_min", 10)), int(cfg.get("bond_neg_max", 30)))
 
 
+def _inventory_items(user: dict) -> list[str]:
+    inventory = user.get("inventory")
+    if not isinstance(inventory, dict):
+        return []
+    items: list[str] = []
+    for name, count in inventory.items():
+        try:
+            available = int(count)
+        except (TypeError, ValueError):
+            continue
+        if str(name) and available > 0:
+            items.append(str(name))
+    return items
+
+
+def _transfer_steal_item(source: dict, target: dict, cfg: dict, rng=random) -> str:
+    chance = max(0.0, min(1.0, float(cfg.get("item_chance", 0.3))))
+    if rng.random() >= chance:
+        return ""
+    candidates = _inventory_items(source)
+    if not candidates:
+        return ""
+    name = rng.choice(candidates)
+    inventory = source["inventory"]
+    remaining = int(inventory[name]) - 1
+    if remaining > 0:
+        inventory[name] = remaining
+    else:
+        inventory.pop(name, None)
+    target_inventory = target.get("inventory")
+    if not isinstance(target_inventory, dict):
+        target_inventory = {}
+        target["inventory"] = target_inventory
+    target_inventory[name] = int(target_inventory.get(name, 0)) + 1
+    return name
+
+
 def _settle_steal(group: GroupRecord, thief_id: str, victim_id: str, outcome: str, rng=random) -> dict:
     pkg = _pkg()
     cfg = pkg._steal_cfg()
     thief = _get_user(group, thief_id)
     victim = _get_user(group, victim_id)
     bond = pkg._get_intimacy(group, thief_id, victim_id)
-    out: dict[str, Any] = {"outcome": outcome, "amount": 0, "bond": 0}
+    out: dict[str, Any] = {"outcome": outcome, "amount": 0, "bond": 0, "item_name": ""}
 
     if outcome == "success":
-        victim_points = int(victim.get("points", 0))
-        amount = min(int(victim_points * float(cfg.get("ratio", 0.1))), int(cfg.get("cap", 40)), victim_points)
-        victim["points"] = victim_points - amount
-        thief["points"] = int(thief.get("points", 0)) + amount
-        out["amount"] = amount
+        item_name = _transfer_steal_item(victim, thief, cfg, rng)
+        if item_name:
+            out["item_name"] = item_name
+        else:
+            victim_points = int(victim.get("points", 0))
+            amount = min(int(victim_points * float(cfg.get("ratio", 0.1))), int(cfg.get("cap", 40)), victim_points)
+            victim["points"] = victim_points - amount
+            thief["points"] = int(thief.get("points", 0)) + amount
+            out["amount"] = amount
     elif outcome == "minor_success":
         victim_points = int(victim.get("points", 0))
         amount = max(int(cfg.get("minor_min_amount", 6)), int(victim_points * float(cfg.get("minor_ratio", 0.04))))
@@ -309,10 +350,14 @@ def _settle_steal(group: GroupRecord, thief_id: str, victim_id: str, outcome: st
         victim["points"] = int(victim.get("points", 0)) + penalty
         out["amount"] = penalty
     elif outcome == "reversal":
-        amount = min(int(cfg.get("reversal_amount", 10)), int(thief.get("points", 0)))
-        thief["points"] = int(thief.get("points", 0)) - amount
-        victim["points"] = int(victim.get("points", 0)) + amount
-        out["amount"] = amount
+        item_name = _transfer_steal_item(thief, victim, cfg, rng)
+        if item_name:
+            out["item_name"] = item_name
+        else:
+            amount = min(int(cfg.get("reversal_amount", 10)), int(thief.get("points", 0)))
+            thief["points"] = int(thief.get("points", 0)) - amount
+            victim["points"] = int(victim.get("points", 0)) + amount
+            out["amount"] = amount
 
     drop = _steal_bond_loss(cfg, outcome, int(out["amount"]), bond, rng)
     new_bond = max(int(cfg.get("bond_floor", -3000)), bond - drop)

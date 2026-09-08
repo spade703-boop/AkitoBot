@@ -9,6 +9,17 @@ import nonebot_plugin_akito.features.gift as gift
 from .helpers import _at, _bot, _patch_runtime, _steal_group
 
 
+class _ItemStealRng:
+    def __init__(self, roll=0.0):
+        self.roll = roll
+
+    def random(self):
+        return self.roll
+
+    def choice(self, values):
+        return values[0]
+
+
 def test_steal_outcome_in_weights():
     keys = set(gift._steal_cfg()["weights"])
     assert keys == {"success", "minor_success", "caught", "whiff", "reversal"}
@@ -52,6 +63,64 @@ def test_settle_steal_reversal_pays_victim():
     assert out["amount"] == cfg["reversal_amount"]
     assert gift._get_user(group, "T")["points"] == 100 - cfg["reversal_amount"]
     assert gift._get_user(group, "V")["points"] == 200 + cfg["reversal_amount"]
+
+
+def test_settle_steal_success_can_transfer_one_inventory_item():
+    group = _steal_group(thief_pts=0, victim_pts=1000)
+    gift._get_user(group, "V")["inventory"] = {"大葱味蛋糕": 2}
+    out = gift._settle_steal(group, "T", "V", "success", _ItemStealRng())
+
+    assert out["item_name"] == "大葱味蛋糕"
+    assert out["amount"] == 0
+    assert gift._get_user(group, "V")["inventory"] == {"大葱味蛋糕": 1}
+    assert gift._get_user(group, "T")["inventory"] == {"大葱味蛋糕": 1}
+    assert gift._get_user(group, "T")["points"] == 0
+    assert gift._get_user(group, "V")["points"] == 1000
+
+
+def test_settle_steal_reversal_can_transfer_one_inventory_item():
+    group = _steal_group(thief_pts=100, victim_pts=200)
+    gift._get_user(group, "T")["inventory"] = {"双倍经验卡": 1}
+    out = gift._settle_steal(group, "T", "V", "reversal", _ItemStealRng())
+
+    assert out["item_name"] == "双倍经验卡"
+    assert out["amount"] == 0
+    assert "inventory" not in gift._get_user(group, "T") or not gift._get_user(group, "T")["inventory"]
+    assert gift._get_user(group, "V")["inventory"] == {"双倍经验卡": 1}
+    assert gift._get_user(group, "T")["points"] == 100
+    assert gift._get_user(group, "V")["points"] == 200
+
+
+def test_settle_steal_item_roll_falls_back_to_points_when_source_empty():
+    cfg = gift._steal_cfg()
+    group = _steal_group(thief_pts=0, victim_pts=1000)
+    out = gift._settle_steal(group, "T", "V", "success", _ItemStealRng())
+
+    assert out["item_name"] == ""
+    assert out["amount"] == cfg["cap"]
+
+
+def test_settle_steal_item_roll_falls_back_to_points_when_chance_misses():
+    cfg = gift._steal_cfg()
+    group = _steal_group(thief_pts=0, victim_pts=1000)
+    gift._get_user(group, "V")["inventory"] = {"经验书": 1}
+    out = gift._settle_steal(group, "T", "V", "success", _ItemStealRng(roll=0.5))
+
+    assert out["item_name"] == ""
+    assert out["amount"] == cfg["cap"]
+    assert gift._get_user(group, "V")["inventory"] == {"经验书": 1}
+
+
+def test_settle_steal_item_roll_only_applies_to_success_and_reversal():
+    group = _steal_group(thief_pts=100, victim_pts=200)
+    gift._get_user(group, "T")["inventory"] = {"经验书": 1}
+    gift._get_user(group, "V")["inventory"] = {"旅人的行囊": 1}
+
+    for outcome in ("minor_success", "caught", "whiff"):
+        gift._settle_steal(group, "T", "V", outcome, _ItemStealRng())
+
+    assert gift._get_user(group, "T")["inventory"] == {"经验书": 1}
+    assert gift._get_user(group, "V")["inventory"] == {"旅人的行囊": 1}
 
 
 def test_settle_steal_whiff_keeps_points():
@@ -127,6 +196,50 @@ async def test_steal_cmd_success_moves_points_and_counts(monkeypatch):
     assert state["groups"]["1001"]["users"]["10002"]["points"] == 1000 - cap
     assert state["groups"]["1001"]["users"]["10001"]["steal_used"] == 1
     assert state["groups"]["1001"]["users"]["10002"]["robbed_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_steal_cmd_success_broadcasts_stolen_item(monkeypatch):
+    state = _patch_runtime(
+        monkeypatch,
+        store={"groups": {"1001": {"users": {
+            "10001": {"points": 0}, "10002": {"points": 1000, "inventory": {"经验书": 1}},
+        }, "intimacy": {}}}},
+    )
+    monkeypatch.setattr(gift, "_steal_outcome", lambda rng=gift.random: "success")
+    monkeypatch.setattr(gift.random, "random", lambda: 0.0)
+    monkeypatch.setattr(gift.random, "choice", lambda values: values[0])
+    event = Event(group_id=1001, user_id="10001", original_message=[_at("10002")])
+
+    with pytest.raises(FinishedException) as exc:
+        await gift.steal_cmd.handlers[0](_bot(), event)
+
+    result = str(exc.value.result)
+    assert "背包里的【经验书】" in result
+    assert state["groups"]["1001"]["users"]["10001"]["inventory"] == {"经验书": 1}
+    assert state["groups"]["1001"]["users"]["10002"].get("inventory") == {}
+
+
+@pytest.mark.asyncio
+async def test_steal_cmd_reversal_broadcasts_lost_item(monkeypatch):
+    state = _patch_runtime(
+        monkeypatch,
+        store={"groups": {"1001": {"users": {
+            "10001": {"points": 100, "inventory": {"双倍经验卡": 1}}, "10002": {"points": 200},
+        }, "intimacy": {}}}},
+    )
+    monkeypatch.setattr(gift, "_steal_outcome", lambda rng=gift.random: "reversal")
+    monkeypatch.setattr(gift.random, "random", lambda: 0.0)
+    monkeypatch.setattr(gift.random, "choice", lambda values: values[0])
+    event = Event(group_id=1001, user_id="10001", original_message=[_at("10002")])
+
+    with pytest.raises(FinishedException) as exc:
+        await gift.steal_cmd.handlers[0](_bot(), event)
+
+    result = str(exc.value.result)
+    assert "顺走了【双倍经验卡】" in result
+    assert state["groups"]["1001"]["users"]["10001"].get("inventory") == {}
+    assert state["groups"]["1001"]["users"]["10002"]["inventory"] == {"双倍经验卡": 1}
 
 
 @pytest.mark.asyncio

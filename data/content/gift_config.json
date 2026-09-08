@@ -244,6 +244,7 @@
   "steal": {
     "daily_limit": 2,
     "victim_daily_limit": 3,
+    "item_chance": 0.3,
     "min_target_points": 50,
     "ratio": 0.1,
     "cap": 40,
@@ -390,6 +391,10 @@
       "{a} 趁 {b} 没留神，顺走了 {amount} 积分，转身就跑。（羁绊 -{bond}）",
       "{a} 从 {b} 那里摸走了 {amount} 积分，手脚倒是利索。（羁绊 -{bond}）"
     ],
+    "steal_item_success": [
+      "{a} 趁 {b} 没留神，顺走了对方背包里的【{item}】。（羁绊 -{bond}）",
+      "{a} 从 {b} 的背包里摸走了【{item}】，手脚倒是利索。（羁绊 -{bond}）"
+    ],
     "steal_minor_success": [
       "{a} 从 {b} 那里顺到一点积分，见好就收。（羁绊 -{bond}）",
       "{a} 在 {b} 身上摸到一点积分，不多，但也算得手了。（羁绊 -{bond}）"
@@ -405,6 +410,10 @@
     "steal_reversal": [
       "{a} 本想偷 {b}，结果被对方反手顺走了 {amount} 积分。（羁绊 -{bond}）",
       "{a} 去偷 {b} 没得手，反倒让 {b} 拿走了 {amount} 积分。（羁绊 -{bond}）"
+    ],
+    "steal_item_reversal": [
+      "{a} 本想偷 {b}，结果被对方反手顺走了【{item}】。（羁绊 -{bond}）",
+      "{a} 去偷 {b} 没得手，反倒让 {b} 拿走了【{item}】。（羁绊 -{bond}）"
     ]
   },
   "errors": {
