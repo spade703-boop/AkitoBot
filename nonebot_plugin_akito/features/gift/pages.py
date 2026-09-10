@@ -32,7 +32,7 @@ def level_info(intimacy: int, levels: list[dict]) -> dict:
     levels: [{"min": int, "name": str}, ...] 从低到高排列。
     level_no：以 min==0 的档位为 Lv1 锚点；负档 level_no ≤ 0 不显示 Lv。
     """
-    intimacy = max(-999_999_999, int(intimacy))
+    intimacy = int(intimacy)
     if not levels:
         return {
             "level_no": 1,
@@ -166,7 +166,7 @@ def build_bond_rank_page_data(
     """羁绊排行榜的数据。
 
     entries: [{"left": {...}, "right": {...}, "intimacy": 6820}, ...]
-    会自动按亲密度从高到低排序并编名次。
+    正向榜按亲密度从高到低排序，负向榜按负值绝对值从高到低排序，并编名次。
     levels: 等级阈值表，不传则用内置默认
     """
     if levels is None:
@@ -214,12 +214,10 @@ def build_bond_rank_page_data(
 def _default_levels() -> list[dict]:
     """内置默认等级表（当调用方未传入 levels 时使用）。"""
     return [
-        {"min": -3000, "name": "不共戴天", "team_level": -2},
-        {"min": -1800, "name": "势不两立", "team_level": -2},
-        {"min": -1000, "name": "反目成仇", "team_level": -2},
-        {"min": -650, "name": "关系破裂", "team_level": -2},
-        {"min": -300, "name": "积怨渐深", "team_level": -1},
-        {"min": -180, "name": "渐行渐远", "team_level": -1},
+        {"min": -3000, "name": "不共戴天", "team_level": -5},
+        {"min": -1800, "name": "势不两立", "team_level": -4},
+        {"min": -650, "name": "反目成仇", "team_level": -3},
+        {"min": -300, "name": "积怨渐深", "team_level": -2},
         {"min": -100, "name": "心生芥蒂", "team_level": -1},
         {"min": -50, "name": "小有摩擦", "team_level": 0},
         {"min": 0, "name": "Hot Dogs"},

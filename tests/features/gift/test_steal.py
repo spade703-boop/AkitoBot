@@ -169,12 +169,12 @@ def test_settle_steal_low_or_zero_amount_no_longer_drops_huge_bond():
     assert gift._get_intimacy(group, "T", "V") == -100 - out["bond"]
 
 
-def test_settle_steal_bond_floor():
-    floor = gift._steal_cfg()["bond_floor"]
-    group = _steal_group(bond=floor + 3)  # 接近下限
+def test_settle_steal_bond_can_continue_below_lowest_tier():
+    group = _steal_group(bond=-3000)
     out = gift._settle_steal(group, "T", "V", "whiff")
-    assert gift._get_intimacy(group, "T", "V") == floor  # 封底，不再下探
-    assert out["bond"] == 3  # 实际只掉到下限的幅度
+    expected_drop = int(gift._steal_cfg()["bond_loss"]["whiff"]["base"])
+    assert gift._get_intimacy(group, "T", "V") == -3000 - expected_drop
+    assert out["bond"] == expected_drop
 
 
 @pytest.mark.asyncio

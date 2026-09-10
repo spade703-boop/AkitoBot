@@ -148,26 +148,22 @@ def test_bond_level_negative_tiers():
     assert gift._bond_level(-51)["name"] == "心生芥蒂"
     assert gift._bond_level(-51)["team_level"] == -1
     assert gift._bond_level(-100)["name"] == "心生芥蒂"
-    assert gift._bond_level(-101)["name"] == "渐行渐远"
-    assert gift._bond_level(-180)["name"] == "渐行渐远"
-    assert gift._bond_level(-181)["name"] == "积怨渐深"
+    assert gift._bond_level(-101)["name"] == "积怨渐深"
     assert gift._bond_level(-300)["name"] == "积怨渐深"
-    assert gift._bond_level(-301)["name"] == "关系破裂"
-    assert gift._bond_level(-301)["team_level"] == -2
-    assert gift._bond_level(-650)["name"] == "关系破裂"
-    assert gift._bond_level(-651)["name"] == "反目成仇"
-    assert gift._bond_level(-1000)["name"] == "反目成仇"
-    assert gift._bond_level(-1001)["name"] == "势不两立"
+    assert gift._bond_level(-301)["name"] == "反目成仇"
+    assert gift._bond_level(-301)["team_level"] == -3
+    assert gift._bond_level(-650)["name"] == "反目成仇"
+    assert gift._bond_level(-651)["name"] == "势不两立"
     assert gift._bond_level(-1800)["name"] == "势不两立"
     assert gift._bond_level(-1801)["name"] == "不共戴天"
     assert gift._bond_level(-3000)["name"] == "不共戴天"
     assert gift._bond_level(-99999)["name"] == "不共戴天"  # 兜底到最低档
+    assert gift._bond_level(-99999)["team_level"] == -5
     assert gift._bond_level(-10)["level"] <= 0  # 负档不挂 Lv
 
 
-def test_bond_floor_matches_lowest_level():
-    lowest_level = min(int(level["min"]) for level in gift._bond_levels())
-    assert gift._steal_cfg()["bond_floor"] == lowest_level
+def test_negative_bond_has_no_floor():
+    assert "bond_floor" not in gift._steal_cfg()
 
 
 def test_negative_bond_page_progress_uses_expanded_floor():
@@ -179,6 +175,15 @@ def test_negative_bond_page_progress_uses_expanded_floor():
 
     assert former_floor["visual_progress_pct"] == 33
     assert expanded_floor["visual_progress_pct"] == 100
+
+
+def test_negative_bond_page_keeps_unbounded_value_beyond_deepest_tier():
+    people = ({"qq": "A", "name": "A"}, {"qq": "B", "name": "B"})
+    page = gift.build_bond_page_data(*people, -999999999999, levels=gift._bond_levels())
+
+    assert page["intimacy"] == -999999999999
+    assert page["level_name"] == "不共戴天"
+    assert page["visual_progress_pct"] == 100
 
 
 def test_count_directed_bump_and_get():

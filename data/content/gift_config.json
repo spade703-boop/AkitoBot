@@ -179,32 +179,22 @@
     {
       "min": -3000,
       "name": "不共戴天",
-      "team_level": -2
+      "team_level": -5
     },
     {
       "min": -1800,
       "name": "势不两立",
-      "team_level": -2
-    },
-    {
-      "min": -1000,
-      "name": "反目成仇",
-      "team_level": -2
+      "team_level": -4
     },
     {
       "min": -650,
-      "name": "关系破裂",
-      "team_level": -2
+      "name": "反目成仇",
+      "team_level": -3
     },
     {
       "min": -300,
       "name": "积怨渐深",
-      "team_level": -1
-    },
-    {
-      "min": -180,
-      "name": "渐行渐远",
-      "team_level": -1
+      "team_level": -2
     },
     {
       "min": -100,
@@ -286,7 +276,6 @@
         "positive_bond_cap": 5
       }
     },
-    "bond_floor": -3000,
     "weights": {
       "success": 3,
       "minor_success": 2,

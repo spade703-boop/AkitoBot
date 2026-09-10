@@ -29,6 +29,15 @@ def test_team_success_rate_scales_and_clamps():
     assert team._team_success_rate(-1) == pytest.approx(base - 2 * neg_step)
     assert team._team_success_rate(99) == pytest.approx(float(t["max_success"]))   # 封顶
     assert team._team_success_rate(-99) == pytest.approx(float(t["min_success"]))   # 深度负羁绊封底
+    assert team._team_success_rate(-5) == pytest.approx(team._team_success_rate(-99))
+    assert team._team_success_rate(-99999) == pytest.approx(team._team_success_rate(-99))
+
+
+def test_deep_negative_bond_keeps_rpg_level_capped():
+    from nonebot_plugin_akito.features.gift import _bond_level
+
+    assert _bond_level(-3000)["team_level"] == -5
+    assert _bond_level(-999999)["team_level"] == -5
 
 
 def test_world_boss_team_success_rate_matches_normal_team_formula():
