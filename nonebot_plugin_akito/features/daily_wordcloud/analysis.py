@@ -164,7 +164,7 @@ def is_bot_command_text(text: str) -> bool:
     if cleaned.startswith("/"):
         return True
     if any(
-        cleaned == prefix or (cleaned.startswith(prefix) and len(cleaned) > len(prefix) and cleaned[len(prefix)].isspace())
+        cleaned.startswith(prefix)
         for prefix in registered_command_prefixes()
     ):
         return True

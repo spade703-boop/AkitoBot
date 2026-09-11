@@ -110,9 +110,17 @@ def test_registered_bot_commands_are_filtered_with_arguments(monkeypatch):
 
     assert analysis.is_bot_command_text("签到") is True
     assert analysis.is_bot_command_text("签到 现在") is True
+    assert analysis.is_bot_command_text("签到啦") is True
     assert analysis.is_bot_command_text("抽派生 共犯") is True
     assert analysis.is_bot_command_text("/任意指令") is True
-    assert analysis.is_bot_command_text("签到啦") is False
+
+
+def test_registered_commands_filter_no_whitespace_arguments(monkeypatch):
+    monkeypatch.setattr(analysis, "registered_command_prefixes", lambda: ("使用",))
+    monkeypatch.setattr(analysis, "registered_command_regexes", lambda: ())
+
+    assert analysis.is_bot_command_text("使用经验书3") is True
+    assert analysis.is_bot_command_text("使用 双倍经验卡2") is True
 
 
 def test_registered_regex_commands_are_filtered_as_a_whole_message(monkeypatch):
