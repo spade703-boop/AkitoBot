@@ -27,21 +27,24 @@ _VOLUME_COLORS = ("#ff9750", "#ffb27d", "#6faeff", "#9bd7ff", "#d1d5db")
 _OTHER_VOLUME_COLOR = "#667085"
 MESSAGE_VOLUME_VISIBLE_USERS = 5
 COMMAND_HELP_ITEMS = (
-    {"command": "群聊词云 [YYYY-MM-DD]", "description": "超管查看昨天或指定日期的日报。"},
-    {"command": "今日群聊词云", "description": "目标群成员可用；查看今天实时词云，同群共享 30 分钟冷却。"},
-    {"command": "实时群聊词云", "description": "今日群聊词云的别名，目标群成员可用。"},
-    {"command": "群聊词云 今天", "description": "查看今天实时词云，目标群成员可用并共享群级冷却。"},
-    {"command": "重算群聊词云 YYYY-MM-DD", "description": "超管重算最近 7 天内的词云日报。"},
-    {"command": "回填群聊词云 YYYY-MM-DD", "description": "超管按日期回填；当天快照会并入实时数据，零点自动刷新。"},
-    {"command": "测试群聊词云", "description": "超管使用示例数据渲染测试图片，不写入数据库。"},
-    {"command": "词云屏蔽词 查看", "description": "超管查看当前全局屏蔽词。"},
-    {"command": "词云屏蔽词 添加 词1 词2", "description": "超管新增全局精确屏蔽词。"},
-    {"command": "词云屏蔽词 取消 词1 词2", "description": "超管移除全局精确屏蔽词。"},
-    {"command": "词云排除用户 查看", "description": "超管查看全局排除的 QQ 号。"},
-    {"command": "词云排除用户 添加 QQ号1 QQ号2", "description": "超管新增全局消息排除对象。"},
-    {"command": "词云排除用户 取消 QQ号1 QQ号2", "description": "超管移除全局消息排除对象。"},
-    {"command": "Bot 指令自动过滤", "description": "所有已注册 Bot 指令、别名及带参数形式自动跳过，无需逐条添加。"},
-    {"command": "词云帮助", "description": "显示本功能的全部指令。"},
+    {"category": "查看类", "command": "今日群聊词云 / 实时群聊词云 / 群聊词云 今天", "description": "查看今天的实时词云。"},
+    {"category": "查看类", "command": "群聊词云 [YYYY-MM-DD]", "description": "查看指定日期的词云日报。"},
+    {"category": "管理类", "command": "重算群聊词云 YYYY-MM-DD", "description": "按本地消息重新生成日报。"},
+    {"category": "管理类", "command": "回填群聊词云 YYYY-MM-DD", "description": "从历史消息库回填日报。"},
+    {"category": "管理类", "command": "测试群聊词云", "description": "预览词云图片布局。"},
+    {"category": "过滤设置", "command": "词云屏蔽词 查看", "description": "查看当前全局屏蔽词。"},
+    {"category": "过滤设置", "command": "词云屏蔽词 添加 词1 词2", "description": "新增全局屏蔽词。"},
+    {"category": "过滤设置", "command": "词云屏蔽词 取消 词1 词2", "description": "移除全局屏蔽词。"},
+    {"category": "过滤设置", "command": "词云排除用户 查看", "description": "查看当前全局排除用户。"},
+    {"category": "过滤设置", "command": "词云排除用户 添加 QQ号1 QQ号2", "description": "新增全局排除用户。"},
+    {"category": "过滤设置", "command": "词云排除用户 取消 QQ号1 QQ号2", "description": "移除全局排除用户。"},
+    {"category": "其他", "command": "词云帮助 / 词云指令 / 群聊词云帮助", "description": "查看这份指令列表。"},
+)
+COMMAND_HELP_NOTES = (
+    "实时词云对目标群全体成员开放；同一群共享 30 分钟冷却。",
+    "除实时查看外，日报维护、测试和过滤管理指令仅限超管。",
+    "查询指令省略日期时查看昨天；重算仅适用于原始消息留存窗口内的日期。",
+    "屏蔽词和排除用户为全局设置；已注册 Bot 指令及其参数会自动排除。",
 )
 
 
@@ -171,6 +174,7 @@ async def render_report(report: dict[str, Any]) -> bytes:
 async def render_command_help() -> bytes:
     html = _TEMPLATE_ENV.get_template("command_help.html").render(
         items=COMMAND_HELP_ITEMS,
+        notes=COMMAND_HELP_NOTES,
         max_words=MAX_WORDS,
     )
     async with _RENDER_SEMAPHORE:

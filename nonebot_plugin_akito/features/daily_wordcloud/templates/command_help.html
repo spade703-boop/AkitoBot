@@ -31,9 +31,15 @@
   .intro { margin-top: 12px; color: var(--muted); font-size: 13px; line-height: 1.6; }
   .rule { height: 1px; margin: 20px 0; background: linear-gradient(90deg, rgba(255,151,80,.5), rgba(255,255,255,.06), rgba(111,174,255,.48)); }
   .commands { display: grid; gap: 10px; }
+  .category { margin: 17px 4px 1px; color: var(--warm); font-size: 12px; font-weight: 850; letter-spacing: .08em; }
+  .category:first-child { margin-top: 0; }
   .command { display: grid; grid-template-columns: 330px minmax(0, 1fr); align-items: center; gap: 18px; padding: 13px 16px; border: 1px solid var(--line); border-radius: 15px; background: var(--surface); }
   .name { color: #fff2e4; font-size: 15px; font-weight: 850; overflow-wrap: anywhere; }
   .description { color: var(--muted); font-size: 12px; line-height: 1.5; }
+  .notes { margin-top: 22px; padding: 15px 17px 14px; border-radius: 15px; background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.08); }
+  .notes-title { color: #fff2e4; font-size: 13px; font-weight: 800; }
+  .note { margin-top: 7px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+  .note::before { content: "·"; display: inline-block; width: 15px; color: var(--warm); font-weight: 900; }
   .footer { display: flex; justify-content: space-between; margin-top: 19px; color: rgba(255,255,255,.38); font-size: 11px; }
 </style>
 </head>
@@ -41,14 +47,23 @@
 <main class="page">
   <div class="eyebrow">AKITOBOT · DAILY CHAT</div>
   <h1>群聊词云指令</h1>
-  <div class="intro">实时词云对目标群成员开放，同群共享 30 分钟冷却；回填、重算、屏蔽词/用户和测试等管理指令仅限超管。词云最多展示 {{ max_words }} 个高频词，所有已注册 Bot 指令会自动排除。</div>
+  <div class="intro">未特别标注的查看指令对目标群成员开放；日报维护、测试和过滤管理指令仅限超管。</div>
   <div class="rule"></div>
   <section class="commands">
     {% for item in items %}
+    {% if loop.first or item.category != loop.previtem.category %}
+    <div class="category">{{ item.category }}</div>
+    {% endif %}
     <article class="command">
       <div class="name">{{ item.command }}</div>
       <div class="description">{{ item.description }}</div>
     </article>
+    {% endfor %}
+  </section>
+  <section class="notes">
+    <div class="notes-title">使用说明</div>
+    {% for note in notes %}
+    <div class="note">{{ note }}</div>
     {% endfor %}
   </section>
   <footer class="footer"><span>历史回填来源：impression_history.db</span><span>AkitoBot · 群聊日报</span></footer>
