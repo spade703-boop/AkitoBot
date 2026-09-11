@@ -29,8 +29,8 @@ def test_date_argument_defaults_to_yesterday_and_rejects_current_day():
 async def test_non_superuser_cannot_manage_blocked_words():
     with mock.patch.object(commands.store, "add_blocked_words", new=mock.AsyncMock()) as add_words:
         result = await commands.blocked_words_cmd.handlers[0](
-            Event(group_id=1001, user_id="not-superuser"),
-            Message("添加 akito"),
+            Event("新增词云屏蔽词 akito", group_id=1001, user_id="not-superuser"),
+            Message("akito"),
         )
 
     assert result is None
@@ -41,8 +41,8 @@ async def test_superuser_can_add_blocked_words():
     with mock.patch.object(commands.store, "add_blocked_words", new=mock.AsyncMock(return_value=2)) as add_words:
         with pytest.raises(FinishedException) as exc_info:
             await commands.blocked_words_cmd.handlers[0](
-                Event(group_id=1001, user_id="9001"),
-                Message("添加 akito coffee"),
+                Event("新增词云屏蔽词 akito coffee", group_id=1001, user_id="9001"),
+                Message("akito coffee"),
             )
 
     add_words.assert_awaited_once_with(["akito", "coffee"], "9001")
@@ -52,10 +52,10 @@ async def test_superuser_can_add_blocked_words():
 @pytest.mark.parametrize(
     ("command", "handler_name"),
     [
-        ("添加", "blocked_words_cmd"),
-        ("取消", "blocked_words_cmd"),
-        ("添加", "excluded_users_cmd"),
-        ("取消", "excluded_users_cmd"),
+        ("新增词云屏蔽词", "blocked_words_cmd"),
+        ("移除词云屏蔽词", "blocked_words_cmd"),
+        ("新增词云排除用户", "excluded_users_cmd"),
+        ("移除词云排除用户", "excluded_users_cmd"),
     ],
 )
 async def test_management_commands_silently_ignore_missing_arguments(command, handler_name):
@@ -66,13 +66,30 @@ async def test_management_commands_silently_ignore_missing_arguments(command, ha
         mock.patch.object(commands.store, "add_excluded_user_ids", new=mock.AsyncMock()) as add_users,
         mock.patch.object(commands.store, "remove_excluded_user_ids", new=mock.AsyncMock()) as remove_users,
     ):
-        result = await matcher.handlers[0](Event(group_id=1001, user_id="9001"), Message(command))
+        result = await matcher.handlers[0](Event(command, group_id=1001, user_id="9001"), Message(""))
 
     assert result is None
     add_words.assert_not_awaited()
     remove_words.assert_not_awaited()
     add_users.assert_not_awaited()
     remove_users.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    ("legacy_command", "handler_name"),
+    [("词云屏蔽词 添加 akito", "blocked_words_cmd"), ("词云排除用户 添加 123456789", "excluded_users_cmd")],
+)
+async def test_legacy_management_command_format_is_ignored(legacy_command, handler_name):
+    matcher = getattr(commands, handler_name)
+    with (
+        mock.patch.object(commands.store, "add_blocked_words", new=mock.AsyncMock()) as add_words,
+        mock.patch.object(commands.store, "add_excluded_user_ids", new=mock.AsyncMock()) as add_users,
+    ):
+        result = await matcher.handlers[0](Event(legacy_command, group_id=1001, user_id="9001"), Message(""))
+
+    assert result is None
+    add_words.assert_not_awaited()
+    add_users.assert_not_awaited()
 
 
 async def test_superuser_can_render_non_persistent_demo_image():

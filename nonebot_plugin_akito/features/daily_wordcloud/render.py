@@ -32,12 +32,12 @@ COMMAND_HELP_ITEMS = (
     {"category": "管理类", "command": "重算群聊词云 YYYY-MM-DD", "description": "按本地消息重新生成日报。"},
     {"category": "管理类", "command": "回填群聊词云 YYYY-MM-DD", "description": "从历史消息库回填日报。"},
     {"category": "管理类", "command": "测试群聊词云", "description": "预览词云图片布局。"},
-    {"category": "过滤设置", "command": "词云屏蔽词 查看", "description": "查看当前全局屏蔽词。"},
-    {"category": "过滤设置", "command": "词云屏蔽词 添加 词1 词2", "description": "新增全局屏蔽词。"},
-    {"category": "过滤设置", "command": "词云屏蔽词 取消 词1 词2", "description": "移除全局屏蔽词。"},
-    {"category": "过滤设置", "command": "词云排除用户 查看", "description": "查看当前全局排除用户。"},
-    {"category": "过滤设置", "command": "词云排除用户 添加 QQ号1 QQ号2", "description": "新增全局排除用户。"},
-    {"category": "过滤设置", "command": "词云排除用户 取消 QQ号1 QQ号2", "description": "移除全局排除用户。"},
+    {"category": "过滤设置", "command": "查看词云屏蔽词", "description": "查看当前全局屏蔽词。"},
+    {"category": "过滤设置", "command": "新增词云屏蔽词 词1 词2", "description": "新增全局屏蔽词。"},
+    {"category": "过滤设置", "command": "移除词云屏蔽词 词1 词2", "description": "移除全局屏蔽词。"},
+    {"category": "过滤设置", "command": "查看词云排除用户", "description": "查看当前全局排除用户。"},
+    {"category": "过滤设置", "command": "新增词云排除用户 QQ号1 QQ号2", "description": "新增全局排除用户。"},
+    {"category": "过滤设置", "command": "移除词云排除用户 QQ号1 QQ号2", "description": "移除全局排除用户。"},
     {"category": "其他", "command": "词云帮助 / 词云指令 / 群聊词云帮助", "description": "查看这份指令列表。"},
 )
 COMMAND_HELP_NOTES = (

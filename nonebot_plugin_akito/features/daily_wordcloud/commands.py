@@ -67,6 +67,14 @@ def _reply_with_text(event: Event, text: str) -> Message:
     return Message(text)
 
 
+def _management_action(event: Event, command_names: dict[str, str]) -> str | None:
+    text = event.get_plaintext().strip().lstrip("/").strip()
+    for action, command in command_names.items():
+        if text == command or text.startswith(f"{command} "):
+            return action
+    return None
+
+
 def _live_cooldown_remaining(group_id: str) -> int:
     now = time.monotonic()
     last_request = _LIVE_LAST_REQUEST.get(group_id)
@@ -275,33 +283,48 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
     )
 
 
-excluded_users_cmd = on_command("词云排除用户", priority=5, block=True)
+excluded_users_cmd = on_command(
+    "查看词云排除用户",
+    aliases={"新增词云排除用户", "移除词云排除用户"},
+    force_whitespace=True,
+    priority=5,
+    block=True,
+)
 
 
 @excluded_users_cmd.handle()
 async def _(event: Event, args: Message = CommandArg()):
     if not _is_superuser(event):
         return
+    action = _management_action(
+        event,
+        {
+            "查看": "查看词云排除用户",
+            "新增": "新增词云排除用户",
+            "移除": "移除词云排除用户",
+        },
+    )
+    if action is None:
+        return
     raw = args.extract_plain_text().strip()
-    if raw in {"查看", "列表"}:
+    if action == "查看":
+        if raw:
+            return
         user_ids = await store.list_excluded_user_ids()
         message = "当前没有排除的 QQ 号。" if not user_ids else "词云排除用户：\n" + "、".join(user_ids)
         await excluded_users_cmd.finish(message)
     if not raw:
         return
 
-    command_parts = raw.split(None, 1)
-    action = command_parts[0]
-    values = command_parts[1] if len(command_parts) > 1 else ""
-    user_ids = analysis.parse_excluded_user_arguments(values)
-    if action == "添加":
+    user_ids = analysis.parse_excluded_user_arguments(raw)
+    if action == "新增":
         if not user_ids:
             return
         changed = await store.add_excluded_user_ids(user_ids, event.get_user_id())
         await excluded_users_cmd.finish(
             f"已新增 {changed} 个排除 QQ 号。新消息会立即跳过；历史日报请执行“回填群聊词云 YYYY-MM-DD”。"
         )
-    if action == "取消":
+    if action == "移除":
         if not user_ids:
             return
         changed = await store.remove_excluded_user_ids(user_ids)
@@ -311,33 +334,48 @@ async def _(event: Event, args: Message = CommandArg()):
     return
 
 
-blocked_words_cmd = on_command("词云屏蔽词", priority=5, block=True)
+blocked_words_cmd = on_command(
+    "查看词云屏蔽词",
+    aliases={"新增词云屏蔽词", "移除词云屏蔽词"},
+    force_whitespace=True,
+    priority=5,
+    block=True,
+)
 
 
 @blocked_words_cmd.handle()
 async def _(event: Event, args: Message = CommandArg()):
     if not _is_superuser(event):
         return
+    action = _management_action(
+        event,
+        {
+            "查看": "查看词云屏蔽词",
+            "新增": "新增词云屏蔽词",
+            "移除": "移除词云屏蔽词",
+        },
+    )
+    if action is None:
+        return
     raw = args.extract_plain_text().strip()
-    if raw in {"查看", "列表"}:
+    if action == "查看":
+        if raw:
+            return
         words = await store.list_blocked_words()
         message = "当前没有额外的词云屏蔽词。" if not words else "词云屏蔽词：\n" + "、".join(words)
         await blocked_words_cmd.finish(message)
     if not raw:
         return
 
-    command_parts = raw.split(None, 1)
-    action = command_parts[0]
-    values = command_parts[1] if len(command_parts) > 1 else ""
-    words = analysis.parse_blocked_word_arguments(values)
-    if action == "添加":
+    words = analysis.parse_blocked_word_arguments(raw)
+    if action == "新增":
         if not words:
             return
         changed = await store.add_blocked_words(words, event.get_user_id())
         await blocked_words_cmd.finish(
             f"已新增 {changed} 个屏蔽词。需要修改近 7 天旧日报时，请执行“重算群聊词云 YYYY-MM-DD”。"
         )
-    if action == "取消":
+    if action == "移除":
         if not words:
             return
         changed = await store.remove_blocked_words(words)
