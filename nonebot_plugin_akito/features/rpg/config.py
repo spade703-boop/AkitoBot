@@ -216,6 +216,33 @@ DEFAULT_RPG_CONFIG: dict = {
         },
         "fail_flavor": {"hesitate": 4, "late_reply": 3, "out_of_step": 3},
     },
+    # ---- 群友助力：个人/已成立组队战斗中的独立低概率事件；羁绊定方向，等级定强度 ----
+    "friend_support": {
+        "chance": 0.03,
+        "bond_weight_cap": 1000,
+        "bond_weight_step": 200,
+        "negative_base": 0.70,
+        "negative_per_level": 0.04,
+        "negative_cap": 0.90,
+        "reverse_positive_chance": 0.05,
+        "tiers": {
+            "positive": [
+                {"min_level": 1, "key": "positive_lv1", "power_mult": 1.02, "exp_mult": 1.03, "points_mult": 1.03, "drop_mult": 1.02, "rescue_chance": 0.00},
+                {"min_level": 6, "key": "positive_lv6", "power_mult": 1.04, "exp_mult": 1.05, "points_mult": 1.05, "drop_mult": 1.03, "rescue_chance": 0.10},
+                {"min_level": 11, "key": "positive_lv11", "power_mult": 1.06, "exp_mult": 1.07, "points_mult": 1.07, "drop_mult": 1.05, "rescue_chance": 0.20},
+                {"min_level": 15, "key": "positive_lv15", "power_mult": 1.08, "exp_mult": 1.10, "points_mult": 1.10, "drop_mult": 1.07, "rescue_chance": 0.30},
+            ],
+            "negative": [
+                {"min_level": 1, "key": "negative_lv1", "power_mult": 0.99, "exp_mult": 0.98, "points_mult": 0.98, "drop_mult": 0.98, "rescue_chance": 0.00},
+                {"min_level": 6, "key": "negative_lv6", "power_mult": 0.98, "exp_mult": 0.97, "points_mult": 0.97, "drop_mult": 0.97, "rescue_chance": 0.00},
+                {"min_level": 11, "key": "negative_lv11", "power_mult": 0.97, "exp_mult": 0.96, "points_mult": 0.96, "drop_mult": 0.96, "rescue_chance": 0.00},
+                {"min_level": 15, "key": "negative_lv15", "power_mult": 0.95, "exp_mult": 0.94, "points_mult": 0.94, "drop_mult": 0.94, "rescue_chance": 0.00},
+            ],
+            "neutral": [
+                {"min_level": 1, "key": "neutral", "power_mult": 1.0, "exp_mult": 1.0, "points_mult": 1.0, "drop_mult": 1.0, "rescue_chance": 0.00},
+            ],
+        },
+    },
     # ---- 战斗特判：普通 RPG 战斗专用。单刷胜利 / 单刷失败 / 组队失败都有独立 3% 援护判定 ----
     "support": {
         "chance": 0.03,
@@ -360,7 +387,7 @@ DEFAULT_RPG_CONFIG: dict = {
          "effect": {"type": "battle_debuff_gift", "uses": 1, "exp_mult": 0.85,
                     "points_mult": 0.90, "drop_mult": 0.80}},
     ],
-    # ---- 文案。占位符：{a}=真@；其余 {exp}{level}{newlevel}{monster}{cost}{forge}{name}{amount}{loot} 为文本 ----
+    # ---- 文案。占位符：{a}{b}{helper}=真@；其余 {exp}{level}{newlevel}{monster}{cost}{forge}{name}{amount}{loot} 为文本 ----
     "copy": {
         "signin_exp": ["🗡️ 签到记上了。经验 +{exp}，今日装备也给你备好了（Lv{level}）。"],
         "hunt_encounter": [
@@ -493,6 +520,21 @@ DEFAULT_RPG_CONFIG: dict = {
         ],
         "team_support_dogbin_fox_out_of_step": [
             "战场上突然出现了一千个松饼挡住了敌人！拜一千个松饼所赐，{b_name} 及时加入了战场。"
+        ],
+        "friend_support_positive": [
+            "【群友助力】{helper} 听见战场上的动静，赶来替{target_name}撑场。\n· {helper_name} 的支援带来了：{effect}。"
+        ],
+        "friend_support_positive_fail": [
+            "【群友助力】{helper} 听见战场上的动静，赶来替{target_name}撑场，却还是没能扭转败局……\n· {helper_name} 的支援虽已生效，但仍未能改变结果：{effect}。"
+        ],
+        "friend_support_positive_rescue": [
+            "【群友助力】{helper} 抓住怪物露出的破绽，把濒临崩溃的战局扳了回来！\n· {helper_name} 的援护带来了：{effect}。"
+        ],
+        "friend_support_negative": [
+            "【群友助力】{helper} 说是来帮忙，结果先把战斗节奏带歪了一点……\n· {helper_name} 的介入造成了：{effect}。"
+        ],
+        "friend_support_neutral": [
+            "【群友助力】{helper} 路过战场，看了两眼就走了，没打算帮忙。"
         ],
         # 世界 BOSS
         "world_boss_spawn": ["🌍 世界BOSS【{monster}】出现了。"],
@@ -746,6 +788,62 @@ def _validate_adventure_supply(config: dict) -> None:
         raise RpgConfigError("adventure_supply.pool 权重总和必须等于 100")
 
 
+def _validate_friend_support(config: dict) -> None:
+    support = _config_section(config, "friend_support", dict)
+    _validate_probability(support.get("chance", 0.03), "friend_support.chance")
+    try:
+        bond_cap = float(support.get("bond_weight_cap", 1000))
+        bond_step = float(support.get("bond_weight_step", 200))
+        negative_base = float(support.get("negative_base", 0.70))
+        negative_step = float(support.get("negative_per_level", 0.04))
+        negative_cap = float(support.get("negative_cap", 0.90))
+        reverse_chance = float(support.get("reverse_positive_chance", 0.05))
+    except (TypeError, ValueError) as exc:
+        raise RpgConfigError("friend_support 的权重和概率配置必须是数字") from exc
+    if bond_cap < 0 or bond_step <= 0:
+        raise RpgConfigError("friend_support.bond_weight_cap 必须非负，bond_weight_step 必须大于 0")
+    _validate_probability(negative_base, "friend_support.negative_base")
+    _validate_probability(negative_cap, "friend_support.negative_cap")
+    _validate_probability(reverse_chance, "friend_support.reverse_positive_chance")
+    if negative_step < 0:
+        raise RpgConfigError("friend_support.negative_per_level 不能为负数")
+    if negative_cap < negative_base:
+        raise RpgConfigError("friend_support.negative_cap 不能低于 negative_base")
+
+    if "tiers" not in support:
+        return
+    tiers = support.get("tiers", {})
+    if not isinstance(tiers, dict):
+        raise RpgConfigError("friend_support.tiers 必须是对象")
+    for polarity in ("positive", "negative", "neutral"):
+        if polarity not in tiers:
+            continue
+        entries = tiers.get(polarity, [])
+        if not isinstance(entries, list) or not entries:
+            raise RpgConfigError(f"friend_support.tiers.{polarity} 必须是非空列表")
+        previous_level = 0
+        for index, entry in enumerate(entries):
+            if not isinstance(entry, dict):
+                raise RpgConfigError(f"friend_support.tiers.{polarity}[{index}] 必须是对象")
+            try:
+                min_level = int(entry.get("min_level", 0))
+                power_mult = float(entry.get("power_mult", 1.0))
+                exp_mult = float(entry.get("exp_mult", 1.0))
+                points_mult = float(entry.get("points_mult", 1.0))
+                drop_mult = float(entry.get("drop_mult", 1.0))
+                rescue_chance = float(entry.get("rescue_chance", 0.0))
+            except (TypeError, ValueError) as exc:
+                raise RpgConfigError(f"friend_support.tiers.{polarity}[{index}] 数值格式错误") from exc
+            if min_level < 1 or min_level <= previous_level:
+                raise RpgConfigError(f"friend_support.tiers.{polarity} 的 min_level 必须严格递增且至少为 1")
+            previous_level = min_level
+            if not 0.80 <= power_mult <= 1.20:
+                raise RpgConfigError(f"friend_support.tiers.{polarity}[{index}].power_mult 必须在 0.80 到 1.20 之间")
+            if not 0.80 <= exp_mult <= 1.20 or not 0.80 <= points_mult <= 1.20 or not 0.80 <= drop_mult <= 1.20:
+                raise RpgConfigError(f"friend_support.tiers.{polarity}[{index}] 的奖励倍率必须在 0.80 到 1.20 之间")
+            _validate_probability(rescue_chance, f"friend_support.tiers.{polarity}[{index}].rescue_chance")
+
+
 def validate_rpg_config(config: dict) -> None:
     """Validate balance-sensitive structures before startup or hot reload."""
     if not isinstance(config, dict):
@@ -753,6 +851,7 @@ def validate_rpg_config(config: dict) -> None:
     monsters = _validate_monsters(config)
     _validate_encounter_brackets(config, monsters)
     _validate_adventure_supply(config)
+    _validate_friend_support(config)
 
     combat = _config_section(config, "combat", dict)
     try:

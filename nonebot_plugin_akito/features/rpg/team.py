@@ -32,6 +32,7 @@ from .analytics import record_battle, record_team_attempt
 from .boss import _cleanup_stale_world_boss, _maybe_spawn_world_boss_lines
 from .combat import _buff_active
 from .config import _cfg, _copy, _error, _line, _variant_line
+from .friend_support import render_friend_support_line
 from .hunt import _battle_debuff_line, _battle_supply_line, _hunt_result_lines, _team_minor_lines
 from .player import _ensure_player, _resolve_group
 from .rewards import _apply_team_minor_encounter, _settle_coop, _settle_solo
@@ -165,9 +166,19 @@ def _build_coop_broadcast(out: dict, b_id: str, a_id: str, b_name: str, a_name: 
     name = out["monster"].get("name", "")
     if out.get("elite"):
         name = "精英·" + name
-    head_key = "team_lose" if out.get("battle_guard_owner") else ("team_win" if out["win"] else "team_lose")
+    friend_support = out.get("friend_support")
+    friend_rescue = isinstance(friend_support, dict) and friend_support.get("rescue_triggered")
+    rescued = bool(out.get("battle_guard_owner") or friend_rescue)
+    head_key = "team_lose" if rescued else ("team_win" if out["win"] else "team_lose")
     head = random.choice(_copy(head_key))
     msg = _render_with_ats(head, {"a": b_id, "b": a_id, "monster": name})
+    friend_support_line = render_friend_support_line(
+        friend_support,
+        target_name=f"{b_name}与{a_name}",
+        battle_won=bool(out.get("win")),
+    )
+    if friend_support_line:
+        msg = msg + "\n" + friend_support_line
     if out.get("team_event"):
         msg = msg + "\n" + _line(f"team_event_{out['team_event']}")
     if out.get("negative_event"):
@@ -264,6 +275,9 @@ def _settle_team_result(
     today: str,
     raw_intimacy: int,
     bond_level: int,
+    *,
+    excluded_user_ids: tuple[str, ...] | list[str] = (),
+    enable_friend_support: bool = True,
 ) -> dict:
     """统一的组队结算入口：普通成功与援护拉回后的组队都共用。"""
     negative_event = _roll_negative_team_event(raw_intimacy, random)
@@ -272,10 +286,14 @@ def _settle_team_result(
         b,
         a,
         today,
+        group=group if enable_friend_support else None,
+        participant_ids=[initiator, target],
+        excluded_user_ids=excluded_user_ids,
         exp_bonus=_team_exp_bonus(bond_level),
         drop_bonus=_team_drop_bonus(bond_level),
         extra_power_mult=float(negative_spec.get("power_mult", 1.0)),
         extra_exp_mult=float(negative_spec.get("exp_mult", 1.0)),
+        extra_points_mult=float(negative_spec.get("points_mult", 1.0)),
         extra_drop_mult=float(negative_spec.get("drop_mult", 1.0)),
     )
     out["negative_event"] = negative_event
@@ -383,9 +401,20 @@ async def _(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
         success = random.random() < _team_success_rate(bond_level)
         b_name = b.get("display_name") or f"群友{initiator}"
         fail_flavor = ""
+        support_excluded = [initiator, target, str(getattr(bot, "self_id", ""))]
 
         if success:
-            out = _settle_team_result(group, initiator, target, b, a, today, raw_intimacy, bond_level)
+            out = _settle_team_result(
+                group,
+                initiator,
+                target,
+                b,
+                a,
+                today,
+                raw_intimacy,
+                bond_level,
+                excluded_user_ids=support_excluded,
+            )
             _record_team_metrics(group, today, out, initiator, target, b, a, before, formed=True)
             boss_lines = _maybe_spawn_world_boss_lines(group, today, initiator, rng=random)
             _save_data(data)
@@ -393,14 +422,32 @@ async def _(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
         else:
             fail_flavor = _roll_fail_flavor()
             if _roll_team_fail_rescue(random):
-                out = _settle_team_result(group, initiator, target, b, a, today, raw_intimacy, bond_level)
+                out = _settle_team_result(
+                    group,
+                    initiator,
+                    target,
+                    b,
+                    a,
+                    today,
+                    raw_intimacy,
+                    bond_level,
+                    excluded_user_ids=support_excluded,
+                    enable_friend_support=False,
+                )
                 out["team_support_variant"] = events._roll_support_variant(random)
                 _record_team_metrics(group, today, out, initiator, target, b, a, before, formed=True)
                 boss_lines = _maybe_spawn_world_boss_lines(group, today, initiator, rng=random)
                 _save_data(data)
                 msg = _build_fail_rescue_broadcast(out, initiator, target, b_name, a_name, fail_flavor)
             else:
-                out = _settle_solo(b, today)
+                out = _settle_solo(
+                    b,
+                    today,
+                    group=group,
+                    participant_ids=[initiator],
+                    excluded_user_ids=support_excluded,
+                )
+                out["player_name"] = str(b_name)
                 _record_team_metrics(group, today, out, initiator, target, b, a, before, formed=False)
                 boss_lines = _maybe_spawn_world_boss_lines(group, today, initiator, rng=random)
                 _save_data(data)

@@ -16,6 +16,23 @@ class ActiveBattleView(ActiveBattleRecord):
     effect: dict[str, Any]
 
 
+class FriendSupportResult(TypedDict, total=False):
+    helper_id: str
+    helper_name: str
+    bond: int
+    bond_level: int
+    bond_name: str
+    helper_level: int
+    polarity: Literal["positive", "negative", "neutral"]
+    effect_key: str
+    power_mult: float
+    exp_mult: float
+    points_mult: float
+    drop_mult: float
+    rescue_chance: float
+    rescue_triggered: bool
+
+
 class EquipmentRecord(TypedDict, total=False):
     exp: int
     equip_date: str

@@ -179,9 +179,12 @@ def _reward_records(outcome: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _record_battle_details(entry: RpgMetricDay, outcome: dict[str, Any]) -> None:
+    friend_support = outcome.get("friend_support")
+    friend_support_key = friend_support.get("effect_key") if isinstance(friend_support, dict) else None
     event_fields = (
         ("battle", outcome.get("event")),
         ("support", outcome.get("support_scene")),
+        ("friend_support", friend_support_key),
         ("team", outcome.get("team_event")),
         ("team_negative", outcome.get("negative_event")),
         ("minor", outcome.get("minor_event")),
@@ -689,6 +692,7 @@ _EVENT_CATEGORY_LABELS = {
     "fortune": "签到运势",
     "battle": "战斗特判",
     "support": "战斗支援",
+    "friend_support": "群友助力",
     "team": "组队事件",
     "team_negative": "组队负面事件",
     "team_minor": "组队小奇遇",
@@ -738,6 +742,15 @@ _EVENT_NAME_LABELS = {
     "team_fail": "组队失败后攻击",
     "killed": "击杀结算",
     "expired": "离场结算",
+    "positive_lv1": "正向助力 Lv1-5",
+    "positive_lv6": "正向助力 Lv6-10",
+    "positive_lv11": "正向助力 Lv11-14",
+    "positive_lv15": "正向助力 Lv15+",
+    "negative_lv1": "负向助力 Lv1-5",
+    "negative_lv6": "负向助力 Lv6-10",
+    "negative_lv11": "负向助力 Lv11-14",
+    "negative_lv15": "负向助力 Lv15+",
+    "neutral": "中立助力",
 }
 
 

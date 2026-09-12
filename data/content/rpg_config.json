@@ -435,6 +435,104 @@
       "out_of_step": 3
     }
   },
+  "friend_support": {
+    "chance": 0.03,
+    "bond_weight_cap": 1000,
+    "bond_weight_step": 200,
+    "negative_base": 0.7,
+    "negative_per_level": 0.04,
+    "negative_cap": 0.9,
+    "reverse_positive_chance": 0.05,
+    "tiers": {
+      "positive": [
+        {
+          "min_level": 1,
+          "key": "positive_lv1",
+          "power_mult": 1.02,
+          "exp_mult": 1.03,
+          "points_mult": 1.03,
+          "drop_mult": 1.02,
+          "rescue_chance": 0.0
+        },
+        {
+          "min_level": 6,
+          "key": "positive_lv6",
+          "power_mult": 1.04,
+          "exp_mult": 1.05,
+          "points_mult": 1.05,
+          "drop_mult": 1.03,
+          "rescue_chance": 0.1
+        },
+        {
+          "min_level": 11,
+          "key": "positive_lv11",
+          "power_mult": 1.06,
+          "exp_mult": 1.07,
+          "points_mult": 1.07,
+          "drop_mult": 1.05,
+          "rescue_chance": 0.2
+        },
+        {
+          "min_level": 15,
+          "key": "positive_lv15",
+          "power_mult": 1.08,
+          "exp_mult": 1.1,
+          "points_mult": 1.1,
+          "drop_mult": 1.07,
+          "rescue_chance": 0.3
+        }
+      ],
+      "negative": [
+        {
+          "min_level": 1,
+          "key": "negative_lv1",
+          "power_mult": 0.99,
+          "exp_mult": 0.98,
+          "points_mult": 0.98,
+          "drop_mult": 0.98,
+          "rescue_chance": 0.0
+        },
+        {
+          "min_level": 6,
+          "key": "negative_lv6",
+          "power_mult": 0.98,
+          "exp_mult": 0.97,
+          "points_mult": 0.97,
+          "drop_mult": 0.97,
+          "rescue_chance": 0.0
+        },
+        {
+          "min_level": 11,
+          "key": "negative_lv11",
+          "power_mult": 0.97,
+          "exp_mult": 0.96,
+          "points_mult": 0.96,
+          "drop_mult": 0.96,
+          "rescue_chance": 0.0
+        },
+        {
+          "min_level": 15,
+          "key": "negative_lv15",
+          "power_mult": 0.95,
+          "exp_mult": 0.94,
+          "points_mult": 0.94,
+          "drop_mult": 0.94,
+          "rescue_chance": 0.0
+        }
+      ],
+      "neutral": [
+        {
+          "min_level": 1,
+          "key": "neutral",
+          "power_mult": 1.0,
+          "exp_mult": 1.0,
+          "points_mult": 1.0,
+          "drop_mult": 1.0,
+          "rescue_chance": 0.0
+        }
+      ]
+    }
+  },
   "support": {
     "chance": 0.03,
     "variant_weights": {
@@ -1191,6 +1289,21 @@
     ],
     "team_support_dogbin_fox_out_of_step": [
       "战场上突然出现了一千个松饼挡住了敌人！拜一千个松饼所赐，{b_name} 及时加入了战场。"
+    ],
+    "friend_support_positive": [
+      "【群友助力】{helper} 听见战场上的动静，赶来替{target_name}撑场。\n· {helper_name} 的支援带来了：{effect}。"
+    ],
+    "friend_support_positive_fail": [
+      "【群友助力】{helper} 听见战场上的动静，赶来替{target_name}撑场，却还是没能扭转败局……\n· {helper_name} 的支援虽已生效，但仍未能改变结果：{effect}。"
+    ],
+    "friend_support_positive_rescue": [
+      "【群友助力】{helper} 抓住怪物露出的破绽，把濒临崩溃的战局扳了回来！\n· {helper_name} 的援护带来了：{effect}。"
+    ],
+    "friend_support_negative": [
+      "【群友助力】{helper} 说是来帮忙，结果先把战斗节奏带歪了一点……\n· {helper_name} 的介入造成了：{effect}。"
+    ],
+    "friend_support_neutral": [
+      "【群友助力】{helper} 路过战场，看了两眼就走了，没打算帮忙。"
     ],
     "world_boss_spawn": [
       "🌍 世界BOSS【{monster}】出现了。"

@@ -58,6 +58,15 @@ def test_config_rejects_scallion_cake_multiplier_above_one():
         rpg_config.validate_rpg_config(config)
 
 
+def test_config_rejects_friend_support_cap_below_base():
+    config = deepcopy(rpg_config.DEFAULT_RPG_CONFIG)
+    config["friend_support"]["negative_base"] = 0.8
+    config["friend_support"]["negative_cap"] = 0.7
+
+    with pytest.raises(rpg_config.RpgConfigError, match="negative_cap"):
+        rpg_config.validate_rpg_config(config)
+
+
 def test_failed_hot_reload_keeps_current_config(monkeypatch):
     previous = deepcopy(rpg_config.RPG_CONFIG)
     invalid = deepcopy(rpg_config.DEFAULT_RPG_CONFIG)

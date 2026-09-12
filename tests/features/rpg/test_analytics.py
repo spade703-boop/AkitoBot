@@ -95,6 +95,7 @@ def test_metrics_records_growth_events_spending_supply_and_boss_instances():
             "monster": {"name": "史莱姆"},
             "event": "insight",
             "support_scene": "akito_success",
+            "friend_support": {"effect_key": "positive_lv15"},
             "battle_guard_triggered": True,
             "buff": {"key": "festival"},
             "drops": ["经验书"],
@@ -162,6 +163,7 @@ def test_metrics_records_growth_events_spending_supply_and_boss_instances():
     assert metric["drop_attempts"] == 3
     assert metric["drop_hits"] == 2
     assert metric["events"]["battle:insight"] == 1
+    assert metric["events"]["friend_support:positive_lv15"] == 1
     assert metric["events"]["team_negative:friction"] == 1
     assert metric["events"]["daily_buff:festival"] == 1
     assert metric["events"]["exp_buff"] == 1
@@ -179,6 +181,7 @@ def test_metrics_records_growth_events_spending_supply_and_boss_instances():
     assert baseline["supply_metrics_available"] is True
     assert baseline["world_boss_instance_metrics_available"] is True
     assert page_data["event_rows"]
+    assert analytics._event_label("friend_support:positive_lv15") == "群友助力 · 正向助力 Lv15+"
     assert page_data["drop_rows"]
     assert page_data["supply_rows"]
     assert page_data["boss_instance_rows"][0]["status"] == "已击杀"

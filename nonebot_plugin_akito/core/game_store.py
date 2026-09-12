@@ -318,7 +318,7 @@ def _weighted_choice(weights: dict, rng) -> str:
 # ==================== 消息组装：@ 渲染 ====================
 
 _PLACEHOLDER_RE = re.compile(r"(\{[a-z_]+\})")
-_AT_KEYS = {"a", "b"}
+_AT_KEYS = {"a", "b", "helper"}
 
 
 def _render_with_ats(template: str, ctx: dict):

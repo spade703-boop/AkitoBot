@@ -28,6 +28,7 @@ from .analytics import record_battle
 from .boss import _cleanup_stale_world_boss, _maybe_spawn_world_boss_lines
 from .combat import _buff_active, _eff_monster, _monsters, _today_buff
 from .config import _cfg, _copy, _error, _line, _variant_line
+from .friend_support import render_friend_support_line
 from .inventory import _roll_drops
 from .player import _ensure_player, _resolve_group
 from .rewards import _settle_solo
@@ -40,8 +41,14 @@ def _hunt_event_line(out: dict) -> str:
     if out.get("event"):
         copy_table = _cfg("copy", {})
         support_scene = str(out.get("support_scene", ""))
+        friend_support = out.get("friend_support")
+        friend_rescue = isinstance(friend_support, dict) and friend_support.get("rescue_triggered")
         flipped_by_support = (
-            (support_scene in {"toya_rescue", "duo_combo"} or out.get("battle_guard_triggered"))
+            (
+                support_scene in {"toya_rescue", "duo_combo"}
+                or out.get("battle_guard_triggered")
+                or friend_rescue
+            )
             and not bool(out.get("base_win", out.get("win")))
             and bool(out.get("win"))
         )
@@ -102,6 +109,18 @@ def _hunt_support_lines(out: dict) -> list[str]:
     if line:
         lines.append(line)
     return lines
+
+
+def _hunt_friend_support_lines(out: dict) -> list:
+    result = out.get("friend_support")
+    if not isinstance(result, dict):
+        return []
+    line = render_friend_support_line(
+        result,
+        target_name=str(out.get("player_name", "冒险者")),
+        battle_won=bool(out.get("win")),
+    )
+    return [line] if line else []
 
 
 def _battle_supply_line(reward: dict) -> str:
@@ -186,6 +205,7 @@ def _hunt_result_lines(out: dict) -> list:
     event_line = _hunt_event_line(out)
     if event_line:
         lines.append(event_line)
+    lines.extend(_hunt_friend_support_lines(out))
     support_lines = _hunt_support_lines(out)
     if out.get("support_scene") in {"toya_rescue", "duo_combo"}:
         lines.extend(support_lines)
@@ -256,7 +276,15 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
 
         old_exp = int(user.get("exp", 0))
         old_points = int(user.get("points", 0))
-        out = _settle_solo(user, today, direct=True)
+        out = _settle_solo(
+            user,
+            today,
+            direct=True,
+            group=group,
+            participant_ids=[user_id],
+            excluded_user_ids=[user_id, str(getattr(bot, "self_id", ""))],
+        )
+        out["player_name"] = str(user.get("display_name") or _display_name(event))
         record_battle(
             group,
             today,

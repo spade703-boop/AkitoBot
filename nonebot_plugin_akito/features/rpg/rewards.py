@@ -7,7 +7,8 @@ from __future__ import annotations
 
 import random
 
-from . import combat, events, inventory, utils
+from ...core.types import GroupRecord
+from . import combat, events, friend_support, inventory, utils
 from .config import _cfg
 from .player import _combat_power, _consume_equip, _level_of
 from .types import ActiveBattleView, RpgUserRecord
@@ -90,12 +91,13 @@ def _apply_extra_rewards(
 
 
 def _apply_rewards(user: RpgUserRecord, today: str, *, win: bool, monster: dict, event_key: str = "",
-                   exp_bonus: float = 0.0, exp_mult: float = 1.0, drop_mult: float = 1.0,
+                   exp_bonus: float = 0.0, exp_mult: float = 1.0, points_mult: float = 1.0,
+                   drop_mult: float = 1.0,
                    battle_supply: ActiveBattleView | None = None, rescue_exp_mult: float = 1.0,
                    rng=random) -> dict:
     """给单个玩家结算（经验[含看破/单刷或组队额外加成/双倍卡/精英/今日增益] + 掉落 + 积分）并消耗其今日装备，记一次战绩。
 
-    `exp_mult`/`drop_mult` 由调用方算好（精英 × 今日增益）传入；怪物自身可用 `reward_exp_mult` 微调经验。
+    `exp_mult`/`points_mult`/`drop_mult` 由调用方算好（精英 × 今日增益 × 群友助力）传入；怪物自身可用 `reward_exp_mult` 微调经验。
     返回奖励明细 {exp_gain, exp_buffed, drops, points_gain, old_level, new_level}（不含播报）。
     单刷与组队（双方各调一次）共用本函数：胜负由调用方判定后传入。
     """
@@ -152,7 +154,7 @@ def _apply_rewards(user: RpgUserRecord, today: str, *, win: bool, monster: dict,
         inventory._add_item(user, d, 1)
 
     points_gain = _challenge_points(win, user)
-    points_gain = int(points_gain * debuff_points_mult)
+    points_gain = int(points_gain * debuff_points_mult * float(points_mult))
     user["points"] = int(user.get("points", 0)) + points_gain
     user["hunt_total"] = int(user.get("hunt_total", 0)) + 1   # 战绩：累计打怪
     if win:
@@ -389,6 +391,9 @@ def _settle_solo(
     today: str,
     *,
     direct: bool = False,
+    group: GroupRecord | None = None,
+    participant_ids: tuple[str, ...] | list[str] = (),
+    excluded_user_ids: tuple[str, ...] | list[str] = (),
     rng=random,
     buff: dict | None = None,
 ) -> dict:
@@ -415,6 +420,14 @@ def _settle_solo(
     power_factor *= combat._rookie_power_factor(level)
     if direct:
         power_factor *= 1.0 + _solo_power_bonus()
+    friend_support_result = friend_support.roll_friend_support(
+        group,
+        participant_ids,
+        excluded_user_ids=excluded_user_ids,
+        rng=rng,
+    )
+    if friend_support_result:
+        power_factor *= float(friend_support_result.get("power_mult", 1.0))
     res = combat.resolve_hunt(
         cp,
         eff,
@@ -423,10 +436,18 @@ def _settle_solo(
         event=event_key,
     )
     base_win = bool(res["win"])
-    support_scene = events._roll_solo_support_scene(bool(res["win"]), rng)
-    support_variant = events._roll_support_variant(rng) if support_scene else ""
-    if not res["win"] and support_scene in {"toya_rescue", "duo_combo"}:
-        res["win"] = True
+    if friend_support_result and friend_support_result.get("polarity") == "positive" and not res["win"]:
+        rescue_chance = float(friend_support_result.get("rescue_chance", 0.0))
+        if rescue_chance > 0 and rng.random() < rescue_chance:
+            res["win"] = True
+            friend_support_result["rescue_triggered"] = True
+    support_scene = ""
+    support_variant = ""
+    if not friend_support_result:
+        support_scene = events._roll_solo_support_scene(bool(res["win"]), rng)
+        support_variant = events._roll_support_variant(rng) if support_scene else ""
+        if not res["win"] and support_scene in {"toya_rescue", "duo_combo"}:
+            res["win"] = True
     battle_guard = inventory._active_battle_supply(user, guard=True)
     guard_triggered = bool(not res["win"] and battle_guard)
     guard_uses_left = 0
@@ -436,12 +457,20 @@ def _settle_solo(
         guard_exp_mult = float(battle_guard["effect"].get("rescue_exp_mult", 1.0))
         guard_uses_left = inventory._consume_battle_supply(user, guard=True)
     exp_mult, drop_mult = combat._reward_mults(buff, is_elite, res["win"])
+    friend_exp_mult = float(friend_support_result.get("exp_mult", 1.0)) if friend_support_result else 1.0
+    friend_points_mult = float(friend_support_result.get("points_mult", 1.0)) if friend_support_result else 1.0
+    friend_drop_mult = float(friend_support_result.get("drop_mult", 1.0)) if friend_support_result else 1.0
+    exp_mult *= friend_exp_mult
+    drop_mult *= friend_drop_mult
     exp_bonus = _solo_exp_bonus(bool(res["win"])) if direct else 0.0
     rew = _apply_rewards(user, today, win=res["win"], monster=eff, event_key=event_key,
-                         exp_bonus=exp_bonus, exp_mult=exp_mult, drop_mult=drop_mult,
+                         exp_bonus=exp_bonus, exp_mult=exp_mult, points_mult=friend_points_mult,
+                         drop_mult=drop_mult,
                          battle_supply=battle_supply, rescue_exp_mult=guard_exp_mult, rng=rng)
     out = {**res, **rew, "monster": monster, "event": event_key, "elite": is_elite, "buff": buff,
            "support_scene": support_scene, "support_variant": support_variant,
+           "friend_support": friend_support_result,
+           "player_name": str(user.get("display_name") or "冒险者"),
            "base_win": base_win, "direct_solo": direct,
            "battle_guard_triggered": guard_triggered,
            "battle_guard_name": str(battle_guard.get("name", "")) if guard_triggered and battle_guard else "",
@@ -457,10 +486,14 @@ def _settle_coop(
     a: RpgUserRecord,
     today: str,
     *,
+    group: GroupRecord | None = None,
+    participant_ids: tuple[str, ...] | list[str] = (),
+    excluded_user_ids: tuple[str, ...] | list[str] = (),
     exp_bonus: float = 0.0,
     drop_bonus: float = 0.0,
     extra_power_mult: float = 1.0,
     extra_exp_mult: float = 1.0,
+    extra_points_mult: float = 1.0,
     extra_drop_mult: float = 1.0,
     rng=random,
 ) -> dict:
@@ -492,6 +525,14 @@ def _settle_coop(
     if margin > 0 and event_spec.get("power_mult") is not None:
         power_factor *= float(event_spec.get("power_mult", 1.0))
     power_factor *= float(extra_power_mult)
+    friend_support_result = friend_support.roll_friend_support(
+        group,
+        participant_ids,
+        excluded_user_ids=excluded_user_ids,
+        rng=rng,
+    )
+    if friend_support_result:
+        power_factor *= float(friend_support_result.get("power_mult", 1.0))
     res = combat.resolve_hunt(
         cp,
         eff,
@@ -500,6 +541,11 @@ def _settle_coop(
     )
     base_win = bool(res["win"])
     win = base_win
+    if friend_support_result and friend_support_result.get("polarity") == "positive" and not win:
+        rescue_chance = float(friend_support_result.get("rescue_chance", 0.0))
+        if rescue_chance > 0 and rng.random() < rescue_chance:
+            win = True
+            friend_support_result["rescue_triggered"] = True
     guard_owner = ""
     guard_name = ""
     guard_exp_mult = {"b": 1.0, "a": 1.0}
@@ -517,6 +563,11 @@ def _settle_coop(
     exp_mult, drop_mult = combat._reward_mults(buff, is_elite, win)
     exp_mult *= float(event_spec.get("exp_mult", 1.0))
     exp_mult *= float(extra_exp_mult)
+    friend_exp_mult = float(friend_support_result.get("exp_mult", 1.0)) if friend_support_result else 1.0
+    friend_points_mult = float(friend_support_result.get("points_mult", 1.0)) if friend_support_result else 1.0
+    friend_drop_mult = float(friend_support_result.get("drop_mult", 1.0)) if friend_support_result else 1.0
+    exp_mult *= friend_exp_mult
+    drop_mult *= friend_drop_mult
     drop_mult *= float(event_spec.get("drop_mult", 1.0))
     drop_mult *= 1.0 + float(drop_bonus)
     drop_mult *= float(extra_drop_mult)
@@ -527,6 +578,7 @@ def _settle_coop(
         monster=eff,
         exp_bonus=exp_bonus,
         exp_mult=exp_mult,
+        points_mult=extra_points_mult * friend_points_mult,
         drop_mult=drop_mult,
         battle_supply=b_supply,
         rescue_exp_mult=guard_exp_mult["b"],
@@ -539,6 +591,7 @@ def _settle_coop(
         monster=eff,
         exp_bonus=exp_bonus,
         exp_mult=exp_mult,
+        points_mult=extra_points_mult * friend_points_mult,
         drop_mult=drop_mult,
         battle_supply=a_supply,
         rescue_exp_mult=guard_exp_mult["a"],
@@ -554,6 +607,7 @@ def _settle_coop(
         "power_bonus": power_bonus,
         "exp_bonus": exp_bonus,
         "drop_bonus": drop_bonus,
+        "friend_support": friend_support_result,
         "battle_guard_owner": guard_owner,
         "battle_guard_name": guard_name,
         "b": b_reward,

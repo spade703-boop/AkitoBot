@@ -400,6 +400,11 @@ async def test_team_fail_rescue_runs_normal_coop_settlement(monkeypatch):
     monkeypatch.setattr(team, "_roll_fail_flavor", lambda rng=team.random: "late_reply")
     monkeypatch.setattr(team, "_roll_team_fail_rescue", lambda rng=team.random: True)
     monkeypatch.setattr(rpg_events, "_roll_support_variant", lambda rng=rpg_events.random: "default")
+    monkeypatch.setattr(
+        rewards.friend_support,
+        "roll_friend_support",
+        lambda group, *args, **kwargs: (pytest.fail("legacy team rescue must disable friend support") if group else None),
+    )
     _stub_hunt_rng(monkeypatch, {"name": "史莱姆", "power_req": 1, "drops": []})
     monkeypatch.setattr(rpg_events, "_roll_coop_event", lambda rng=rpg_events.random: "")
 

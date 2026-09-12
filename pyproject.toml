@@ -119,6 +119,7 @@ files = [
     "nonebot_plugin_akito/features/rpg/state.py",
     "nonebot_plugin_akito/features/rpg/utils.py",
     "nonebot_plugin_akito/features/rpg/combat.py",
+    "nonebot_plugin_akito/features/rpg/friend_support.py",
     "nonebot_plugin_akito/features/rpg/boss.py",
     "nonebot_plugin_akito/features/rpg/analytics.py",
     "nonebot_plugin_akito/features/rpg/team.py",
