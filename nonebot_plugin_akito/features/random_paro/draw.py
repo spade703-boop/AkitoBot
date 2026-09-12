@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import random
 
-from .store import PARO_DATA
+from .store import PARO_CONFIG, PARO_DATA
 
 EASTER_EGG_RATE = 0.03
 FOXRABBIT_RATE = 0.02
@@ -98,6 +98,21 @@ def get_fixed_side(fixed_a: str | None, fixed_b: str | None) -> str | None:
     return None
 
 
+def _special_config() -> dict:
+    return PARO_CONFIG
+
+
+def _pick_special_outcome(used_tags: set[str], rng=random) -> dict | None:
+    outcomes = []
+    for outcome in _special_config().get("special_outcomes", []):
+        tags = set(outcome.get("tags", []))
+        if tags.isdisjoint(used_tags):
+            outcomes.append(outcome)
+    if not outcomes:
+        return None
+    return rng.choices(outcomes, weights=[outcome["weight"] for outcome in outcomes], k=1)[0]
+
+
 def draw_results(
     count: int,
     *,
@@ -105,29 +120,27 @@ def draw_results(
     fixed_b: str | None = None,
     akito_pool: list[str] | None = None,
     toya_pool: list[str] | None = None,
+    rng=None,
 ) -> list[tuple[str, str, bool, str | None]]:
     akito_pool = akito_pool if akito_pool is not None else PARO_DATA.get("akito_pool", [])
     toya_pool = toya_pool if toya_pool is not None else PARO_DATA.get("toya_pool", [])
     results = []
-    foxrabbit_used = False
+    rng = rng or random
+    used_special_tags: set[str] = set()
+    config = _special_config()
+    cooking_rate = float(config.get("cooking_rate", EASTER_EGG_RATE))
+    special_rate = float(config.get("special_rate", FOXRABBIT_RATE * 4))
     for _ in range(count):
-        akito_name = fixed_a or random.choice(akito_pool)
-        toya_name = fixed_b or random.choice(toya_pool)
-        is_egg = random.random() < EASTER_EGG_RATE
-        fox_type = None
-        if not is_egg and not foxrabbit_used:
-            roll = random.random()
-            if roll < FOXRABBIT_RATE:
-                fox_type = "fox"
-            elif roll < FOXRABBIT_RATE * 2:
-                fox_type = "rabbit"
-            elif roll < FOXRABBIT_RATE * 3:
-                fox_type = "foxrabbit"
-            elif roll < FOXRABBIT_RATE * 4:
-                fox_type = "foxbun"
-            if fox_type:
-                foxrabbit_used = True
-        results.append((akito_name, toya_name, is_egg, fox_type))
+        akito_name = fixed_a or rng.choice(akito_pool)
+        toya_name = fixed_b or rng.choice(toya_pool)
+        is_egg = rng.random() < cooking_rate
+        special_type = None
+        if not is_egg and rng.random() < special_rate:
+            outcome = _pick_special_outcome(used_special_tags, rng)
+            if outcome is not None:
+                special_type = outcome["id"]
+                used_special_tags.update(outcome["tags"])
+        results.append((akito_name, toya_name, is_egg, special_type))
     return results
 
 

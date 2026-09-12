@@ -8,6 +8,7 @@
 # Data (images, memories, DB)
 /data/*
 !/data/content/
+!/data/paro_config.json
 /data/content/*
 !/data/content/gift_config.json
 !/data/content/rpg_config.json

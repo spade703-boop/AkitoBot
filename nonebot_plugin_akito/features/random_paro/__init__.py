@@ -24,6 +24,7 @@ from .assets import (
     load_fox_stat_icon as _load_fox_stat_icon,
     load_foxbun_image as _load_foxbun_image,
     load_foxrabbit_image as _load_foxrabbit_image,
+    load_special_images as _load_special_images,
     load_font as _load_font,
     path_to_uri as _path_to_uri,
     resize_to_fit as _resize_to_fit,
@@ -138,9 +139,12 @@ from .stats import (
 )
 from .store import (
     DATA_FILE,
+    CONFIG_FILE,
     DEFAULT_DATA,
+    DEFAULT_PARO_CONFIG,
     EGG_LOG_FILE,
     PARO_DATA,
+    PARO_CONFIG,
     PARO_STATS,
     STATS_FILE,
     _append_egg_log,

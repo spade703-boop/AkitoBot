@@ -19,10 +19,7 @@ from .assets import (
     load_font as _load_font,
 )
 from .assets import (
-    load_foxbun_image as _load_foxbun_image,
-)
-from .assets import (
-    load_foxrabbit_image as _load_foxrabbit_image,
+    load_special_stat_icon as _load_special_stat_icon,
 )
 from .stats import (
     _build_character_rows,
@@ -57,27 +54,7 @@ def _load_avatar_thumb(character: str, name: str, size: int = 56) -> Image.Image
 
 
 def _load_fox_stat_icon(fox_type: str) -> Image.Image | None:
-    if fox_type == "fox":
-        image = _load_foxrabbit_image("狐")
-        return _resize_to_fit(image, max_w=56, max_h=56) if image else None
-    if fox_type == "rabbit":
-        image = _load_foxrabbit_image("兔")
-        return _resize_to_fit(image, max_w=56, max_h=56) if image else None
-    if fox_type == "foxbun":
-        image = _load_foxbun_image()
-        return _resize_to_fit(image, max_w=96, max_h=56) if image else None
-    if fox_type == "foxrabbit":
-        fox = _load_foxrabbit_image("狐")
-        rabbit = _load_foxrabbit_image("兔")
-        if not fox or not rabbit:
-            return None
-        fox = _resize_to_fit(fox, max_w=56, max_h=56)
-        rabbit = _resize_to_fit(rabbit, max_w=56, max_h=56)
-        canvas = Image.new("RGB", (fox.width + rabbit.width + 6, max(fox.height, rabbit.height)), "#ffffff")
-        canvas.paste(fox, (0, (canvas.height - fox.height) // 2))
-        canvas.paste(rabbit, (fox.width + 6, (canvas.height - rabbit.height) // 2))
-        return canvas
-    return None
+    return _load_special_stat_icon(fox_type)
 
 
 def _text_width(font: ImageFont.FreeTypeFont | ImageFont.ImageFont, text: str, fallback_size: int = FONT_SIZE) -> int:

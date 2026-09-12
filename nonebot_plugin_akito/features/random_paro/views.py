@@ -18,7 +18,7 @@ from .stats import (
     _sorted_ranked_items,
     _today_str,
 )
-from .store import _save_stats
+from .store import PARO_CONFIG, _save_stats
 
 _HTML_PAGE_CACHE: dict[str, tuple[str, bytes]] = {}
 
@@ -84,12 +84,20 @@ def _build_character_contract(
 
 
 def _build_fox_rows_contract(period_stats: dict) -> list[dict]:
-    entries = [
-        ("foxrabbit", "狐兔", period_stats["foxrabbit_total"], ["狐", "兔"]),
-        ("foxbun", "狐兔饭", period_stats["foxbun_total"], ["狐", "兔"]),
-        ("fox", "狐狸", period_stats["fox_total"], ["狐"]),
-        ("rabbit", "兔子", period_stats["rabbit_total"], ["兔"]),
-    ]
+    counts = dict(period_stats.get("special_outcomes") or {})
+    for special_type, legacy_key in {
+        "foxrabbit": "foxrabbit_total",
+        "foxbun": "foxbun_total",
+        "fox": "fox_total",
+        "rabbit": "rabbit_total",
+    }.items():
+        counts[special_type] = max(counts.get(special_type, 0), period_stats.get(legacy_key, 0))
+    entries = []
+    for outcome in PARO_CONFIG.get("special_outcomes", []):
+        special_type = outcome["id"]
+        entries.append((special_type, outcome.get("label", special_type), counts.get(special_type, 0), outcome.get("tags", [])))
+    known_ids = {entry[0] for entry in entries}
+    entries.extend((special_type, special_type, count, []) for special_type, count in counts.items() if special_type not in known_ids)
     return [
         {"name": label, "kinds": kinds, "count": count, "icons": _fox_icon_uris(fox_type)}
         for _index, (fox_type, label, count, kinds) in sorted(
@@ -198,10 +206,11 @@ def _build_draw_result_page_data(
     items = []
     dishes = []
     foxbun_hit = False
-    for akito_name, toya_name, is_egg, fox_type in results:
-        if fox_type:
-            items.append({"type": "fox", "fox_type": fox_type, "imgs": _fox_icon_uris(fox_type)})
-            foxbun_hit = foxbun_hit or fox_type == "foxbun"
+    for akito_name, toya_name, is_egg, special_type in results:
+        if special_type:
+            outcome = next((item for item in PARO_CONFIG.get("special_outcomes", []) if item.get("id") == special_type), {})
+            items.append({"type": "fox", "fox_type": special_type, "special_type": special_type, "message": outcome.get("message", special_type), "imgs": _fox_icon_uris(special_type)})
+            foxbun_hit = foxbun_hit or special_type == "foxbun"
             continue
         items.append(
             {

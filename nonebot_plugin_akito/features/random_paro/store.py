@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import json
+import math
 import os
 from pathlib import Path
 
@@ -12,11 +13,59 @@ from nonebot.log import logger
 from ...core import TZ_CN, find_data_path, get_data_dir, load_json_file
 
 DATA_FILE = "paro_pools.json"
+CONFIG_FILE = "paro_config.json"
 STATS_FILE = "paro_stats.json"
 EGG_LOG_FILE = "paro_egg_log.jsonl"
 DEFAULT_DATA = {"akito_pool": [], "toya_pool": []}
+DEFAULT_PARO_CONFIG = {
+    "cooking_rate": 0.03,
+    "special_rate": 0.08,
+    "special_outcomes": [
+        {
+            "id": "fox",
+            "label": "狐狸",
+            "weight": 1,
+            "tags": ["fox"],
+            "assets": ["狐"],
+            "message": "一只得意的狐狸赶走了这里的派生。",
+            "counts_as_cooking": False,
+            "legacy_stat": "fox_total",
+        },
+        {
+            "id": "rabbit",
+            "label": "兔子",
+            "weight": 1,
+            "tags": ["rabbit"],
+            "assets": ["兔"],
+            "message": "一只圆圆的兔子挡住了这里的派生。",
+            "counts_as_cooking": False,
+            "legacy_stat": "rabbit_total",
+        },
+        {
+            "id": "foxrabbit",
+            "label": "狐兔",
+            "weight": 1,
+            "tags": ["fox", "rabbit"],
+            "assets": ["狐", "兔"],
+            "message": "一对眼熟的狐兔出现在了这里……",
+            "counts_as_cooking": False,
+            "legacy_stat": "foxrabbit_total",
+        },
+        {
+            "id": "foxbun",
+            "label": "狐兔饭",
+            "weight": 1,
+            "tags": ["fox", "rabbit"],
+            "assets": ["狐&兔"],
+            "message": "发现了一对正在贴贴的狐兔！",
+            "counts_as_cooking": True,
+            "legacy_stat": "foxbun_total",
+        },
+    ],
+}
 
 PARO_DATA: dict = load_json_file(DATA_FILE, DEFAULT_DATA)
+PARO_CONFIG: dict = {}
 PARO_STATS: dict = {}
 
 
@@ -38,11 +87,91 @@ def _stats_path() -> Path:
     return path
 
 
+def _config_path() -> Path:
+    path = find_data_path(CONFIG_FILE)
+    if not path:
+        path = get_data_dir() / CONFIG_FILE
+    return path
+
+
 def _egg_log_path() -> Path:
     path = find_data_path(EGG_LOG_FILE)
     if not path:
         path = get_data_dir() / EGG_LOG_FILE
     return path
+
+
+def _safe_rate(value: object, default: float) -> float:
+    try:
+        rate = float(value)
+    except (TypeError, ValueError):
+        return default
+    return rate if 0 <= rate <= 1 else default
+
+
+def _normalize_paro_config(raw: object) -> dict:
+    config = {
+        "cooking_rate": DEFAULT_PARO_CONFIG["cooking_rate"],
+        "special_rate": DEFAULT_PARO_CONFIG["special_rate"],
+        "special_outcomes": [],
+    }
+    if isinstance(raw, dict):
+        config["cooking_rate"] = _safe_rate(raw.get("cooking_rate"), config["cooking_rate"])
+        config["special_rate"] = _safe_rate(raw.get("special_rate"), config["special_rate"])
+        raw_outcomes = raw.get("special_outcomes")
+    else:
+        raw_outcomes = None
+
+    if not isinstance(raw_outcomes, list):
+        raw_outcomes = DEFAULT_PARO_CONFIG["special_outcomes"]
+
+    seen_ids: set[str] = set()
+    for raw_outcome in raw_outcomes:
+        if not isinstance(raw_outcome, dict):
+            continue
+        outcome_id = str(raw_outcome.get("id") or "").strip()
+        if not outcome_id or outcome_id in seen_ids:
+            continue
+        try:
+            weight = float(raw_outcome.get("weight", 0))
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(weight) or weight <= 0:
+            continue
+        tags = raw_outcome.get("tags")
+        assets = raw_outcome.get("assets")
+        tags = [str(tag).strip() for tag in tags if str(tag).strip()] if isinstance(tags, list) else []
+        assets = [str(asset).strip() for asset in assets if str(asset).strip()] if isinstance(assets, list) else []
+        if not tags:
+            continue
+        outcome = {
+            "id": outcome_id,
+            "label": str(raw_outcome.get("label") or outcome_id),
+            "weight": weight,
+            "tags": tags,
+            "assets": assets,
+            "message": str(raw_outcome.get("message") or raw_outcome.get("label") or outcome_id),
+            "counts_as_cooking": bool(raw_outcome.get("counts_as_cooking", False)),
+        }
+        legacy_stat = raw_outcome.get("legacy_stat")
+        if isinstance(legacy_stat, str) and legacy_stat.strip():
+            outcome["legacy_stat"] = legacy_stat.strip()
+        config["special_outcomes"].append(outcome)
+        seen_ids.add(outcome_id)
+
+    if not config["special_outcomes"]:
+        config["special_outcomes"] = [dict(item) for item in DEFAULT_PARO_CONFIG["special_outcomes"]]
+    return config
+
+
+def _special_outcome_map() -> dict[str, dict]:
+    return {item["id"]: item for item in PARO_CONFIG.get("special_outcomes", []) if isinstance(item, dict)}
+
+
+def _special_outcome(special_type: str | None) -> dict | None:
+    if not special_type:
+        return None
+    return _special_outcome_map().get(special_type)
 
 
 def _new_period_stats(*, date: str | None = None) -> dict:
@@ -54,6 +183,7 @@ def _new_period_stats(*, date: str | None = None) -> dict:
         "akito_last_hit_seq": {},
         "toya_last_hit_seq": {},
         "egg_user_counts": {},
+        "special_outcomes": {},
         "foxrabbit_total": 0,
         "foxbun_total": 0,
         "fox_total": 0,
@@ -70,6 +200,7 @@ def _new_user_stats() -> dict:
         "draw_count": 0,
         "egg_count": 0,
         "foxbun_count": 0,
+        "special_outcomes": {},
         "akito_hits": {},
         "toya_hits": {},
         "pair_hits": {},
@@ -130,12 +261,23 @@ def _normalize_period_stats(raw: object, *, date: str | None = None) -> dict:
         "akito_hits",
         "toya_hits",
         "egg_user_counts",
+        "special_outcomes",
         "akito_last_hit_seq",
         "toya_last_hit_seq",
     ):
         stats[key] = _normalize_counter(raw.get(key))
     for key in ("foxrabbit_total", "foxbun_total", "fox_total", "rabbit_total"):
         stats[key] = max(0, _safe_int(raw.get(key)))
+    legacy_map = {
+        "foxrabbit": "foxrabbit_total",
+        "foxbun": "foxbun_total",
+        "fox": "fox_total",
+        "rabbit": "rabbit_total",
+    }
+    for special_type, legacy_key in legacy_map.items():
+        legacy_count = stats[legacy_key]
+        if legacy_count > stats["special_outcomes"].get(special_type, 0):
+            stats["special_outcomes"][special_type] = legacy_count
     return stats
 
 
@@ -146,6 +288,9 @@ def _normalize_user_stats(raw: object) -> dict:
 
     for key in ("draw_count", "egg_count", "foxbun_count", "_seq"):
         stats[key] = max(0, _safe_int(raw.get(key)))
+    stats["special_outcomes"] = _normalize_counter(raw.get("special_outcomes"))
+    if stats["foxbun_count"] > stats["special_outcomes"].get("foxbun", 0):
+        stats["special_outcomes"]["foxbun"] = stats["foxbun_count"]
     for key in (
         "akito_hits",
         "toya_hits",
@@ -170,6 +315,8 @@ def _rebuild_history_counters_from_users(history: dict, users: dict[str, dict]) 
     user_draw_counts: dict[str, int] = {}
     egg_user_counts: dict[str, int] = {}
     foxbun_total = 0
+    existing_special_outcomes = _normalize_counter(history.get("special_outcomes"))
+    user_special_outcomes: dict[str, int] = {}
 
     for user_id, user_stats in users.items():
         draw_count = max(0, _safe_int(user_stats.get("draw_count")))
@@ -178,9 +325,17 @@ def _rebuild_history_counters_from_users(history: dict, users: dict[str, dict]) 
 
         egg_count = max(0, _safe_int(user_stats.get("egg_count")))
         foxbun_count = max(0, _safe_int(user_stats.get("foxbun_count")))
-        if egg_count or foxbun_count:
-            egg_user_counts[user_id] = egg_count + foxbun_count
+        cooking_special_count = 0
+        for special_type, count in user_stats.get("special_outcomes", {}).items():
+            outcome = _special_outcome(str(special_type))
+            if outcome and outcome.get("counts_as_cooking") and str(special_type) != "foxbun":
+                cooking_special_count += max(0, _safe_int(count))
+        if egg_count or foxbun_count or cooking_special_count:
+            egg_user_counts[user_id] = egg_count + foxbun_count + cooking_special_count
         foxbun_total += foxbun_count
+        for special_type, count in user_stats.get("special_outcomes", {}).items():
+            special_type = str(special_type)
+            _bump_counter(user_special_outcomes, special_type, max(0, _safe_int(count)))
 
         for key, count in user_stats.get("akito_hits", {}).items():
             _bump_counter(akito_hits, key, max(0, _safe_int(count)))
@@ -198,6 +353,23 @@ def _rebuild_history_counters_from_users(history: dict, users: dict[str, dict]) 
     history["egg_user_counts"] = {key: egg_user_counts[key] for key in sorted(egg_user_counts)}
     history["total_draws"] = sum(user_draw_counts.values())
     history["foxbun_total"] = foxbun_total
+    special_outcomes = dict(user_special_outcomes)
+    for special_type, count in existing_special_outcomes.items():
+        if special_type not in user_special_outcomes:
+            special_outcomes[special_type] = count
+    for special_type, legacy_key in {
+        "foxrabbit": "foxrabbit_total",
+        "foxbun": "foxbun_total",
+        "fox": "fox_total",
+        "rabbit": "rabbit_total",
+    }.items():
+        if special_type not in special_outcomes:
+            special_outcomes[special_type] = max(0, _safe_int(history.get(legacy_key)))
+    history["special_outcomes"] = {key: value for key, value in special_outcomes.items() if value > 0}
+    history["foxrabbit_total"] = special_outcomes.get("foxrabbit", 0)
+    history["fox_total"] = special_outcomes.get("fox", 0)
+    history["rabbit_total"] = special_outcomes.get("rabbit", 0)
+    history["foxbun_total"] = special_outcomes.get("foxbun", foxbun_total)
     history["akito_last_hit_seq"] = {name: index for index, name in enumerate(akito_names, 1)}
     history["toya_last_hit_seq"] = {name: index for index, name in enumerate(toya_names, 1)}
 
@@ -285,9 +457,12 @@ def _append_egg_log(entry: dict) -> None:
 def reload_paro_data() -> None:
     PARO_DATA.clear()
     PARO_DATA.update(load_json_file(DATA_FILE, DEFAULT_DATA))
+    PARO_CONFIG.clear()
+    PARO_CONFIG.update(_normalize_paro_config(load_json_file(CONFIG_FILE, DEFAULT_PARO_CONFIG)))
     PARO_STATS.clear()
     PARO_STATS.update(_load_stats())
     logger.info("🔄 派生池与排行榜数据已热重载")
 
 
 PARO_STATS.update(_load_stats())
+PARO_CONFIG.update(_normalize_paro_config(load_json_file(CONFIG_FILE, DEFAULT_PARO_CONFIG)))

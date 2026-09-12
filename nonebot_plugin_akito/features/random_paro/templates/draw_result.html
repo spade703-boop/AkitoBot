@@ -3,7 +3,7 @@
    draw_result v2 - 数据契约:
    results: [
      {"type":"pair","akito","toya","akito_img","toya_img","cooking":bool},
-     {"type":"fox","fox_type":"fox|rabbit|foxrabbit|foxbun","imgs":[uri...]},
+     {"type":"fox","fox_type":"legacy-id","special_type":"configured-id","imgs":[uri...]},
    ]
    cooking_summary: None
      | {"mode":"multi","dishes":[{"akito","toya"}...],"with_foxbun":bool}
@@ -351,7 +351,7 @@
         <div class="fox-ph a">狐</div>
         <div class="fox-ph t">兔</div>
         {% else %}
-        <div class="fox-ph at wide">狐兔</div>
+        <div class="fox-ph at wide">{{ it.special_type or it.fox_type }}</div>
         {% endif %}
       </div>
       <div class="fox-text">
@@ -360,7 +360,7 @@
           {% if it.fox_type == "fox" %}一只得意的<b class="fa">狐狸</b>赶走了这里的派生。
           {% elif it.fox_type == "rabbit" %}一只圆圆的<b class="ft">兔子</b>挡住了这里的派生。
           {% elif it.fox_type == "foxrabbit" %}一对眼熟的<b class="fa">狐</b><b class="ft">兔</b>出现在了这里……
-          {% else %}发现了一对正在贴贴的<b class="fa">狐</b><b class="ft">兔</b>！{% endif %}
+          {% else %}{{ it.message or it.special_type }}{% endif %}
         </span>
       </div>
     </div>

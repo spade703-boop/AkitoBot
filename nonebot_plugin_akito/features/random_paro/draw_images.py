@@ -27,6 +27,10 @@ from .assets import (
 from .assets import (
     load_foxrabbit_image as _load_foxrabbit_image,
 )
+from .assets import (
+    load_special_stat_icon as _load_special_stat_icon,
+)
+from .store import PARO_CONFIG
 
 SEQS = ["①", "②", "③"]
 
@@ -173,11 +177,13 @@ def _render_multi(results: list, remaining: int, nickname: str) -> bytes:
     fb = _load_font(FONT_BOLD_SIZE)  # 24px — 彩蛋汇总
 
     FR_TEXTS = {
-        "fox": "一只得意的狐狸赶走了这里的派生。",
-        "rabbit": "一只圆圆的兔子挡住了这里的派生。",
-        "foxrabbit": "一对眼熟的狐兔出现在了这里……",
-        "foxbun": "发现了一对正在贴贴的狐兔！",
+        outcome["id"]: outcome.get("message", outcome["label"])
+        for outcome in PARO_CONFIG.get("special_outcomes", [])
     }
+    FR_TEXTS.setdefault("fox", "狐狸出现了。")
+    FR_TEXTS.setdefault("rabbit", "兔子出现了。")
+    FR_TEXTS.setdefault("foxrabbit", "狐兔出现了。")
+    FR_TEXTS.setdefault("foxbun", "发现了一对正在贴贴的狐兔！")
 
     # --- 逐行计算宽度 ---
     emoji_w = fn.getbbox(" ★")[2]
@@ -187,7 +193,7 @@ def _render_multi(results: list, remaining: int, nickname: str) -> bytes:
     def _row_width(idx):
         _, _, is_egg, fox_type = results[idx]
         if fox_type:
-            txt_w = int(fn.getbbox(SEQS[idx] + FR_TEXTS[fox_type])[2])
+            txt_w = int(fn.getbbox(SEQS[idx] + FR_TEXTS.get(fox_type, fox_type))[2])
             if fox_type == "foxbun":
                 bun = _load_foxbun_image()
                 return max(txt_w, bun.size[0]) if bun else txt_w
@@ -276,9 +282,11 @@ def _render_multi(results: list, remaining: int, nickname: str) -> bytes:
                     canvas.paste(rab_im, (fx + IMG_SZ + gap, y))
                 y += IMG_SZ + 8
             else:
-                single_im = _load_foxrabbit_image("狐" if fox_type == "fox" else "兔")
+                single_im = _load_special_stat_icon(fox_type)
                 if single_im:
-                    canvas.paste(single_im, ((w - IMG_SZ) // 2, y))
+                    canvas.paste(single_im, ((w - single_im.width) // 2, y))
+                else:
+                    draw.text((w // 2, y + IMG_SZ // 2), FR_TEXTS.get(fox_type, fox_type), font=fn, fill="#000000", anchor="mm")
                 y += IMG_SZ + 8
             # 狐兔文字：狐橙兔蓝（单抽不带序号）
             pre = seq + " " if count > 1 else ""
@@ -306,12 +314,7 @@ def _render_multi(results: list, remaining: int, nickname: str) -> bytes:
                     ("赶走了这里的派生。", "#000000", False),
                 ]
             else:
-                segs = [
-                    (pre, "#000000", False),
-                    ("一只圆圆的", "#000000", False),
-                    ("兔子", "#0077DD", False),
-                    ("挡住了这里的派生。", "#000000", False),
-                ]
+                segs = [(pre, "#000000", False), (FR_TEXTS.get(fox_type, fox_type), "#000000", False)]
             _draw_segmented_line(draw, y, segs, w)
             y += ROW_H + result_gap
         else:

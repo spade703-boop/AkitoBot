@@ -44,6 +44,20 @@ def load_foxrabbit_image(kind: str) -> Image.Image | None:
     return None
 
 
+def load_special_images(special_type: str) -> list[Image.Image]:
+    from .store import _special_outcome
+
+    outcome = _special_outcome(special_type)
+    if not outcome:
+        return []
+    images = []
+    for asset_name in outcome.get("assets", []):
+        image = load_foxbun_image() if asset_name == "狐&兔" else load_foxrabbit_image(asset_name)
+        if image:
+            images.append(image)
+    return images
+
+
 def load_foxbun_image() -> Image.Image | None:
     for ext in (".png", ".jpg", ".jpeg"):
         path = FOXRABBIT_DIR / f"狐&兔{ext}"
@@ -74,13 +88,15 @@ def avatar_uri(character: str, name: str) -> str:
 
 
 def fox_icon_uris(fox_type: str) -> list[str]:
-    names = {
-        "fox": ("狐",),
-        "rabbit": ("兔",),
-        "foxrabbit": ("狐", "兔"),
-        "foxbun": ("狐&兔",),
-    }.get(fox_type, ())
+    from .store import _special_outcome
+
+    outcome = _special_outcome(fox_type)
+    names = outcome.get("assets", []) if outcome else []
     return [path_to_uri(path) for name in names if (path := find_foxrabbit_asset(name))]
+
+
+def special_icon_uris(special_type: str | None) -> list[str]:
+    return fox_icon_uris(special_type or "")
 
 
 def resize_to_fit(image: Image.Image, *, max_w: int, max_h: int) -> Image.Image:
@@ -100,27 +116,30 @@ def load_avatar_thumb(character: str, name: str, size: int = 56) -> Image.Image 
 
 
 def load_fox_stat_icon(fox_type: str) -> Image.Image | None:
-    if fox_type == "fox":
-        image = load_foxrabbit_image("狐")
-        return resize_to_fit(image, max_w=56, max_h=56) if image else None
-    if fox_type == "rabbit":
-        image = load_foxrabbit_image("兔")
-        return resize_to_fit(image, max_w=56, max_h=56) if image else None
-    if fox_type == "foxbun":
-        image = load_foxbun_image()
-        return resize_to_fit(image, max_w=96, max_h=56) if image else None
-    if fox_type == "foxrabbit":
-        fox = load_foxrabbit_image("狐")
-        rabbit = load_foxrabbit_image("兔")
-        if not fox or not rabbit:
-            return None
-        fox = resize_to_fit(fox, max_w=56, max_h=56)
-        rabbit = resize_to_fit(rabbit, max_w=56, max_h=56)
-        canvas = Image.new("RGB", (fox.width + rabbit.width + 6, max(fox.height, rabbit.height)), "#ffffff")
-        canvas.paste(fox, (0, (canvas.height - fox.height) // 2))
-        canvas.paste(rabbit, (fox.width + 6, (canvas.height - rabbit.height) // 2))
-        return canvas
-    return None
+    from .store import _special_outcome
+
+    outcome = _special_outcome(fox_type)
+    if not outcome:
+        return None
+    images = [resize_to_fit(image, max_w=56, max_h=56) for image in load_special_images(fox_type)]
+    if not images:
+        return None
+    if len(images) == 1:
+        return resize_to_fit(images[0], max_w=96 if fox_type == "foxbun" else 56, max_h=56)
+    canvas = Image.new(
+        "RGB",
+        (sum(image.width for image in images) + 6 * (len(images) - 1), max(image.height for image in images)),
+        "#ffffff",
+    )
+    x = 0
+    for image in images:
+        canvas.paste(image, (x, (canvas.height - image.height) // 2))
+        x += image.width + 6
+    return canvas
+
+
+def load_special_stat_icon(special_type: str) -> Image.Image | None:
+    return load_fox_stat_icon(special_type)
 
 
 def build_placeholder_avatar(label: str, *, size: int, bg_color: str) -> Image.Image:

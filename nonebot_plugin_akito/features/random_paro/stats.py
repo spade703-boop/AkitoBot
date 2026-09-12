@@ -65,22 +65,39 @@ def _record_user_hit(user_stats: dict, counter_key: str, order_key: str, name: s
     user_stats[order_key][name] = user_stats["_seq"]
 
 
+def _record_special_outcome(stats: dict, special_type: str) -> None:
+    _bump_counter(stats.setdefault("special_outcomes", {}), special_type)
+    outcome = store._special_outcome(special_type) or {}
+    legacy_stat = outcome.get("legacy_stat")
+    if isinstance(legacy_stat, str) and legacy_stat in stats:
+        stats[legacy_stat] = _safe_nonnegative_int(stats.get(legacy_stat)) + 1
+
+
+def _safe_nonnegative_int(value: object) -> int:
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0
+
+
 def _record_user_draw_stats(
     user_stats: dict,
     *,
     results: list[tuple[str, str, bool, str | None]],
 ) -> None:
     user_stats["draw_count"] += len(results)
-    for akito_name, toya_name, is_egg, fox_type in results:
-        if fox_type is None:
+    for akito_name, toya_name, is_egg, special_type in results:
+        if special_type is None:
             _record_user_hit(user_stats, "akito_hits", "akito_last_hit_seq", akito_name)
             _record_user_hit(user_stats, "toya_hits", "toya_last_hit_seq", toya_name)
             pair_key = _make_pair_key(akito_name, toya_name)
             _record_user_hit(user_stats, "pair_hits", "pair_last_hit_seq", pair_key)
         if is_egg:
             user_stats["egg_count"] += 1
-        if fox_type == "foxbun":
-            user_stats["foxbun_count"] += 1
+        if special_type:
+            _record_special_outcome(user_stats, special_type)
+            if special_type == "foxbun":
+                user_stats["foxbun_count"] += 1
 
 
 def _get_fixed_side(fixed_a: str | None, fixed_b: str | None) -> str | None:
@@ -126,24 +143,18 @@ def _record_draw_stats_for_period(
     period_stats["total_draws"] += draw_count
     _bump_counter(period_stats["user_draw_counts"], user_id, draw_count)
 
-    for akito_name, toya_name, is_egg, fox_type in results:
-        if fox_type is None:
+    for akito_name, toya_name, is_egg, special_type in results:
+        if special_type is None:
             # Keep group rankings aligned with personal stats: directional draws
             # still count as seeing the fixed-side paro in the final result.
             _record_period_hit(period_stats, "akito_hits", "akito_last_hit_seq", akito_name)
             _record_period_hit(period_stats, "toya_hits", "toya_last_hit_seq", toya_name)
 
-        if is_egg or fox_type == "foxbun":
+        if is_egg or (special_type and (store._special_outcome(special_type) or {}).get("counts_as_cooking")):
             _bump_counter(period_stats["egg_user_counts"], user_id)
 
-        if fox_type == "foxrabbit":
-            period_stats["foxrabbit_total"] += 1
-        elif fox_type == "foxbun":
-            period_stats["foxbun_total"] += 1
-        elif fox_type == "fox":
-            period_stats["fox_total"] += 1
-        elif fox_type == "rabbit":
-            period_stats["rabbit_total"] += 1
+        if special_type:
+            _record_special_outcome(period_stats, special_type)
 
 
 def _record_group_draw_stats(
@@ -177,9 +188,12 @@ def _record_group_draw_stats(
     )
     _record_user_draw_stats(user_stats, results=results)
 
-    for index, (akito_name, toya_name, is_egg, fox_type) in enumerate(results, 1):
-        if not is_egg and fox_type != "foxbun":
+    for index, (akito_name, toya_name, is_egg, special_type) in enumerate(results, 1):
+        outcome = store._special_outcome(special_type) if special_type else {}
+        is_cooking_special = bool(outcome and outcome.get("counts_as_cooking"))
+        if not is_egg and not is_cooking_special:
             continue
+        egg_type = "cooking" if is_egg else special_type
         store._append_egg_log(
             {
                 "ts": now_ts,
@@ -187,7 +201,8 @@ def _record_group_draw_stats(
                 "group_id": str(group_id),
                 "user_id": user_id,
                 "display_name": display_name,
-                "egg_type": "cooking" if is_egg else "foxbun",
+                "egg_type": egg_type,
+                "special_type": special_type,
                 "akito": akito_name,
                 "toya": toya_name,
                 "draw_index": index,
@@ -254,12 +269,21 @@ def _build_character_rows(
 
 
 def _build_fox_rows(period_stats: dict) -> list[dict]:
-    entries = [
-        ("foxrabbit", "狐兔", period_stats["foxrabbit_total"]),
-        ("foxbun", "狐兔饭", period_stats["foxbun_total"]),
-        ("fox", "狐狸", period_stats["fox_total"]),
-        ("rabbit", "兔子", period_stats["rabbit_total"]),
-    ]
+    counts = dict(period_stats.get("special_outcomes") or {})
+    legacy_counts = {
+        "foxrabbit": period_stats.get("foxrabbit_total", 0),
+        "foxbun": period_stats.get("foxbun_total", 0),
+        "fox": period_stats.get("fox_total", 0),
+        "rabbit": period_stats.get("rabbit_total", 0),
+    }
+    for special_type, count in legacy_counts.items():
+        counts[special_type] = max(counts.get(special_type, 0), count)
+    entries = []
+    for outcome in store.PARO_CONFIG.get("special_outcomes", []):
+        special_type = outcome["id"]
+        entries.append((special_type, outcome.get("label", special_type), counts.get(special_type, 0)))
+    known_ids = {entry[0] for entry in entries}
+    entries.extend((special_type, special_type, count) for special_type, count in counts.items() if special_type not in known_ids)
     rows = []
     for _idx, (fox_type, label, count) in sorted(
         enumerate(entries),
@@ -273,6 +297,7 @@ def _new_user_egg_history() -> dict:
     return {
         "cooking_count": 0,
         "foxbun_count": 0,
+        "special_outcomes": {},
         "cooking_pair_hits": {},
         "cooking_pair_last_hit_seq": {},
         "_seq": 0,
@@ -295,6 +320,8 @@ def _record_user_egg_history_entry(
         return
     if egg_type == "foxbun":
         egg_history["foxbun_count"] += 1
+        return
+    _bump_counter(egg_history.setdefault("special_outcomes", {}), egg_type)
 
 
 def _collect_user_egg_history(group_id: int, user_id: str) -> dict:
@@ -318,7 +345,8 @@ def _collect_user_egg_history(group_id: int, user_id: str) -> dict:
                 if str(entry.get("group_id")) != target_group_id or str(entry.get("user_id")) != target_user_id:
                     continue
                 egg_type = str(entry.get("egg_type") or "")
-                if egg_type not in {"cooking", "foxbun"}:
+                outcome = store._special_outcome(egg_type)
+                if egg_type != "cooking" and not (outcome and outcome.get("counts_as_cooking")):
                     continue
                 _record_user_egg_history_entry(
                     egg_history,
@@ -350,4 +378,9 @@ def _build_personal_cooking_pair_items(egg_history: dict) -> list[dict]:
 
 
 def _count_total_cooking_hits(egg_history: dict) -> int:
-    return int(egg_history.get("cooking_count", 0)) + int(egg_history.get("foxbun_count", 0))
+    special_count = sum(_safe_nonnegative_int(value) for value in (egg_history.get("special_outcomes") or {}).values())
+    return (
+        _safe_nonnegative_int(egg_history.get("cooking_count"))
+        + _safe_nonnegative_int(egg_history.get("foxbun_count"))
+        + special_count
+    )

@@ -59,6 +59,56 @@ def test_解析抽派生参数_默认单抽():
     assert 定向 == f"冬弥 {冬弥_王子}"
 
 
+def test_特殊结果配置_支持新增动物并按标签去重(monkeypatch):
+    配置 = {
+        "cooking_rate": 0,
+        "special_rate": 1,
+        "special_outcomes": [
+            {"id": "fox", "label": "狐狸", "weight": 1, "tags": ["fox"], "assets": [], "message": "狐"},
+            {"id": "rabbit", "label": "兔子", "weight": 1, "tags": ["rabbit"], "assets": [], "message": "兔"},
+            {"id": "cat", "label": "猫", "weight": 1, "tags": ["cat"], "assets": [], "message": "猫"},
+        ],
+    }
+    monkeypatch.setitem(random_paro._draw_results.__globals__, "PARO_CONFIG", 配置)
+    class FixedRng:
+        def choice(self, seq):
+            return seq[0]
+        def random(self):
+            return 0
+        def choices(self, seq, weights, k=1):
+            return [seq[0]]
+
+    结果 = random_paro._draw_results(3, akito_pool=["a"], toya_pool=["b"], rng=FixedRng())
+    assert [item[3] for item in 结果] == ["fox", "rabbit", "cat"]
+
+
+def test_复合特殊结果占用多个标签且耗尽后回落普通结果(monkeypatch):
+    配置 = {
+        "cooking_rate": 0,
+        "special_rate": 1,
+        "special_outcomes": [
+            {"id": "foxrabbit", "label": "狐兔", "weight": 1, "tags": ["fox", "rabbit"], "assets": [], "message": "狐兔"},
+            {"id": "fox", "label": "狐狸", "weight": 1, "tags": ["fox"], "assets": [], "message": "狐"},
+            {"id": "rabbit", "label": "兔子", "weight": 1, "tags": ["rabbit"], "assets": [], "message": "兔"},
+            {"id": "cat", "label": "猫", "weight": 1, "tags": ["cat"], "assets": [], "message": "猫"},
+        ],
+    }
+    monkeypatch.setitem(random_paro._draw_results.__globals__, "PARO_CONFIG", 配置)
+
+    class FixedRng:
+        def choice(self, seq):
+            return seq[0]
+
+        def random(self):
+            return 0
+
+        def choices(self, seq, weights, k=1):
+            return [seq[0]]
+
+    结果 = random_paro._draw_results(3, akito_pool=["a"], toya_pool=["b"], rng=FixedRng())
+    assert [item[3] for item in 结果] == ["foxrabbit", "cat", None]
+
+
 def test_定向抽取解析_可处理唯一匹配和歧义():
     固定彰人, 固定冬弥, 错误 = random_paro._resolve_directional_draw(
         "彰人 黑百",

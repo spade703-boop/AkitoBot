@@ -483,7 +483,7 @@ Galgame 级导演骰子，由 `chat_pipeline.py` 通过 `chat.py` 暴露的 help
 - 统计口径：个人页与群级派生角色榜统一按“最终展示结果”累计；定向抽取会计入被固定一侧与随机一侧，狐狸 / 兔子 / 狐兔 / 狐兔饭这类未展示正常角色的结果不计入角色榜
 - 运行时缓存：`PARO_STATS` 在模块导入时载入内存；手动替换 `data/paro_stats.json` 后，必须执行 `重载配置 assets` 或重启进程，群里看到的排行才会切到新文件
 - 模糊匹配：`_fuzzy_match()` 三级匹配（精确 → 前缀 → 包含），大小写不敏感；歧义时列出候选
-- 数据文件：`data/paro_pools.json`（池子）、`data/paro_stats.json`（限频 + 个人/群排行累计）、`data/paro_egg_log.jsonl`（个人做饭/狐兔饭历史）；已接入 `reload_assets()` 热重载
+- 数据文件：`data/paro_pools.json`（池子）、`data/paro_config.json`（特殊动物概率/权重/标签/素材/文案）、`data/paro_stats.json`（限频 + 个人/群排行累计）、`data/paro_egg_log.jsonl`（个人做饭/狐兔饭历史）；已接入 `reload_assets()` 热重载
 
 ### random_keyword/
 
