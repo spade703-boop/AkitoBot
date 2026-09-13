@@ -6,11 +6,7 @@ from collections.abc import Iterable
 from datetime import date, timedelta
 from typing import Any, cast
 
-from nonebot import on_command
-from nonebot.adapters import Message
-from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageSegment
 from nonebot.log import logger
-from nonebot.params import CommandArg
 
 from ....core import SUPERUSER_QQ
 from ....core.game_store import LOCK, _get_group, _load_data, _today_str
@@ -953,45 +949,15 @@ async def _render_metrics_image(page_data: dict) -> bytes | None:
         return None
 
 
-rpg_metrics_cmd = on_command("RPG数据", priority=5, block=True)
-style_test_cmd = on_command("看板样式测试", priority=5, block=True)
+# Keep the command objects available from the historical analytics module.
+from .command import rpg_metrics_cmd, style_test_cmd  # noqa: E402
 
-
-@rpg_metrics_cmd.handle()
-async def _(event: GroupMessageEvent, args: Message = CommandArg()):
-    if str(event.get_user_id()) != SUPERUSER_QQ:
-        return
-    group_id, rejection = _resolve_group(event)
-    if rejection:
-        await rpg_metrics_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
-    if group_id is None or (args and args.extract_plain_text().strip()):
-        return
-    today = _today_str()
-    async with LOCK:
-        data = _load_data()
-        group = _get_group(data, group_id)
-        page_data = build_metrics_page_data(group, today)
-        report = build_metrics_report(group, today)
-    image = await _render_metrics_image(page_data)
-    if image is not None:
-        await rpg_metrics_cmd.finish(MessageSegment.reply(event.message_id) + MessageSegment.image(image))
-    await rpg_metrics_cmd.finish(MessageSegment.reply(event.message_id) + report)
-
-
-@style_test_cmd.handle()
-async def _(event: GroupMessageEvent, args: Message = CommandArg()):
-    if str(event.get_user_id()) != SUPERUSER_QQ:
-        return
-    group_id, rejection = _resolve_group(event)
-    if rejection:
-        await style_test_cmd.finish(MessageSegment.reply(event.message_id) + rejection)
-    if group_id is None or (args and args.extract_plain_text().strip()):
-        return
-    today = _today_str()
-    group = _build_style_test_group(today)
-    page_data = build_metrics_page_data(group, today)
-    image = await _render_metrics_image(page_data)
-    reply_prefix = MessageSegment.reply(event.message_id)
-    if image is not None:
-        await style_test_cmd.finish(reply_prefix + MessageSegment.image(image))
-    await style_test_cmd.finish(reply_prefix + "看板样式测试渲染失败，已切回文字预览。\n" + build_metrics_report(group, today))
+__all__ = [
+    "rpg_metrics_cmd",
+    "style_test_cmd",
+    "SUPERUSER_QQ",
+    "LOCK",
+    "_get_group",
+    "_load_data",
+    "_resolve_group",
+]

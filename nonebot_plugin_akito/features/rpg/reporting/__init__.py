@@ -1,5 +1,5 @@
 """RPG 数据埋点与报表。"""
 
-from . import analytics
+from . import analytics, command
 
-__all__ = ["analytics"]
+__all__ = ["analytics", "command"]

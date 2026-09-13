@@ -325,7 +325,9 @@ def _settle_steal(group: GroupRecord, thief_id: str, victim_id: str, outcome: st
     out: dict[str, Any] = {"outcome": outcome, "amount": 0, "bond": 0, "item_name": ""}
 
     if outcome == "success":
-        item_name = _transfer_steal_item(victim, thief, cfg, rng)
+        item_name = _transfer_steal_item(
+            cast(dict[str, Any], victim), cast(dict[str, Any], thief), cfg, rng
+        )
         if item_name:
             out["item_name"] = item_name
         else:
@@ -350,7 +352,9 @@ def _settle_steal(group: GroupRecord, thief_id: str, victim_id: str, outcome: st
         victim["points"] = int(victim.get("points", 0)) + penalty
         out["amount"] = penalty
     elif outcome == "reversal":
-        item_name = _transfer_steal_item(thief, victim, cfg, rng)
+        item_name = _transfer_steal_item(
+            cast(dict[str, Any], thief), cast(dict[str, Any], victim), cfg, rng
+        )
         if item_name:
             out["item_name"] = item_name
         else:

@@ -321,9 +321,9 @@ _PLACEHOLDER_RE = re.compile(r"(\{[a-z_]+\})")
 _AT_KEYS = {"a", "b", "helper"}
 
 
-def _render_with_ats(template: str, ctx: dict):
+def _render_with_ats(template: str, ctx: dict) -> Any:
     """把模板渲染成消息：{a}{b} → 真 @，其余占位符 → 文本；未提供的占位符原样保留。"""
-    rendered = None
+    rendered: Any = None
     for part in _PLACEHOLDER_RE.split(template):
         if not part:
             continue
@@ -331,7 +331,7 @@ def _render_with_ats(template: str, ctx: dict):
             key = part[1:-1]
             value = ctx.get(key)
             if key in _AT_KEYS and value is not None:
-                seg = MessageSegment.at(value)
+                seg: Any = MessageSegment.at(value)
             elif value is None:
                 seg = part
             else:

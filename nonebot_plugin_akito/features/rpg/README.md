@@ -105,7 +105,8 @@ features/rpg/
 ├── battle/rewards/encounters.py    支援与小奇遇奖励函数入口
 ├── utils.py                  组队成功率 / 协作战力 / 失败事件 / 运势战力与掉落公共公式
 ├── simulation/runner.py      可复现的 360 天单人成长模拟 + Lv30 到达时间
-├── reporting/analytics.py    群级 30 日滚动统计（含冒险补给）+ 超管 `RPG数据`
+├── reporting/analytics.py    群级 30 日滚动统计（含冒险补给）+ 看板数据计算
+├── reporting/command.py      `RPG数据` / `看板样式测试` 命令入口与图片渲染回退
 ├── world_boss/logic.py       世界 BOSS 状态、刷出、伤害与参与者装备逻辑
 ├── world_boss/settlement.py  世界 BOSS 结算与跨日清理
 ├── world_boss/command.py     世界 BOSS 相关指令入口

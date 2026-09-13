@@ -57,3 +57,34 @@
 - [x] 复核 `world_boss/logic.py`、`settlement.py`、`command.py` 的实现边界；命令入口通过 `command.py` 导出，结算实现集中在 `settlement.py`，避免重复注册。
 - [x] 为拆分后的公开内部函数保留稳定导入路径，确保 monkeypatch 与现有调用不失效。
 - [x] 每完成职责块均通过局部回归；最终全量测试 901 passed、Ruff 通过、命令注册保持 20 个。
+
+## 生产前收尾路线
+
+### 必须处理
+
+- [x] **世界 BOSS 真正拆分**：将命令 handler 移入 `world_boss/command.py`，状态/生成/伤害留在 `logic.py`，结算与跨日清理留在 `settlement.py`；禁止重复注册命令。
+- [x] **移除播报动态兼容桥**：去掉 `hunt/broadcast.py` 对 `sys.modules` 和 `command` helper 的隐式依赖，改为稳定的配置/渲染接口。
+- [x] **增加 RPG 启动 smoke test**：真实导入 RPG 包，检查命令注册数量、命令名唯一性和签到钩子单次注册。
+- [x] **补生产数据兼容测试**：覆盖旧版 `gift_data.json` 读取/规范化/保存、非法配置热重载回滚、世界 BOSS 跨日清理幂等与防重复发奖。
+- [x] **清理全局 Mypy 基线**：修复 `core/game_store.py` 与 `features/gift/logic.py` 的已知错误，`mypy` 配置范围内 21 个源文件全部通过。
+
+### 建议处理
+
+- [ ] **继续拆分测试职责**：将 `test_hunt.py`、`test_boss.py` 按计算、结算、播报、命令职责拆成更小的测试文件。
+- [x] **复核大模块边界**：完成 `reporting/analytics.py` 的运营看板计算与命令入口拆分，新增 `reporting/command.py` 并保留旧导入兼容；`config.py` 与 `inventory/inventory.py` 暂无低风险边界可提取，列入后续 dataclass/TypedDict 收紧。
+- [x] **增加并发与锁测试**：覆盖签到、打怪、组队同时写入时的锁行为和存档不覆盖。
+- [x] **建立发布前检查脚本**：统一执行冷启动、配置加载、命令扫描、旧路径扫描、RPG/全量测试和 Ruff。
+
+### 可以延后
+
+- [ ] 将配置对象和跨模块结算对象逐步改为标准库 `dataclass`。
+- [ ] 为 `_cfg`、`_copy`、`_line` 等只读配置查询增加可失效缓存，并在热重载时原子清理。
+- [ ] 继续收紧动态 `dict`，扩大 `TypedDict` 或其他结构化类型覆盖范围。
+
+### 推荐执行顺序
+
+1. 世界 BOSS 拆分与启动 smoke test。
+2. 播报兼容桥清理与对应测试迁移。
+3. 生产数据兼容、热重载回滚和跨日幂等测试。
+4. 并发锁测试、发布前检查脚本与全量验证。
+5. 最后单独处理全局 Mypy 基线和延后项。

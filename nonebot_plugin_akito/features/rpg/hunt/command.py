@@ -31,20 +31,33 @@ from ..player.player import _ensure_player, _resolve_group
 from ..reporting.analytics import record_battle
 from ..world_boss.logic import _maybe_spawn_world_boss_lines
 from ..world_boss.settlement import _cleanup_stale_world_boss
+from . import broadcast as _broadcast
 from .broadcast import (  # noqa: F401
     _battle_debuff_line,
     _battle_supply_line,
     _hunt_event_line,
     _hunt_friend_support_lines,
     _hunt_minor_lines,
-    _hunt_result_lines,
     _hunt_reward_lines,
-    _hunt_support_lines,
     _team_minor_lines,
+    configure_helpers,
 )
+
+configure_helpers(cfg=_cfg, copy=_copy, line=_line, variant_line=_variant_line)
+
+
+def _hunt_result_lines(out: dict) -> list:
+    configure_helpers(cfg=_cfg, copy=_copy, line=_line, variant_line=_variant_line)
+    return _broadcast._hunt_result_lines(out)
+
+
+def _hunt_support_lines(out: dict) -> list[str]:
+    configure_helpers(cfg=_cfg, copy=_copy, line=_line, variant_line=_variant_line)
+    return _broadcast._hunt_support_lines(out)
 
 
 def _build_hunt_broadcast(out: dict, user_id: str):
+    configure_helpers(cfg=_cfg, copy=_copy, line=_line, variant_line=_variant_line)
     """遭遇行（带真 @，精英走专属文案）+ 结果行，合并单条消息。"""
     m = out["monster"]
     enc_key = "hunt_encounter_elite" if out.get("elite") else "hunt_encounter"
@@ -153,20 +166,23 @@ async def _(event: Event, args: Message = CommandArg()):
         candidates = [m for m in monsters if m.get("name") == target_name]
         if not candidates:
             await test_drop_cmd.finish(
-                MessageSegment.reply(event.message_id) + f"没找到怪「{target_name}」。可用的：{'/'.join(m.get('name','') for m in monsters)}"
+                MessageSegment.reply(event.message_id)
+                + f"没找到怪「{target_name}」。可用的：{'/'.join(m.get('name', '') for m in monsters)}"
             )
 
     buff = _today_buff()
     elite = "精英" in flags
 
     lines = ["🧪 掉落测试" + (f"（{target_name}{'·精英' if elite else ''}）" if target_name else "")]
-    lines.append(f"今日增益：{buff.get('name','')} xp×{buff.get('exp_mult',1):.1f} drop×{buff.get('drop_mult',1):.1f}")
+    lines.append(
+        f"今日增益：{buff.get('name', '')} xp×{buff.get('exp_mult', 1):.1f} drop×{buff.get('drop_mult', 1):.1f}"
+    )
     lines.append("")
 
     mons_to_test = candidates if target_name else monsters
     for m in mons_to_test:
         eff = _eff_monster(m, elite)
-        lines.append(f"【{eff.get('name','')}】power_req={eff.get('power_req',0)}")
+        lines.append(f"【{eff.get('name', '')}】power_req={eff.get('power_req', 0)}")
         drops = m.get("drops", [])
         if not drops:
             lines.append("  无掉落配置")
@@ -180,7 +196,9 @@ async def _(event: Event, args: Message = CommandArg()):
                 buff_mult = float(buff.get("drop_mult", 1.0))
                 full_mult = win_mult * fortune_factor * elite_mult * buff_mult
                 effective = base * full_mult
-                lines.append(f"  {d.get('item','?')}: 基础{d.get('chance',0)*100:.0f}% ×{full_mult:.2f} = {effective*100:.1f}%")
+                lines.append(
+                    f"  {d.get('item', '?')}: 基础{d.get('chance', 0) * 100:.0f}% ×{full_mult:.2f} = {effective * 100:.1f}%"
+                )
             # 模拟掷 20 次
             rolled = []
             for _ in range(20):
@@ -188,9 +206,10 @@ async def _(event: Event, args: Message = CommandArg()):
                 for item in r:
                     rolled.append(item)
             from collections import Counter
+
             counts = Counter(rolled)
             if counts:
-                lines.append(f"  20次模拟掉落: {'  '.join(f'{n}×{c}' for n,c in counts.items())}")
+                lines.append(f"  20次模拟掉落: {'  '.join(f'{n}×{c}' for n, c in counts.items())}")
             else:
                 lines.append("  20次模拟掉落: 无")
         lines.append("")
