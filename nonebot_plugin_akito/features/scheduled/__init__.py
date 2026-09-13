@@ -13,7 +13,7 @@ from nonebot_plugin_apscheduler import scheduler  # noqa: E402
 from ...core import MEMORY_DB, REACTIONS_DB, TARGET_GROUPS, TZ_CN, grant_safety_pass, save_memory  # noqa: E402
 from ...core.game_store import LOCK, _get_group, _load_data, _save_data, _today_str  # noqa: E402
 from ...core.types import GameData  # noqa: E402
-from ..rpg.boss import _cleanup_stale_world_boss  # noqa: E402
+from ..rpg.world_boss.settlement import _cleanup_stale_world_boss  # noqa: E402
 
 # ==============================================================================
 # 定时任务模块 (SCHEDULED TASKS)

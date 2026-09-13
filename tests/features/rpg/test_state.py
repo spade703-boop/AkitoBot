@@ -1,6 +1,6 @@
 from nonebot_plugin_akito.core import game_store
 from nonebot_plugin_akito.features.rpg.state import _rpg_state
-from nonebot_plugin_akito.features.rpg.team import _team_bond_daily_pairs
+from nonebot_plugin_akito.features.rpg.team.team import _team_bond_daily_pairs
 
 
 def test_rpg_state_preserves_existing_mapping_and_nested_records():

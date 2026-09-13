@@ -42,8 +42,8 @@ nonebot_plugin_akito/
 - `core/data.py` 的 `reload_assets()` 惰性导入各 feature 的热重载钩子（注册式刷新，非启动期依赖）；
 - `core/retrieval.py` 与 `core/data.py` 互为惰性导入（函数内 import，规避循环依赖）；core 子模块之间可按需显式引用同层基础工具，不要求所有调用经过包入口。
   features 层优先使用公共 `find_data_path` / `get_data_dir`，但共享存储和类型模块的受控显式引用仍以实际接口为准。
-- `features/rpg/` 对 `features/gift/` 保留单向依赖：`team.py` / `boss.py` 读取羁绊，`inventory.py` 复用礼物结算；`gift/` 不得反向依赖 `rpg/`。
-- `features/scheduled/` 可按定时任务需要调用 `features/rpg/boss.py` 的世界 BOSS 刷新/收尾入口；该依赖必须保持单向且不可扩散到其他 feature。
+- `features/rpg/` 对 `features/gift/` 保留单向依赖：`team/team.py` / `world_boss/*` 读取羁绊，`inventory/inventory.py` 复用礼物结算；`gift/` 不得反向依赖 `rpg/`。
+- `features/scheduled/` 可按定时任务需要调用 `features/rpg/world_boss/settlement.py` 的世界 BOSS 刷新/收尾入口；该依赖必须保持单向且不可扩散到其他 feature。
 - `features/` 对 `core.game_store`、`core.types` 等共享存储/类型模块可直接引用；这些是稳定的基础设施例外，不得借此反向引入 handlers 或其他 feature。
 
 ### 1.4 生产环境基线

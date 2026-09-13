@@ -6,10 +6,10 @@ import types
 from nonebot.adapters import Bot, Event
 
 from nonebot_plugin_akito.core import game_store
-import nonebot_plugin_akito.features.rpg.combat as combat
-import nonebot_plugin_akito.features.rpg.events as rpg_events
-import nonebot_plugin_akito.features.rpg.inventory as inventory
-import nonebot_plugin_akito.features.rpg.rewards as rewards
+import nonebot_plugin_akito.features.rpg.battle.combat as combat
+import nonebot_plugin_akito.features.rpg.battle.events as rpg_events
+import nonebot_plugin_akito.features.rpg.battle.rewards.settlement as rewards
+import nonebot_plugin_akito.features.rpg.inventory.inventory as inventory
 
 
 def _bot():

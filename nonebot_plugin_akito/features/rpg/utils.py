@@ -6,7 +6,7 @@ from typing import Any
 
 from ...core.game_store import _weighted_choice
 from .config import _cfg
-from .fortune import _fortune_by_key
+from .signin.fortune import _fortune_by_key
 
 
 def _team_success_rate(bond_level: int) -> float:

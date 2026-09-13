@@ -93,28 +93,33 @@ features/rpg/
 ├── config.py                 全部数值 / 文案 / 配置 + 启动/热更新前强校验
 ├── types.py                  RPG 存档、配置与结算结果 TypedDict
 ├── state.py                  玩家/群状态访问与规范化 helper
-├── player.py                 经验→等级派生；称号派生 `_title_of`；今日装备 helper；_combat_power；群校验 _resolve_group
-├── fortune.py                隐藏运势掷取（含连签保底 / 大凶转大吉修正）+ 签到钩子 on_signin（暗掷运势 + 发经验[10 起步、连签最高 20] + 发今日装备）
-├── hunt.py                   `今日打怪` 指令入口 + 战斗结果、援护追击和小奇遇播报
-├── combat.py                 遭遇分段 / 精英 / 今日增益 / 新手保护 / 胜负判定
-├── events.py                 普通与组队事件 / 援护追击 / 单人和双人小奇遇抽取
-├── rewards.py                经验积分掉落 / 援护与奇遇入账 / `_settle_solo` / `_settle_coop`
-├── friend_support.py         群友助力候选抽取、羁绊方向、等级效果与播报渲染
+├── player/player.py           经验→等级派生；称号派生 `_title_of`；今日装备 helper；_combat_power；群校验 _resolve_group
+├── signin/fortune.py          隐藏运势掷取（含连签保底 / 大凶转大吉修正）+ 签到钩子 on_signin
+├── hunt/command.py            `今日打怪` 指令入口与战斗结果播报组装
+├── hunt/broadcast.py          普通战斗播报辅助；`hunt/drop_test.py` 提供掉落测试命令
+├── battle/combat.py           遭遇分段 / 精英 / 今日增益 / 新手保护 / 胜负判定
+├── battle/events.py           普通与组队事件 / 援护追击 / 单人和双人小奇遇抽取
+├── battle/friend_support.py   群友助力候选抽取、羁绊方向、等级效果与播报渲染
+├── battle/rewards/settlement.py    经验积分掉落 / 援护与奇遇入账 / `_settle_solo` / `_settle_coop`
+├── battle/rewards/calculations.py  基础奖励计算函数入口
+├── battle/rewards/encounters.py    支援与小奇遇奖励函数入口
 ├── utils.py                  组队成功率 / 协作战力 / 失败事件 / 运势战力与掉落公共公式
-├── simulation.py             可复现的 360 天单人成长模拟 + Lv30 到达时间
-├── analytics.py              群级 30 日滚动统计（含冒险补给）+ 超管 `RPG数据`
-├── boss.py                   世界 BOSS 刷出 / 强制开启 / 查询 / 独立临时装备的单人攻击 / 双人攻击 / 贡献结算
-├── team.py                   `组队@某人` 指令：负羁绊事件/小额羁绊增长、失败退化单刷或被援护拉回（复用 rewards 结算）
-├── smith.py                  `强化今日装备` / `强化世界BOSS装备` / `购买装备` / `重置RPG功能`
-├── supply.py                 `开启冒险补给` / 跨群周次数 / 阶梯成本 / 固定经验与战备入包
-├── inventory.py              `背包` / `使用` 指令 + 道具效果 + 打怪掉落 helper
-└── character.py              `我的角色` 面板（含称号/战绩）+ `群排行榜`（等级榜）+ `冒险帮助`
+├── simulation/runner.py      可复现的 360 天单人成长模拟 + Lv30 到达时间
+├── reporting/analytics.py    群级 30 日滚动统计（含冒险补给）+ 超管 `RPG数据`
+├── world_boss/logic.py       世界 BOSS 状态、刷出、伤害与参与者装备逻辑
+├── world_boss/settlement.py  世界 BOSS 结算与跨日清理
+├── world_boss/command.py     世界 BOSS 相关指令入口
+├── team/team.py              `组队@某人` 指令：负羁绊事件/小额羁绊增长、失败退化单刷或被援护拉回
+├── equipment/smith.py        `强化今日装备` / `强化世界BOSS装备` / `购买装备` / `重置RPG功能`
+├── supply/supply.py          `开启冒险补给` / 跨群周次数 / 阶梯成本 / 固定经验与战备入包
+├── inventory/inventory.py    `背包` / `使用` 指令 + 道具效果 + 打怪掉落 helper
+└── profile/character.py      `我的角色` 面板（含称号/战绩）+ `群排行榜`（等级榜）+ `冒险帮助`
 ```
 
 **依赖方向**：`features/gift/` 与 `features/rpg/*` 都依赖 `core/game_store.py`。
 签到的衔接走 **钩子注册表**解耦：`fortune.on_signin` 在 import 时 `register_signin_hook` 注册；
 送礼系统的 `签到` 结算时调用 `run_signin_hooks(...)` 回调它（**`gift/` 不依赖 rpg**）。
-组队和双人世界 BOSS 都要消费「羁绊等级」，故 `team.py` 与 `boss.py` 都有 **rpg→gift 单向依赖**（`from ..gift import _bond_level`，消费 gift 拥有的羁绊体系）；`inventory.py` 里的礼物券也会回调 gift 的送礼结算；gift 仍不反向依赖 rpg，无环。
+组队和双人世界 BOSS 都要消费「羁绊等级」，故 `team/team.py` 与 `world_boss/*` 都有 **rpg→gift 单向依赖**（消费 gift 拥有的羁绊体系）；`inventory/inventory.py` 里的礼物券也会回调 gift 的送礼结算；gift 仍不反向依赖 rpg，无环。
 
 **数据流**：
 - 签到：`gift.签到` →（持锁）`run_signin_hooks` → `fortune.on_signin` → `player._grant_equip`（发今日装备）。

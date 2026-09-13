@@ -11,10 +11,10 @@
 | 普通打怪、组队、世界 BOSS | ✅ 已完成 | 两条线已分离；装备、结算、羁绊和贡献状态按各自规则运行。 | 只在后续改动时保持独立性回归。 |
 | 单人成长与怪物节奏 | 🟡 进行中 | Lv16～30 分段和成长模拟已落地；当前模拟中位约为 30/90/180/270/360 天 Lv7/Lv14/Lv22/Lv29/Lv37。 | 结果仍快于早期 30/90/180 天目标，继续观察和校准，不直接改动既有等级曲线。 |
 | RPG 看板二期 | 🟡 进行中 | 签到、战斗、事件、掉落、强化/购买支出、补给和世界 BOSS 实例埋点及 7/30 日图片/文字看板已实现。 | 旧存档缺少的人均收益、历史净消耗、真实触发率等指标不回填；继续从上线后采集。 |
-| 代码拆分与公共公式 | ✅ 基本完成 | `utils.py`、`combat.py`、`events.py`、`rewards.py` 已接入；`hunt.py` 已从约 900 行降到约 350 行，`boss.py` 保持独立。 | `rewards.py` 仍约 560 行，需继续评估职责边界。 |
+| 代码拆分与公共公式 | ✅ 基本完成 | `utils.py`、`battle/combat.py`、`battle/events.py`、`battle/rewards/*` 已接入；`hunt/command.py` 负责指令与播报，`world_boss/*` 保持独立。 | 后续可继续细化实现内部职责，但不改变现有接口。 |
 | 类型安全 | 🟡 部分完成 | `types.py` 已有 RPG `TypedDict` 和广泛函数注解。 | 尚无配置/玩家 `dataclass`，仍有裸 `dict` 和不精确注解。 |
 | 配置访问 | ⏳ 待开始 | 配置校验和热重载已存在。 | `_cfg`/`_copy`/`_error` 尚未缓存，热重载也没有缓存失效步骤。 |
-| 兼容性与测试 | ✅ 已验证 | RPG 测试 197 passed；全量测试 861 passed；Ruff 检查通过。 | 新的缓存/类型/拆分改动需重复执行同一组检查。 |
+| 兼容性与测试 | ✅ 已验证 | RPG 测试 212 passed；全量测试 901 passed；Ruff 检查通过。 | 新的缓存/类型/拆分改动需重复执行同一组检查。 |
 
 ## 固定约束
 
@@ -37,7 +37,7 @@
 ## 已完成里程碑
 
 - [x] 把真正跨普通组队与相关结算的公式集中到 `nonebot_plugin_akito/features/rpg/utils.py`，包括组队成功率、协作战力、运势系数和失败文案；没有把世界 BOSS 业务逻辑并入普通打怪。
-- [x] 将普通打怪拆成 `combat.py`（遭遇与胜负）、`events.py`（事件/援护/小奇遇）和 `rewards.py`（奖励结算），`hunt.py` 只保留指令入口与播报组装。
+- [x] 将普通打怪拆成 `battle/combat.py`（遭遇与胜负）、`battle/events.py`（事件/援护/小奇遇）和 `battle/rewards/settlement.py`（奖励结算），`hunt/command.py` 只保留指令入口与播报组装。
 - [x] 用 `TypedDict` 表达玩家、装备、世界 BOSS、指标和结算记录，保留旧存档字段兼容。
 - [x] 建立 30 日聚合指标和超管 `RPG数据` 看板；图片渲染失败时回退文字，历史缺失字段显示“暂无”而不是估算。
 - [x] 为强化、购买、补给、事件、掉落和世界 BOSS 实例增加成功后的匿名聚合埋点；不保存用户原文或用户明细展示。
@@ -59,10 +59,10 @@
 
 ### 3. 代码维护性调优
 
-- [ ] 把 `rewards.py`（约 560 行）和 `hunt.py`（约 350 行）继续按职责拆小；每次拆分后保留 `hunt` 的兼容入口和 `boss.py` 的独立边界。
+- [ ] 继续评估 `battle/rewards/settlement.py` 与 `hunt/command.py` 的内部职责边界；保持 `world_boss/` 与普通战斗独立。
 - [ ] 为配置和稳定数据结构引入标准库 `dataclasses`（不引入新依赖），先覆盖配置对象和跨模块结算对象，再逐步收紧裸 `dict`。
 - [ ] 为 `_cfg`、`_copy`、`_error` 等只读配置查询增加可失效缓存；`reload_rpg_config()` 必须原子校验、更新并清理缓存，且保留失败时继续使用旧配置的行为。
-- [ ] 复核 `nonebot_plugin_akito/features/rpg/__init__.py` 的公共导出：导入即注册指令/钩子，内部实现模块不被误当作公开 API。
+- [x] 复核 `nonebot_plugin_akito/features/rpg/__init__.py` 的公共导出：导入即注册指令/钩子，内部实现模块不被误当作公开 API。
 - [ ] 在优化后再次执行 RPG/全量测试、Ruff 和成长模拟；必要时补充配置缺失、热重载和性能测试。
 
 ## 验收标准
@@ -76,7 +76,7 @@
 ## 证据与关联资料
 
 - 代码：`nonebot_plugin_akito/features/rpg/`。
-- 测试：`tests/features/rpg/`，其中 `test_boss.py` 覆盖两条战斗线的隔离。
+- 测试：`tests/features/rpg/`，其中 `world_boss/test_boss.py` 覆盖两条战斗线的隔离。
 - 模拟：`tools/simulate_rpg_growth.py`。
-- 看板埋点：`nonebot_plugin_akito/features/rpg/analytics.py`、`nonebot_plugin_akito/templates/bond/rpg_metrics.html`。
+- 看板埋点：`nonebot_plugin_akito/features/rpg/reporting/analytics.py`、`nonebot_plugin_akito/templates/bond/rpg_metrics.html`。
 - 历史调优草案已迁入 [`../archive/legacy-plans/rpg_optimization/`](../archive/legacy-plans/rpg_optimization/)，仅供追溯，不作为当前状态来源。
