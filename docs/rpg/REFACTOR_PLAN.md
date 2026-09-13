@@ -48,3 +48,12 @@
 - [x] 通过 Ruff；Mypy 仅剩工作区原有的 `core/game_store.py` 与 `features/gift/logic.py` 类型错误，RPG 报表新增错误已清理。
 - [x] 运行成长模拟器并确认输出稳定。
 - [x] 检查命令注册数量、导入顺序和工作区差异；保留非 RPG 未提交修改不纳入本次提交。
+
+## 第二阶段：实现职责收紧
+
+- [x] 将 `battle/rewards/calculations.py` 从 re-export facade 收紧为纯计算实现，并由结算模块调用。
+- [x] 将 `battle/rewards/encounters.py` 承载援护/小奇遇奖励实现，结算模块只编排调用。
+- [x] 将 `hunt/broadcast.py` 承载播报行生成，`hunt/command.py` 只保留指令与流程编排。
+- [x] 复核 `world_boss/logic.py`、`settlement.py`、`command.py` 的实现边界；命令入口通过 `command.py` 导出，结算实现集中在 `settlement.py`，避免重复注册。
+- [x] 为拆分后的公开内部函数保留稳定导入路径，确保 monkeypatch 与现有调用不失效。
+- [x] 每完成职责块均通过局部回归；最终全量测试 901 passed、Ruff 通过、命令注册保持 20 个。
